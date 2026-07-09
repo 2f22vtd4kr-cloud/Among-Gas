@@ -312,6 +312,27 @@ export default function GameMap() {
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
+      // Ground shadow — soft dark oval directly under the character's feet,
+      // matching the Among Us-style grounding shadow in the reference.
+      {
+        const blurPx = Math.max(2, Math.round(sH * 0.05));
+        ctx.save();
+        ctx.filter = `blur(${blurPx}px)`;
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = '#000000';
+        ctx.beginPath();
+        ctx.ellipse(
+          pCX,
+          pCY + sH * 0.48,   // just at the base of the sprite
+          sW  * 0.28,         // wide enough to sit under the feet
+          sH  * 0.055,        // thin flat oval
+          0, 0, Math.PI * 2,
+        );
+        ctx.fill();
+        ctx.restore();
+        ctx.filter = 'none'; // guard against iOS Safari filter leak
+      }
+
       // Sprite draw.
       // Source alpha is binarized (0 or 255, no semi-transparent pixels) so
       // nearest-neighbour is now safe: hard source edges produce hard output
