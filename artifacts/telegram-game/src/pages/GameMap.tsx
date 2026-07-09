@@ -312,29 +312,35 @@ export default function GameMap() {
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
-      // Drop shadow: small blur-filtered ellipse sitting at the character's feet.
+      // Drop shadow: radial-gradient ellipse at the character's feet.
       //
-      // Shadow centre Y is at the very bottom of the sprite cell (+sH*0.5 from
-      // sprite centre) so it sits at ground level rather than hiding under the body.
-      // A small blur radius (1–3 canvas px) softens the path's anti-aliased edge
-      // without spreading the shadow into a blob; the blur also averages any tile-
-      // grout contrast in the spread region, preventing stripe artefacts.
-      // ctx.filter is reset by the enclosing save/restore so it cannot leak into
-      // the sprite draw that follows.
+      // We deliberately avoid ctx.filter/blur here. On iOS Safari, ctx.filter is
+      // not reliably reset by ctx.restore(), causing the blur to leak into the
+      // subsequent sprite drawImage call. A leaked blur makes the sprite edges
+      // semi-transparent → tile grout lines bleed through as horizontal stripes.
+      //
+      // Instead we draw the soft shadow entirely with a radial gradient clipped to
+      // an ellipse, which requires no filter API and works on all WebKit versions.
       {
-        const blurPx = Math.max(1, Math.round(sH * 0.015));
+        const gx = pCX;
+        const gy = pCY + sH * 0.50;   // ground level: bottom edge of sprite cell
+        const rx = sW * 0.22;           // half-width  of shadow ellipse
+        const ry = sH * 0.055;          // half-height of shadow ellipse
+
         ctx.save();
-        ctx.filter = `blur(${blurPx}px)`;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.40)';
+        // Scale space so the ellipse becomes a unit circle — lets createRadialGradient
+        // produce a circular gradient that looks elliptical after the scale.
+        ctx.translate(gx, gy);
+        ctx.scale(rx, ry);
         ctx.beginPath();
-        ctx.ellipse(
-          pCX,
-          pCY + sH * 0.50,       // ground level: bottom edge of sprite cell
-          sW  * 0.18,             // narrow — fits under the feet, not the whole body
-          sH  * 0.04,             // thin oval
-          0, 0, Math.PI * 2,
-        );
-        ctx.fill();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.clip();
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        grad.addColorStop(0,   'rgba(0,0,0,0.55)');
+        grad.addColorStop(0.5, 'rgba(0,0,0,0.30)');
+        grad.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.fillRect(-1, -1, 2, 2);   // covers the unit circle exactly
         ctx.restore();
       }
 
