@@ -17,6 +17,7 @@ import {
   CHARACTER_CELL_HEIGHT,
   getCharacterFrameRect,
 } from '../game/characterSprites';
+import Joystick from '../components/Joystick';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 // How many screen pixels equal one map pixel. Matches the reference
@@ -359,7 +360,10 @@ export default function GameMap() {
         />
       </div>
 
-      {/* ── HUD: movement hint ────────────────────────────────────────────── */}
+      {/* ── Joystick (touch devices) ──────────────────────────────────────── */}
+      {loaded && <Joystick keysRef={keysRef} />}
+
+      {/* ── HUD: movement hint (keyboard, hidden when touch is primary) ───── */}
       {loaded && (
         <div style={{
           position: 'fixed',
@@ -375,6 +379,8 @@ export default function GameMap() {
           backdropFilter: 'blur(6px)',
           letterSpacing: '0.03em',
           zIndex: 20,
+          // Hide on touch-primary devices — joystick replaces this hint
+          display: window.matchMedia('(pointer: coarse)').matches ? 'none' : 'block',
         }}>
           WASD / Arrow keys to move
         </div>

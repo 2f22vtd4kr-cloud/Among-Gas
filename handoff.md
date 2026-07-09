@@ -266,6 +266,26 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Added virtual joystick for mobile testing
+
+**Done**
+- Created `artifacts/telegram-game/src/components/Joystick.tsx` — fixed bottom-left joystick (52px base, 22px knob) that writes 'w'/'a'/'s'/'d' into `keysRef` on touch drag, so no changes to `player.ts` or collision logic were needed.
+- Joystick uses `touchstart`/`touchmove`/`touchend` on `window` (passive: false) to track the active touch identifier; clamps knob to base radius; 18% dead zone; diagonal threshold 0.4.
+- Imported and rendered `<Joystick keysRef={keysRef} />` in `GameMap.tsx` after the canvas layers.
+- WASD hint auto-hides on touch-primary devices via `window.matchMedia('(pointer: coarse)')`.
+
+**Decisions & gotchas**
+- Joystick injects directly into `keysRef` (the same Set that keyboard events use) — no new movement path, collision and player logic unchanged.
+- `transition: transform 0.04s ease-out` on the knob gives a tiny snap-back feel on release without adding latency during drag.
+- The `touchmove`/`touchend` listeners are on `window` (not the base div) so dragging outside the joystick ring doesn't break tracking.
+
+**Left off / next steps**
+- Joystick is fixed-position (bottom-left). A floating/dynamic joystick that spawns where the user first taps is a common mobile game UX improvement if desired.
+- DB, multiplayer, and Telegram SDK still pending.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (artifact re-registration, dependency install, workflow start)
 
 **Done**
