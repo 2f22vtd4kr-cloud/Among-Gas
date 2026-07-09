@@ -312,37 +312,6 @@ export default function GameMap() {
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
-      // Drop shadow: blur-filtered ellipse at the character's feet.
-      //
-      // Blur is essential here: a semi-transparent dark shape drawn directly over
-      // a tiled background amplifies the tile/grout contrast and produces visible
-      // horizontal stripe artefacts. A blur radius of ~4% of sprite height averages
-      // the nearby tile pixels together, killing the contrast pattern.
-      //
-      // iOS Safari sometimes fails to reset ctx.filter inside ctx.restore(), which
-      // leaks the blur into the sprite drawImage call that follows (making sprite
-      // edges semi-transparent → more stripe artefacts). We guard against this by
-      // explicitly assigning ctx.filter = 'none' immediately after ctx.restore().
-      {
-        const blurPx = Math.max(2, Math.round(sH * 0.06));
-        ctx.save();
-        ctx.filter = `blur(${blurPx}px)`;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        ctx.beginPath();
-        ctx.ellipse(
-          pCX,
-          pCY + sH * 0.50,       // ground level: bottom edge of sprite cell
-          sW  * 0.20,             // half-width — fits under feet, not whole body
-          sH  * 0.045,            // thin oval
-          0, 0, Math.PI * 2,
-        );
-        ctx.fill();
-        ctx.restore();
-        // Explicit reset — guards against iOS Safari restore() not clearing filter.
-        // This must stay between the shadow restore() and the sprite drawImage.
-        ctx.filter = 'none';
-      }
-
       // Sprite draw.
       // Source alpha is binarized (0 or 255, no semi-transparent pixels) so
       // nearest-neighbour is now safe: hard source edges produce hard output
