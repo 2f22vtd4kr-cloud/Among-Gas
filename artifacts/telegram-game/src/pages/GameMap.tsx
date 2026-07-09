@@ -90,7 +90,7 @@ export default function GameMap() {
       setLoaded(true);
     };
     img.onerror = () => { if (!cancelled) setError(true); };
-    img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
+    img.src = `${import.meta.env.BASE_URL}map-hires.png`;
     // Already cached (e.g. HMR reload)
     if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
