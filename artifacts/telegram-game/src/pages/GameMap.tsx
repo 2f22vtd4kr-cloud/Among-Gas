@@ -312,36 +312,35 @@ export default function GameMap() {
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
-      // Drop shadow: radial-gradient ellipse at the character's feet.
+      // Drop shadow: blur-filtered ellipse at the character's feet.
       //
-      // We deliberately avoid ctx.filter/blur here. On iOS Safari, ctx.filter is
-      // not reliably reset by ctx.restore(), causing the blur to leak into the
-      // subsequent sprite drawImage call. A leaked blur makes the sprite edges
-      // semi-transparent → tile grout lines bleed through as horizontal stripes.
+      // Blur is essential here: a semi-transparent dark shape drawn directly over
+      // a tiled background amplifies the tile/grout contrast and produces visible
+      // horizontal stripe artefacts. A blur radius of ~4% of sprite height averages
+      // the nearby tile pixels together, killing the contrast pattern.
       //
-      // Instead we draw the soft shadow entirely with a radial gradient clipped to
-      // an ellipse, which requires no filter API and works on all WebKit versions.
+      // iOS Safari sometimes fails to reset ctx.filter inside ctx.restore(), which
+      // leaks the blur into the sprite drawImage call that follows (making sprite
+      // edges semi-transparent → more stripe artefacts). We guard against this by
+      // explicitly assigning ctx.filter = 'none' immediately after ctx.restore().
       {
-        const gx = pCX;
-        const gy = pCY + sH * 0.50;   // ground level: bottom edge of sprite cell
-        const rx = sW * 0.22;           // half-width  of shadow ellipse
-        const ry = sH * 0.055;          // half-height of shadow ellipse
-
+        const blurPx = Math.max(2, Math.round(sH * 0.06));
         ctx.save();
-        // Scale space so the ellipse becomes a unit circle — lets createRadialGradient
-        // produce a circular gradient that looks elliptical after the scale.
-        ctx.translate(gx, gy);
-        ctx.scale(rx, ry);
+        ctx.filter = `blur(${blurPx}px)`;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
         ctx.beginPath();
-        ctx.arc(0, 0, 1, 0, Math.PI * 2);
-        ctx.clip();
-        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-        grad.addColorStop(0,   'rgba(0,0,0,0.55)');
-        grad.addColorStop(0.5, 'rgba(0,0,0,0.30)');
-        grad.addColorStop(1,   'rgba(0,0,0,0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(-1, -1, 2, 2);   // covers the unit circle exactly
+        ctx.ellipse(
+          pCX,
+          pCY + sH * 0.50,       // ground level: bottom edge of sprite cell
+          sW  * 0.20,             // half-width — fits under feet, not whole body
+          sH  * 0.045,            // thin oval
+          0, 0, Math.PI * 2,
+        );
+        ctx.fill();
         ctx.restore();
+        // Explicit reset — guards against iOS Safari restore() not clearing filter.
+        // This must stay between the shadow restore() and the sprite drawImage.
+        ctx.filter = 'none';
       }
 
       // Sprite draw.
