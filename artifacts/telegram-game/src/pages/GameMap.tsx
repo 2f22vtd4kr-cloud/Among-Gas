@@ -243,17 +243,22 @@ export default function GameMap() {
 
         const cellW = CELL_X * scale;
         const cellH = CELL_Y * scale;
+        // Draw a smaller centered marker per cell so the grid looks finer
+        const mW = cellW * 0.5;
+        const mH = cellH * 0.5;
+        const mOX = (cellW - mW) / 2;
+        const mOY = (cellH - mH) / 2;
 
         for (let row = rowStart; row <= rowEnd; row++) {
           for (let col = colStart; col <= colEnd; col++) {
             const cx = (col * CELL_X - srcX) * scale;
             const cy = (row * CELL_Y - srcY) * scale;
             if (grid[row * COLS + col] === 1) {
-              ctx.fillStyle = 'rgba(255,50,50,0.42)';
-              ctx.fillRect(cx, cy, cellW, cellH);
+              ctx.fillStyle = 'rgba(255,50,50,0.55)';
+              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
             } else {
-              ctx.fillStyle = 'rgba(60,220,120,0.12)';
-              ctx.fillRect(cx, cy, cellW, cellH);
+              ctx.fillStyle = 'rgba(60,220,120,0.15)';
+              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
             }
           }
         }

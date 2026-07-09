@@ -11,11 +11,16 @@ import type { CharacterPose } from './characterSprites';
 
 export const PLAYER_COLOR = 'teal' as const;
 // Scale from original 1040×580 canvas to the current MAP_W×MAP_H canvas.
-// Radius and speed use the geometric mean of the two axis scale factors
-// so movement feels consistent in both directions.
-const _SCALE = Math.sqrt((MAP_W / 1040) * (MAP_H / 580)); // ≈ 2.42 at 1.5x upscale
-export const PLAYER_RADIUS = Math.round(9 * _SCALE);
+// Speed uses the geometric mean of the two axis scale factors.
+const _SCALE = Math.sqrt((MAP_W / 1040) * (MAP_H / 580));
 export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE);
+
+// Collision is checked at the character's feet (bottom-center of sprite),
+// not the sprite center. FEET_OFFSET_Y shifts the test point down to the
+// base of the sprite; PLAYER_RADIUS is intentionally tiny (just the feet).
+const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
+export const FEET_OFFSET_Y  = Math.round(_SPRITE_H_MAP_PX * 0.42);
+export const PLAYER_RADIUS  = 4;
 export const PLAYER_ANIM_INTERVAL_MS = 140;
 
 /** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
@@ -81,7 +86,10 @@ export function stepPlayer(
     const dist = (PLAYER_SPEED_PX_PER_SEC * dtMs) / 1000;
     const nx = x + (dx / len) * dist;
     const ny = y + (dy / len) * dist;
-    [x, y] = resolveMovement(grid, x, y, nx, ny, PLAYER_RADIUS);
+    // Collision is tested at the feet (offset down from sprite centre).
+    const [fx, fy] = resolveMovement(grid, x + 0, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y, PLAYER_RADIUS);
+    x = fx;
+    y = fy - FEET_OFFSET_Y;
   }
 
   const facingLeft = dx !== 0 ? dx < 0 : state.facingLeft;
@@ -98,5 +106,5 @@ export function stepPlayer(
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
 export function isSpawnWalkable(grid: Grid): boolean {
-  return canMoveTo(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y, PLAYER_RADIUS);
+  return canMoveTo(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y + FEET_OFFSET_Y, PLAYER_RADIUS);
 }
