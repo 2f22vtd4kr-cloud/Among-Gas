@@ -115,14 +115,27 @@ export default function GameMap() {
         const boundary = Math.ceil(row * cellH);
         octx.clearRect(0, boundary, img.naturalWidth, 5);
       }
-      // Binarize alpha: any pixel with alpha > 20 → fully opaque (255),
-      // otherwise fully transparent (0). This prevents the map tile grout
-      // lines from bleeding through semi-transparent outline edge pixels
-      // when the sprite is composited over the map.
+      // Two-pass pixel normalisation:
+      // 1. Binarize alpha (> 20 → 255, else → 0) so map tile grout lines
+      //    cannot bleed through semi-transparent outline edge pixels.
+      // 2. Normalise dark pixels to pure black.  The visor's vertical stripes
+      //    bleed teal tint into the outline pixels at the head's curved edge,
+      //    producing alternating dark/lighter-teal bands that look like
+      //    horizontal stripes at game scale.  Clamping all dark pixels
+      //    (average brightness < 80/255) to #000 gives a uniform outline.
       const id = octx.getImageData(0, 0, oc.width, oc.height);
       const px = id.data;
-      for (let i = 3; i < px.length; i += 4) {
-        px[i] = px[i] > 20 ? 255 : 0;
+      for (let i = 0; i < px.length; i += 4) {
+        const a = px[i + 3];
+        if (a <= 20) {
+          px[i + 3] = 0;
+        } else {
+          px[i + 3] = 255;
+          // Normalise dark pixels → pure black so outline is stripe-free
+          if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 80) {
+            px[i] = 0; px[i + 1] = 0; px[i + 2] = 0;
+          }
+        }
       }
       octx.putImageData(id, 0, 0);
       spriteImgRef.current = oc;
