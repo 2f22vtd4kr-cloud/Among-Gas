@@ -1,1 +1,2 @@
 - [Handoff protocol](handoff-protocol.md) — every session must read handoff.md first and append to it before finishing; replit.md enforces this rule.
+- [Collision sampling & sandbox testing](collision-and-sandbox-testing.md) — circular collision needs circumference sampling not just 4 points; no Playwright in CodeExecution, simulate via tsc+node instead.

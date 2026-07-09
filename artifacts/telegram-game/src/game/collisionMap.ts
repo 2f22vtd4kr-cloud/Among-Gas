@@ -120,19 +120,26 @@ export function isBlocked(grid: Grid, px: number, py: number): boolean {
 
 /**
  * Can an entity with the given radius move to pixel position (cx, cy)?
- * Checks the four cardinal edge points.
+ * Samples the center plus points around the circle's circumference — not
+ * just the 4 cardinal points — so corners of blocked cells can't be cut
+ * through during diagonal movement. Sample count scales with radius so the
+ * arc length between samples stays well under one grid cell.
  */
 export function canMoveTo(
   grid: Grid,
   cx: number, cy: number,
   radius = 8,
 ): boolean {
-  return (
-    !isBlocked(grid, cx - radius, cy) &&
-    !isBlocked(grid, cx + radius, cy) &&
-    !isBlocked(grid, cx, cy - radius) &&
-    !isBlocked(grid, cx, cy + radius)
-  );
+  if (isBlocked(grid, cx, cy)) return false;
+
+  const samples = Math.max(8, Math.ceil((2 * Math.PI * radius) / (CELL * 0.5)));
+  for (let i = 0; i < samples; i++) {
+    const angle = (i / samples) * Math.PI * 2;
+    const px = cx + Math.cos(angle) * radius;
+    const py = cy + Math.sin(angle) * radius;
+    if (isBlocked(grid, px, py)) return false;
+  }
+  return true;
 }
 
 /**
