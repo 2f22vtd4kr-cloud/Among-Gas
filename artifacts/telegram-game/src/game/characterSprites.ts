@@ -10,7 +10,13 @@
 // cell height of 175.125 px which bleeds the next row's character into the
 // bottom of every source rect — the root cause of the "double ghost" bug.
 
-export const CHARACTER_SHEET_PATH = "/sprites/characters.png";
+// Cache-busting version suffix. Bump this any time characters.png is
+// regenerated — browsers (especially mobile Telegram webviews) can
+// aggressively cache the previous PNG by URL even after a hard refresh,
+// which shows stale artwork (e.g. an old shadow) that isn't actually on
+// disk anymore. Appending ?v=N forces a fresh fetch.
+const SPRITE_SHEET_VERSION = 4;
+export const CHARACTER_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
 
 export const CHARACTER_SHEET_COLS = 7;
 export const CHARACTER_SHEET_ROWS = 9;   // was incorrectly 8; sheet has 9 pose rows
