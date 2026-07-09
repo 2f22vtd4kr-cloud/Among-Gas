@@ -1,0 +1,1 @@
+- [Handoff protocol](handoff-protocol.md) — every session must read handoff.md first and append to it before finishing; replit.md enforces this rule.

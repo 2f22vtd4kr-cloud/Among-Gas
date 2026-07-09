@@ -2,6 +2,10 @@
 
 _Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
 
+## ⚠️ Agent rule — read this first
+
+**At the start of every session, read `handoff.md` before doing anything else.** It is the running log of everything that has been built, every decision made, and where the project was left off. After completing any meaningful work, append a new dated entry to `handoff.md` following the format defined at the top of that file, then commit it with the rest of your changes.
+
 ## Run & Operate
 
 - `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)

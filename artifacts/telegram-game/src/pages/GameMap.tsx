@@ -11,7 +11,7 @@ export default function GameMap() {
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const [loaded, setLoaded]               = useState(false);
   const [error, setError]                 = useState(false);
-  const [showCollision, setShowCollision] = useState(true);
+  const [showCollision, setShowCollision] = useState(false);
   const [hoverZone, setHoverZone]         = useState<string | null>(null);
 
   // ── Load map image ─────────────────────────────────────────────────────────
