@@ -411,6 +411,23 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Shadow crop + uniform-color follow-up fix
+
+**Done**
+- Fixed two bugs in the drop shadow added earlier this session: (1) shadow got cropped when the character moved/changed pose, (2) shadow needed to be one uniform grey shade instead of a radial gradient.
+- Root cause of the crop: the shadow's vertical position/radius was derived only from the body's bounding box, and for most standing/walking poses the character's feet sit right at (or 1-2px from) the bottom edge of the sprite cell — leaving no room for a shadow below. The old shadow position spilled past the cell height, and the game's per-frame source-rect crop (`getCharacterFrameRect` + `Math.floor` sizing in `GameMap.tsx`) silently sliced it off.
+- Fix: replaced the shadow entirely — stripped the old gradient shadow pixels (dilation-mask approach: any translucent pixel more than ~2px from an opaque body pixel is shadow, not legit AA fringe, so zero it), then redrew a flat solid ellipse (`fill rgb(60,60,60)`, constant `fill-opacity 0.55`, no gradient stops) per cell, with `shadowY + shadowRY` clamped to never exceed the cell height.
+- Verified via pixel math across all 9 poses that the new shadow fits fully inside its cell, and visually across the full 7×9 sheet.
+
+**Gotcha for next time**
+- When placing anything near a sprite's feet, remember the character's feet are often flush with the bottom pixel row of its cell — there is very little/no margin below. Any addition anchored below the feet must be clamped to the cell bounds, not just derived from the body bbox, or it will get cropped by the fixed source-rect draw.
+
+**Left off / next steps**
+- Same open items as before: DB not connected, no Telegram SDK integration, no multiplayer.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (repeat repair, evening session)
 
 **Done**
