@@ -305,25 +305,37 @@ export default function GameMap() {
       const sw = Math.floor(rect.x + rect.width)  - sx;
       const sh = Math.floor(rect.y + rect.height) - sy;
 
-      // Drop shadow, drawn directly on the map — not baked into the sprite
-      // sheet. Most poses have the character's feet flush with the very
-      // bottom of their sprite cell, leaving no free pixel space in the atlas
-      // to render a shadow; anything baked in there gets hidden/cropped by
-      // the body and reads as broken speckling. Drawing a flat ellipse here
-      // instead guarantees a clean, uncropped, single-shade shadow every
-      // frame, independent of the sprite sheet's cell layout.
-      // Drop shadow: a plain solid grey ellipse under the character.
-      // No transparency so no map tile lines can bleed through.
-      ctx.save();
-      ctx.fillStyle = 'rgb(38, 50, 56)';
-      ctx.beginPath();
-      ctx.ellipse(
-        playerCX, playerCY + spriteH * 0.44,
-        spriteW * 0.30, spriteH * 0.09,
-        0, 0, Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.restore();
+      // Drop shadow: blur-filtered solid ellipse drawn before the sprite.
+      //
+      // WHY BLUR INSTEAD OF A PLAIN SOLID FILL:
+      // A solid canvas path fill always has anti-aliased sub-pixel edges
+      // (~1-2px of semi-transparent pixels at the ellipse boundary). The map's
+      // horizontal tile grout lines happen to run exactly where those
+      // semi-transparent edge pixels land, letting the lines bleed through and
+      // produce the visible horizontal stripe artifact on mobile.
+      //
+      // ctx.filter='blur(Xpx)' is applied to the drawn shape BEFORE it
+      // composites onto the destination canvas — it averages out tile-line
+      // contrast in the blur spread region, eliminating stripes completely.
+      // The ellipse is drawn slightly smaller than the target visual size;
+      // the blur spreads it to the right apparent size naturally.
+      //
+      // Note: ctx.filter must be reset (to 'none') before drawing the sprite,
+      // or the blur leaks into the character image. The save/restore handles it.
+      {
+        const blurPx = Math.max(3, Math.round(spriteH * 0.06));
+        ctx.save();
+        ctx.filter = `blur(${blurPx}px)`;
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.82)';
+        ctx.beginPath();
+        ctx.ellipse(
+          playerCX, playerCY + spriteH * 0.44,
+          spriteW * 0.26, spriteH * 0.07,
+          0, 0, Math.PI * 2,
+        );
+        ctx.fill();
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.translate(playerCX, playerCY);

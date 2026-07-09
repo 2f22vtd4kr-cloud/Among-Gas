@@ -574,6 +574,26 @@
 **Left off / next steps**
 - User to verify on iOS device.
 
+### 2026-07-09 — Restored blur shadow (reverted solid fill that re-introduced stripes)
+
+**Done**
+- Fresh import repair: re-registered all three artifacts via `verifyAndReplaceArtifactToml`, ran `pnpm install`, restarted `telegram-game` and `api-server` workflows.
+- Root cause of continuing ground shadow stripes: the solid `rgb(38,50,56)` fill (from the "Fix character outline stripes" session) reverted the blur-filter approach that was confirmed working. Canvas path anti-aliasing always creates ~1-2px of semi-transparent sub-pixels at the ellipse boundary; horizontal tile grout lines that intersect those pixels bleed through and read as stripes on mobile.
+- Fix: restored `ctx.filter = 'blur(Xpx)'` on a `rgba(0,0,0,0.82)` solid ellipse (the approach confirmed working in "Shadow ellipse stripe fix, 3rd attempt"). The blur is applied to the shape BEFORE compositing, averaging out tile-line contrast in the spread region. `ctx.filter` is reset within the existing `ctx.save()/ctx.restore()` block, so it cannot leak into the sprite draw.
+- `blurPx = Math.max(3, Math.round(spriteH * 0.06))` scales with DPR/ZOOM via `spriteH`.
+- Typecheck clean. Code review (architect) passed: correct save/restore scoping, no state leak, scaling formula sound.
+
+**Decisions & gotchas**
+- Do NOT revert to a plain solid fill again — canvas path fills always produce anti-aliased edges that let tile lines through at mobile DPR. The blur approach is the correct permanent solution.
+- The screenshot tool renders at dpr=1 (shadow cleanest there); the fix matters most at mobile dpr≈1.67. Verify on iOS device.
+
+**Left off / next steps**
+- User to verify shadow is clean on iOS.
+- DB, Telegram SDK, multiplayer still pending.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Fix character outline stripes (root cause: alpha bleed)
 
 **Done**
