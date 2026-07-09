@@ -266,6 +266,29 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Viewport-clipped rendering (crisp map on mobile)
+
+**Done**
+- Rewrote `artifacts/telegram-game/src/pages/GameMap.tsx` to use viewport-clipped rendering: instead of three full-map canvases (6608×3808) scaled down via CSS `transform: scale(ZOOM)`, there is now a single screen-sized canvas sized to `window.innerWidth × DPR` by `window.innerHeight × DPR`.
+- Each rAF, the visible slice of the map is drawn using `ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch)` — canvas buffer pixels map 1:1 to physical screen pixels, so no CSS-transform downscaling blur.
+- Camera math: `srcW = vw / ZOOM`, `srcH = vh / ZOOM`; `srcX/srcY` clamped to map bounds. Player always appears near screen center; player canvas coords = `(px - srcX) * ZOOM * DPR`.
+- Collision overlay moved from a separate once-per-toggle `useEffect` into the rAF loop, drawing only visible cells (O(viewport) not O(MAP_W×MAP_H)).
+- `showCollisionRef` mirrors React state into a ref so the rAF closure reads it without stale values.
+- `sizeCanvas` callback resizes buffer on window resize.
+- Removed the old `cameraRef` div and all CSS transform logic.
+- `tsc --noEmit` passes clean.
+
+**Decisions & gotchas**
+- DPR buffer scaling is now safe because the canvas is viewport-sized, not map-sized. At DPR=3 (iPhone), buffer is ~1242×2688 — ~13 MB RGBA, perfectly fine vs the old approach which would need 400 MB at map scale.
+- `imageSmoothingEnabled = true, quality = 'high'` on the map draw; `false` on the sprite draw (pixel art should stay crisp).
+- The three-canvas → one-canvas consolidation was done because all layers must now redraw every frame (viewport shifts every frame), so the old "draw map once, overlay on toggle" optimization no longer applies.
+
+**Left off / next steps**
+- DB, multiplayer, Telegram SDK still pending.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Added virtual joystick for mobile testing
 
 **Done**

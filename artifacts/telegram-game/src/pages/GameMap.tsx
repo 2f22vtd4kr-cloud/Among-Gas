@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useCallback } from 'react';
 import {
   buildCollisionGrid,
   COLS, ROWS, CELL_X, CELL_Y,
@@ -20,144 +20,73 @@ import {
 import Joystick from '../components/Joystick';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-// How many screen pixels equal one map pixel. Matches the reference
-// Among Us screenshots — character is a small figure with lots of
-// surrounding map visible, not a close-up zoom.
+// Screen CSS pixels per map pixel. Calibrated against reference Among Us
+// screenshots — small figure with a wide view of surrounding rooms.
 const ZOOM = 0.6;
 
-// On-map display size of the player sprite. Derived from the sheet cell's
-// aspect ratio (146.29:128) rather than hardcoded so it stays proportional
-// if the sprite sheet is ever re-sliced. Scaled against the map's native
-// upscaled resolution (36px was tuned for the old 1652×952 canvas).
+// Player sprite display size in MAP pixels (scaled from the original 1652-wide canvas)
 const PLAYER_DISPLAY_HEIGHT = Math.round(36 * (MAP_W / 1652));
-const PLAYER_DISPLAY_WIDTH = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
+const PLAYER_DISPLAY_WIDTH  = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
 
 export default function GameMap() {
-  const mapCanvasRef     = useRef<HTMLCanvasElement>(null);
-  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
-  const playerCanvasRef  = useRef<HTMLCanvasElement>(null);
-  // The camera transform is applied directly to this div each rAF — no state
-  const cameraRef        = useRef<HTMLDivElement>(null);
+  // Single screen-sized canvas — the whole scene is drawn here each rAF.
+  // Buffer dimensions = viewport × DPR so each canvas pixel maps 1:1 to a
+  // physical screen pixel with no CSS-transform scaling blur.
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  const [loaded, setLoaded]               = useState(false);
-  const [error, setError]                 = useState(false);
+  const mapImgRef    = useRef<HTMLImageElement | null>(null);
+  const spriteImgRef = useRef<HTMLImageElement | null>(null);
+
+  const [loaded,       setLoaded]       = useState(false);
+  const [error,        setError]        = useState(false);
   const [showCollision, setShowCollision] = useState(false);
-  const [hoverZone, setHoverZone]         = useState<string | null>(null);
-  const [spriteLoaded, setSpriteLoaded]   = useState(false);
+  const [hoverZone,    setHoverZone]    = useState<string | null>(null);
+  const [spriteLoaded, setSpriteLoaded] = useState(false);
+
+  // Mirror showCollision into a ref so the rAF loop reads it without stale closure.
+  const showCollisionRef = useRef(false);
+  useEffect(() => { showCollisionRef.current = showCollision; }, [showCollision]);
+
+  // ── Resize canvas buffer to viewport × DPR ────────────────────────────────
+  const sizeCanvas = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const w   = window.innerWidth;
+    const h   = window.innerHeight;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    canvas.style.width  = `${w}px`;
+    canvas.style.height = `${h}px`;
+  }, []);
+
+  useEffect(() => {
+    sizeCanvas();
+    window.addEventListener('resize', sizeCanvas);
+    return () => window.removeEventListener('resize', sizeCanvas);
+  }, [sizeCanvas]);
 
   // ── Load map image ─────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    const canvas = mapCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = 'high';
-
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
-      ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
+      mapImgRef.current = img;
       setLoaded(true);
     };
-    img.onerror = () => {
-      if (cancelled) return;
-      setError(true);
-    };
-    // Pre-upscaled (sharp lanczos3) WebP asset — see game/collisionMap.ts
-    // for why we don't stretch the small original via canvas at runtime.
+    img.onerror = () => { if (!cancelled) setError(true); };
     img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
-    if (img.complete && img.naturalWidth > 0) {
-      ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
-      setLoaded(true);
-    }
-    return () => {
-      cancelled = true;
-      img.onload = null;
-      img.onerror = null;
-    };
+    // Already cached (e.g. HMR reload)
+    if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
+    return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
-  // ── Draw / clear collision overlay ────────────────────────────────────────
-  useEffect(() => {
-    const canvas = overlayCanvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    ctx.clearRect(0, 0, MAP_W, MAP_H);
-    if (!showCollision) return;
-
-    const grid = buildCollisionGrid();
-
-    // Draw blocked cells
-    ctx.fillStyle = 'rgba(255, 50, 50, 0.42)';
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (grid[row * COLS + col] === 1) {
-          ctx.fillRect(col * CELL_X, row * CELL_Y, CELL_X, CELL_Y);
-        }
-      }
-    }
-
-    // Draw walkable cells (subtle green tint)
-    ctx.fillStyle = 'rgba(60, 220, 120, 0.12)';
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        if (grid[row * COLS + col] === 0) {
-          ctx.fillRect(col * CELL_X, row * CELL_Y, CELL_X, CELL_Y);
-        }
-      }
-    }
-
-    // Draw grid lines
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
-    ctx.lineWidth = 0.5;
-    for (let row = 0; row <= ROWS; row++) {
-      ctx.beginPath();
-      ctx.moveTo(0,      row * CELL_Y);
-      ctx.lineTo(MAP_W,  row * CELL_Y);
-      ctx.stroke();
-    }
-    for (let col = 0; col <= COLS; col++) {
-      ctx.beginPath();
-      ctx.moveTo(col * CELL_X, 0);
-      ctx.lineTo(col * CELL_X, MAP_H);
-      ctx.stroke();
-    }
-
-    // Draw zone outlines with labels
-    ctx.font         = 'bold 9px monospace';
-    ctx.textBaseline = 'top';
-    for (const zone of ZONES) {
-      ctx.strokeStyle = 'rgba(120, 220, 255, 0.6)';
-      ctx.lineWidth   = 1;
-      ctx.strokeRect(zone.px, zone.py, zone.pw, zone.ph);
-
-      ctx.fillStyle = 'rgba(120, 220, 255, 0.85)';
-      ctx.fillText(zone.label, zone.px + 3, zone.py + 3);
-    }
-  }, [showCollision]);
-
-  // ── Keyboard shortcut 'C' to toggle collision overlay ─────────────────────
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'c' || e.key === 'C') {
-        setShowCollision(prev => !prev);
-      }
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, []);
-
-  // ── Load player sprite sheet ──────────────────────────────────────────────
-  const spriteImgRef = useRef<HTMLImageElement | null>(null);
+  // ── Load sprite sheet ──────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     const img = new Image();
-    img.onload = () => { if (!cancelled) setSpriteLoaded(true); };
+    img.onload = () => { if (!cancelled) { spriteImgRef.current = img; setSpriteLoaded(true); } };
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
     spriteImgRef.current = img;
     if (img.complete && img.naturalWidth > 0) setSpriteLoaded(true);
@@ -167,39 +96,46 @@ export default function GameMap() {
   // ── Track held movement keys (WASD + arrows) ──────────────────────────────
   const keysRef = useRef<Set<string>>(new Set());
   useEffect(() => {
-    const trackedKeys = new Set(['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']);
-    const onKeyDown = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      if (!trackedKeys.has(key)) return;
+    const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
+    const onDown  = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      if (!tracked.has(k)) return;
       e.preventDefault();
-      keysRef.current.add(key);
+      keysRef.current.add(k);
     };
-    const onKeyUp = (e: KeyboardEvent) => {
-      const key = e.key.toLowerCase();
-      if (!trackedKeys.has(key)) return;
-      keysRef.current.delete(key);
-    };
-    const clearKeys = () => keysRef.current.clear();
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup', onKeyUp);
-    window.addEventListener('blur', clearKeys);
-    document.addEventListener('visibilitychange', clearKeys);
+    const onUp   = (e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()); };
+    const clear  = () => keysRef.current.clear();
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup',   onUp);
+    window.addEventListener('blur',    clear);
+    document.addEventListener('visibilitychange', clear);
     return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup', onKeyUp);
-      window.removeEventListener('blur', clearKeys);
-      document.removeEventListener('visibilitychange', clearKeys);
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup',   onUp);
+      window.removeEventListener('blur',    clear);
+      document.removeEventListener('visibilitychange', clear);
     };
   }, []);
 
-  // ── Player movement + render loop ─────────────────────────────────────────
+  // ── Keyboard shortcut 'C' → toggle collision overlay ──────────────────────
+  useEffect(() => {
+    if (!loaded) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'c' || e.key === 'C') setShowCollision(prev => !prev);
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [loaded]);
+
+  // ── Main rAF render loop ───────────────────────────────────────────────────
   const playerStateRef = useRef(createInitialPlayerState());
+
   useEffect(() => {
     if (!loaded || !spriteLoaded) return;
-    const canvas = playerCanvasRef.current;
+    const canvas = canvasRef.current;
+    const mapImg = mapImgRef.current;
     const sprite = spriteImgRef.current;
-    if (!canvas || !sprite) return;
+    if (!canvas || !mapImg || !sprite) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
@@ -216,66 +152,121 @@ export default function GameMap() {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
       lastTs = ts;
 
+      // Step player physics
       playerStateRef.current = stepPlayer(grid, playerStateRef.current, keysRef.current, dtMs);
-      const { x, y, pose, facingLeft } = playerStateRef.current;
+      const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
 
-      // ── Draw player sprite ──────────────────────────────────────────────
-      ctx.clearRect(0, 0, MAP_W, MAP_H);
-      ctx.imageSmoothingEnabled = false;
+      // Canvas buffer size and DPR
+      const cw  = canvas.width;
+      const ch  = canvas.height;
+      const dpr = window.devicePixelRatio || 1;
+
+      // How many map pixels are visible across the viewport
+      const srcW = (cw / dpr) / ZOOM;   // map px wide
+      const srcH = (ch / dpr) / ZOOM;   // map px tall
+
+      // Camera center = player; clamped so we don't show outside the map
+      const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
+      const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
+
+      // scale: map pixels → canvas buffer pixels
+      const scale = ZOOM * dpr;
+
+      // ── 1. Map ────────────────────────────────────────────────────────────
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
+
+      // ── 2. Collision overlay (only visible cells) ─────────────────────────
+      if (showCollisionRef.current) {
+        const colStart = Math.max(0,        Math.floor(srcX / CELL_X));
+        const colEnd   = Math.min(COLS - 1, Math.ceil((srcX + srcW) / CELL_X));
+        const rowStart = Math.max(0,        Math.floor(srcY / CELL_Y));
+        const rowEnd   = Math.min(ROWS - 1, Math.ceil((srcY + srcH) / CELL_Y));
+
+        const cellW = CELL_X * scale;
+        const cellH = CELL_Y * scale;
+
+        for (let row = rowStart; row <= rowEnd; row++) {
+          for (let col = colStart; col <= colEnd; col++) {
+            const cx = (col * CELL_X - srcX) * scale;
+            const cy = (row * CELL_Y - srcY) * scale;
+            if (grid[row * COLS + col] === 1) {
+              ctx.fillStyle = 'rgba(255,50,50,0.42)';
+              ctx.fillRect(cx, cy, cellW, cellH);
+            } else {
+              ctx.fillStyle = 'rgba(60,220,120,0.12)';
+              ctx.fillRect(cx, cy, cellW, cellH);
+            }
+          }
+        }
+
+        // Grid lines (only over visible area)
+        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+        ctx.lineWidth = 0.5;
+        for (let row = rowStart; row <= rowEnd + 1; row++) {
+          const cy = (row * CELL_Y - srcY) * scale;
+          ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cw, cy); ctx.stroke();
+        }
+        for (let col = colStart; col <= colEnd + 1; col++) {
+          const cx = (col * CELL_X - srcX) * scale;
+          ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, ch); ctx.stroke();
+        }
+
+        // Zone outlines + labels
+        ctx.font         = `bold ${Math.round(9 * dpr)}px monospace`;
+        ctx.textBaseline = 'top';
+        for (const zone of ZONES) {
+          const zx = (zone.px - srcX) * scale;
+          const zy = (zone.py - srcY) * scale;
+          const zw = zone.pw * scale;
+          const zh = zone.ph * scale;
+          ctx.strokeStyle = 'rgba(120,220,255,0.6)';
+          ctx.lineWidth   = 1;
+          ctx.strokeRect(zx, zy, zw, zh);
+          ctx.fillStyle = 'rgba(120,220,255,0.85)';
+          ctx.fillText(zone.label, zx + 3, zy + 3);
+        }
+      }
+
+      // ── 3. Player sprite ──────────────────────────────────────────────────
+      const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
+      const spriteW = PLAYER_DISPLAY_WIDTH  * scale;
+      // Player screen position in canvas buffer pixels
+      const playerCX = (px - srcX) * scale;
+      const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(PLAYER_COLOR, pose);
       ctx.save();
-      ctx.translate(x, y);
+      ctx.translate(playerCX, playerCY);
       if (facingLeft) ctx.scale(-1, 1);
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(
         sprite,
         rect.x, rect.y, rect.width, rect.height,
-        -PLAYER_DISPLAY_WIDTH / 2, -PLAYER_DISPLAY_HEIGHT / 2,
-        PLAYER_DISPLAY_WIDTH, PLAYER_DISPLAY_HEIGHT,
+        -spriteW / 2, -spriteH / 2, spriteW, spriteH,
       );
       ctx.restore();
 
-      // ── Camera follow ───────────────────────────────────────────────────
-      // Mutate the container transform directly — avoids React re-renders.
-      // transform-origin is 0 0, so:
-      //   screen_x = map_x * ZOOM + tx  →  tx = vw/2 - x * ZOOM
-      //   screen_y = map_y * ZOOM + ty  →  ty = vh/2 - y * ZOOM
-      const cam = cameraRef.current;
-      if (cam) {
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-        const tx = vw / 2 - x * ZOOM;
-        const ty = vh / 2 - y * ZOOM;
-        cam.style.transform = `translate(${tx}px,${ty}px) scale(${ZOOM})`;
-      }
-
       rafId = requestAnimationFrame(frame);
     };
-
-    // Set initial camera position before first frame so there's no flash
-    const initCam = cameraRef.current;
-    if (initCam) {
-      const { x, y } = playerStateRef.current;
-      const vw = window.innerWidth;
-      const vh = window.innerHeight;
-      initCam.style.transform =
-        `translate(${vw / 2 - x * ZOOM}px,${vh / 2 - y * ZOOM}px) scale(${ZOOM})`;
-    }
 
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded]);
 
-  // ── Track mouse to show zone name on hover ────────────────────────────────
-  // Convert screen coords → map coords, accounting for the camera transform.
+  // ── Mouse hover → zone label (for collision debug) ────────────────────────
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!showCollision) return;
     const { x: px, y: py } = playerStateRef.current;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    // Inverse of: translate(vw/2 - px*ZOOM, vh/2 - py*ZOOM) scale(ZOOM)
-    const mapX = (e.clientX - (vw / 2 - px * ZOOM)) / ZOOM;
-    const mapY = (e.clientY - (vh / 2 - py * ZOOM)) / ZOOM;
+    const vw   = window.innerWidth;
+    const vh   = window.innerHeight;
+    const srcW = vw / ZOOM;
+    const srcH = vh / ZOOM;
+    const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
+    const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
+    const mapX = srcX + (e.clientX / vw) * srcW;
+    const mapY = srcY + (e.clientY / vh) * srcH;
     const found = ZONES.find(
       z => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
     );
@@ -283,24 +274,17 @@ export default function GameMap() {
   };
 
   return (
-    // ── Viewport clipping wrapper ─────────────────────────────────────────
     <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        overflow: 'hidden',
-        background: '#3d4e5e',
-      }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverZone(null)}
     >
-      {/* ── Loading / error states (centred in viewport) ───────────────── */}
+      {/* Loading / error states */}
       {!loaded && !error && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#8faabb', fontFamily: 'monospace', fontSize: 14,
-          zIndex: 10,
+          color: '#8faabb', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
         }}>
           Loading map…
         </div>
@@ -309,77 +293,38 @@ export default function GameMap() {
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          color: '#cc4444', fontFamily: 'monospace', fontSize: 14,
-          zIndex: 10,
+          color: '#cc4444', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
         }}>
           Failed to load map.
         </div>
       )}
 
-      {/* ── Camera container: transform applied here each rAF ─────────── */}
-      <div
-        ref={cameraRef}
+      {/* ── Single screen-sized canvas ─────────────────────────────────────
+          CSS size = viewport (no scaling); buffer = viewport × DPR.
+          Each frame draws only the visible map slice so map pixels map 1:1
+          to physical screen pixels — no CSS-transform downscale blur.   */}
+      <canvas
+        ref={canvasRef}
         style={{
+          display: 'block',
           position: 'absolute',
-          width: MAP_W,
-          height: MAP_H,
-          transformOrigin: '0 0',
-          // Initial position: player spawn centred; overwritten on first rAF
-          willChange: 'transform',
+          top: 0, left: 0,
+          opacity: loaded ? 1 : 0,
         }}
-      >
-        {/* Map image layer */}
-        <canvas
-          ref={mapCanvasRef}
-          width={MAP_W}
-          height={MAP_H}
-          style={{ display: 'block', position: 'absolute', top: 0, left: 0 }}
-        />
-
-        {/* Overlay: collision debug */}
-        <canvas
-          ref={overlayCanvasRef}
-          width={MAP_W}
-          height={MAP_H}
-          style={{
-            display: 'block', position: 'absolute', top: 0, left: 0,
-            opacity: loaded ? 1 : 0,
-          }}
-        />
-
-        {/* Player layer */}
-        <canvas
-          ref={playerCanvasRef}
-          width={MAP_W}
-          height={MAP_H}
-          style={{
-            display: 'block', position: 'absolute', top: 0, left: 0,
-            opacity: loaded && spriteLoaded ? 1 : 0,
-            pointerEvents: 'none',
-          }}
-        />
-      </div>
+      />
 
       {/* ── Joystick (touch devices) ──────────────────────────────────────── */}
       {loaded && <Joystick keysRef={keysRef} />}
 
-      {/* ── HUD: movement hint (keyboard, hidden when touch is primary) ───── */}
+      {/* ── HUD: keyboard hint (hidden on touch-primary devices) ─────────── */}
       {loaded && (
         <div style={{
-          position: 'fixed',
-          bottom: 16,
-          left: 16,
+          position: 'fixed', bottom: 16, left: 16,
           padding: '5px 10px',
-          background: 'rgba(20, 32, 44, 0.85)',
-          color: '#8ab8cc',
-          fontFamily: 'monospace',
-          fontSize: 12,
-          borderRadius: 6,
+          background: 'rgba(20,32,44,0.85)', color: '#8ab8cc',
+          fontFamily: 'monospace', fontSize: 12, borderRadius: 6,
           border: '1px solid rgba(100,160,200,0.3)',
-          backdropFilter: 'blur(6px)',
-          letterSpacing: '0.03em',
-          zIndex: 20,
-          // Hide on touch-primary devices — joystick replaces this hint
+          backdropFilter: 'blur(6px)', letterSpacing: '0.03em', zIndex: 20,
           display: window.matchMedia('(pointer: coarse)').matches ? 'none' : 'block',
         }}>
           WASD / Arrow keys to move
@@ -389,23 +334,15 @@ export default function GameMap() {
       {/* ── HUD: debug controls ──────────────────────────────────────────── */}
       {loaded && (
         <div style={{
-          position: 'fixed',
-          bottom: 16,
-          right: 16,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'flex-end',
-          gap: 6,
-          zIndex: 20,
+          position: 'fixed', bottom: 16, right: 16,
+          display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
+          gap: 6, zIndex: 20,
         }}>
           {showCollision && hoverZone && (
             <div style={{
               padding: '3px 8px',
-              background: 'rgba(20, 32, 44, 0.9)',
-              color: '#78d4ff',
-              fontFamily: 'monospace',
-              fontSize: 11,
-              borderRadius: 4,
+              background: 'rgba(20,32,44,0.9)', color: '#78d4ff',
+              fontFamily: 'monospace', fontSize: 11, borderRadius: 4,
               border: '1px solid rgba(120,200,255,0.3)',
             }}>
               {hoverZone}
@@ -415,15 +352,11 @@ export default function GameMap() {
             onClick={() => setShowCollision(prev => !prev)}
             style={{
               padding: '6px 14px',
-              background: showCollision ? 'rgba(200, 50, 50, 0.85)' : 'rgba(20, 32, 44, 0.85)',
+              background: showCollision ? 'rgba(200,50,50,0.85)' : 'rgba(20,32,44,0.85)',
               color: showCollision ? '#ffcccc' : '#8ab8cc',
               border: `1px solid ${showCollision ? 'rgba(255,100,100,0.4)' : 'rgba(100,160,200,0.3)'}`,
-              borderRadius: 6,
-              fontFamily: 'monospace',
-              fontSize: 12,
-              cursor: 'pointer',
-              backdropFilter: 'blur(6px)',
-              letterSpacing: '0.03em',
+              borderRadius: 6, fontFamily: 'monospace', fontSize: 12, cursor: 'pointer',
+              backdropFilter: 'blur(6px)', letterSpacing: '0.03em',
             }}
           >
             {showCollision ? '■ Hide Collision [C]' : '□ Show Collision [C]'}
