@@ -281,6 +281,25 @@ export default function GameMap() {
       const sw = Math.floor(rect.x + rect.width)  - sx;
       const sh = Math.floor(rect.y + rect.height) - sy;
 
+      // Drop shadow, drawn directly on the map — not baked into the sprite
+      // sheet. Most poses have the character's feet flush with the very
+      // bottom of their sprite cell, leaving no free pixel space in the atlas
+      // to render a shadow; anything baked in there gets hidden/cropped by
+      // the body and reads as broken speckling. Drawing a flat ellipse here
+      // instead guarantees a clean, uncropped, single-shade shadow every
+      // frame, independent of the sprite sheet's cell layout.
+      ctx.save();
+      ctx.imageSmoothingEnabled = true;
+      ctx.fillStyle = 'rgba(40,40,40,0.4)';
+      ctx.beginPath();
+      ctx.ellipse(
+        playerCX, playerCY + spriteH * 0.42,
+        spriteW * 0.32, spriteH * 0.12,
+        0, 0, Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.restore();
+
       ctx.save();
       ctx.translate(playerCX, playerCY);
       if (facingLeft) ctx.scale(-1, 1);

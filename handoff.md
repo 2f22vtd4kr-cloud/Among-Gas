@@ -428,6 +428,21 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Shadow moved from sprite sheet to procedural canvas draw (final fix)
+
+**Done**
+- The baked-in sprite-sheet shadow (from the two prior entries above) turned out to be fundamentally unfixable in the atlas: most character poses have their feet flush with the very last pixel row of their sprite cell, so there is no free space in the atlas below the feet at all. Any shadow drawn there was almost entirely hidden behind the opaque body, and the sliver that peeked out (mostly through the leg-gap notch) read as broken/speckled stripes once scaled to gameplay size — not a rendering bug, just no room to draw it.
+- Final fix: removed the shadow from `characters.png` entirely (reverted to a clean, shadow-free sprite) and instead draw the shadow procedurally in `GameMap.tsx`'s render loop — a flat single-color ellipse (`rgba(40,40,40,0.4)`) positioned relative to the player's screen coordinates and sized proportional to `spriteW/spriteH`, drawn immediately before the sprite each frame (so it's always underneath, always uncropped, and pose-independent).
+
+**Why this approach**
+- Baking effects into a tightly-packed sprite atlas only works if there's literal pixel space in the cell for them. When there isn't (as here), draw the effect in world/screen space in the render loop instead of fighting the atlas layout.
+
+**Left off / next steps**
+- Same open items as before: DB not connected, no Telegram SDK integration, no multiplayer.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (repeat repair, evening session)
 
 **Done**
