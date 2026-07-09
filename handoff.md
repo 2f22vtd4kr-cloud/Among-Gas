@@ -266,6 +266,19 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Fixed animation ghost / double-character bug
+
+**Done**
+- Added `ctx.clearRect(0, 0, cw, ch)` at the start of the rAF frame in `GameMap.tsx`. Root cause: the single merged canvas was not being explicitly cleared each frame; transparent sprite pixels let the previous frame show through even though the opaque map drawImage covered the background.
+- Floored sprite source rect coordinates: `sx = floor(rect.x)`, `sy = floor(rect.y)`, `sw = floor(rect.x + rect.width) - sx`, `sh = floor(rect.y + rect.height) - sy`. Prevents 1px sub-pixel bleed from adjacent animation rows when `imageSmoothingEnabled=false` is active (fractional cell dimensions 160.43×175.125 on the sprite sheet).
+
+**Decisions & gotchas**
+- In the old three-canvas layout the player canvas called `clearRect` explicitly each frame; the merged-canvas refactor dropped it. Always `clearRect` a merged canvas at frame start — never rely on an opaque drawImage to serve as the clear.
+- Sprite sheet cells are NOT integer-sized (1123/7 × 1401/8). Always floor the source origin and derive end from `floor(start + size)` to get integer rects; never round the dimensions directly.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Viewport-clipped rendering (crisp map on mobile)
 
 **Done**

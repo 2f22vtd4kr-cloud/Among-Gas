@@ -172,7 +172,11 @@ export default function GameMap() {
       // scale: map pixels → canvas buffer pixels
       const scale = ZOOM * dpr;
 
-      // ── 1. Map ────────────────────────────────────────────────────────────
+      // ── 1. Clear + Map ───────────────────────────────────────────────────
+      // Must clear first: transparent sprite pixels from the previous frame
+      // would show through even though the map drawImage is fully opaque,
+      // because compositing happens at the pixel level after the fact.
+      ctx.clearRect(0, 0, cw, ch);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
@@ -237,13 +241,21 @@ export default function GameMap() {
       const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(PLAYER_COLOR, pose);
+      // Floor the source origin and derive integer width/height from the
+      // next cell boundary so nearest-neighbor sampling (imageSmoothingEnabled=false)
+      // never bleeds a pixel strip from the adjacent animation frame.
+      const sx = Math.floor(rect.x);
+      const sy = Math.floor(rect.y);
+      const sw = Math.floor(rect.x + rect.width)  - sx;
+      const sh = Math.floor(rect.y + rect.height) - sy;
+
       ctx.save();
       ctx.translate(playerCX, playerCY);
       if (facingLeft) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(
         sprite,
-        rect.x, rect.y, rect.width, rect.height,
+        sx, sy, sw, sh,
         -spriteW / 2, -spriteH / 2, spriteW, spriteH,
       );
       ctx.restore();
