@@ -78,3 +78,23 @@
 
 **State to restore**
 - None — `showCollision` in `GameMap.tsx` is confirmed `false` (default, non-overlay) after this session's edits.
+
+### 2026-07-09 — Re-import setup: dependencies, DB, and artifact/workflow repair
+
+**Done**
+- Ran `pnpm install` (fresh node_modules on this import).
+- Confirmed the Replit Postgres DB is provisioned and `DATABASE_URL` is set; no schema exists yet (`lib/db/src/schema/index.ts` is still the empty template), so nothing to push.
+- Found `listArtifacts()` returned empty and no workflows were configured despite all three `artifacts/*/.replit-artifact/artifact.toml` files being present and valid — the import dropped artifact registration metadata (not the code).
+- Fixed by copying each artifact's own `artifact.toml` to a sibling `artifact.edit.toml` and calling `verifyAndReplaceArtifactToml()` on it (no content changes) for `api-server`, `telegram-game`, and `mockup-sandbox`. This re-registered all three artifacts and recreated their managed workflows with no code changes.
+- Started and verified all three workflows: `artifacts/api-server: API Server`, `artifacts/telegram-game: web`, `artifacts/mockup-sandbox: Component Preview Server`. Screenshotted the game map — renders correctly, matches the pixel-accurate collision map from the previous session.
+
+**Decisions & gotchas**
+- See the new "Gotchas" entry in `replit.md` — the `verifyAndReplaceArtifactToml` re-registration trick is the fix observed for this "artifact files exist but not registered" import failure mode.
+- `.replit` picked up a `postgresql-16` nix module (and nix channel bump) automatically when the pre-provisioned DB was confirmed reachable this session — not a manual edit, just noting it for reproducibility.
+
+**Left off / next steps**
+- Still no player/movement system or DB schema — unchanged from previous session.
+- User asked to provision the DB as part of this session; it was already provisioned by the environment, so no action was needed beyond confirming reachability.
+
+**State to restore**
+- None.

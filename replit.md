@@ -1,6 +1,6 @@
-# [Project name]
+# Telegram Game Project
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+A multi-artifact project centered on a Telegram game with a top-down map, backed by a shared Express API server, plus a mockup sandbox for UI prototyping.
 
 ## ⚠️ Agent rule — read this first
 
@@ -43,6 +43,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 ## Gotchas
 
 _Populate as you build — sharp edges, "always run X before Y" rules._
+- If a fresh import/re-import shows no configured workflows and `listArtifacts()` returns empty even though `artifacts/*/.replit-artifact/artifact.toml` files exist, the artifact registration metadata was dropped on import. Repair by re-running `verifyAndReplaceArtifactToml()` against each artifact's own (unmodified) `artifact.toml` — this re-registers the artifact and its workflows without touching any source code.
 
 ## Pointers
 
