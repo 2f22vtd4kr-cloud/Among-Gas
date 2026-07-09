@@ -26,6 +26,25 @@
 
 ## Sessions
 
+### 2026-07-09 — Re-registered artifacts after import; regenerated collision map from updated reference image
+
+**Done**
+- Import had dropped Replit's artifact registration metadata (TOML files were intact); re-ran `verifyAndReplaceArtifactToml` for all three artifacts (`telegram-game`, `api-server`, `mockup-sandbox`), ran `pnpm install`, verified all three workflows start cleanly.
+- User uploaded a new red-line reference image (`attached_assets/IMG_2907_1783632830477.jpeg`, byte-identical to the earlier `IMG_2907_1783593845208.jpeg` used previously) and asked for the collision mapping to match it.
+- Pointed `scripts/src/analyzeCollisionMap.ts`'s `SRC` at the new filename and re-ran it (`pnpm --filter @workspace/scripts exec tsx src/analyzeCollisionMap.ts`) to regenerate `artifacts/telegram-game/src/game/collisionData.ts`. Updated the stale filename in the top-of-file comment in `collisionMap.ts` to match.
+- Verified by rendering the decoded RLE grid as a semi-transparent overlay directly on the source reference image (temp script, not committed) — walls/obstacles/furniture align with the red outlines. Also spot-checked in-game with the collision overlay toggled on, then reverted `showCollision` back to `false`.
+- `tsc --noEmit` passes; code review (architect subagent) passed with no blocking issues.
+
+**Decisions & gotchas**
+- There are two collision-generation scripts: `analyzeCollisionMap.ts` (traces pixel-accurate red-line boundaries from a hand-annotated reference photo — used this session) and `analyzeCollisionMapArt.ts` (heuristic background/darkness detection directly on the game artwork, no red-line image needed — this is what most recently produced the *previous* `collisionData.ts`, per its generated banner). Both output the same COLS×ROWS×CELL RLE format `collisionMap.ts` expects, so either can be re-run safely; use whichever a fresh reference image was drawn for.
+- If future red-line reference images are supplied under a new `attached_assets/...` filename, update `SRC` in `analyzeCollisionMap.ts` to match before re-running, and update the filename mentioned in `collisionMap.ts`'s header comment so it doesn't go stale.
+
+**Left off / next steps**
+- None outstanding; both the artifact re-registration and the collision remap are complete and verified.
+
+**State to restore**
+- None — the temporary `showCollision` debug toggle was reverted back to `false` before finishing.
+
 ### 2026-07-09 — Attempted AI-detail map regen (chunked, image-edit): blocked on billing, reverted
 
 **Context:** after the DPR-cap fix (below), user wanted the map's actual detail ceiling raised, not just the upsampling blur removed. Discussed and rejected plain tiling/viewport-culling (solves a perf problem, not a detail problem) and settled on: split the map into overlapping tiles, regenerate each via an image-to-image *edit* call (not blind text-to-image) with a "preserve exact layout, only add detail" prompt, re-theme to a modern-Russia setting (Bukhanka van, Lenin bust, Cyrillic-only/no text), stitch back into the same 6608×3808 canvas so collision-map coordinates stay valid.

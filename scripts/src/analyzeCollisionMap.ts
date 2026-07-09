@@ -21,7 +21,7 @@ import sharp from 'sharp';
 import { writeFileSync } from 'fs';
 
 const ROOT = new URL('../../', import.meta.url);
-const SRC = new URL('attached_assets/IMG_2907_1783593845208.jpeg', ROOT).pathname;
+const SRC = new URL('attached_assets/IMG_2907_1783632830477.jpeg', ROOT).pathname;
 const OUT = new URL('artifacts/telegram-game/src/game/collisionData.ts', ROOT).pathname;
 
 // Logical game grid (must match collisionMap.ts constants)
