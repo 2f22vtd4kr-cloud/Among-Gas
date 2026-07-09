@@ -288,27 +288,18 @@ export default function GameMap() {
       // the body and reads as broken speckling. Drawing a flat ellipse here
       // instead guarantees a clean, uncropped, single-shade shadow every
       // frame, independent of the sprite sheet's cell layout.
-      // Shadow: blurred solid ellipse.
-      // ctx.filter='blur' blurs the shape before compositing over the map,
-      // which averages out any tile-line contrast bleeding through the
-      // semi-transparent fill — the cleanest way to suppress grout-line stripes.
-      // Radius is slightly undersized; the blur spreads it to the right visual size.
-      {
-        const sCX = playerCX;
-        const sCY = playerCY + spriteH * 0.42;
-        const sRX = spriteW * 0.28;
-        const sRY = spriteH * 0.09;
-        const blurPx = Math.max(2, Math.round(spriteH * 0.06));
-        ctx.save();
-        ctx.filter = `blur(${blurPx}px)`;
-        ctx.translate(sCX, sCY);
-        ctx.scale(1, sRY / sRX);
-        ctx.beginPath();
-        ctx.arc(0, 0, sRX, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.82)';
-        ctx.fill();
-        ctx.restore();
-      }
+      // Drop shadow: a plain solid grey ellipse under the character.
+      // No transparency so no map tile lines can bleed through.
+      ctx.save();
+      ctx.fillStyle = 'rgb(38, 50, 56)';
+      ctx.beginPath();
+      ctx.ellipse(
+        playerCX, playerCY + spriteH * 0.44,
+        spriteW * 0.30, spriteH * 0.09,
+        0, 0, Math.PI * 2,
+      );
+      ctx.fill();
+      ctx.restore();
 
       ctx.save();
       ctx.translate(playerCX, playerCY);
