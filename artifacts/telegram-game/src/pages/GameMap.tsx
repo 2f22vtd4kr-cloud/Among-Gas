@@ -25,6 +25,18 @@ import Joystick from '../components/Joystick';
 // screenshots — small figure with a wide view of surrounding rooms.
 const ZOOM = 0.6;
 
+// Hard cap on the DPR used to size the canvas buffer and scale the map draw.
+// The map source asset (map-hires.webp) has a fixed native resolution; the
+// per-frame draw stretches it by a factor of `ZOOM * dpr`. Once that factor
+// exceeds ~1 we're upsampling native image pixels, which reads as visibly
+// blurry (bilinear/bicubic interpolation adds no real detail) — this is most
+// noticeable on high-DPR phones (iPhones are typically dpr=3). Capping dpr at
+// 1/ZOOM keeps the map stretch factor at exactly 1 (pure 1:1, no upsampling)
+// on any device, at the cost of slightly less-dense text/UI on very high-DPR
+// screens. See .agents/memory/image-upscaling.md.
+const MAX_RENDER_DPR = 1 / ZOOM;
+const getRenderDpr = () => Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR);
+
 // Player sprite display size in MAP pixels (scaled from the original 1652-wide canvas)
 const PLAYER_DISPLAY_HEIGHT = Math.round(36 * (MAP_W / 1652));
 const PLAYER_DISPLAY_WIDTH  = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
@@ -53,7 +65,7 @@ export default function GameMap() {
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = getRenderDpr();
     const w   = window.innerWidth;
     const h   = window.innerHeight;
     canvas.width  = Math.round(w * dpr);
@@ -176,7 +188,7 @@ export default function GameMap() {
       // Canvas buffer size and DPR
       const cw  = canvas.width;
       const ch  = canvas.height;
-      const dpr = window.devicePixelRatio || 1;
+      const dpr = getRenderDpr();
 
       // How many map pixels are visible across the viewport
       const srcW = (cw / dpr) / ZOOM;   // map px wide

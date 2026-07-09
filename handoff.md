@@ -26,6 +26,26 @@
 
 ## Sessions
 
+### 2026-07-09 — Map crispness fix: cap DPR to stop upsampling blur
+
+**Done**
+- Root-caused why the user (viewing via the iOS Replit app, likely dpr≈3) saw the map as blurry even though it looked crisp on desktop screenshots: `GameMap.tsx`'s per-frame draw stretches the native `map-hires.webp` asset by `scale = ZOOM * dpr` (ZOOM=0.6 fixed camera calibration). At dpr=3 that's `scale=1.8` — upsampling native image pixels by 80%, which reads as visible blur; at dpr=1 (desktop) `scale=0.6` (downsample, looks fine) — explaining why prior desktop screenshots never caught this.
+- Fix (`artifacts/telegram-game/src/pages/GameMap.tsx`): added `MAX_RENDER_DPR = 1 / ZOOM` and a shared `getRenderDpr()` helper that clamps `window.devicePixelRatio` to that cap; replaced both raw `window.devicePixelRatio` reads (canvas buffer sizing in `sizeCanvas`, and the per-frame `scale`/font-size calc) with it. Guarantees the map draw never exceeds a 1:1 stretch (no upsampling) on any device, while still using a denser-than-1x buffer on retina screens for UI/text.
+- Chose this over regenerating the map at a higher resolution: the source art's native detail (1652×952) is a separate, harder ceiling; a further resolution bump would need ~2x more pixels (13,216×7,616 ≈ 100 MP, ~400 MB decoded RGBA) which risks crashing mobile/Telegram in-app WebViews — the DPR cap fixes the actual reported blur mechanism with zero asset changes and zero added memory risk.
+- Verified: typecheck passes, workflow restarted cleanly, screenshot at a 402×874 mobile viewport confirms map/character/HUD render correctly. Code review (architect subagent) passed — DPR usage consistent across buffer sizing, frame scale, and font size; no regression to collision overlay, sprite alignment, or joystick/HUD (those are CSS-pixel DOM elements, unaffected by canvas DPR).
+- Logged the general technique in `.agents/memory/image-upscaling.md` (cap DPR via a zoom-derived constant, rather than chasing more source pixels, whenever a fixed camera-zoom constant multiplies dpr into a canvas draw scale).
+
+**Decisions & gotchas**
+- `MAX_RENDER_DPR` is derived from `ZOOM` (`1 / ZOOM`), not a magic number — if `ZOOM` is ever recalibrated, the cap tracks it automatically.
+- This screenshot tool renders at dpr=1 by default, so it cannot visually reproduce the retina blur being fixed here — the fix was verified by math/code review, not a before/after screenshot diff.
+
+**Left off / next steps**
+- If the user still wants MORE real detail (not just removing upsampling blur), the actual next step is regenerating the source map art at higher genuine resolution or with an AI super-resolution pass (not available in this environment currently) — flag this tradeoff if they ask for further crispness.
+- DB still not connected, no Telegram WebApp SDK integration, no multiplayer — unchanged.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (artifact re-registration, again)
 
 **Done**
