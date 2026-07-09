@@ -573,3 +573,24 @@
 
 **Left off / next steps**
 - User to verify on iOS device.
+
+### 2026-07-09 — Fix character outline stripes (root cause: alpha bleed)
+
+**Done**
+- Confirmed root cause of horizontal stripes in character outline: the sprite PNG's outline pixels are semi-transparent at edges (anti-aliased from AI generation). Map tile grout lines bleed through those semi-transparent pixels when composited over the map — same mechanism as the shadow ellipse stripes, just in the sprite itself.
+- Fix: after drawing sprite to OffscreenCanvas and clearing row boundaries, binarize alpha channel across the entire sprite sheet. Any pixel with alpha > 20 → 255 (fully opaque), otherwise → 0. This eliminates all semi-transparent edge pixels so tile lines cannot bleed through.
+- This is done once at sprite load time (not per frame) so zero runtime cost.
+- Bilinear smoothing (previous fix) still provides clean scaling; binarized-alpha + bilinear = sharp outline at all scales with no transparency bleed.
+- Shadow ellipse also fixed (previous session): plain solid rgb(38,50,56) ellipse, no transparency, no stripes possible.
+
+**Decisions & gotchas**
+- Alpha threshold = 20 (not 128): even low-alpha pixels (e.g. alpha=30) let visible tile contrast through, so threshold must be low to catch all edge anti-aliasing from the PNG.
+- Binarization removes sub-pixel anti-aliasing from the source PNG, but bilinear scaling at render time re-introduces natural anti-aliasing at the game scale — net result is clean crisp edges.
+- Desktop screenshot (dpr=1, scale=0.6) shows clean outline. Mobile at dpr=1.667 (scale=1.0) should be even cleaner.
+
+**Left off / next steps**
+- User to verify on iOS.
+- DB, Telegram SDK, multiplayer still not started.
+
+**State to restore**
+- None.

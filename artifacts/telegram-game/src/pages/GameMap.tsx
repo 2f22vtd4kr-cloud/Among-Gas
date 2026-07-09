@@ -109,11 +109,22 @@ export default function GameMap() {
       const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
       const octx = oc.getContext('2d')!;
       octx.drawImage(img, 0, 0);
+      // Wipe 5px at every inter-row boundary to prevent row bleed.
       const cellH = img.naturalHeight / CHARACTER_SHEET_ROWS;
       for (let row = 1; row < CHARACTER_SHEET_ROWS; row++) {
         const boundary = Math.ceil(row * cellH);
         octx.clearRect(0, boundary, img.naturalWidth, 5);
       }
+      // Binarize alpha: any pixel with alpha > 20 → fully opaque (255),
+      // otherwise fully transparent (0). This prevents the map tile grout
+      // lines from bleeding through semi-transparent outline edge pixels
+      // when the sprite is composited over the map.
+      const id = octx.getImageData(0, 0, oc.width, oc.height);
+      const px = id.data;
+      for (let i = 3; i < px.length; i += 4) {
+        px[i] = px[i] > 20 ? 255 : 0;
+      }
+      octx.putImageData(id, 0, 0);
       spriteImgRef.current = oc;
       setSpriteLoaded(true);
     };
