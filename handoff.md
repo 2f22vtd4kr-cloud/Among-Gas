@@ -99,6 +99,30 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Camera-follow with Among Us-style zoom
+
+**Done**
+- Added camera-follow to `GameMap.tsx`: a `cameraRef` div wraps all three canvas layers with `transformOrigin: '0 0'` and `willChange: 'transform'`.
+- Camera transform (`translate(vw/2 - x·ZOOM, vh/2 - y·ZOOM) scale(ZOOM)`) is applied directly to the div's style each rAF frame — no React state update, no re-renders.
+- `ZOOM = 2.5` chosen to match Among Us-style close zoom (shows ~512px of the 1652px map width at a 1280px viewport).
+- Outer wrapper changed to `position: fixed; inset: 0; overflow: hidden` to clip the transformed canvas.
+- `handleMouseMove` updated to invert the camera transform (screen → map coords) so collision zone hover still works.
+- Increased `PLAYER_DISPLAY_HEIGHT` from 30 → 36 px for better visibility at zoom.
+- HUD elements (WASD hint, collision toggle) kept `position: fixed; zIndex: 20` so they stay anchored to the viewport regardless of camera.
+
+**Decisions & gotchas**
+- Camera transform uses `transform-origin: 0 0` so the math is: `tx = vw/2 - x·ZOOM`, `ty = vh/2 - y·ZOOM`. Using `50% 50%` origin would complicate the formula.
+- Direct style mutation (not React state) is intentional — avoids a React re-render every rAF tick, which would be catastrophic for performance.
+- Initial camera position is set synchronously before the first rAF tick to prevent a one-frame flash at position 0,0.
+- `willChange: transform` on the camera div hints to the browser to promote it to a compositor layer for smooth panning.
+
+**Left off / next steps**
+- No camera smoothing / lerp — camera snaps instantly. Could add exponential decay for polish.
+- Map edges are now reachable (player can walk off-screen to the far edges of the 1652×952 map). Edge clamping may be desirable.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Upscaled map image + proportional collision/player scaling
 
 **Done**

@@ -18,16 +18,23 @@ import {
   getCharacterFrameRect,
 } from '../game/characterSprites';
 
+// ── Camera ────────────────────────────────────────────────────────────────────
+// How many screen pixels equal one map pixel. Among Us-style close zoom.
+const ZOOM = 2.5;
+
 // On-map display size of the player sprite. Derived from the sheet cell's
 // aspect ratio (146.29:128) rather than hardcoded so it stays proportional
 // if the sprite sheet is ever re-sliced.
-const PLAYER_DISPLAY_HEIGHT = 30;
+const PLAYER_DISPLAY_HEIGHT = 36;
 const PLAYER_DISPLAY_WIDTH = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
 
 export default function GameMap() {
   const mapCanvasRef     = useRef<HTMLCanvasElement>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
   const playerCanvasRef  = useRef<HTMLCanvasElement>(null);
+  // The camera transform is applied directly to this div each rAF — no state
+  const cameraRef        = useRef<HTMLDivElement>(null);
+
   const [loaded, setLoaded]               = useState(false);
   const [error, setError]                 = useState(false);
   const [showCollision, setShowCollision] = useState(false);
@@ -113,7 +120,7 @@ export default function GameMap() {
     }
 
     // Draw zone outlines with labels
-    ctx.font        = 'bold 9px monospace';
+    ctx.font         = 'bold 9px monospace';
     ctx.textBaseline = 'top';
     for (const zone of ZONES) {
       ctx.strokeStyle = 'rgba(120, 220, 255, 0.6)';
@@ -142,8 +149,6 @@ export default function GameMap() {
     let cancelled = false;
     const img = new Image();
     img.onload = () => { if (!cancelled) setSpriteLoaded(true); };
-    // The sheet lives in public/, served as-is at the artifact's base path
-    // (not an asset the bundler fingerprints), so build the URL from BASE_URL.
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
     spriteImgRef.current = img;
     if (img.complete && img.naturalWidth > 0) setSpriteLoaded(true);
@@ -165,9 +170,6 @@ export default function GameMap() {
       if (!trackedKeys.has(key)) return;
       keysRef.current.delete(key);
     };
-    // If the tab/window loses focus while a key is held, the corresponding
-    // keyup can be missed entirely — clear all held keys so the character
-    // doesn't keep "walking" after focus is lost.
     const clearKeys = () => keysRef.current.clear();
 
     window.addEventListener('keydown', onKeyDown);
@@ -208,6 +210,7 @@ export default function GameMap() {
       playerStateRef.current = stepPlayer(grid, playerStateRef.current, keysRef.current, dtMs);
       const { x, y, pose, facingLeft } = playerStateRef.current;
 
+      // ── Draw player sprite ──────────────────────────────────────────────
       ctx.clearRect(0, 0, MAP_W, MAP_H);
       ctx.imageSmoothingEnabled = false;
 
@@ -223,65 +226,99 @@ export default function GameMap() {
       );
       ctx.restore();
 
+      // ── Camera follow ───────────────────────────────────────────────────
+      // Mutate the container transform directly — avoids React re-renders.
+      // transform-origin is 0 0, so:
+      //   screen_x = map_x * ZOOM + tx  →  tx = vw/2 - x * ZOOM
+      //   screen_y = map_y * ZOOM + ty  →  ty = vh/2 - y * ZOOM
+      const cam = cameraRef.current;
+      if (cam) {
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const tx = vw / 2 - x * ZOOM;
+        const ty = vh / 2 - y * ZOOM;
+        cam.style.transform = `translate(${tx}px,${ty}px) scale(${ZOOM})`;
+      }
+
       rafId = requestAnimationFrame(frame);
     };
+
+    // Set initial camera position before first frame so there's no flash
+    const initCam = cameraRef.current;
+    if (initCam) {
+      const { x, y } = playerStateRef.current;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      initCam.style.transform =
+        `translate(${vw / 2 - x * ZOOM}px,${vh / 2 - y * ZOOM}px) scale(${ZOOM})`;
+    }
+
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded]);
 
   // ── Track mouse to show zone name on hover ────────────────────────────────
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Convert screen coords → map coords, accounting for the camera transform.
+  const handleMouseMove = (e: React.MouseEvent) => {
     if (!showCollision) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const { x: px, y: py } = playerStateRef.current;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    // Inverse of: translate(vw/2 - px*ZOOM, vh/2 - py*ZOOM) scale(ZOOM)
+    const mapX = (e.clientX - (vw / 2 - px * ZOOM)) / ZOOM;
+    const mapY = (e.clientY - (vh / 2 - py * ZOOM)) / ZOOM;
     const found = ZONES.find(
-      z => mx >= z.px && mx < z.px + z.pw && my >= z.py && my < z.py + z.ph,
+      z => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
     );
     setHoverZone(found?.label ?? null);
   };
 
   return (
+    // ── Viewport clipping wrapper ─────────────────────────────────────────
     <div
       style={{
-        width: '100vw',
-        height: '100vh',
+        position: 'fixed',
+        inset: 0,
+        overflow: 'hidden',
         background: '#3d4e5e',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'auto',
-        position: 'relative',
       }}
+      onMouseMove={handleMouseMove}
+      onMouseLeave={() => setHoverZone(null)}
     >
-      {/* ── Canvas container ─────────────────────────────────────────────── */}
+      {/* ── Loading / error states (centred in viewport) ───────────────── */}
+      {!loaded && !error && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#8faabb', fontFamily: 'monospace', fontSize: 14,
+          zIndex: 10,
+        }}>
+          Loading map…
+        </div>
+      )}
+      {error && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#cc4444', fontFamily: 'monospace', fontSize: 14,
+          zIndex: 10,
+        }}>
+          Failed to load map.
+        </div>
+      )}
+
+      {/* ── Camera container: transform applied here each rAF ─────────── */}
       <div
-        style={{ position: 'relative', width: MAP_W, height: MAP_H }}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHoverZone(null)}
+        ref={cameraRef}
+        style={{
+          position: 'absolute',
+          width: MAP_W,
+          height: MAP_H,
+          transformOrigin: '0 0',
+          // Initial position: player spawn centred; overwritten on first rAF
+          willChange: 'transform',
+        }}
       >
-        {/* Loading state */}
-        {!loaded && !error && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#8faabb', fontFamily: 'monospace', fontSize: 14,
-          }}>
-            Loading map…
-          </div>
-        )}
-
-        {/* Error state */}
-        {error && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#cc4444', fontFamily: 'monospace', fontSize: 14,
-          }}>
-            Failed to load map.
-          </div>
-        )}
-
         {/* Map image layer */}
         <canvas
           ref={mapCanvasRef}
@@ -314,7 +351,7 @@ export default function GameMap() {
         />
       </div>
 
-      {/* ── Movement hint (fixed to viewport) ────────────────────────────── */}
+      {/* ── HUD: movement hint ────────────────────────────────────────────── */}
       {loaded && (
         <div style={{
           position: 'fixed',
@@ -329,12 +366,13 @@ export default function GameMap() {
           border: '1px solid rgba(100,160,200,0.3)',
           backdropFilter: 'blur(6px)',
           letterSpacing: '0.03em',
+          zIndex: 20,
         }}>
           WASD / Arrow keys to move
         </div>
       )}
 
-      {/* ── Debug controls (fixed to viewport) ───────────────────────────── */}
+      {/* ── HUD: debug controls ──────────────────────────────────────────── */}
       {loaded && (
         <div style={{
           position: 'fixed',
@@ -344,8 +382,8 @@ export default function GameMap() {
           flexDirection: 'column',
           alignItems: 'flex-end',
           gap: 6,
+          zIndex: 20,
         }}>
-          {/* Hover zone label */}
           {showCollision && hoverZone && (
             <div style={{
               padding: '3px 8px',
@@ -359,8 +397,6 @@ export default function GameMap() {
               {hoverZone}
             </div>
           )}
-
-          {/* Toggle button */}
           <button
             onClick={() => setShowCollision(prev => !prev)}
             style={{
