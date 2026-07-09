@@ -26,6 +26,24 @@
 
 ## Sessions
 
+### 2026-07-09 — Post-import setup (artifact re-registration, again)
+
+**Done**
+- Same recurring gotcha: fresh import dropped all three artifact registrations (`listArtifacts()` returned empty, no workflows configured).
+- Repaired via standard sequence: copied each `artifact.toml` → `artifact.edit.toml`, called `verifyAndReplaceArtifactToml({ tempFilePath, artifactTomlPath })` (absolute paths) for `api-server`, `mockup-sandbox`, `telegram-game` — all succeeded.
+- Ran `pnpm install` (lockfile already up to date).
+- Restarted `artifacts/telegram-game: web` and `artifacts/api-server: API Server`; both running cleanly. Left `mockup-sandbox` workflow stopped (not needed unless doing design work).
+- Verified via screenshot: map and teal character render correctly, matches expected state from prior sessions.
+
+**Decisions & gotchas**
+- No code changes needed — this was pure re-registration, consistent with the documented import gotcha in replit.md.
+
+**Left off / next steps**
+- Unchanged from prior session: DB not connected, no Telegram WebApp SDK integration, no multiplayer/networking.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Project import, environment setup, collision map rewrite
 
 **Done**
