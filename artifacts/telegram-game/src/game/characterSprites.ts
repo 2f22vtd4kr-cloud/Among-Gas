@@ -1,16 +1,19 @@
 // Character sprite sheet: artifacts/telegram-game/public/sprites/characters.png
-// User-supplied higher-res pixel-art sheet, 1123x1401px, background removed
-// (transparent PNG).
+// Pixel-art sheet, 1123×1401px, transparent-background PNG.
 //
-// Grid: 7 columns (colors) x 8 rows (poses), same layout/order as the
-// previous sheet. Cells are NOT integer-sized (1123 / 7 ≈ 160.43px,
-// 1401 / 8 ≈ 175.125px) -- slicing uses fractional source rects, matching
-// the pattern from the original sheet.
+// Grid: 7 columns (colors) × 9 rows (poses).
+// Cells are NOT integer-sized:
+//   width  = 1123 / 7 ≈ 160.43 px
+//   height = 1401 / 9 ≈ 155.67 px
+//
+// IMPORTANT: the sheet has 9 pose rows, not 8. Using ROWS=8 produces a
+// cell height of 175.125 px which bleeds the next row's character into the
+// bottom of every source rect — the root cause of the "double ghost" bug.
 
 export const CHARACTER_SHEET_PATH = "/sprites/characters.png";
 
 export const CHARACTER_SHEET_COLS = 7;
-export const CHARACTER_SHEET_ROWS = 8;
+export const CHARACTER_SHEET_ROWS = 9;   // was incorrectly 8; sheet has 9 pose rows
 export const CHARACTER_SHEET_WIDTH = 1123;
 export const CHARACTER_SHEET_HEIGHT = 1401;
 export const CHARACTER_CELL_WIDTH = CHARACTER_SHEET_WIDTH / CHARACTER_SHEET_COLS;
@@ -36,6 +39,7 @@ export const CHARACTER_POSES = [
   "mask",
   "hold-item",
   "sit-hug-knees",
+  "sit-crouch",     // row 8 — was missing; caused row bleed ghost artifact
 ] as const;
 export type CharacterPose = (typeof CHARACTER_POSES)[number];
 

@@ -1,4 +1,5 @@
 - [Handoff protocol](handoff-protocol.md) — every session must read handoff.md first and append to it before finishing; replit.md enforces this rule.
 - [verifyAndReplaceArtifactToml signature](artifact-reregistration.md) — API changed: now requires `{ tempFilePath, artifactTomlPath }` (both absolute paths), not `{ filePath }`.
 - [Collision sampling & sandbox testing](collision-and-sandbox-testing.md) — circular collision needs circumference sampling not just 4 points; no Playwright in CodeExecution, simulate via tsc+node instead.
+- [Sprite sheet row count](sprite-sheet-rows.md) — characters.png has 9 pose rows (not 8); wrong count causes row-bleed ghost artifact; cell height = 1401/9 ≈ 155.67px.
 - [Canvas image upscaling](image-upscaling.md) — canvas drawImage scaling never adds detail; pre-upscale with sharp lanczos3 into a real static asset instead.
