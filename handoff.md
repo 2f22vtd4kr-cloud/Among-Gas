@@ -574,6 +574,24 @@
 **Left off / next steps**
 - User to verify on iOS device.
 
+### 2026-07-09 — Shadow tuned: reduced blur radius + opacity to prevent blob spread
+
+**Done**
+- First blur pass (previous entry) used `spriteH * 0.06` blur and `rgba(0,0,0,0.82)` — at mobile dpr≈1.667 spriteH≈144px → blurPx≈9, which spread the shadow into a large dark blob.
+- Reduced to `blurPx = max(2, round(spriteH * 0.025))` (≈4px on mobile) and `rgba(0,0,0,0.50)`. Just enough blur to soften path anti-aliasing and kill tile-line stripes, without spreading the shadow into a blob.
+- Killed orphaned vite/node processes (EADDRINUSE on ports 18297 and 8080); restarted both workflows cleanly.
+
+**Decisions & gotchas**
+- Blur radius sweet spot: small enough to not spread visually (~2-4px on mobile), large enough to average out the 1-2px anti-aliased edge pixels where tile lines bleed through. If stripes return, increase blurPx slightly; if blob returns, decrease it.
+- If you ever increase DPR cap or change ZOOM, re-verify shadow appearance on device — blurPx scales with spriteH which scales with dpr.
+
+**Left off / next steps**
+- User to verify on iOS.
+- DB, Telegram SDK, multiplayer still pending.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Restored blur shadow (reverted solid fill that re-introduced stripes)
 
 **Done**

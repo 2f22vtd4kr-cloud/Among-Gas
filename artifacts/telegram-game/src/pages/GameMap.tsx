@@ -323,10 +323,12 @@ export default function GameMap() {
       // Note: ctx.filter must be reset (to 'none') before drawing the sprite,
       // or the blur leaks into the character image. The save/restore handles it.
       {
-        const blurPx = Math.max(3, Math.round(spriteH * 0.06));
+        // blurPx kept small — just enough to soften the path edges and kill
+        // the tile-line stripes; too high and the shadow spreads into a blob.
+        const blurPx = Math.max(2, Math.round(spriteH * 0.025));
         ctx.save();
         ctx.filter = `blur(${blurPx}px)`;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.82)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.50)';
         ctx.beginPath();
         ctx.ellipse(
           playerCX, playerCY + spriteH * 0.44,
