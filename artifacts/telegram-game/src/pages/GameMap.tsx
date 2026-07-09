@@ -19,9 +19,10 @@ import {
 } from '../game/characterSprites';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-// How many screen pixels equal one map pixel. Among Us-style close zoom.
-// Zoomed out 30% from the previous 2.5 per user request.
-const ZOOM = 2.5 * 0.7;
+// How many screen pixels equal one map pixel. Matches the reference
+// Among Us screenshots — character is a small figure with lots of
+// surrounding map visible, not a close-up zoom.
+const ZOOM = 0.6;
 
 // On-map display size of the player sprite. Derived from the sheet cell's
 // aspect ratio (146.29:128) rather than hardcoded so it stays proportional

@@ -209,6 +209,24 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Corrected camera zoom to match real Among Us framing
+
+**Done**
+- User flagged the previous zoom-out (30% off `2.5`, i.e. `1.75`) as still far too close compared to reference Among Us screenshots — character should be a small figure with most of the screen showing surrounding map, not filling a large portion of the viewport.
+- Set `ZOOM` in `GameMap.tsx` to a hardcoded `0.6` (was `2.5 * 0.7`), calibrated against the reference screenshots and the current `PLAYER_DISPLAY_HEIGHT` (~108px in map-space after the earlier 3x map upscale) so the on-screen character height lands in the same small proportion of viewport height seen in the references.
+- Fixed a stale-process port conflict that had left `api-server` (8080) and `telegram-game` (18297) workflows failing with `EADDRINUSE`/`port already in use` — killed the orphaned `vite`/`node dist/index.mjs` processes and restarted both workflows cleanly.
+- Verified visually via screenshot: framing now matches the reference images closely — small character, wide view of rooms/corridors around it.
+
+**Decisions & gotchas**
+- `ZOOM` is not derived from `MAP_W`/`PLAYER_DISPLAY_HEIGHT` by formula — it's a hand-tuned constant recalibrated by eye against reference screenshots. If `PLAYER_DISPLAY_HEIGHT` or `MAP_W`/`MAP_H` change again (e.g. another map resolution bump), re-check `ZOOM` visually rather than assuming it'll auto-scale correctly.
+- If workflows ever fail with `EADDRINUSE`/`port already in use` after a restart, check for orphaned processes from a previous session (`pkill -f "vite --config vite.config.ts"`, `pkill -f "node ./dist/index.mjs"`) before troubleshooting further — the workflow config itself was fine.
+
+**Left off / next steps**
+- Camera zoom is now a fixed constant; no smoothing/lerp on camera movement (noted in an earlier session, still unaddressed).
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Project re-import: artifact re-registration and dependency install
 
 **Done**
