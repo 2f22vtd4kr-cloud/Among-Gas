@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState } from 'react';
 import {
   buildCollisionGrid,
-  COLS, ROWS, CELL,
+  COLS, ROWS, CELL_X, CELL_Y,
   MAP_W, MAP_H,
   ZONES,
 } from '../game/collisionMap';
@@ -52,7 +52,7 @@ export default function GameMap() {
       if (cancelled) return;
       setError(true);
     };
-    img.src = new URL('@assets/IMG_2898_1783586696260.jpeg', import.meta.url).href;
+    img.src = new URL('@assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png', import.meta.url).href;
     if (img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
       setLoaded(true);
@@ -81,7 +81,7 @@ export default function GameMap() {
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         if (grid[row * COLS + col] === 1) {
-          ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
+          ctx.fillRect(col * CELL_X, row * CELL_Y, CELL_X, CELL_Y);
         }
       }
     }
@@ -91,7 +91,7 @@ export default function GameMap() {
     for (let row = 0; row < ROWS; row++) {
       for (let col = 0; col < COLS; col++) {
         if (grid[row * COLS + col] === 0) {
-          ctx.fillRect(col * CELL, row * CELL, CELL, CELL);
+          ctx.fillRect(col * CELL_X, row * CELL_Y, CELL_X, CELL_Y);
         }
       }
     }
@@ -101,14 +101,14 @@ export default function GameMap() {
     ctx.lineWidth = 0.5;
     for (let row = 0; row <= ROWS; row++) {
       ctx.beginPath();
-      ctx.moveTo(0,      row * CELL);
-      ctx.lineTo(MAP_W,  row * CELL);
+      ctx.moveTo(0,      row * CELL_Y);
+      ctx.lineTo(MAP_W,  row * CELL_Y);
       ctx.stroke();
     }
     for (let col = 0; col <= COLS; col++) {
       ctx.beginPath();
-      ctx.moveTo(col * CELL, 0);
-      ctx.lineTo(col * CELL, MAP_H);
+      ctx.moveTo(col * CELL_X, 0);
+      ctx.lineTo(col * CELL_X, MAP_H);
       ctx.stroke();
     }
 

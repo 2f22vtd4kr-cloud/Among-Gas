@@ -15,11 +15,24 @@
 // Values:  0 = walkable    1 = blocked / wall
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { CELL, COLS, ROWS, RUNS } from './collisionData';
+import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData';
 
-export const MAP_W = 1040;
-export const MAP_H = 580;
-export { CELL, COLS, ROWS };
+export const MAP_W = 1652;
+export const MAP_H = 952;
+export { COLS, ROWS };
+
+/**
+ * Pixel size of one collision cell in each axis.
+ * The underlying grid was built at COLS×ROWS cells from a 1040×580 reference
+ * (CELL=10 px/cell), but the visual map is now 1652×952, so X and Y cell
+ * sizes differ slightly. All pixel-space ↔ grid-space conversions use these.
+ */
+export const CELL_X = MAP_W / COLS;   // ≈ 15.885 px
+export const CELL_Y = MAP_H / ROWS;   // ≈ 16.414 px
+
+// Keep CELL as the average for code that needs a single representative value
+// (e.g. sample-count calculations in canMoveTo).
+export const CELL = (_CELL * MAP_W) / (COLS * _CELL); // same as MAP_W/COLS
 
 export type Grid = Uint8Array;
 
@@ -74,23 +87,32 @@ export interface Zone {
 // logic (that comes entirely from the pixel-accurate grid above). Re-eyeball
 // against a fresh screenshot with the overlay on if the reference image
 // changes noticeably.
+// Zone bounds were originally measured against the 1040×580 canvas.
+// Scale them to the new 1652×952 canvas using the same X/Y ratios.
+const _SX = MAP_W / 1040;
+const _SY = MAP_H / 580;
+const z = (px: number, py: number, pw: number, ph: number): Pick<Zone, 'px'|'py'|'pw'|'ph'> => ({
+  px: Math.round(px * _SX), py: Math.round(py * _SY),
+  pw: Math.round(pw * _SX), ph: Math.round(ph * _SY),
+});
+
 export const ZONES: Zone[] = [
-  { name: 'garage_nw',      label: 'Parking Garage',      px:   0, py:   0, pw: 270, ph: 180 },
-  { name: 'industrial',     label: 'Boiler Room',          px:   0, py: 180, pw: 310, ph: 210 },
-  { name: 'pipe_corridor',  label: 'Pipe Corridor',        px:   0, py: 210, pw:  45, ph: 180 },
-  { name: 'lobby',          label: 'Main Lobby / Atrium',  px: 280, py:   0, pw: 430, ph: 390 },
-  { name: 'tech_room_ne',   label: 'Tech Room',            px: 710, py:   0, pw: 170, ph: 190 },
-  { name: 'ne_connector',   label: 'NE Connector',         px: 670, py:  80, pw:  50, ph: 110 },
-  { name: 'far_right_top',  label: 'Far-Right Upper',      px: 880, py:   0, pw: 160, ph:  80 },
-  { name: 'office_e',       label: 'East Office',          px: 780, py: 190, pw: 170, ph: 200 },
-  { name: 'far_right_strip',label: 'Far-Right Strip',      px: 950, py:  80, pw:  90, ph: 310 },
-  { name: 'gas_station',    label: 'Gas Station',          px:   0, py: 390, pw: 310, ph: 190 },
-  { name: 'park',           label: 'Outdoor Park',         px: 310, py: 390, pw: 400, ph: 190 },
-  { name: 'junction_s',     label: 'South Junction',       px: 600, py: 360, pw: 130, ph: 130 },
-  { name: 'garage_se',      label: 'Vehicle Garage',       px: 730, py: 330, pw: 140, ph: 160 },
-  { name: 'corridor_se',    label: 'SE Corridor',          px: 870, py: 210, pw:  50, ph: 280 },
-  { name: 'electrical',     label: 'Electrical Room',      px: 730, py: 470, pw: 190, ph: 110 },
-  { name: 'strip_far_se',   label: 'Far-SE Strip',         px: 920, py: 320, pw: 120, ph: 260 },
+  { name: 'garage_nw',       label: 'Parking Garage',      ...z(  0,   0, 270, 180) },
+  { name: 'industrial',      label: 'Boiler Room',          ...z(  0, 180, 310, 210) },
+  { name: 'pipe_corridor',   label: 'Pipe Corridor',        ...z(  0, 210,  45, 180) },
+  { name: 'lobby',           label: 'Main Lobby / Atrium',  ...z(280,   0, 430, 390) },
+  { name: 'tech_room_ne',    label: 'Tech Room',            ...z(710,   0, 170, 190) },
+  { name: 'ne_connector',    label: 'NE Connector',         ...z(670,  80,  50, 110) },
+  { name: 'far_right_top',   label: 'Far-Right Upper',      ...z(880,   0, 160,  80) },
+  { name: 'office_e',        label: 'East Office',          ...z(780, 190, 170, 200) },
+  { name: 'far_right_strip', label: 'Far-Right Strip',      ...z(950,  80,  90, 310) },
+  { name: 'gas_station',     label: 'Gas Station',          ...z(  0, 390, 310, 190) },
+  { name: 'park',            label: 'Outdoor Park',         ...z(310, 390, 400, 190) },
+  { name: 'junction_s',      label: 'South Junction',       ...z(600, 360, 130, 130) },
+  { name: 'garage_se',       label: 'Vehicle Garage',       ...z(730, 330, 140, 160) },
+  { name: 'corridor_se',     label: 'SE Corridor',          ...z(870, 210,  50, 280) },
+  { name: 'electrical',      label: 'Electrical Room',      ...z(730, 470, 190, 110) },
+  { name: 'strip_far_se',    label: 'Far-SE Strip',         ...z(920, 320, 120, 260) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -112,8 +134,8 @@ export function buildCollisionGrid(): Grid {
 
 /** Is the cell at pixel (px, py) blocked? Returns true if outside map bounds. */
 export function isBlocked(grid: Grid, px: number, py: number): boolean {
-  const col = Math.floor(px / CELL);
-  const row = Math.floor(py / CELL);
+  const col = Math.floor(px / CELL_X);
+  const row = Math.floor(py / CELL_Y);
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
   return grid[row * COLS + col] === 1;
 }
@@ -132,7 +154,8 @@ export function canMoveTo(
 ): boolean {
   if (isBlocked(grid, cx, cy)) return false;
 
-  const samples = Math.max(8, Math.ceil((2 * Math.PI * radius) / (CELL * 0.5)));
+  const minCell = Math.min(CELL_X, CELL_Y);
+  const samples = Math.max(8, Math.ceil((2 * Math.PI * radius) / (minCell * 0.5)));
   for (let i = 0; i < samples; i++) {
     const angle = (i / samples) * Math.PI * 2;
     const px = cx + Math.cos(angle) * radius;

@@ -10,12 +10,19 @@ import { canMoveTo, resolveMovement, type Grid } from './collisionMap';
 import type { CharacterPose } from './characterSprites';
 
 export const PLAYER_COLOR = 'teal' as const;
-export const PLAYER_RADIUS = 9;
-export const PLAYER_SPEED_PX_PER_SEC = 130;
+// Scale from original 1040×580 canvas to new 1652×952 canvas.
+// Radius and speed use the geometric mean of the two axis scale factors
+// so movement feels consistent in both directions.
+const _SCALE = Math.sqrt((1652 / 1040) * (952 / 580)); // ≈ 1.615
+export const PLAYER_RADIUS = Math.round(9 * _SCALE);           // ≈ 14 px
+export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE); // ≈ 210 px/s
 export const PLAYER_ANIM_INTERVAL_MS = 140;
 
 /** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
-export const PLAYER_SPAWN = { x: 350, y: 150 };
+export const PLAYER_SPAWN = {
+  x: Math.round(350 * (1652 / 1040)),  // ≈ 556
+  y: Math.round(150 * (952 / 580)),    // ≈ 246
+};
 
 export interface PlayerState {
   x: number;
