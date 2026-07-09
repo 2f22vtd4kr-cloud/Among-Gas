@@ -305,54 +305,54 @@ export default function GameMap() {
       const sw = Math.floor(rect.x + rect.width)  - sx;
       const sh = Math.floor(rect.y + rect.height) - sy;
 
-      // Drop shadow: blur-filtered solid ellipse drawn before the sprite.
+      // Snap player position to integer canvas pixels to eliminate sub-pixel
+      // jitter and give bilinear sampling a clean, stable input each frame.
+      const pCX = Math.round(playerCX);
+      const pCY = Math.round(playerCY);
+      const sW  = Math.round(spriteW);
+      const sH  = Math.round(spriteH);
+
+      // Drop shadow: small blur-filtered ellipse sitting at the character's feet.
       //
-      // WHY BLUR INSTEAD OF A PLAIN SOLID FILL:
-      // A solid canvas path fill always has anti-aliased sub-pixel edges
-      // (~1-2px of semi-transparent pixels at the ellipse boundary). The map's
-      // horizontal tile grout lines happen to run exactly where those
-      // semi-transparent edge pixels land, letting the lines bleed through and
-      // produce the visible horizontal stripe artifact on mobile.
-      //
-      // ctx.filter='blur(Xpx)' is applied to the drawn shape BEFORE it
-      // composites onto the destination canvas — it averages out tile-line
-      // contrast in the blur spread region, eliminating stripes completely.
-      // The ellipse is drawn slightly smaller than the target visual size;
-      // the blur spreads it to the right apparent size naturally.
-      //
-      // Note: ctx.filter must be reset (to 'none') before drawing the sprite,
-      // or the blur leaks into the character image. The save/restore handles it.
+      // Shadow centre Y is at the very bottom of the sprite cell (+sH*0.5 from
+      // sprite centre) so it sits at ground level rather than hiding under the body.
+      // A small blur radius (1–3 canvas px) softens the path's anti-aliased edge
+      // without spreading the shadow into a blob; the blur also averages any tile-
+      // grout contrast in the spread region, preventing stripe artefacts.
+      // ctx.filter is reset by the enclosing save/restore so it cannot leak into
+      // the sprite draw that follows.
       {
-        // blurPx kept small — just enough to soften the path edges and kill
-        // the tile-line stripes; too high and the shadow spreads into a blob.
-        const blurPx = Math.max(2, Math.round(spriteH * 0.025));
+        const blurPx = Math.max(1, Math.round(sH * 0.015));
         ctx.save();
         ctx.filter = `blur(${blurPx}px)`;
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.50)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.40)';
         ctx.beginPath();
         ctx.ellipse(
-          playerCX, playerCY + spriteH * 0.44,
-          spriteW * 0.26, spriteH * 0.07,
+          pCX,
+          pCY + sH * 0.50,       // ground level: bottom edge of sprite cell
+          sW  * 0.18,             // narrow — fits under the feet, not the whole body
+          sH  * 0.04,             // thin oval
           0, 0, Math.PI * 2,
         );
         ctx.fill();
         ctx.restore();
       }
 
+      // Sprite draw.
+      // Source alpha is binarized (0 or 255, no semi-transparent pixels) so
+      // nearest-neighbour is now safe: hard source edges produce hard output
+      // edges with no tile-line bleed-through. Bilinear was previously needed
+      // to blend the original semi-transparent outline fringe, but after
+      // binarization it only re-introduces semi-transparent output pixels at
+      // every body edge, letting tile grout lines show through as stripes.
       ctx.save();
-      ctx.translate(playerCX, playerCY);
+      ctx.translate(pCX, pCY);
       if (facingLeft) ctx.scale(-1, 1);
-      // Use bilinear smoothing so the 2px outline downsamples cleanly.
-      // imageSmoothingEnabled=false caused Moiré stripes: at ~0.55× scale the
-      // outline alternated between hitting and missing output rows.
-      // The source rect is already hard-clamped (ceil start, floor end) so the
-      // bilinear kernel cannot bleed pixels across row/col boundaries in the atlas.
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
+      ctx.imageSmoothingEnabled = false;
       ctx.drawImage(
         sprite,
         sx, sy, sw, sh,
-        -spriteW / 2, -spriteH / 2, spriteW, spriteH,
+        -sW / 2, -sH / 2, sW, sH,
       );
       ctx.restore();
 

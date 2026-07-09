@@ -574,6 +574,28 @@
 **Left off / next steps**
 - User to verify on iOS device.
 
+### 2026-07-09 — Shadow reworked + sprite switched to nearest-neighbour
+
+**Done**
+- Shadow was still too large (X radius = 0.26 spriteW spread way beyond character feet) and positioned too high (centre at +0.44 spriteH → mostly hidden under the body, with the smear extending asymmetrically below).
+- Fixed: shadow centre moved to +0.50 spriteH (exactly at the bottom edge of the sprite cell, i.e. ground level). X radius reduced to 0.18 spriteW, Y radius to 0.04 spriteH, opacity to 0.40, blurPx to max(1, round(sH*0.015)). Blur keeps the ellipse edges from aliasing against tile grout, without spreading into a blob.
+- Character body stripes (horizontal tile-grout bleed through body): root cause was bilinear interpolation between binarized alpha=255 body pixels and alpha=0 transparent pixels. Bilinear sampling creates semi-transparent OUTPUT pixels at every body edge → tile lines bleed through. Fix: switched sprite draw to `imageSmoothingEnabled = false` (nearest-neighbour). This is now safe because the source alpha was already binarized (all pixels are exactly 0 or 255) — hard source edges produce hard output edges with zero bleed. The original Moiré concern (2px outline alternating at sub-1× scale) was caused by the OLD semi-transparent outline pixels, not the binarized ones.
+- Also: round playerCX/playerCY and spriteW/spriteH to integers before drawing to eliminate sub-pixel jitter.
+- Typecheck clean. Screenshot (dpr=1) confirms clean shadow under feet, character looks crisp.
+- Port 18297/8080 EADDRINUSE cleared via `fuser -k`.
+
+**Decisions & gotchas**
+- Shadow at +0.50 spriteH puts it exactly at the sprite cell bottom. If the character art ever gains more empty space below the feet in the cell, reduce to 0.47–0.48.
+- NN is safe ONLY because source alpha is binarized. If the sprite sheet is ever replaced with a new one that has anti-aliased edges (non-binarized alpha), switch back to bilinear and re-examine the bleed issue.
+- `fuser -k <port>/tcp` reliably clears EADDRINUSE; `pkill -f` pattern failed previously due to signal handling.
+
+**Left off / next steps**
+- User to verify on iOS.
+- DB, Telegram SDK, multiplayer still pending.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Shadow tuned: reduced blur radius + opacity to prevent blob spread
 
 **Done**
