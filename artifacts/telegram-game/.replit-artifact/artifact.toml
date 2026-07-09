@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "Telegram Game"
+version = "1.0.0"
+id = "artifacts/telegram-game"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 18297
+
+[services.development]
+run = "pnpm --filter @workspace/telegram-game run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/telegram-game", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/telegram-game/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18297"
+BASE_PATH = "/"
