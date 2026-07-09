@@ -266,7 +266,29 @@
 **State to restore**
 - None.
 
-### 2026-07-09 — Post-import setup (artifact re-registration)
+### 2026-07-09 — Post-import setup (artifact re-registration, dependency install, workflow start)
+
+**Done**
+- Ran `pnpm install` (node_modules absent after import; completed in ~14s, lockfile up to date).
+- Re-registered all three artifacts after import dropped Replit metadata — `verifyAndReplaceArtifactToml` API signature has changed to `{ tempFilePath, artifactTomlPath }` (both absolute paths required); updated call pattern accordingly.
+- Started `artifacts/telegram-game: web` and `artifacts/api-server: API Server` workflows; both running cleanly.
+- Verified via screenshot: map crisp, teal character in lobby corridor, WASD hint and collision toggle visible — matches expected state from prior sessions.
+- Code review passed: no severe issues.
+
+**Decisions & gotchas**
+- `verifyAndReplaceArtifactToml` now requires `{ tempFilePath: string (absolute), artifactTomlPath: string (absolute) }` — the old `{ filePath }` single-arg form throws a validation error. Always use absolute paths (`/home/runner/workspace/...`).
+- Standard import repair sequence: (1) copy each `artifact.toml` → `artifact.edit.toml`, (2) call `verifyAndReplaceArtifactToml` with absolute paths for all three artifacts, (3) `pnpm install`, (4) restart workflows.
+
+**Left off / next steps**
+- DB still not connected (schema empty, no routes implemented).
+- No Telegram WebApp SDK integration.
+- No multiplayer/networking.
+- Proposed follow-up tasks: DB connection, multiplayer movement, Telegram SDK integration.
+
+**State to restore**
+- None.
+
+### 2026-07-09 — Post-import setup (artifact re-registration) [SUPERSEDED by entry above]
 
 **Done**
 - Re-registered all three artifacts after GitHub import dropped their Replit metadata: `telegram-game` (web, `/`), `api-server` (api, `/api`), `mockup-sandbox` (design, `/__mockup`) — used `verifyAndReplaceArtifactToml` on each existing `artifact.toml` without touching source code.
