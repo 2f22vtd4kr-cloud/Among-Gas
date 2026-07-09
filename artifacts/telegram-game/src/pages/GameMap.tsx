@@ -288,17 +288,28 @@ export default function GameMap() {
       // the body and reads as broken speckling. Drawing a flat ellipse here
       // instead guarantees a clean, uncropped, single-shade shadow every
       // frame, independent of the sprite sheet's cell layout.
-      ctx.save();
-      ctx.imageSmoothingEnabled = true;
-      ctx.fillStyle = 'rgba(40,40,40,0.4)';
-      ctx.beginPath();
-      ctx.ellipse(
-        playerCX, playerCY + spriteH * 0.42,
-        spriteW * 0.32, spriteH * 0.12,
-        0, 0, Math.PI * 2,
-      );
-      ctx.fill();
-      ctx.restore();
+      // Shadow: radial gradient (opaque centre → transparent edge) drawn as a
+      // squashed circle. A flat semi-transparent fill lets map tile grout lines
+      // show through as horizontal stripes; the gradient is dark enough in the
+      // centre to mask them and fades naturally without a hard edge.
+      {
+        const sCX = playerCX;
+        const sCY = playerCY + spriteH * 0.42;
+        const sRX = spriteW * 0.32;
+        const sRY = spriteH * 0.12;
+        const grad = ctx.createRadialGradient(sCX, sCY, 0, sCX, sCY, sRX);
+        grad.addColorStop(0,   'rgba(0,0,0,0.72)');
+        grad.addColorStop(0.6, 'rgba(0,0,0,0.45)');
+        grad.addColorStop(1,   'rgba(0,0,0,0)');
+        ctx.save();
+        ctx.translate(sCX, sCY);
+        ctx.scale(1, sRY / sRX);   // squash circle → ellipse
+        ctx.beginPath();
+        ctx.arc(0, 0, sRX, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        ctx.restore();
+      }
 
       ctx.save();
       ctx.translate(playerCX, playerCY);

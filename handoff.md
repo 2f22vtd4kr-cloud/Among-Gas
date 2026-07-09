@@ -540,3 +540,21 @@
 
 **State to restore**
 - None.
+
+### 2026-07-09 — Fix tile-line stripes in floor shadow ellipse
+
+**Done**
+- Root-caused horizontal stripes in the shadow ellipse under the character's feet: the flat `rgba(40,40,40,0.4)` fill was 60% transparent, letting map tile grout lines show clearly through.
+- Fix: replaced flat fill with a radial gradient (`rgba(0,0,0,0.72)` at centre → `rgba(0,0,0,0.45)` at 60% → transparent at edge), drawn by squashing a circle (ctx.scale trick) to match the ellipse aspect ratio. Dark centre masks tile lines; natural fade at edges removes the hard perimeter.
+- Also kept the previous bilinear smoothing fix for the character sprite outline (Moiré from nearest-neighbour at sub-1× scale).
+
+**Decisions & gotchas**
+- `ctx.scale(1, sRY/sRX)` squashes the circle into the ellipse shape — the gradient coordinates are in pre-scale space so they stay circular and map correctly.
+- Desktop screenshot (dpr=1, scale=0.6) shows the shadow; mobile at higher DPR will show it more prominently — gradient approach is DPR-independent.
+
+**Left off / next steps**
+- User to verify on iOS.
+- DB, Telegram SDK, multiplayer still not started.
+
+**State to restore**
+- None.
