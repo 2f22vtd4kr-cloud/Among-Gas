@@ -99,6 +99,27 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Project re-import: artifact re-registration and dependency install
+
+**Done**
+- Re-registered all three artifacts (api-server, telegram-game, mockup-sandbox) via `verifyAndReplaceArtifactToml` after import dropped registration metadata.
+- Ran `pnpm install` (478 packages, lockfile up to date) — node_modules were absent after import.
+- Restarted `artifacts/telegram-game: web` and `artifacts/api-server: API Server` workflows; both came up cleanly.
+- Verified game renders correctly in preview (map visible, teal character in lobby, WASD controls functional).
+- Code review passed: no severe issues; collision system, player movement, and GameMap wiring all intact.
+
+**Decisions & gotchas**
+- After a GitHub import, artifact registration is always dropped — always re-run `verifyAndReplaceArtifactToml` on each `artifact.toml` before starting workflows.
+- `node_modules` are not committed, so `pnpm install` must be run after every fresh import before any workflow can start.
+- `GameMap` lives at `src/pages/GameMap.tsx`, not `src/game/GameMap.tsx` — align docs/references accordingly.
+
+**Left off / next steps**
+- DB still not connected (schema is empty, no routes implemented).
+- Only teal color + idle/walk poses wired; 6 other colors and remaining poses available for NPCs.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Character sprite sheet + movable test player
 
 **Done**
