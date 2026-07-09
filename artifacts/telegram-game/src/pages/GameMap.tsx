@@ -52,6 +52,9 @@ export default function GameMap() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
@@ -62,9 +65,9 @@ export default function GameMap() {
       if (cancelled) return;
       setError(true);
     };
-    // Pre-upscaled (sharp lanczos3) static asset — see game/collisionMap.ts
+    // Pre-upscaled (sharp lanczos3) WebP asset — see game/collisionMap.ts
     // for why we don't stretch the small original via canvas at runtime.
-    img.src = `${import.meta.env.BASE_URL}map-hires.png`;
+    img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
     if (img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
       setLoaded(true);

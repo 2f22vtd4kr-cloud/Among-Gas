@@ -248,6 +248,24 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Map crispness: 4× image upscale to WebP
+
+**Done**
+- Upscaled map from 4956×2856 PNG (3× original) → 6608×3808 WebP using sharp lanczos3 + light sharpen (sigma=0.6). File: `artifacts/telegram-game/public/map-hires.webp` (1.1 MB vs 17 MB PNG — 94% smaller).
+- Updated `MAP_W=6608, MAP_H=3808` in `artifacts/telegram-game/src/game/collisionMap.ts`. All derived constants (CELL_X, CELL_Y, zone scale, player spawn) auto-adapt via ratios.
+- Updated `GameMap.tsx` img.src to use `.webp`; added `imageSmoothingEnabled = true, imageSmoothingQuality = 'high'` on the map canvas context.
+
+**Decisions & gotchas**
+- DPR canvas buffer scaling was attempted but reverted: at 6608×3808 even DPR=2 gives a ~400 MB RGBA buffer per canvas layer. With 3 layers this crashes mobile browsers. Effective safe DPR for this map is 1 — do not attempt buffer×DPR here. See memory `image-upscaling.md`.
+- WebP at quality=90 gives no perceptible quality loss for this illustrated map vs lossless PNG.
+
+**Left off / next steps**
+- DB still not connected.
+- No Telegram WebApp SDK integration.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (artifact re-registration)
 
 **Done**
