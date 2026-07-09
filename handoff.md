@@ -521,3 +521,22 @@
 
 **State to restore**
 - None.
+
+### 2026-07-09 — Fix Moiré stripes on character outline shadow
+
+**Done**
+- Root-caused horizontal stripe artifact visible on the character's dark outline on mobile (user photo: `attached_assets/IMG_2952_1783623605477.jpeg`).
+- Cause: `imageSmoothingEnabled = false` (nearest-neighbor) on the sprite drawImage. At ~0.55–0.93× scale (the range across dpr values), the 2px black outline alternates between hitting and missing output pixel rows — classic Moiré. Nearest-neighbor amplifies this into visible stripes; bilinear blends it away.
+- Fix (`artifacts/telegram-game/src/pages/GameMap.tsx`, sprite draw block): changed `imageSmoothingEnabled = false` → `true` + `imageSmoothingQuality = 'high'`. The source rect is already hard-clamped (ceil start, floor end) and the OffscreenCanvas has 5px clearRects at every row boundary — so bilinear cannot bleed across atlas rows.
+- Code review (architect): pass. No security issues, no state-leak (save/restore scope), typecheck clean.
+
+**Decisions & gotchas**
+- The screenshot tool renders at dpr=1 (scale=0.6) — stripes are faintest at that scale; the fix is most visible on mobile (dpr≈1.67, scale≈1.0) where the artifact was reported. Cannot visually verify fix via screenshot tool; verified by math + code review.
+- clearRect guard bands + source rect clamping make bilinear safe — no new ghost artifact expected.
+
+**Left off / next steps**
+- User to verify on iOS device.
+- DB, Telegram SDK, multiplayer still not started.
+
+**State to restore**
+- None.

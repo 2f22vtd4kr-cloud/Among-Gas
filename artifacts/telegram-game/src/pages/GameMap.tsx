@@ -303,7 +303,13 @@ export default function GameMap() {
       ctx.save();
       ctx.translate(playerCX, playerCY);
       if (facingLeft) ctx.scale(-1, 1);
-      ctx.imageSmoothingEnabled = false;
+      // Use bilinear smoothing so the 2px outline downsamples cleanly.
+      // imageSmoothingEnabled=false caused Moiré stripes: at ~0.55× scale the
+      // outline alternated between hitting and missing output rows.
+      // The source rect is already hard-clamped (ceil start, floor end) so the
+      // bilinear kernel cannot bleed pixels across row/col boundaries in the atlas.
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(
         sprite,
         sx, sy, sw, sh,
