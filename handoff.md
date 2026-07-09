@@ -248,6 +248,26 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Post-import setup (artifact re-registration)
+
+**Done**
+- Re-registered all three artifacts after GitHub import dropped their Replit metadata: `telegram-game` (web, `/`), `api-server` (api, `/api`), `mockup-sandbox` (design, `/__mockup`) — used `verifyAndReplaceArtifactToml` on each existing `artifact.toml` without touching source code.
+- Ran `pnpm install` (was already up to date, lockfile committed).
+- Started `artifacts/telegram-game: web` and `artifacts/api-server: API Server` workflows; both running cleanly.
+- Game client visible in preview with teal character on map and WASD controls working.
+
+**Decisions & gotchas**
+- Same import gotcha as before: artifact registrations always drop on GitHub import; always re-run `verifyAndReplaceArtifactToml` per artifact before starting workflows.
+- `verifyAndReplaceArtifactToml` requires a pre-written sibling temp file (e.g. `artifact.edit.toml`) — it does not accept an in-memory TOML string.
+
+**Left off / next steps**
+- DB still not connected (`DATABASE_URL` not set, schema not pushed).
+- Mockup sandbox workflow not started (not needed for game preview).
+- No Telegram WebApp SDK integration yet.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Character sprite sheet + movable test player
 
 **Done**
