@@ -13,6 +13,7 @@ import {
 } from '../game/player';
 import {
   CHARACTER_SHEET_PATH,
+  CHARACTER_SHEET_ROWS,
   CHARACTER_CELL_WIDTH,
   CHARACTER_CELL_HEIGHT,
   getCharacterFrameRect,
@@ -35,7 +36,8 @@ export default function GameMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
-  const spriteImgRef = useRef<HTMLImageElement | null>(null);
+  // OffscreenCanvas after bleed cleanup, or raw img before it finishes
+  const spriteImgRef = useRef<CanvasImageSource | null>(null);
 
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
@@ -86,10 +88,25 @@ export default function GameMap() {
   useEffect(() => {
     let cancelled = false;
     const img = new Image();
-    img.onload = () => { if (!cancelled) { spriteImgRef.current = img; setSpriteLoaded(true); } };
+    img.onload = () => {
+      if (cancelled) return;
+      // Draw to an OffscreenCanvas and wipe 5px at every inter-row boundary.
+      // Some rows' artwork overflows the fractional cell boundary into the next
+      // row's space; with imageSmoothingEnabled=false those stray pixels render
+      // as a visible dark artifact above the character's head when walking.
+      const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
+      const octx = oc.getContext('2d')!;
+      octx.drawImage(img, 0, 0);
+      const cellH = img.naturalHeight / CHARACTER_SHEET_ROWS;
+      for (let row = 1; row < CHARACTER_SHEET_ROWS; row++) {
+        const boundary = Math.ceil(row * cellH);
+        octx.clearRect(0, boundary, img.naturalWidth, 5);
+      }
+      spriteImgRef.current = oc;
+      setSpriteLoaded(true);
+    };
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
-    spriteImgRef.current = img;
-    if (img.complete && img.naturalWidth > 0) setSpriteLoaded(true);
+    if (img.complete && img.naturalWidth > 0) img.onload!(new Event('load'));
     return () => { cancelled = true; img.onload = null; };
   }, []);
 
@@ -241,11 +258,14 @@ export default function GameMap() {
       const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(PLAYER_COLOR, pose);
-      // Floor the source origin and derive integer width/height from the
-      // next cell boundary so nearest-neighbor sampling (imageSmoothingEnabled=false)
-      // never bleeds a pixel strip from the adjacent animation frame.
-      const sx = Math.floor(rect.x);
-      const sy = Math.floor(rect.y);
+      // Ceil the source ORIGIN so we never start before the cell boundary —
+      // floor would pull in the last fractional pixel of the previous row/col,
+      // which with imageSmoothingEnabled=false nearest-neighbor blows up into
+      // a visible dark artifact at the top of the sprite.
+      // Floor the source END (derived from the far boundary) so we never pull
+      // in the first fractional pixel of the next row/col either.
+      const sx = Math.ceil(rect.x);
+      const sy = Math.ceil(rect.y);
       const sw = Math.floor(rect.x + rect.width)  - sx;
       const sh = Math.floor(rect.y + rect.height) - sy;
 
