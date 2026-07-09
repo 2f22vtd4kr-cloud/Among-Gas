@@ -11,6 +11,8 @@
 //   2. Carve out walkable floor rectangles for each room / corridor.
 //   3. Re-block obstacle rectangles that sit inside those floors
 //      (furniture, vehicles, pillars, raised planters, etc.).
+//
+// Boundaries traced from the red-line reference image.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const MAP_W  = 1040;
@@ -36,18 +38,18 @@ function fill(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Room / zone descriptors (for documentation and future tooling)
+// Room / zone descriptors
 // ─────────────────────────────────────────────────────────────────────────────
 export type ZoneName =
   | 'garage_nw'
-  | 'corridor_n'
-  | 'lobby'
   | 'industrial'
   | 'pipe_corridor'
-  | 'tech_room'
-  | 'corridor_ne'
+  | 'lobby'
+  | 'tech_room_ne'
+  | 'ne_connector'
+  | 'far_right_top'
   | 'office_e'
-  | 'strip_far_e'
+  | 'far_right_strip'
   | 'gas_station'
   | 'park'
   | 'junction_s'
@@ -59,28 +61,27 @@ export type ZoneName =
 export interface Zone {
   name: ZoneName;
   label: string;
-  /** pixel bounds (inclusive) */
+  /** pixel bounds */
   px: number; py: number; pw: number; ph: number;
 }
 
-/** Named walkable zones (in grid cells, before obstacles are applied). */
 export const ZONES: Zone[] = [
-  { name: 'garage_nw',    label: 'Parking Garage',     px:  80, py:  20, pw: 200, ph: 140 },
-  { name: 'corridor_n',   label: 'North Corridor',      px: 140, py: 140, pw: 160,  ph:  60 },
-  { name: 'lobby',        label: 'Main Lobby / Atrium', px: 280, py:  20, pw: 420, ph: 360 },
-  { name: 'industrial',   label: 'Boiler Room',         px:  80, py: 200, pw: 220, ph: 180 },
-  { name: 'pipe_corridor',label: 'Pipe Corridor',       px:  20, py: 240, pw:  70,  ph: 120 },
-  { name: 'tech_room',    label: 'Tech Room',           px: 740, py:  20, pw: 220, ph: 160 },
-  { name: 'corridor_ne',  label: 'NE Corridor',         px: 700, py: 100, pw:  60, ph: 120 },
-  { name: 'office_e',     label: 'East Office',         px: 880, py: 180, pw: 120, ph: 200 },
-  { name: 'strip_far_e',  label: 'Far East Strip',      px: 980, py: 180, pw:  60, ph: 280 },
-  { name: 'gas_station',  label: 'Gas Station',         px:  20, py: 360, pw: 280, ph: 200 },
-  { name: 'park',         label: 'Outdoor Park',        px: 280, py: 360, pw: 380, ph: 200 },
-  { name: 'junction_s',   label: 'South Junction',      px: 560, py: 360, pw: 120, ph: 140 },
-  { name: 'garage_se',    label: 'Vehicle Garage',      px: 660, py: 360, pw: 220, ph: 140 },
-  { name: 'corridor_se',  label: 'SE Corridor',         px: 860, py: 280, pw:  40, ph: 220 },
-  { name: 'electrical',   label: 'Electrical Room',     px: 740, py: 480, pw: 240,  ph:  80 },
-  { name: 'strip_far_se', label: 'Far SE Strip',        px: 980, py: 380, pw:  60, ph: 180 },
+  { name: 'garage_nw',      label: 'Parking Garage',      px:  80, py:   0, pw: 180, ph: 160 },
+  { name: 'industrial',     label: 'Boiler Room',          px:  60, py: 160, pw: 220, ph: 220 },
+  { name: 'pipe_corridor',  label: 'Pipe Corridor',        px:   0, py: 220, pw:  60, ph: 140 },
+  { name: 'lobby',          label: 'Main Lobby / Atrium',  px: 280, py:   0, pw: 420, ph: 380 },
+  { name: 'tech_room_ne',   label: 'Tech Room',            px: 700, py:   0, pw: 260, ph: 180 },
+  { name: 'ne_connector',   label: 'NE Connector',         px: 680, py: 100, pw:  60, ph: 100 },
+  { name: 'far_right_top',  label: 'Far-Right Upper',      px: 960, py:   0, pw:  80, ph:  80 },
+  { name: 'office_e',       label: 'East Office',          px: 860, py: 180, pw: 140, ph: 200 },
+  { name: 'far_right_strip',label: 'Far-Right Strip',      px: 980, py:  80, pw:  60, ph: 300 },
+  { name: 'gas_station',    label: 'Gas Station',          px:   0, py: 380, pw: 280, ph: 200 },
+  { name: 'park',           label: 'Outdoor Park',         px: 280, py: 380, pw: 400, ph: 200 },
+  { name: 'junction_s',     label: 'South Junction',       px: 560, py: 360, pw: 140, ph: 160 },
+  { name: 'garage_se',      label: 'Vehicle Garage',       px: 660, py: 360, pw: 220, ph: 140 },
+  { name: 'corridor_se',    label: 'SE Corridor',          px: 860, py: 260, pw:  60, ph: 260 },
+  { name: 'electrical',     label: 'Electrical Room',      px: 740, py: 480, pw: 260, ph: 100 },
+  { name: 'strip_far_se',   label: 'Far-SE Strip',         px: 980, py: 380, pw:  60, ph: 200 },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,83 +96,126 @@ export function buildCollisionGrid(): Grid {
 
   // ── STEP 1 : Carve walkable floors ─────────────────────────────────────────
 
-  fill(g,  4,  1, 10,  7, 0); // Parking garage NW
-  fill(g,  7,  7,  8,  3, 0); // North corridor  (garage → lobby)
-  fill(g, 14,  1, 21, 18, 0); // Main lobby / atrium
-  fill(g,  4, 10, 10,  9, 0); // Boiler / industrial room
-  fill(g,  1, 12,  3,  6, 0); // Far-left pipe corridor
-  fill(g, 37,  1, 11,  8, 0); // Tech room NE
-  fill(g, 35,  5,  3,  6, 0); // NE corridor (tech room → lobby)
-  fill(g, 44,  9,  5, 10, 0); // East office / utility room
-  fill(g, 49,  9,  3, 14, 0); // Far-east strip
-  fill(g,  1, 18, 14, 10, 0); // Gas station zone (SW)
-  fill(g, 14, 18, 19, 10, 0); // Outdoor park
-  fill(g, 28, 18,  6,  7, 0); // South junction / service road
-  fill(g, 33, 18, 11,  7, 0); // Vehicle garage SE
-  fill(g, 43, 14,  2, 11, 0); // SE corridor
-  fill(g, 37, 24, 12,  4, 0); // Electrical room
-  fill(g, 49, 19,  3,  9, 0); // Far-east bottom strip
+  // NW Parking Garage  (top-left, contains 2 cars)
+  // Red line: left≈x80 right≈x260 top≈y0 bottom≈y160
+  fill(g,  4,  0,  9,  8, 0); // cols 4-13, rows 0-8
+
+  // Industrial / Boiler Room  (left-center, below garage)
+  // Red line: left≈x60 right≈x280 top≈y160 bottom≈y380
+  fill(g,  3,  8, 11, 11, 0); // cols 3-14, rows 8-19
+
+  // Far-left pipe / freezer corridor  (narrow strip, far left edge)
+  // Red line: left≈x0 right≈x60 top≈y220 bottom≈y360
+  fill(g,  0, 11,  3,  7, 0); // cols 0-3, rows 11-18
+
+  // Main Lobby / Atrium  (large central space)
+  // Red line: left≈x280 right≈x700 top≈y0 bottom≈y380
+  fill(g, 14,  0, 21, 19, 0); // cols 14-35, rows 0-19
+
+  // NE Tech Room  (upper right, server room)
+  // Red line: left≈x700 right≈x960 top≈y0 bottom≈y180
+  fill(g, 35,  0, 13,  9, 0); // cols 35-48, rows 0-9
+
+  // NE Connector  (tech room ↔ lobby)
+  // Red line: left≈x680 right≈x740 top≈y100 bottom≈y200
+  fill(g, 34,  5,  3,  5, 0); // cols 34-37, rows 5-10
+
+  // Far-right upper rooms  (top-right corner, 2 stacked chambers)
+  // Red line: left≈x960 right≈x1040 top≈y0 bottom≈y80
+  fill(g, 48,  0,  4,  4, 0); // cols 48-52, rows 0-4
+
+  // East Office / Equipment Room  (right-center)
+  // Red line: left≈x860 right≈x1000 top≈y180 bottom≈y380
+  fill(g, 43,  9,  7, 10, 0); // cols 43-50, rows 9-19
+
+  // Far-right vertical strip  (connects upper rooms to east office)
+  // Red line: left≈x980 right≈x1040 top≈y80 bottom≈y380
+  fill(g, 49,  4,  3, 15, 0); // cols 49-52, rows 4-19
+
+  // Gas Station zone  (bottom-left)
+  // Red line: left≈x0 right≈x280 top≈y380 bottom≈y580
+  fill(g,  0, 19, 14, 10, 0); // cols 0-14, rows 19-29
+
+  // Outdoor Park  (bottom-center)
+  // Red line: left≈x280 right≈x680 top≈y380 bottom≈y580
+  fill(g, 14, 19, 20, 10, 0); // cols 14-34, rows 19-29
+
+  // South Junction / service road  (center-south, connecting park to SE)
+  // Red line: left≈x560 right≈x700 top≈y360 bottom≈y520
+  fill(g, 28, 18,  7,  8, 0); // cols 28-35, rows 18-26
+
+  // SE Vehicle Garage  (military van, bottom-right)
+  // Red line: left≈x660 right≈x880 top≈y360 bottom≈y500
+  fill(g, 33, 18, 11,  7, 0); // cols 33-44, rows 18-25
+
+  // SE Corridor  (narrow vertical connector, right side)
+  // Red line: left≈x860 right≈x920 top≈y260 bottom≈y520
+  fill(g, 43, 13,  3, 13, 0); // cols 43-46, rows 13-26
+
+  // Electrical Room  (bottom-right, server equipment)
+  // Red line: left≈x740 right≈x1000 top≈y480 bottom≈y580
+  fill(g, 37, 24, 13,  5, 0); // cols 37-50, rows 24-29
+
+  // Far-SE strip  (bottom-right corner)
+  // Red line: left≈x980 right≈x1040 top≈y380 bottom≈y560
+  fill(g, 49, 19,  3, 10, 0); // cols 49-52, rows 19-29
 
   // ── STEP 2 : Re-block obstacles within floors ───────────────────────────────
 
-  // ── Lobby ──
-  // Central octagonal planter / statue  (the glowing garden in the middle)
-  fill(g, 20,  5,  9,  8, 1);
-  // Trim planter corners to approximate octagonal shape
-  fill(g, 20,  5,  2,  1, 0); // NW corner walkable
-  fill(g, 27,  5,  2,  1, 0); // NE corner walkable
-  fill(g, 20, 12,  2,  1, 0); // SW corner walkable
-  fill(g, 27, 12,  2,  1, 0); // SE corner walkable
+  // ── NW Garage: 2 cars (stacked on left side, driving lane on right) ──
+  fill(g,  4,  0,  5,  4, 1); // car 1  (upper, blue sedan)
+  fill(g,  4,  4,  5,  4, 1); // car 2  (lower, dark sedan)
 
-  // Benches north wall (two rows)
-  fill(g, 15,  1,  5,  1, 1);
-  fill(g, 29,  1,  5,  1, 1);
-  // Benches south wall
-  fill(g, 17, 17,  4,  1, 1);
-  fill(g, 28, 17,  4,  1, 1);
+  // ── Industrial / Boiler Room ──
+  fill(g,  7, 11,  5,  5, 1); // boiler / furnace cylinder (center-left)
+  fill(g,  3,  8,  2,  3, 1); // NW corner machinery
+  fill(g,  3, 16,  3,  3, 1); // SW corner pipes
+  fill(g, 13,  8,  1, 11, 1); // east wall computer terminals
 
-  // ── Parking garage NW ──
-  fill(g,  5,  1,  4,  4, 1); // car 1
-  fill(g,  5,  5,  4,  2, 1); // car 2
-  fill(g,  4,  1,  1,  7, 1); // west wall of garage
+  // ── Main Lobby: central octagonal planter / statue ──
+  fill(g, 20,  5,  9,  8, 1); // block octagonal footprint
+  // Trim corners to approximate octagonal shape
+  fill(g, 20,  5,  1,  1, 0); // NW corner walkable
+  fill(g, 28,  5,  1,  1, 0); // NE corner walkable
+  fill(g, 20, 12,  1,  1, 0); // SW corner walkable
+  fill(g, 28, 12,  1,  1, 0); // SE corner walkable
 
-  // ── Industrial / boiler room ──
-  fill(g,  8, 12,  5,  5, 1); // boiler / furnace (large cylinder)
-  fill(g, 13, 10,  1,  9, 1); // computer terminal wall (east edge)
-  fill(g,  4, 10,  2,  2, 1); // NW corner machinery
-  fill(g,  4, 16,  3,  3, 1); // SW corner pipes
+  // Lobby: north-wall benches
+  fill(g, 15,  0,  4,  1, 1);
+  fill(g, 30,  0,  4,  1, 1);
+  // Lobby: south-wall benches
+  fill(g, 17, 18,  4,  1, 1);
+  fill(g, 27, 18,  4,  1, 1);
 
-  // ── Gas station ──
-  fill(g,  4, 22,  3,  4, 1); // gas pumps
-  fill(g,  1, 18,  1, 10, 1); // west wall
-  fill(g,  7, 19,  7,  5, 1); // shop building (solid walls + interior)
-  fill(g,  2, 18,  5,  2, 1); // refrigerators / shelves (north interior wall)
-  fill(g,  1, 26,  4,  2, 1); // south corner obstacle
+  // ── NE Tech Room: server banks and equipment ──
+  fill(g, 36,  0, 12,  3, 1); // north wall server banks
+  fill(g, 35,  3,  3,  5, 1); // west wall equipment (near NE connector)
 
-  // ── Tech room NE ──
-  fill(g, 37,  1, 11,  4, 1); // server banks / computer desks (north wall)
-  fill(g, 37,  5,  3,  3, 1); // additional equipment (west wall)
+  // ── East Office: workstation cluster ──
+  fill(g, 44,  9,  5,  4, 1); // desk / monitor bank
+  fill(g, 49,  9,  2,  5, 1); // server rack cabinet (east wall)
 
-  // ── East office ──
-  fill(g, 44, 10,  4,  3, 1); // desk / workstation
-  fill(g, 49,  9,  2,  5, 1); // server rack cabinet
+  // ── Gas Station ──
+  fill(g,  6, 20,  6,  5, 1); // store building (solid interior)
+  fill(g,  3, 22,  3,  4, 1); // gas pumps
+  fill(g,  0, 19,  1, 10, 1); // far-left wall (edge)
+  fill(g,  1, 27,  3,  2, 1); // south-corner cones / barriers
 
-  // ── Outdoor park ──
-  fill(g, 14, 18,  2,  2, 1); // tree cluster NW
-  fill(g, 30, 18,  3,  2, 1); // tree cluster NE
-  fill(g, 15, 20,  4,  6, 1); // playground climbing frame
-  fill(g, 20, 21,  5,  5, 1); // playground swings
-  fill(g, 25, 18,  4,  3, 1); // military crates
-  fill(g, 19, 23,  9,  4, 1); // circular green (raised, non-walkable)
-  fill(g, 22, 26,  4,  2, 1); // south grass extension
+  // ── Outdoor Park ──
+  fill(g, 14, 19,  2,  3, 1); // NW tree cluster
+  fill(g, 29, 19,  5,  2, 1); // NE tree / crate cluster
+  fill(g, 15, 21,  5,  5, 1); // playground climbing frame (west)
+  fill(g, 20, 22,  5,  5, 1); // playground swings (east)
+  fill(g, 19, 24,  9,  4, 1); // raised circular grass mound (center)
+  fill(g, 22, 27,  4,  2, 1); // south grass extension
 
-  // ── Vehicle garage SE ──
-  fill(g, 34, 19,  6,  4, 1); // military van
-  fill(g, 33, 18,  2,  2, 1); // gate posts / barriers at entrance
+  // ── SE Vehicle Garage ──
+  fill(g, 33, 18,  2,  2, 1); // entrance gate posts / barriers
+  fill(g, 34, 19,  7,  5, 1); // military van (center)
 
-  // ── Electrical room ──
-  fill(g, 37, 24,  6,  4, 1); // server rack bank left
-  fill(g, 44, 25,  4,  3, 1); // equipment bank right
+  // ── Electrical Room ──
+  fill(g, 37, 24,  7,  5, 1); // server rack bank (left side)
+  fill(g, 45, 25,  5,  4, 1); // equipment / breaker bank (right side)
 
   _cached = g;
   return g;
