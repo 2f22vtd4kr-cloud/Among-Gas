@@ -23,7 +23,7 @@ import Joystick from '../components/Joystick';
 // ── Camera ────────────────────────────────────────────────────────────────────
 // Screen CSS pixels per map pixel. Calibrated against reference Among Us
 // screenshots — small figure with a wide view of surrounding rooms.
-const ZOOM = 0.4;
+const ZOOM = 0.3;
 
 // Hard cap on the DPR used to size the canvas buffer and scale the map draw.
 // The map source asset (map-hires.webp) has a fixed native resolution; the
