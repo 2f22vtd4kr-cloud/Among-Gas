@@ -12,7 +12,6 @@
     "tsx": "catalog:"
   },
   "dependencies": {
-    "openai": "^6.45.0",
     "sharp": "^0.35.3"
   }
 }

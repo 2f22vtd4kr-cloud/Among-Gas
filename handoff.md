@@ -26,6 +26,18 @@
 
 ## Sessions
 
+### 2026-07-09 — Attempted AI-detail map regen (chunked, image-edit): blocked on billing, reverted
+
+**Context:** after the DPR-cap fix (below), user wanted the map's actual detail ceiling raised, not just the upsampling blur removed. Discussed and rejected plain tiling/viewport-culling (solves a perf problem, not a detail problem) and settled on: split the map into overlapping tiles, regenerate each via an image-to-image *edit* call (not blind text-to-image) with a "preserve exact layout, only add detail" prompt, re-theme to a modern-Russia setting (Bukhanka van, Lenin bust, Cyrillic-only/no text), stitch back into the same 6608×3808 canvas so collision-map coordinates stay valid.
+
+**What was built (then removed — see Outcome):** `scripts/src/mapRegen/config.ts` (5×3 tile grid over the existing `map-hires.webp`, 100px overlap per tile for cross-tile context, zone-aware prompt builder reusing `collisionMap.ts`'s `ZONES` table) and `scripts/src/mapRegen/generateTile.ts` (crops a tile with sharp, calls OpenAI `images.edit` with `gpt-image-1`, force-resizes the result back to the exact crop dimensions so the stitch math holds). Typechecked clean; never got to the stitch/QA-overlay step.
+
+**Outcome:** Replit's own OpenAI AI Integration required an account upgrade the user declined, so this fell back to a user-supplied `OPENAI_API_KEY` secret. Four different keys (four different OpenAI org IDs, confirmed via response headers) all failed identically and immediately with `billing_hard_limit_reached` on `images.edit` — no image ever generated, no charge incurred. This is an OpenAI-account-side block (org has no payment method / a $0 usage limit under platform.openai.com → Settings → Billing → Limits), not something fixable from this environment. User chose to drop the plan rather than keep supplying keys blind. **Reverted**: `scripts/src/mapRegen/` deleted, `openai` dependency removed from `scripts/package.json`, `pnpm remove` run, typecheck reconfirmed clean. `map-hires.webp` was never touched.
+
+**Loose end:** an `OPENAI_API_KEY` Replit Secret still exists in this repl from the 4 attempts — orphaned/unused now that the plan was dropped. Not deleted (no secret-delete callback available from this session); harmless to leave, but worth knowing it's there if it resurfaces in an env-var audit.
+
+**If revisited:** don't reattempt with a blind new key — first have the user confirm in the OpenAI dashboard that the org's hard spending limit is raised above $0 (that specific error code means the request never even ran against actual usage). The tile-grid/prompt design above is otherwise ready to reuse as-is once a working key exists.
+
 ### 2026-07-09 — Map crispness fix: cap DPR to stop upsampling blur
 
 **Done**
