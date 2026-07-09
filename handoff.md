@@ -394,6 +394,23 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Sprite outline removal + drop shadow
+
+**Done**
+- Removed the thin tan/gold outline halo around every character sprite (all 63 color×pose cells) in `artifacts/telegram-game/public/sprites/characters.png` via a scripted sharp pipeline: color-threshold pass to zero fully-opaque halo pixels, then a 1px alpha erosion to clean up the remaining anti-aliased fringe without eating into the intended black outline.
+- Added a soft drop shadow under each character's feet, matching the style the user referenced. Shadow placement uses largest-connected-component bounding box per cell (not the naive full-cell bbox) so a pre-existing disconnected art artifact in the "hold-item" pose (a stray floating eye pair, unrelated to this task) doesn't skew shadow position.
+- Verified visually in-game via screenshot at multiple zoom levels.
+
+**Decisions & gotchas**
+- The in-game sprite is rendered very small (~50-90px tall after camera zoom + nearest-neighbor downscale from a ~156px source cell), so a shadow with realistic soft/low-opacity falloff (like a typical drop shadow) becomes nearly invisible after downscaling. Had to use a much higher-contrast, higher-opacity, larger-radius ellipse than would look "correct" at full source resolution — always test additions to this sprite sheet at actual in-game render size (via screenshot), not just at full-res crops, or subtle effects will silently disappear.
+- The maroon "hold-item" pose cell has a pre-existing disconnected floating-eyes artifact separate from the main body — a latent art defect, not something introduced by this change. Left as-is since it wasn't in scope.
+
+**Left off / next steps**
+- Same open items as before: DB not connected, no Telegram SDK integration, no multiplayer.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (repeat repair, evening session)
 
 **Done**
