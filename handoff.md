@@ -558,3 +558,18 @@
 
 **State to restore**
 - None.
+
+### 2026-07-09 — Shadow ellipse stripe fix (3rd attempt, correct)
+
+**Done**
+- Root cause confirmed: tile grout lines show through any semi-transparent fill over the map canvas because the map is already painted and the shadow composites over it. No opacity or gradient tweak can fully hide them while the shadow remains transparent.
+- Fix: replaced gradient fill with `ctx.filter = 'blur(Xpx)'` on a solid `rgba(0,0,0,0.82)` ellipse. The blur filter is applied to the drawn shape BEFORE it composites over the map — this averages out tile-line contrast in the blur spread, eliminating stripes completely. Shadow size slightly undersized; blur spreads it to the right visual size.
+- blurPx = `Math.max(2, Math.round(spriteH * 0.06))` — scales with DPR/zoom so it looks consistent at all render scales.
+
+**Decisions & gotchas**
+- Previous approaches (higher opacity gradient, gradient in wrong coordinate space) still let tile lines through because any non-zero transparency lets proportional contrast pass.
+- `ctx.filter` must be reset in the save/restore block (it is — the save/restore handles it).
+- Desktop screenshot (dpr=1) confirms clean soft oval, no tile-line stripes visible.
+
+**Left off / next steps**
+- User to verify on iOS device.
