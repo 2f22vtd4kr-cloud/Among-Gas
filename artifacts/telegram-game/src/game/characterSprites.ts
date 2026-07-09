@@ -1,18 +1,18 @@
 // Character sprite sheet: artifacts/telegram-game/public/sprites/characters.png
-// Generated pixel-art sheet, 1024x1024px, transparent background.
+// User-supplied higher-res pixel-art sheet, 1123x1401px, background removed
+// (transparent PNG).
 //
-// Grid: 7 columns (colors) x 8 rows (poses). Cells are NOT integer-sized
-// (1024 / 7 = ~146.29px, 1024 / 8 = 128px) -- when slicing frames in a
-// canvas/WebGL renderer, sample with fractional source rects rather than
-// assuming a clean pixel grid, or re-slice/pad the sheet to an integer
-// grid (e.g. 7x8 cells of 150x128 on a 1050x1024 canvas) before shipping.
+// Grid: 7 columns (colors) x 8 rows (poses), same layout/order as the
+// previous sheet. Cells are NOT integer-sized (1123 / 7 ≈ 160.43px,
+// 1401 / 8 ≈ 175.125px) -- slicing uses fractional source rects, matching
+// the pattern from the original sheet.
 
 export const CHARACTER_SHEET_PATH = "/sprites/characters.png";
 
 export const CHARACTER_SHEET_COLS = 7;
 export const CHARACTER_SHEET_ROWS = 8;
-export const CHARACTER_SHEET_WIDTH = 1024;
-export const CHARACTER_SHEET_HEIGHT = 1024;
+export const CHARACTER_SHEET_WIDTH = 1123;
+export const CHARACTER_SHEET_HEIGHT = 1401;
 export const CHARACTER_CELL_WIDTH = CHARACTER_SHEET_WIDTH / CHARACTER_SHEET_COLS;
 export const CHARACTER_CELL_HEIGHT = CHARACTER_SHEET_HEIGHT / CHARACTER_SHEET_ROWS;
 

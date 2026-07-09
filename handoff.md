@@ -190,6 +190,25 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Swapped in user-supplied higher-res character sprite sheet
+
+**Done**
+- User provided a new, higher-resolution 7-color × 8-pose character sprite sheet (`attached_assets/BAF1186A-CC7C-4076-B23F-03C55C906007_1783604564967.png`, 1123×1401, opaque tan background) with the same grid layout/order as the original.
+- Removed the tan background via the background-removal tool, saved directly over `artifacts/telegram-game/public/sprites/characters.png` (transparent PNG, same filename/path so no other code needed to change).
+- Updated `characterSprites.ts` sheet-size constants (`CHARACTER_SHEET_WIDTH/HEIGHT`) from `1024×1024` to the new sheet's native `1123×1401` — grid is still 7 cols × 8 rows, cell slicing stays fractional (same pattern as before, no resizing/distortion applied to keep it pixel-perfect to the source art).
+- Verified visually via screenshot: teal idle pose renders correctly, matches the new sheet's art style, no bleed from adjacent cells.
+
+**Decisions & gotchas**
+- Only `CHARACTER_SHEET_WIDTH`/`CHARACTER_SHEET_HEIGHT` needed to change — `CHARACTER_CELL_WIDTH/HEIGHT` and `getCharacterFrameRect()` are already derived from those constants, so no other code touched.
+- Kept the sheet at its native resolution (no upscale/downscale) to stay pixel-perfect to the user-supplied art, per the `recreate-screenshot` skill's pixel-perfect-accuracy principle.
+- Only teal (idle/walk-1/walk-2) is wired into gameplay; the other 6 colors and remaining poses (run-lean, ghost, mask, hold-item, sit-hug-knees) are available in the new sheet at the same grid coordinates as before — unaffected by this swap.
+
+**Left off / next steps**
+- No further sprite work requested this session.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Project re-import: artifact re-registration and dependency install
 
 **Done**
