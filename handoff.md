@@ -146,6 +146,27 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Re-import repair (again) + 1.5x map canvas upscale
+
+**Done**
+- Re-import once more dropped artifact registration and `node_modules`; repaired via `verifyAndReplaceArtifactToml` on all three `artifact.toml` files (same fix as prior sessions) and re-ran `pnpm install`. All three workflows (api-server, telegram-game, mockup-sandbox) restarted cleanly.
+- Upscaled the game map canvas 1.5x further: added `_UPSCALE = 1.5` in `collisionMap.ts` so `MAP_W`/`MAP_H` are now derived as `Math.round(1652 * 1.5)` / `Math.round(952 * 1.5)` = 2478×1428 (same source image, just drawn larger).
+- Because `ZONES`, player constants (`PLAYER_RADIUS`, `PLAYER_SPEED_PX_PER_SEC`, `PLAYER_SPAWN`), and the on-map sprite display size were already expressed as ratios against the base 1040×580 (or `MAP_W`/`MAP_H`), only `player.ts` needed a code change: switched its `_SCALE`/`PLAYER_SPAWN` formulas from hardcoded `1652/952` literals to `MAP_W`/`MAP_H` imports so they track any future `_UPSCALE` change automatically.
+- Also scaled `PLAYER_DISPLAY_HEIGHT` in `GameMap.tsx` by `MAP_W / 1652` so the sprite stays visually proportional to the map at the new size.
+- Verified `tsc --noEmit` passes and the workflow serves correctly.
+
+**Decisions & gotchas**
+- To upscale the map further in the future, just change the single `_UPSCALE` constant in `collisionMap.ts` — everything else (zones, player scale, spawn, sprite size) derives from `MAP_W`/`MAP_H` and will follow automatically. Do not hardcode `1652`/`952` literals in new code; import `MAP_W`/`MAP_H` instead.
+- `ZOOM = 2.5` (camera zoom level) in `GameMap.tsx` was left unchanged — it's a screen-pixels-per-map-pixel ratio, not tied to map resolution, so it doesn't need to scale with the canvas.
+- Reconfirmed the "import drops artifact registration + node_modules" failure mode is now recurring across sessions — always check `listArtifacts()` / try a workflow restart first thing each session and re-run the `verifyAndReplaceArtifactToml` + `pnpm install` fix proactively if it's empty.
+
+**Left off / next steps**
+- Collision grid (`collisionData.ts`) is still resolution-independent (fractional CELL_X/CELL_Y), so no regeneration was needed for this upscale — confirmed working.
+- No player/movement or DB schema changes this session — unchanged from previous sessions.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Project re-import: artifact re-registration and dependency install
 
 **Done**

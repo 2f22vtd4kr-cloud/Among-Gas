@@ -6,22 +6,22 @@
 // and canvas concerns, matching the collisionMap.ts pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { canMoveTo, resolveMovement, type Grid } from './collisionMap';
+import { canMoveTo, resolveMovement, MAP_W, MAP_H, type Grid } from './collisionMap';
 import type { CharacterPose } from './characterSprites';
 
 export const PLAYER_COLOR = 'teal' as const;
-// Scale from original 1040×580 canvas to new 1652×952 canvas.
+// Scale from original 1040×580 canvas to the current MAP_W×MAP_H canvas.
 // Radius and speed use the geometric mean of the two axis scale factors
 // so movement feels consistent in both directions.
-const _SCALE = Math.sqrt((1652 / 1040) * (952 / 580)); // ≈ 1.615
-export const PLAYER_RADIUS = Math.round(9 * _SCALE);           // ≈ 14 px
-export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE); // ≈ 210 px/s
+const _SCALE = Math.sqrt((MAP_W / 1040) * (MAP_H / 580)); // ≈ 2.42 at 1.5x upscale
+export const PLAYER_RADIUS = Math.round(9 * _SCALE);
+export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE);
 export const PLAYER_ANIM_INTERVAL_MS = 140;
 
 /** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
 export const PLAYER_SPAWN = {
-  x: Math.round(350 * (1652 / 1040)),  // ≈ 556
-  y: Math.round(150 * (952 / 580)),    // ≈ 246
+  x: Math.round(350 * (MAP_W / 1040)),
+  y: Math.round(150 * (MAP_H / 580)),
 };
 
 export interface PlayerState {

@@ -15,3 +15,11 @@ description: Every session must read handoff.md first and append to it before fi
 3. Commit `handoff.md` with the rest of your changes so it stays in the repo.
 
 **Format defined in:** `handoff.md` (top section).
+
+## Recurring import failure mode
+
+Every re-import of this project so far has dropped artifact registration (`listArtifacts()` returns empty, workflows missing) and wiped `node_modules`, even though `artifact.toml` files and source code are untouched.
+
+**Why:** Import doesn't preserve the platform-side artifact registration metadata or installed dependencies, only the repo contents.
+
+**How to apply:** At the start of a session, if workflows are missing/fail to start: (1) run `pnpm install`, (2) for each `artifacts/*/.replit-artifact/artifact.toml`, copy it to a sibling `artifact.edit.toml` and call `verifyAndReplaceArtifactToml()` with no content changes to re-register, then restart workflows.

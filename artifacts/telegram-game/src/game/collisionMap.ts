@@ -17,8 +17,10 @@
 
 import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData';
 
-export const MAP_W = 1652;
-export const MAP_H = 952;
+// Upscale factor applied on top of the previous 1652×952 canvas.
+const _UPSCALE = 1.5;
+export const MAP_W = Math.round(1652 * _UPSCALE); // 2478
+export const MAP_H = Math.round(952 * _UPSCALE);  // 1428
 export { COLS, ROWS };
 
 /**
@@ -88,7 +90,7 @@ export interface Zone {
 // against a fresh screenshot with the overlay on if the reference image
 // changes noticeably.
 // Zone bounds were originally measured against the 1040×580 canvas.
-// Scale them to the new 1652×952 canvas using the same X/Y ratios.
+// Scale them to the current MAP_W×MAP_H canvas using the same X/Y ratios.
 const _SX = MAP_W / 1040;
 const _SY = MAP_H / 580;
 const z = (px: number, py: number, pw: number, ph: number): Pick<Zone, 'px'|'py'|'pw'|'ph'> => ({
