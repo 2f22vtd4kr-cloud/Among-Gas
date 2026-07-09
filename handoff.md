@@ -394,6 +394,23 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Post-import setup (repeat repair, evening session)
+
+**Done**
+- Fresh re-import again dropped artifact registration metadata (same recurring gotcha). Repaired via the documented sequence: copied each `artifact.toml` → `artifact.edit.toml`, called `verifyAndReplaceArtifactToml({ tempFilePath, artifactTomlPath })` (absolute paths) for all three artifacts — all succeeded.
+- `pnpm install` (lockfile already up to date).
+- Restarted `artifacts/api-server: API Server` and `artifacts/telegram-game: web` workflows; both running cleanly. Left `mockup-sandbox` stopped (not needed unless doing UI prototyping).
+- Verified via screenshot: map renders crisply, teal character visible, WASD hint shown — matches expected state.
+
+**Decisions & gotchas**
+- No new gotchas; this confirms the standard repair sequence in `handoff-protocol`/memory is reliable across repeated imports.
+
+**Left off / next steps**
+- Same as before: DB not connected, no Telegram SDK integration, no multiplayer. These remain open follow-ups.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Post-import setup (artifact re-registration) [SUPERSEDED by entry above]
 
 **Done**
