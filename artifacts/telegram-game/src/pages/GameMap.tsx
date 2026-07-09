@@ -20,12 +20,13 @@ import {
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 // How many screen pixels equal one map pixel. Among Us-style close zoom.
-const ZOOM = 2.5;
+// Zoomed out 30% from the previous 2.5 per user request.
+const ZOOM = 2.5 * 0.7;
 
 // On-map display size of the player sprite. Derived from the sheet cell's
 // aspect ratio (146.29:128) rather than hardcoded so it stays proportional
-// if the sprite sheet is ever re-sliced. Scaled with the map's 1.5x upscale
-// (36px was tuned for the previous 1652×952 canvas).
+// if the sprite sheet is ever re-sliced. Scaled against the map's native
+// upscaled resolution (36px was tuned for the old 1652×952 canvas).
 const PLAYER_DISPLAY_HEIGHT = Math.round(36 * (MAP_W / 1652));
 const PLAYER_DISPLAY_WIDTH = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
 
@@ -60,7 +61,9 @@ export default function GameMap() {
       if (cancelled) return;
       setError(true);
     };
-    img.src = new URL('@assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png', import.meta.url).href;
+    // Pre-upscaled (sharp lanczos3) static asset — see game/collisionMap.ts
+    // for why we don't stretch the small original via canvas at runtime.
+    img.src = `${import.meta.env.BASE_URL}map-hires.png`;
     if (img.complete && img.naturalWidth > 0) {
       ctx.drawImage(img, 0, 0, MAP_W, MAP_H);
       setLoaded(true);

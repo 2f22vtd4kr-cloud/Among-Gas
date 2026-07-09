@@ -167,6 +167,29 @@
 **State to restore**
 - None.
 
+### 2026-07-09 — Real image upscale (sharp lanczos3) + camera zoom-out 30%
+
+**Done**
+- User reported the previous session's 1.5x canvas upscale was still blurry — correctly diagnosed: stretching a 1652×952 source at runtime via `ctx.drawImage(img, 0, 0, MAP_W, MAP_H)` can't add real detail, it's just bilinear/bicubic interpolation of the same pixels.
+- Real fix: pre-generated a genuinely higher-resolution static asset using `sharp` (`kernel: lanczos3` + a light `sharpen`) at 3x the original size (4956×2856), saved to `artifacts/telegram-game/public/map-hires.png`. The one-off script lived at `/tmp/upscale_script/upscale.cjs` (not committed — rerun a similar script from `artifacts/telegram-game/public/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png`-equivalent source if you need to regenerate at a different resolution).
+- `collisionMap.ts`: `MAP_W`/`MAP_H` are now hardcoded to `4956`/`2856` (matching the static asset's native size exactly) instead of derived from an `_UPSCALE` multiplier — comment explains they must stay in sync with `map-hires.png`.
+- `GameMap.tsx`: image `src` changed from the small `@assets/...` original (via `new URL(...)`) to the pre-upscaled static asset served from `public/`: `` `${import.meta.env.BASE_URL}map-hires.png` ``.
+- `GameMap.tsx`: `ZOOM` reduced 30% per user request, from `2.5` to `2.5 * 0.7` (=1.75) — shows more of the map around the player.
+- `player.ts` and `PLAYER_DISPLAY_HEIGHT` needed no changes — both already derive from `MAP_W`/`MAP_H` ratios, so they scaled automatically to the new resolution.
+- Verified visually via screenshot: map is now crisp/sharp at the new resolution, character renders proportionally, more map is visible around the player after the zoom-out.
+
+**Decisions & gotchas**
+- **Key lesson: canvas-time upscaling (`drawImage` with a larger destination rect) never increases real detail — it just interpolates existing pixels and looks blurry past ~1.2-1.5x.** To make a low-res source image look crisper, you must pre-process it (e.g. `sharp` with `lanczos3` kernel + sharpen) into a genuinely higher-pixel-count static file, then keep `MAP_W`/`MAP_H` in exact sync with that file's native dimensions so the canvas draws ~1:1 with no further stretching.
+- If the map needs to go even higher-res later, regenerate `public/map-hires.png` at the new target resolution with the same sharp recipe, then update the hardcoded `MAP_W`/`MAP_H` in `collisionMap.ts` to match exactly.
+- The original small map source is still referenced in `collisionMap.ts` comments and `player.ts`'s scale-ratio math (`MAP_W / 1040`, etc.) — those ratios are still correct since they're relative, just note the "1040×580 base" is now two generations removed from the live asset.
+
+**Left off / next steps**
+- The one-off upscale script isn't committed anywhere reusable — if the map artwork changes again, a fresh sharp upscale script will need to be written (quick, ~10 lines, pattern is in this entry).
+- No further map/character work requested this session beyond the crispness fix and zoom-out.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Project re-import: artifact re-registration and dependency install
 
 **Done**

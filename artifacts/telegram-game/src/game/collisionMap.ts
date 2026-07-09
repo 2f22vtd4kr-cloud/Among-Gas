@@ -17,10 +17,13 @@
 
 import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData';
 
-// Upscale factor applied on top of the previous 1652×952 canvas.
-const _UPSCALE = 1.5;
-export const MAP_W = Math.round(1652 * _UPSCALE); // 2478
-export const MAP_H = Math.round(952 * _UPSCALE);  // 1428
+// Map now renders from a pre-upscaled static asset (public/map-hires.png,
+// generated via sharp lanczos3 from the original 1652×952 artwork) instead
+// of stretching the small source at runtime — this is what actually removes
+// the blur, since canvas drawImage scaling alone can't add real detail.
+// MAP_W/MAP_H must match that asset's native pixel size exactly.
+export const MAP_W = 4956; // 3x of 1652
+export const MAP_H = 2856; // 3x of 952
 export { COLS, ROWS };
 
 /**
