@@ -108,7 +108,91 @@ export function useCorrectionRef(): React.RefObject<{ x: number; y: number } | n
   return useContext(GameCorrectionCtx);
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Dev-only mock states (screenshot / visual QA harness) ──────────────────
+//
+// Navigate to `?mock=<key>` in dev to force the app into a specific visual
+// state without a real WebSocket connection — lets us screenshot every
+// screen on demand instead of always landing on the lobby. DEV-gated so it
+// can never affect production builds.
+
+const MOCK_PLAYERS_ROOM: LobbyPlayer[] = [
+  { slot: 0, username: 'HostPlayer' },
+  { slot: 1, username: 'DevPlayer' },
+  { slot: 2, username: 'Guest99' },
+];
+
+const MOCK_PLAYERS_GAME: LobbyPlayer[] = [
+  { slot: 0, username: 'DevPlayer' },
+  { slot: 1, username: 'Blitz' },
+  { slot: 2, username: 'Nova' },
+  { slot: 3, username: 'Quill' },
+];
+
+/** Remote positions (pixel space) scattered near the mock local player, for `playing` mocks. */
+const MOCK_REMOTE_POSITIONS: RemotePlayer[] = [
+  { slot: 1, x: MAP_W / 2 + 120, y: MAP_H / 2 - 40 },
+  { slot: 2, x: MAP_W / 2 - 90, y: MAP_H / 2 + 60 },
+  { slot: 3, x: MAP_W / 2 + 30, y: MAP_H / 2 + 140 },
+];
+
+interface MockPreset {
+  state: Partial<GameState>;
+  remotePlayers?: RemotePlayer[];
+}
+
+const MOCK_PRESETS: Record<string, MockPreset> = {
+  connecting: { state: { phase: 'connecting' } },
+  error: { state: { phase: 'error', errorMessage: 'Room not found' } },
+  'lobby-empty': {
+    state: { phase: 'lobby', mySlot: 0, hostSlot: 0, roomCode: null, players: [] },
+  },
+  'lobby-host': {
+    state: {
+      phase: 'lobby', mySlot: 0, hostSlot: 0, roomCode: 'XYZ789',
+      players: [{ slot: 0, username: 'DevPlayer' }, { slot: 1, username: 'Alice' }],
+    },
+  },
+  'lobby-guest': {
+    state: {
+      phase: 'lobby', mySlot: 1, hostSlot: 0, roomCode: 'ABC123',
+      players: MOCK_PLAYERS_ROOM,
+    },
+  },
+  'reveal-crewmate': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  'reveal-impostor': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0, 2],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  playing: {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: null, impostorSlots: [],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+};
+
+/** Returns the requested dev mock preset, or null if none/invalid/prod. */
+function getMockPreset(): MockPreset | null {
+  if (!import.meta.env.DEV) return null;
+  const key = new URLSearchParams(window.location.search).get('mock');
+  if (!key) return null;
+  const preset = MOCK_PRESETS[key];
+  if (!preset) {
+    console.warn(`[mock] Unknown ?mock=${key}. Valid keys: ${Object.keys(MOCK_PRESETS).join(', ')}`);
+    return null;
+  }
+  return preset;
+}
 
 function getWsUrl(): string {
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -240,6 +324,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [send]);
 
   useEffect(() => {
+    // ── Dev mock mode: skip the real socket, force a fixed visual state ────
+    const mock = getMockPreset();
+    if (mock) {
+      if (mock.remotePlayers) {
+        remotePlayersRef.current = new Map(mock.remotePlayers.map(rp => [rp.slot, rp]));
+      }
+      setState(s => ({ ...s, ...mock.state }));
+      console.log(`[mock] Forced state:`, mock.state);
+      return () => {};
+    }
+
     const ws = new WebSocket(getWsUrl());
     ws.binaryType = 'arraybuffer';
     socketRef.current = ws;

@@ -102,15 +102,21 @@ export default function GameMap() {
   }, [impostorSlots]);
 
   // ── Role reveal overlay ───────────────────────────────────────────────────
+  // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
+  // (both the React state AND the CSS fade animation, which otherwise finishes
+  // and hides itself after 3.2s regardless of state) so it can be screenshotted.
+  const isMockReveal = import.meta.env.DEV
+    && new URLSearchParams(window.location.search).get('mock')?.startsWith('reveal-');
   const [showReveal, setShowReveal] = useState(false);
   useEffect(() => {
     if (!myRole) return;
     // Clear stale remote animation state so sprites animate fresh from spawns.
     remoteAnimMapRef.current.clear();
     setShowReveal(true);
+    if (isMockReveal) return;
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
-  }, [myRole]);
+  }, [myRole, isMockReveal]);
 
   // Inject role-reveal keyframes once (avoids a CSS file dependency)
   useEffect(() => {
@@ -625,10 +631,10 @@ export default function GameMap() {
           background: myRole === 'impostor'
             ? 'rgba(44, 0, 0, 0.92)'
             : 'rgba(0, 16, 48, 0.92)',
-          animation: 'rrFade 3.2s ease forwards',
+          animation: isMockReveal ? 'none' : 'rrFade 3.2s ease forwards',
           pointerEvents: 'none',
         }}>
-          <div style={{ textAlign: 'center', animation: 'rrScale 3.2s ease forwards' }}>
+          <div style={{ textAlign: 'center', animation: isMockReveal ? 'none' : 'rrScale 3.2s ease forwards' }}>
             <div style={{
               fontSize: 12, color: 'rgba(255,255,255,0.5)',
               fontFamily: 'sans-serif', letterSpacing: '0.3em',

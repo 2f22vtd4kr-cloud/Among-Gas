@@ -44,6 +44,10 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 _Populate as you build — sharp edges, "always run X before Y" rules._
 - If a fresh import/re-import shows no configured workflows and `listArtifacts()` returns empty even though `artifacts/*/.replit-artifact/artifact.toml` files exist, the artifact registration metadata was dropped on import. Repair by re-running `verifyAndReplaceArtifactToml()` against each artifact's own (unmodified) `artifact.toml` — this re-registers the artifact and its workflows without touching any source code.
+- **Screenshot / visual QA harness:** the telegram-game frontend always lands on the lobby's "Create Room" screen when screenshotted normally, because the real flow requires a live WebSocket round-trip through several server states. Use `?mock=<key>` (dev-only, gated on `import.meta.env.DEV`, zero prod effect) to force any visual state instead:
+  - `connecting`, `error`, `lobby-empty`, `lobby-host`, `lobby-guest` — navigate to `/?mock=<key>`
+  - `playing`, `reveal-crewmate`, `reveal-impostor` — navigate to `/game?mock=<key>` (role-reveal overlays are held open indefinitely under mock, instead of auto-dismissing after 3.2s, so they can be reliably screenshotted)
+  - Implemented in `GameContext.tsx` (`MOCK_PRESETS`, skips the real socket) and `GameMap.tsx` (`isMockReveal`, disables the CSS fade-out). Add new presets to `MOCK_PRESETS` as new screens/phases are built.
 
 ## Pointers
 
