@@ -46,6 +46,25 @@
 **State to restore**
 - None.
 
+### 2026-07-10 — Correction: Phase 7 (Tasks) was already implemented
+
+**Done**
+- The previous entry above says "Phase 7 (Tasks) is next" — that was stale/incorrect. Verified via code inspection that Phase 7 is already **fully implemented**, not just planned:
+  - `lib/shared/src/tasks.ts` — `TASK_DEFS` (5 tasks: Wiring, Download, Calibrate, Garbage, Filters) with map coords + interaction ranges.
+  - `artifacts/api-server/src/ws/lobby.ts` — task assignment on game start, `handleTaskStep` (authoritative alive/role/range/sequential-order checks), `checkWinAfterTask`.
+  - `artifacts/api-server/src/ws/wsServer.ts` — `0x15` sub `0x03` task-step opcode handling, progress broadcast.
+  - `artifacts/telegram-game/src/components/TaskMinigame.tsx` — all 5 minigames implemented.
+  - `artifacts/telegram-game/src/context/GameContext.tsx` / `pages/GameMap.tsx` — task assignment receipt (`0x1D`), progress state, proximity prompts, minigame overlay wiring.
+
+**Decisions & gotchas**
+- Handoff entries in this file are not reliably appended in one consistent place — some sessions prepend new entries near the top, others append at the bottom, so "most recent" isn't always "first in file." Always cross-check a phase's stated status against the actual code before trusting a `Left off / next steps` line.
+
+**Left off / next steps**
+- Per `GAME_SPEC.md` §13, next unimplemented phase is Phase 8 (Sabotages & Vision), then Phase 9 (Polish & Telegram Integration). Worth a quick code-level check at the start of that work too, given the above.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Re-import repair: re-registered artifacts, installed deps
 
 **Done**
