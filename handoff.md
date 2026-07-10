@@ -1297,6 +1297,20 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 - After Phase D: Phase E difficulty tuning (run 100-game sims, adjust `HUNT_ISOLATION_THRESHOLD`, sabotage interval, vote skip-bias until 55/45 ± 10% win-rate split).
 - Three follow-up tasks already queued (#2, #3, #4) covering Phase D, a solo crash-safety test, and the tuning pass.
 
+### 2026-07-10 — Re-import repair
+
+**Done**
+- Fresh re-import landed with no workflows/artifacts registered (as expected — `.replit-artifact/artifact.toml` files were present but registration metadata was dropped). Ran the standard repair: `verifyAndReplaceArtifactToml()` for api-server, telegram-game, mockup-sandbox → all three artifacts and their workflows re-registered.
+- `pnpm install`, restarted all three workflows — all came up clean.
+- Verified: telegram-game lobby loads, WS handshake succeeds (slot 0 assigned), "Play Solo vs Bots" panel visible.
+- Proposed 3 follow-up tasks (#2–#4) covering Phase D headless sim runner, bot crash-safety tests, and difficulty tuning, per the backlog noted in the previous entry.
+
+**Left off / next steps**
+- Pick up Phase D (headless simulation runner) — now tracked as task #2.
+
+**State to restore**
+- None.
+
 ## IMPORTANT — First actions after next re-import
 1. Run the standard re-import repair (see Gotchas in replit.md):
    - `verifyAndReplaceArtifactToml()` for api-server, telegram-game, mockup-sandbox
