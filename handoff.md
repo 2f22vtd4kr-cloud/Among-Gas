@@ -1372,6 +1372,23 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **Decisions & gotchas**
 - Same as prior sessions: expected on every fresh GitHub import/clone. See replit.md Gotchas and `.agents/memory/artifact-reregistration.md`.
 
+### 2026-07-10 — Verified: all bot AI phases (A–E) complete
+
+**Done**
+- Confirmed all five phases of SINGLE_PLAY.md already fully implemented in prior sessions.
+- Fixed port conflict (orphaned PIDs on 8080 and 18297) with `fuser -k`; restarted api-server and telegram-game workflows — both came up clean.
+- Screenshot verified: lobby shows "Play Solo vs Bots" panel with bot-count stepper (+/−) and green "Play Solo" button. Server builds, WS handshake succeeds, no console errors.
+- No code changes this session.
+
+**Decisions & gotchas**
+- Orphaned port PIDs are a recurring pattern on workflow restart; `fuser -k <port>/tcp` clears them immediately — no code investigation needed.
+
+**Left off / next steps**
+- Bot AI feature is shippable. Remaining work: add `TELEGRAM_BOT_TOKEN` secret and publish to production so real players can access it via BotFather.
+
+**State to restore**
+- None.
+
 **Left off / next steps**
 - Project is running and ready. Per last session's notes: Phase E (bot/solo play) is done. Check SINGLE_PLAY.md §9 for remaining phases (C confirmation, tasks #3/#4 reconciliation).
 - Next: add `TELEGRAM_BOT_TOKEN` secret, then publish to production and register with BotFather.
