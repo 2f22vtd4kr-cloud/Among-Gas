@@ -26,6 +26,33 @@
 
 ## Sessions
 
+### 2026-07-10 — Phase 9: Telegram haptics, theme binding, twa.ready/expand
+
+**Done**
+- Re-import repair (same recurring pattern): ran `pnpm install`, built shared lib (`pnpm --filter @workspace/shared exec tsc --build`), re-registered all three artifacts via `verifyAndReplaceArtifactToml()`, restarted `api-server` and `telegram-game` workflows.
+- Confirmed Phase 8 is working: ran `artifacts/api-server/test_sabotage.mjs` — sabotage trigger broadcast `[0x16, 0x01, systemId, attackerSlot]` received correctly, cooldown rejection confirmed. The previous session's "missing trigger" investigation was a transient issue; code was already correct.
+- Implemented Phase 9 (Polish & Telegram Integration):
+  - New `artifacts/telegram-game/src/lib/haptics.ts` — thin wrapper over `window.Telegram?.WebApp?.HapticFeedback`; all functions are silent no-ops outside a Telegram WebView.
+  - `artifacts/telegram-game/src/main.tsx` — calls `twa.ready()` + `twa.expand()` before React mount; maps `themeParams` → CSS `--tg-*` custom properties (bg_color, text_color, button_color, button_text_color, hint_color, link_color, secondary_bg_color).
+  - `artifacts/telegram-game/src/context/GameContext.tsx` — added `myRoleRef` to track role across WS callbacks; haptic calls on: role reveal (warning=impostor / success=crewmate), kill broadcast (kill pulse if victim, medium if attacker — both gated inside functional setState so replays don't retrigger), meeting start (gated inside functional setState, first receipt only), win/loss (success on local win, warning on local loss using myRoleRef to distinguish), sabotage start (warning), sabotage fixed (success).
+  - `artifacts/telegram-game/src/pages/GameMap.tsx` — `haptic.tap()` on all action button clicks (kill, report, emergency meeting, sabotage open/trigger, repair, task, votes); `haptic.success()` in task minigame `onComplete`.
+  - `artifacts/telegram-game/src/pages/Lobby.tsx` — `haptic.tap()` on create room and join room; `haptic.medium()` on start game.
+  - Updated `GAME_SPEC.md` §13 Phase 9 as ✅ complete; added §14 #18 deviation note (direct WebApp API instead of `@telegram-apps/sdk-react`).
+- `pnpm run typecheck` passes clean across all packages.
+
+**Decisions & gotchas**
+- Skipped `@telegram-apps/sdk-react` — existing `getInitData()` in `GameContext.tsx` already uses `window.Telegram?.WebApp?.initData` directly; adding the SDK would add a provider wrapper with no functional gain for the haptic/theme features. Documented in §14 #18.
+- Event haptics (kill, meeting, win/loss, sabotage) fire on server broadcast receipt rather than button click — deduped by being inside functional setState updaters (meeting, kill) or guarded by myRoleRef (win/loss). Button click haptics are lightweight `tap()` only; heavy confirmation comes from the broadcast.
+- `myRoleRef` is updated synchronously in the 0x1A handler before `setState`, so it's always accurate in the 0x1C win/loss check that runs later in the same onmessage callback stream.
+- Haptic side effects inside functional setState updaters: technically impure, but React's batching guarantees the functional form runs once per broadcast packet in practice. The alternative (a separate ref to track duplicate state) adds more code for negligible correctness gain.
+
+**Left off / next steps**
+- All 9 phases are now complete. The game is feature-complete per `GAME_SPEC.md §13`.
+- Remaining non-feature work: deploy to production, set `TELEGRAM_BOT_TOKEN` in environment, register the bot's mini app URL with BotFather.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Phase 6 completion: meetings & voting (client-side)
 
 **Done**

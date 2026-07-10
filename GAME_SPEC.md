@@ -578,11 +578,11 @@ Ordered by dependency. Each step is independently shippable and testable.
 3. Lights: fog-of-war lightmask Layer 2 implementation. ✅ — rendered only while a Lights sabotage is active (not a permanent baseline mechanic).
 4. O₂ / Reactor: dual-pad fix UI. ✅ — pad markers on canvas + proximity-gated Repair button.
 
-### Phase 9 — Polish & Telegram Integration
-1. `@telegram-apps/sdk-react` SDK.
-2. Real `initData` auth in production.
-3. Haptic feedback hooks.
-4. Telegram theme color binding.
+### Phase 9 — Polish & Telegram Integration ✅ (2026-07-10)
+1. ~~`@telegram-apps/sdk-react` SDK~~ — used direct `window.Telegram.WebApp` API instead (already used for `initData`; no extra package needed; see §14 #18). ✅
+2. Real `initData` auth in production. ✅ — already handled by `getInitData()` in `GameContext.tsx` (HMAC validated server-side in prod; JSON mock in dev).
+3. Haptic feedback hooks. ✅ — `src/lib/haptics.ts` thin wrapper; calls on kill, meeting, role reveal, game over, sabotage start/fixed, all action buttons.
+4. Telegram theme color binding. ✅ — `twa.ready()` + `twa.expand()` + `themeParams → CSS --tg-* custom properties` applied in `main.tsx` before React mounts.
 
 ---
 
@@ -609,3 +609,4 @@ This section documents issues in the source spec documents that are corrected in
 | 15 | §3's opcode matrix has no S→C broadcast opcode for sabotage state (only the §10 RPC sub-codes `0x15` sub `0x04`/`0x05` cover the C→S trigger/repair requests) | Added opcode `0x16` "Sabotage Control" (S→C only): sub `0x01` Started `[0x16,0x01,systemId,attackerSlot]`, sub `0x02` Pad Fixed `[0x16,0x02,systemId,padId]`, sub `0x03` Fixed `[0x16,0x03,systemId]`. Same style of undocumented wire extension as opcode `0x1D` (Phase 7 task assignment, S→C only, also missing from §3 — noted here retroactively since it was never previously recorded). |
 | 16 | §10 describes O₂/Reactor as requiring two crewmates to "hold" two pads "simultaneously" | Repairs are discrete one-shot RPCs (`0x15` sub `0x05`), not a continuous hold, so there is no server concept of two clients holding at once. Implemented as: two *different* pads each fixed within a rolling `SABOTAGE_PAD_SYNC_WINDOW_MS` (10s) window of each other count as simultaneous. A lone crewmate repeatedly hitting the same pad never resolves it — a second crewmate on the other pad is still required. |
 | 17 | §10 says "Server broadcasts vision change to all clients via dedicated update" for the Lights effect | No separate vision-change opcode was added. The client already knows the active sabotage's `systemId` from the `0x16` sub `0x01` broadcast, so a crewmate client renders the fog-of-war locally whenever `systemId === SABOTAGE_LIGHTS`, with no extra packet. Functionally equivalent (same trigger, same crewmate-only effect) but saves a wire message. |
+| 18 | §12 specifies `@telegram-apps/sdk-react` for haptics and theme | Used `window.Telegram?.WebApp` directly instead. The existing `getInitData()` in `GameContext.tsx` already used this API; the haptic wrapper (`src/lib/haptics.ts`) and theme init (`main.tsx`) follow the same pattern. No new package needed, no SDK provider wrapper, identical runtime behaviour. |

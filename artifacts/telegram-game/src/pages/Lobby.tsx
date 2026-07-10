@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
 import { useLocation } from 'wouter';
+import { haptic } from '@/lib/haptics';
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -38,7 +39,7 @@ function JoinForm({ onJoin }: { onJoin: (code: string) => void }) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const clean = code.toUpperCase().replace(/[^A-Z2-9]/g, '');
-    if (clean.length === 6) onJoin(clean);
+    if (clean.length === 6) { haptic.tap(); onJoin(clean); }
   }
 
   return (
@@ -131,7 +132,7 @@ export default function Lobby() {
         {!isInRoom && (
           <>
             <button
-              onClick={createRoom}
+              onClick={() => { haptic.tap(); createRoom(); }}
               className="w-full bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
             >
               Create Room
@@ -184,7 +185,7 @@ export default function Lobby() {
             {/* Start game (host only) */}
             {isHost && (
               <button
-                onClick={startGame}
+                onClick={() => { haptic.medium(); startGame(); }}
                 disabled={state.players.length < 2}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
                 title={state.players.length < 2 ? 'Need at least 2 players' : ''}

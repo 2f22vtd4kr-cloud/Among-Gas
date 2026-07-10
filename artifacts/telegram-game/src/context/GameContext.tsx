@@ -21,6 +21,7 @@ import {
   SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
 } from '@workspace/shared/sabotage';
 import { PLAYER_SPAWN } from '../game/player';
+import { haptic } from '../lib/haptics';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -512,8 +513,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(DEFAULT_STATE);
   const socketRef = useRef<WebSocket | null>(null);
 
-  // mySlot in a ref so callbacks don't need stale-closure workarounds
+  // mySlot / myRole in refs so WS callbacks don't have stale-closure workarounds
   const mySlotRef = useRef<number | null>(null);
+  const myRoleRef = useRef<PlayerRole | null>(null);
 
   // Remote player positions — updated every 40ms, never triggers re-renders
   const remotePlayersRef = useRef<Map<number, RemotePlayer>>(new Map());
@@ -694,6 +696,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (opcode === 0x1A && event.data.byteLength >= 2) {
         const roleByte = view.getUint8(1);
         const myRole: PlayerRole = roleByte === 1 ? 'impostor' : 'crewmate';
+        // Keep ref in sync so win/loss haptic in 0x1C can read role without stale closure.
+        myRoleRef.current = myRole;
+        // Haptic: impostor reveal is a warning; crewmate reveal is a success pulse.
+        if (myRole === 'impostor') haptic.warning(); else haptic.success();
 
         const impostorSlots: number[] = [];
         if (roleByte === 1 && event.data.byteLength >= 3) {
@@ -742,18 +748,22 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (sub === 0x01 && event.data.byteLength >= 3) {
           const victimSlot = view.getUint8(2);
           const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
-          setState(s => (
-            s.deadSlots.includes(victimSlot)
-              ? s
-              : {
-                  ...s,
-                  deadSlots: [...s.deadSlots, victimSlot],
-                  // Only the attacking client resets its own cooldown UI.
-                  killCooldownMs: attackerSlot === mySlotRef.current
-                    ? KILL_COOLDOWN_MS
-                    : s.killCooldownMs,
-                }
-          ));
+            // Haptics gated inside the functional updater so replayed broadcast
+          // packets don't retrigger after the victim is already in deadSlots.
+          setState(s => {
+            if (s.deadSlots.includes(victimSlot)) return s;
+            // I was killed — strong error pulse.
+            if (victimSlot === mySlotRef.current) haptic.kill();
+            // I executed the kill — medium confirmation pulse.
+            else if (attackerSlot === mySlotRef.current) haptic.medium();
+            return {
+              ...s,
+              deadSlots: [...s.deadSlots, victimSlot],
+              killCooldownMs: attackerSlot === mySlotRef.current
+                ? KILL_COOLDOWN_MS
+                : s.killCooldownMs,
+            };
+          });
           return;
         }
 
@@ -779,6 +789,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         if (sub === 0x01) {
           const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
+          haptic.warning();
           setState(s => ({
             ...s,
             sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [] },
@@ -801,6 +812,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (sub === 0x03) {
+          haptic.success();
           setState(s => (s.sabotage?.systemId === systemId ? { ...s, sabotage: null } : s));
           return;
         }
@@ -831,8 +843,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const bodySlot = view.getUint8(2);
         setState(s => {
           // Ignore duplicate 0x1B while a meeting is already active — prevents
-          // a network replay from resetting the countdown and hasVoted flag.
+          // a network replay from resetting the countdown, hasVoted flag, and haptic.
           if (s.meeting !== null) return s;
+          haptic.meeting(); // first receipt only
           return {
             ...s,
             meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
@@ -850,6 +863,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const winByte = view.getUint8(2);
         const winner: 'crewmates' | 'impostors' | null =
           winByte === 1 ? 'crewmates' : winByte === 2 ? 'impostors' : null;
+        // Haptic: success on a local win, warning on a local loss.
+        if (winner) {
+          const localWon = (winner === 'crewmates' && myRoleRef.current === 'crewmate') ||
+                           (winner === 'impostors' && myRoleRef.current === 'impostor');
+          if (localWon) haptic.success(); else haptic.warning();
+        }
 
         setState(s => ({
           ...s,

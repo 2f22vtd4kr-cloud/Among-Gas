@@ -1,4 +1,5 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
+import { haptic } from '../lib/haptics';
 import {
   buildCollisionGrid,
   COLS, ROWS, CELL_X, CELL_Y,
@@ -985,7 +986,7 @@ export default function GameMap() {
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
           <button
-            onClick={() => setActiveTaskId(nearestTask.taskId)}
+            onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
               background: 'rgba(28,110,200,0.9)', color: '#dff0ff',
@@ -1012,7 +1013,7 @@ export default function GameMap() {
           {amIImpostor && (
             <button
               disabled={killCooldownMs > 0 || nearestTarget === null}
-              onClick={() => { if (nearestTarget !== null) sendKill(nearestTarget); }}
+              onClick={() => { if (nearestTarget !== null) { haptic.tap(); sendKill(nearestTarget); } }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
@@ -1032,7 +1033,7 @@ export default function GameMap() {
           )}
           {sabotage === null && nearestBody !== null && (
             <button
-              onClick={() => reportBody(nearestBody)}
+              onClick={() => { haptic.tap(); reportBody(nearestBody); }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
@@ -1055,7 +1056,7 @@ export default function GameMap() {
         <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}>
           <button
             disabled={sabotageCooldownMs > 0}
-            onClick={() => setShowSabotagePanel(true)}
+            onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
             style={{
               width: 76, height: 76, borderRadius: '50%',
               fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
@@ -1081,7 +1082,7 @@ export default function GameMap() {
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
           <button
-            onClick={() => repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId)}
+            onClick={() => { haptic.tap(); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
               background: 'rgba(200,50,50,0.9)', color: '#ffe8e8',
@@ -1134,7 +1135,7 @@ export default function GameMap() {
           {Object.values(SABOTAGE_DEFS).map(def => (
             <button
               key={def.id}
-              onClick={(e) => { e.stopPropagation(); triggerSabotage(def.id); setShowSabotagePanel(false); }}
+              onClick={(e) => { e.stopPropagation(); haptic.tap(); triggerSabotage(def.id); setShowSabotagePanel(false); }}
               style={{
                 padding: '12px 32px', borderRadius: 10, minWidth: 180,
                 background: 'rgba(130,40,200,0.85)', color: '#f0e4ff',
@@ -1164,7 +1165,7 @@ export default function GameMap() {
       {loaded && !amIDead && meeting === null && sabotage === null && (
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
-            onClick={callEmergencyMeeting}
+            onClick={() => { haptic.tap(); callEmergencyMeeting(); }}
             style={{
               padding: '8px 14px', borderRadius: 8,
               background: 'rgba(160,40,20,0.85)', color: '#ffe4d0',
@@ -1251,7 +1252,7 @@ export default function GameMap() {
                   <button
                     key={p.slot}
                     disabled={hasVoted}
-                    onClick={() => castVote(p.slot)}
+                    onClick={() => { haptic.tap(); castVote(p.slot); }}
                     style={{
                       padding: '10px 14px', borderRadius: 8, textAlign: 'left',
                       background: hasVoted ? 'rgba(30,40,55,0.6)' : 'rgba(30,40,55,0.9)',
@@ -1265,7 +1266,7 @@ export default function GameMap() {
                 ))}
               <button
                 disabled={hasVoted}
-                onClick={() => castVote(NO_TARGET)}
+                onClick={() => { haptic.tap(); castVote(NO_TARGET); }}
                 style={{
                   padding: '10px 14px', borderRadius: 8, textAlign: 'center', fontWeight: 700,
                   background: hasVoted ? 'rgba(60,60,60,0.4)' : 'rgba(60,60,60,0.75)',
@@ -1302,6 +1303,7 @@ export default function GameMap() {
             taskId={activeTaskId}
             stepIndex={stepIndex}
             onComplete={() => {
+              haptic.success();
               completeTaskStep(activeTaskId, stepIndex);
               // If this was the last step, close the panel
               if (stepIndex + 1 >= def.steps) setActiveTaskId(null);
