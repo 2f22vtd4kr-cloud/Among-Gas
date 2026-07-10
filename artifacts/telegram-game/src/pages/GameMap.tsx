@@ -19,6 +19,7 @@ import {
   getCharacterFrameRect,
 } from '../game/characterSprites';
 import Joystick from '../components/Joystick';
+import { Link } from 'wouter';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 // Screen CSS pixels per map pixel. Calibrated against reference Among Us
@@ -469,6 +470,22 @@ export default function GameMap() {
           >
             {showCollision ? '■ Hide Collision [C]' : '□ Show Collision [C]'}
           </button>
+          {import.meta.env.DEV && (
+            <Link
+              href="/collision-editor"
+              style={{
+                padding: '6px 14px',
+                background: 'rgba(20,32,44,0.85)',
+                color: '#8ab8cc',
+                border: '1px solid rgba(100,160,200,0.3)',
+                borderRadius: 6, fontFamily: 'monospace', fontSize: 12,
+                backdropFilter: 'blur(6px)', letterSpacing: '0.03em',
+                textDecoration: 'none',
+              }}
+            >
+              ✎ Edit Collision
+            </Link>
+          )}
         </div>
       )}
     </div>

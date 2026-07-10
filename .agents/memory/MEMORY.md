@@ -6,3 +6,4 @@
 - [Sprite effect scale testing](sprite-shadow-scale.md) — shadows/outlines on the character sheet must be checked via in-game screenshot; subtle effects vanish after downscale to gameplay size.
 - [iOS Safari ctx.filter shadow fix](shadow-ios-fix.md) — blur shadow needs explicit ctx.filter="none" after restore(); radial gradient alone still stripes.
 - [Collision generator tuning](collision-generator-tuning.md) — checkerboard/over-blocking bugs: verify via BFS connectivity not overlay looks; tune downsample threshold + small-prop base-fraction, not per-object hacks.
+- [Dev-only file-write endpoints](dev-only-file-write-endpoints.md) — pattern for in-app editors that persist to source files in static-build artifacts; CSRF/validation gotchas for Vite dev middleware.
