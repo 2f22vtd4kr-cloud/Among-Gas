@@ -1070,3 +1070,37 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **State to restore**
 - None. All changes typecheck-clean, live-tested, code-reviewed (one issue found and fixed before this entry).
+
+---
+
+### 2026-07-10 — Solo-mode "screen shaking" bug report — investigation paused awaiting user answers
+
+**Done**
+- User reported: entering solo ("Test Run") mode makes the whole screen "shake like crazy" with the emergency indicator visible, blocking movement.
+- Solo mode itself was implemented server-side only: in `artifacts/api-server/src/ws/lobby.ts`, `startGame()` forces `impostorCount = 0` when a lobby has exactly 1 player (lone tester is always crewmate), and `callMeeting()` rejects emergency/report requests when `lobby.players.size === 1` (0 impostors would make `_computeWinFlag()` instantly end the session).
+- Ruled out via code review (no bug found in any of these):
+  - `GameContext.tsx` — `applyDeltaPacket` (0xFF parser), `correctionRef` (server position-correction for local player), meeting/vote/task actions. No optimistic-UI or correction-loop bug. `phase` transitions (line ~896 close handler) don't oscillate; no reconnect-retry storm exists (there is no reconnect logic at all currently).
+  - `GameMap.tsx` — rAF render loop, camera/srcX/srcY clamping, canvas resize logic, role-reveal CSS keyframes (`rrFade`/`rrScale`). No animation loop, resize feedback loop, or CSS "shake" effect. `html, body { overflow: hidden }` already prevents scrollbar-resize loops. No `100vh` usage that could trigger a mobile browser-chrome show/hide loop (canvas sizes off `window.innerWidth/innerHeight` directly, container uses `height: 100%` not `100vh`).
+  - `player.ts` / `wsServer.ts` (0x11 move, 0x13 report/emergency handlers) / `lib/shared/src/coords.ts` (`toWire`/`fromWire`, `FEET_OFFSET_Y`) — spawn/feet-offset convention is consistent client↔server (no offset applied to stored/sent x/y, only to collision checks).
+  - `haptics.ts` — every function is a no-op outside a real Telegram WebView; can't cause a visual "shake" in a dev browser.
+- Built `artifacts/api-server/bot_shake_repro.mjs` — a disposable raw-WebSocket bot script (same pattern as `test_sabotage.mjs`): creates a solo room, starts the game, sends continuous rightward 0x11 movement at ~60Hz tick/25Hz send for 4s, presses Emergency mid-movement, logs all 0xFF echo positions. **Result: no bug reproduced** — 71 clean position echoes, strictly monotonic increasing X, no backward jump/oscillation; solo emergency meeting correctly rejected with no regression. This rules out server-authoritative-correction/rubber-banding as the cause, at least for straight-line movement.
+- Not yet tried: diagonal movement (dx & dy both set, exercises `stepPlayer` normalization + `resolveMovement` wall-sliding, untested by the repro so far), rapid direction reversals or wall-clip near a collision boundary, repeated/spammed Emergency presses, t=0 state at spawn before any movement, and whether the bug is specific to the real Telegram WebView (viewport/haptics/resize behavior not present in a dev browser).
+
+**Decisions & gotchas**
+- Chose disposable raw-WebSocket Node scripts over Playwright (unavailable in this environment) and over the Screenshot tool (no click/interaction capability, can't simulate the repro) to test this — matches the existing `test_sabotage.mjs` pattern in `artifacts/api-server/`.
+- Solo mode's win-condition gotcha (0 impostors + an allowed meeting → `_computeWinFlag()` instantly ends the session) is why `callMeeting()` has a solo-lobby guard; don't remove that guard without also fixing the win-condition check itself.
+
+**Left off / next steps — MUST DO FIRST IN THE NEXT SESSION**
+- The investigation is **paused pending user answers**, not resolved. Do not restart the investigation from scratch or re-derive new hypotheses before asking.
+- The user was mid-way through answering this exact `AskQuestion` call when the session ended (they asked to be re-asked identically after a fresh Replit import, before any other work). **Re-issue this exact question, verbatim, as the very first action of the next session** (after the standard re-import repair steps in the Gotchas section above, if workflows/artifacts are missing):
+  - Question: "I dug through the movement/collision/meeting code and scripted a bot to simulate solo movement + the Emergency button — no bug there. I need a couple details to pin down the screen-shaking bug."
+  - Field 1 — `device` (singleSelect, required) — "What were you using when it happened?": `desktop_browser` = "Desktop browser (dev preview)", `phone_browser` = "Phone browser", `telegram_app` = "Real Telegram app (mobile)", `telegram_desktop` = "Telegram desktop app".
+  - Field 2 — `trigger` (singleSelect, required) — "When did the shaking start?": `immediately` = "Immediately when the map appeared, before I touched anything", `after_moving` = "After I started moving (WASD / arrows / drag)", `after_emergency` = "Right after I tapped the Emergency button", `other` = "Something else".
+  - Field 3 — `reproducible` (boolean, default true) — "Does it happen every time you enter solo mode, or was it a one-off?"
+  - Field 4 — `other_details` (text, multiline, optional) — "Anything else you noticed (e.g. did the map image itself jump around, or just the buttons/UI)?"
+  - Once answered, resume the investigation using the answers to target the right subsystem (e.g. `telegram_app` + `immediately` points at Telegram WebView viewport/theme init; `after_emergency` points back at the meeting-rejection path; `after_moving` points at diagonal movement/wall-sliding, untested by the bot so far).
+- After the shake bug is resolved: either delete `artifacts/api-server/bot_shake_repro.mjs` or evolve it into the real single-player bot/testing harness (see below) rather than leaving it as dead disposable code.
+
+**State to restore**
+- `artifacts/api-server/bot_shake_repro.mjs` exists but is not part of the shipped product — disposable diagnostic script, keep or delete per the note above once the bug is closed.
+- Broader, still-not-started asks from this session (do after the shake bug, in this order): (1) build a persistent single-player bot AI mode usable both as real solo gameplay and as an automated bug-hunting test harness, with its own tracking doc separate from this file; (2) formalize "playtest after every update" as a standing practice (not yet written into `replit.md`); (3) document the rule that any feature built for one mode (single-player or multiplayer) must be wired into both, so they don't drift apart; (4) update `GAME_SPEC.md`'s impostor-count table to document the solo-test-mode exception (flagged in an earlier code-review pass, not yet done); (5) no integration tests exist yet for the solo `startGame`/`callMeeting` paths.
