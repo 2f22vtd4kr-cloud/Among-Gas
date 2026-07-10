@@ -1360,6 +1360,25 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - None. All changes typecheck-clean, simulator-verified, workflows restarted.
 
+### 2026-07-10 — Re-import repair (routine, session 4)
+
+**Done**
+- Fresh re-import; same recurring pattern. `listArtifacts()` was empty, no workflows configured, but `artifacts/*/.replit-artifact/artifact.toml` files were intact.
+- Ran `pnpm install`, re-registered all three artifacts (`api-server`, `telegram-game`, `mockup-sandbox`) via `verifyAndReplaceArtifactToml()`, which recreated their managed workflows.
+- Restarted all three workflows; ran `pnpm --filter @workspace/db run push` — no schema changes needed (DB already in sync).
+- Verified via screenshot (`?mock=lobby-host`): lobby loads correctly, no console errors.
+- No code changes made this session — pure environment repair.
+
+**Decisions & gotchas**
+- Same as prior sessions: expected on every fresh GitHub import/clone. See replit.md Gotchas and `.agents/memory/artifact-reregistration.md`.
+
+**Left off / next steps**
+- Project is running and ready. Per last session's notes: Phase E (bot/solo play) is done. Check SINGLE_PLAY.md §9 for remaining phases (C confirmation, tasks #3/#4 reconciliation).
+- Next: add `TELEGRAM_BOT_TOKEN` secret, then publish to production and register with BotFather.
+
+**State to restore**
+- None.
+
 ## IMPORTANT — First actions after next re-import
 1. Run the standard re-import repair (see Gotchas in replit.md):
    - `verifyAndReplaceArtifactToml()` for api-server, telegram-game, mockup-sandbox
