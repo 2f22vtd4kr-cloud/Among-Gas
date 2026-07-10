@@ -598,6 +598,9 @@ export class LobbyManager {
       if (!target || !target.alive) return false; // can't vote for a dead/nonexistent slot
     }
 
+    // Reject duplicate votes — each alive player gets exactly one vote per meeting.
+    if (meeting.votes.has(voterSlot)) return false;
+
     meeting.votes.set(voterSlot, targetSlot);
 
     const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;

@@ -644,12 +644,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (opcode === 0x1B && event.data.byteLength >= 3) {
         const reporterSlot = view.getUint8(1);
         const bodySlot = view.getUint8(2);
-        setState(s => ({
-          ...s,
-          meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
-          hasVoted: false,
-          voteResult: null,
-        }));
+        setState(s => {
+          // Ignore duplicate 0x1B while a meeting is already active — prevents
+          // a network replay from resetting the countdown and hasVoted flag.
+          if (s.meeting !== null) return s;
+          return {
+            ...s,
+            meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
+            hasVoted: false,
+            voteResult: null,
+          };
+        });
         return;
       }
 

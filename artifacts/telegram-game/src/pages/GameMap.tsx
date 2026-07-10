@@ -161,9 +161,12 @@ export default function GameMap() {
 
   // Local countdown clock for the meeting overlay, ticked independently of
   // the canvas rAF loop (this UI lives outside the canvas).
+  // Initialised to meeting.startedAtMs immediately so the first frame shows
+  // the correct remaining time without waiting for the first 250ms tick.
   const [meetingNow, setMeetingNow] = useState(() => Date.now());
   useEffect(() => {
     if (!meeting) return;
+    setMeetingNow(Date.now()); // snap to current time on meeting start
     const id = setInterval(() => setMeetingNow(Date.now()), 250);
     return () => clearInterval(id);
   }, [meeting]);
