@@ -1,0 +1,95 @@
+@keyframes pulse-cyan {
+  0%, 100% {
+    box-shadow: 0 0 5px #00f5ff, 0 0 10px #00f5ff, inset 0 0 5px #00f5ff;
+  }
+  50% {
+    box-shadow: 0 0 10px #00f5ff, 0 0 20px #00f5ff, inset 0 0 10px #00f5ff;
+  }
+}
+
+@keyframes pulse-magenta {
+  0%, 100% {
+    box-shadow: 0 0 5px #ff00aa, 0 0 10px #ff00aa, inset 0 0 5px #ff00aa;
+  }
+  50% {
+    box-shadow: 0 0 10px #ff00aa, 0 0 20px #ff00aa, inset 0 0 10px #ff00aa;
+  }
+}
+
+@keyframes text-flicker-cyan {
+  0%, 18%, 22%, 25%, 53%, 57%, 100% {
+    text-shadow: 0 0 4px #00f5ff, 0 0 11px #00f5ff, 0 0 19px #00f5ff, 0 0 40px #00f5ff;
+  }
+  20%, 24%, 55% {
+    text-shadow: none;
+  }
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.neon-btn-cyan {
+  border: 1px solid #00f5ff;
+  color: #00f5ff;
+  text-shadow: 0 0 5px #00f5ff;
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+.neon-btn-cyan:hover, .neon-btn-cyan:active {
+  background: rgba(0, 245, 255, 0.1);
+  box-shadow: 0 0 10px #00f5ff, 0 0 20px #00f5ff, inset 0 0 10px #00f5ff;
+}
+
+.neon-btn-magenta {
+  border: 1px solid #ff00aa;
+  color: #ff00aa;
+  text-shadow: 0 0 5px #ff00aa;
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+  position: relative;
+  overflow: hidden;
+}
+.neon-btn-magenta:hover, .neon-btn-magenta:active {
+  background: rgba(255, 0, 170, 0.1);
+  box-shadow: 0 0 10px #ff00aa, 0 0 20px #ff00aa, inset 0 0 10px #ff00aa;
+}
+
+.neon-btn-green {
+  border: 1px solid #00ff66;
+  color: #00ff66;
+  text-shadow: 0 0 5px #00ff66;
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+}
+.neon-btn-green:hover, .neon-btn-green:active {
+  background: rgba(0, 255, 102, 0.1);
+  box-shadow: 0 0 10px #00ff66, 0 0 20px #00ff66, inset 0 0 10px #00ff66;
+}
+
+.neon-input {
+  background: rgba(0, 245, 255, 0.05);
+  border: 1px solid rgba(0, 245, 255, 0.5);
+  color: #00f5ff;
+  outline: none;
+  transition: border 0.3s;
+}
+.neon-input:focus {
+  border-color: #00f5ff;
+  box-shadow: 0 0 10px rgba(0, 245, 255, 0.5), inset 0 0 5px rgba(0, 245, 255, 0.5);
+}
+.neon-input::placeholder {
+  color: rgba(0, 245, 255, 0.3);
+}

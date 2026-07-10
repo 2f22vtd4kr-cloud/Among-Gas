@@ -1,0 +1,99 @@
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400;1,700&display=swap');
+
+@keyframes flicker {
+  0%, 19.999%, 22%, 62.999%, 64%, 64.999%, 70%, 100% {
+    opacity: 1;
+  }
+  20%, 21.999%, 63%, 63.999%, 65%, 69.999% {
+    opacity: 0.4;
+  }
+}
+
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(0, 212, 255, 0.2), inset 0 0 10px rgba(0, 212, 255, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(0, 212, 255, 0.5), inset 0 0 15px rgba(0, 212, 255, 0.2);
+  }
+}
+
+@keyframes danger-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(255, 42, 0, 0.2), inset 0 0 10px rgba(255, 42, 0, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(255, 42, 0, 0.6), inset 0 0 15px rgba(255, 42, 0, 0.3);
+  }
+}
+
+.font-display {
+  font-family: 'Orbitron', sans-serif;
+}
+
+.font-mono-custom {
+  font-family: 'Space Mono', monospace;
+}
+
+.scanlines {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 50;
+}
+
+.crt-flicker {
+  animation: flicker 4s infinite;
+}
+
+.cyber-button {
+  background: transparent;
+  border: 1px solid rgba(0, 212, 255, 0.5);
+  color: #00d4ff;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.2s ease;
+  animation: pulse-glow 3s infinite;
+}
+.cyber-button:active, .cyber-button:hover {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: #00d4ff;
+}
+
+.danger-button {
+  background: rgba(255, 42, 0, 0.1);
+  border: 1px solid rgba(255, 42, 0, 0.6);
+  color: #ff2a00;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  transition: all 0.2s ease;
+}
+.danger-button:active, .danger-button:hover {
+  background: rgba(255, 42, 0, 0.2);
+  border-color: #ff2a00;
+}
+
+.noise-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)' opacity='0.08'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+}
