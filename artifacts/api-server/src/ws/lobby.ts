@@ -1,12 +1,14 @@
 /**
- * Lobby & Matchmaking — Phase 2 + Phase 3
+ * Lobby & Matchmaking — Phase 2 + Phase 3 + Phase 4
  *
  * Phase 2: LobbyManager, room code generation, slot assignment,
  *   host migration on disconnect, room update broadcast.
  * Phase 3: Per-player position tracking, 25Hz delta broadcast loop,
  *   game-start handling (0x12 → 0x1A role reveal).
+ * Phase 4: Fisher-Yates role assignment with information asymmetry
+ *   (personalized 0x1A packets), spread spawn positions at game start.
  *
- * Protocol reference: GAME_SPEC.md §6, §7
+ * Protocol reference: GAME_SPEC.md §6, §7, §8
  */
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
@@ -14,7 +16,12 @@ import {
   MAP_W, MAP_H,
   toWire,
   DELTA_THRESHOLD_SQ,
+  FEET_OFFSET_Y, PLAYER_RADIUS,
 } from '@workspace/shared/coords';
+import {
+  buildCollisionGrid,
+  canMoveTo,
+} from '@workspace/shared/collisionMap';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -32,9 +39,38 @@ function generateCode(): string {
 const SPAWN_X = Math.round(350 * (MAP_W / 1040));
 const SPAWN_Y = Math.round(150 * (MAP_H / 580));
 
+/** Collision grid — built once for spawn-position validation. */
+const spawnGrid = buildCollisionGrid();
+
+/**
+ * Compute a spread spawn position for player `index` of `total`.
+ * Players are placed evenly around an ellipse centered on the lobby spawn
+ * point; each candidate radius is validated against the collision grid,
+ * falling back to the central spawn if no walkable candidate is found.
+ */
+function computeSpawnPosition(index: number, total: number): { x: number; y: number } {
+  if (total <= 1) return { x: SPAWN_X, y: SPAWN_Y };
+  const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
+  for (const radius of [60, 40, 20]) {
+    const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
+    const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
+    if (canMoveTo(spawnGrid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS)) return { x, y };
+  }
+  return { x: SPAWN_X, y: SPAWN_Y };
+}
+
+/** Impostor count by player count (GAME_SPEC.md §8; host setting UI is future work). */
+function impostorCountFor(playerCount: number): number {
+  if (playerCount <= 6) return 1;
+  if (playerCount <= 9) return 2;
+  return 3;
+}
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type LobbyPhase = 'WAITING' | 'ROAMING' | 'GAMEOVER';
+
+export type PlayerRole = 'crewmate' | 'impostor';
 
 export interface LobbyPlayer {
   slot: number;
@@ -47,6 +83,9 @@ export interface LobbyPlayer {
   /** Wire-space position at the time of last 0xFF broadcast. */
   lastBroadcastWireX: number;
   lastBroadcastWireY: number;
+  /** Assigned at game start (0x12). Server-side only — never broadcast. */
+  role: PlayerRole;
+  alive: boolean;
 }
 
 export interface Lobby {
@@ -116,11 +155,16 @@ export function buildJoinErrorPacket(errorCode: 0x01 | 0x02 | 0x03): Buffer {
 
 /**
  * 0x1A — role reveal (sent individually to each player at game start)
- * Layout: [0x1A, role]  where role = 0 (crewmate) | 1 (impostor)
- * Phase 3: all players receive role=0 (crewmate); real assignment in Phase 4.
+ *
+ * Crewmate packet: [0x1A, 0x00]
+ * Impostor packet: [0x1A, 0x01, impostorCount, slot_0, slot_1, ...]
+ *
+ * Information asymmetry (GAME_SPEC.md §8): impostors learn their teammates'
+ * slots; crewmates receive NO role data about other players.
  */
-export function buildRoleRevealPacket(role: 0 | 1): Buffer {
-  return Buffer.from([0x1A, role]);
+export function buildRoleRevealPacket(role: 0 | 1, impostorSlots: number[] = []): Buffer {
+  if (role === 0) return Buffer.from([0x1A, 0x00]);
+  return Buffer.from([0x1A, 0x01, impostorSlots.length, ...impostorSlots]);
 }
 
 /**
@@ -196,6 +240,7 @@ export class LobbyManager {
       x: SPAWN_X, y: SPAWN_Y,
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
+      role: 'crewmate', alive: true,
     };
 
     const lobby: Lobby = {
@@ -245,6 +290,7 @@ export class LobbyManager {
       x: SPAWN_X, y: SPAWN_Y,
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
+      role: 'crewmate', alive: true,
     };
     lobby.players.set(slot, player);
     lobby.userIdToSlot.set(tgUserId, slot);
@@ -307,21 +353,59 @@ export class LobbyManager {
     }
   }
 
-  // ── Game start (Phase 3: minimal, roles in Phase 4) ──────────────────────
+  // ── Game start (Phase 4: role assignment + spawn positions) ──────────────
 
   /**
-   * Transition lobby to ROAMING. Sends 0x1A (role=crewmate) to every player.
-   * Phase 4 will extend this with real role assignment and spawning positions.
+   * Transition lobby to ROAMING:
+   * 1. Fisher-Yates shuffle → assign impostor/crewmate roles server-side.
+   * 2. Spread players around the spawn point (collision-validated).
+   * 3. Force every player into the next 0xFF delta so clients snap to spawns.
+   * 4. Send each player their personalized 0x1A role reveal packet.
    */
   startGame(lobby: Lobby): void {
     if (lobby.phase !== 'WAITING') return;
-    lobby.phase = 'ROAMING';
-    logger.info(`[Lobby] Game started in ${lobby.code}`);
 
-    const crewmatePacket = buildRoleRevealPacket(0);
-    for (const player of lobby.players.values()) {
-      if (player.ws.readyState === /* OPEN */ 1) {
-        player.ws.send(crewmatePacket);
+    const players = Array.from(lobby.players.values()).sort((a, b) => a.slot - b.slot);
+    const impostorCount = impostorCountFor(players.length);
+
+    // Fisher-Yates shuffle (GAME_SPEC.md §8)
+    const shuffled = [...players];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    shuffled.forEach((p, i) => {
+      p.role = i < impostorCount ? 'impostor' : 'crewmate';
+      p.alive = true;
+    });
+
+    const impostorSlots = shuffled
+      .slice(0, impostorCount)
+      .map(p => p.slot)
+      .sort((a, b) => a - b);
+
+    // Spread spawn positions + force inclusion in the next delta broadcast
+    players.forEach((p, i) => {
+      const pos = computeSpawnPosition(i, players.length);
+      p.x = pos.x;
+      p.y = pos.y;
+      p.lastBroadcastWireX = -100_000;
+      p.lastBroadcastWireY = -100_000;
+    });
+
+    lobby.phase = 'ROAMING';
+    logger.info(
+      `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +
+      `${impostorCount} impostor(s) (slots: ${impostorSlots.join(',')})`,
+    );
+
+    for (const p of players) {
+      if (p.ws.readyState === /* OPEN */ 1) {
+        p.ws.send(
+          p.role === 'impostor'
+            ? buildRoleRevealPacket(1, impostorSlots)
+            : buildRoleRevealPacket(0),
+        );
       }
     }
   }

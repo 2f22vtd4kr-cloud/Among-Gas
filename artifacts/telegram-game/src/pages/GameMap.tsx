@@ -9,18 +9,26 @@ import {
   createInitialPlayerState,
   stepPlayer,
   isSpawnWalkable,
-  PLAYER_COLOR,
+  PLAYER_ANIM_INTERVAL_MS,
 } from '../game/player';
 import {
   CHARACTER_SHEET_PATH,
   CHARACTER_SHEET_ROWS,
   CHARACTER_CELL_WIDTH,
   CHARACTER_CELL_HEIGHT,
+  CHARACTER_COLORS,
   getCharacterFrameRect,
+  type CharacterColor,
+  type CharacterPose,
 } from '../game/characterSprites';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
-import { useGameActions, useRemotePlayersRef, useCorrectionRef } from '@/context/GameContext';
+import {
+  useGameState,
+  useGameActions,
+  useRemotePlayersRef,
+  useCorrectionRef,
+} from '@/context/GameContext';
 import { toWire } from '@workspace/shared/coords';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
@@ -35,30 +43,24 @@ const PLAYER_DISPLAY_WIDTH  = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CH
 // ── Movement throttle: send 0x11 at most once per 40ms (25Hz) ────────────────
 const MOVE_SEND_INTERVAL_MS = 40;
 
-// ── Remote player visual ─────────────────────────────────────────────────────
-// Draw remote players as colored circles while sprites are Phase 3 scope.
-// Colors cycle through a palette keyed by slot number.
-const REMOTE_COLORS = [
-  '#e74c3c', // red
-  '#3498db', // blue
-  '#2ecc71', // green
-  '#f39c12', // orange
-  '#9b59b6', // purple
-  '#1abc9c', // teal
-  '#e67e22', // dark orange
-  '#34495e', // dark gray
-  '#e91e63', // pink
-  '#00bcd4', // cyan
-  '#8bc34a', // light green
-  '#ff5722', // deep orange
-  '#607d8b', // blue gray
-  '#795548', // brown
-  '#9e9e9e', // gray
-];
-
-function remoteColor(slot: number): string {
-  return REMOTE_COLORS[slot % REMOTE_COLORS.length];
+// ── Player color: keyed by lobby slot, cycling the 7 sheet colors ────────────
+function slotColor(slot: number): CharacterColor {
+  return CHARACTER_COLORS[slot % CHARACTER_COLORS.length];
 }
+
+// ── Remote player animation state (per slot, maintained across frames) ───────
+// Remote positions arrive at 25Hz via 0xFF deltas; the rAF loop compares
+// against the previous frame to derive walk animation and facing direction.
+interface RemoteAnim {
+  x: number;
+  y: number;
+  animMs: number;
+  facingLeft: boolean;
+  lastMovedTs: number;
+}
+
+/** A remote player is "moving" if its position changed within this window. */
+const REMOTE_MOVING_WINDOW_MS = 160;
 
 export default function GameMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,6 +81,32 @@ export default function GameMap() {
   const remotePlayersRef = useRemotePlayersRef();
   // Server correction for our own position (set by 0xFF handler in GameContext).
   const correctionRef = useCorrectionRef();
+
+  // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
+  const { mySlot, players, myRole, impostorSlots } = useGameState();
+
+  const mySlotRef = useRef<number | null>(mySlot);
+  useEffect(() => { mySlotRef.current = mySlot; }, [mySlot]);
+
+  const usernamesRef = useRef<Map<number, string>>(new Map());
+  useEffect(() => {
+    usernamesRef.current = new Map(players.map(p => [p.slot, p.username]));
+  }, [players]);
+
+  // Fellow impostor slots (only populated on an impostor's client)
+  const impostorSetRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    impostorSetRef.current = new Set(impostorSlots);
+  }, [impostorSlots]);
+
+  // ── Role reveal overlay ───────────────────────────────────────────────────
+  const [showReveal, setShowReveal] = useState(false);
+  useEffect(() => {
+    if (!myRole) return;
+    setShowReveal(true);
+    const timer = setTimeout(() => setShowReveal(false), 3200);
+    return () => clearTimeout(timer);
+  }, [myRole]);
 
   // ── Resize canvas ─────────────────────────────────────────────────────────
   const sizeCanvas = useCallback(() => {
@@ -315,12 +343,17 @@ export default function GameMap() {
         }
       }
 
-      // ── 3. Remote players ─────────────────────────────────────────────────
+      // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
+      const remoteAnims = remoteAnimMap;
+      // Prune animation state for slots that no longer exist
+      for (const slot of remoteAnims.keys()) {
+        if (!remotePlayers.has(slot)) remoteAnims.delete(slot);
+      }
       if (remotePlayers.size > 0) {
-        const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
-        const spriteR = spriteH * 0.35; // circle radius ≈ sprite body width
+        const rSpriteH = Math.round(PLAYER_DISPLAY_HEIGHT * scale);
+        const rSpriteW = Math.round(PLAYER_DISPLAY_WIDTH  * scale);
 
         ctx.save();
         ctx.textBaseline = 'bottom';
@@ -328,48 +361,72 @@ export default function GameMap() {
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
 
         for (const rp of remotePlayers.values()) {
+          // Update per-slot animation state from position deltas
+          let anim = remoteAnims.get(rp.slot);
+          if (!anim) {
+            anim = { x: rp.x, y: rp.y, animMs: 0, facingLeft: false, lastMovedTs: -1e9 };
+            remoteAnims.set(rp.slot, anim);
+          }
+          const rdx = rp.x - anim.x;
+          const rdy = rp.y - anim.y;
+          if (rdx * rdx + rdy * rdy > 0.25) {
+            anim.lastMovedTs = ts;
+            if (Math.abs(rdx) > 0.1) anim.facingLeft = rdx < 0;
+          }
+          anim.x = rp.x;
+          anim.y = rp.y;
+          const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
+          anim.animMs = rMoving ? anim.animMs + dtMs : 0;
+          const rPose: CharacterPose = rMoving
+            ? Math.floor(anim.animMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
+              ? 'walk-1'
+              : 'walk-2'
+            : 'idle';
+
           const rpCX = Math.round((rp.x - srcX) * scale);
           const rpCY = Math.round((rp.y - srcY) * scale);
 
           // Skip players that are off-screen (with margin)
-          if (rpCX < -spriteR * 2 || rpCX > cw + spriteR * 2) continue;
-          if (rpCY < -spriteR * 2 || rpCY > ch + spriteR * 2) continue;
-
-          const color = remoteColor(rp.slot);
+          if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
+          if (rpCY < -rSpriteH * 2 || rpCY > ch + rSpriteH * 2) continue;
 
           // Ground shadow
           {
-            const blurPx = Math.max(2, Math.round(spriteH * 0.05));
+            const blurPx = Math.max(2, Math.round(rSpriteH * 0.05));
             ctx.save();
             ctx.filter = `blur(${blurPx}px)`;
-            ctx.globalAlpha = 0.45;
+            ctx.globalAlpha = 0.55;
             ctx.fillStyle = '#000000';
             ctx.beginPath();
-            ctx.ellipse(rpCX, rpCY + spriteH * 0.48, spriteR * 0.7, spriteH * 0.055, 0, 0, Math.PI * 2);
+            ctx.ellipse(rpCX, rpCY + rSpriteH * 0.48, rSpriteW * 0.28, rSpriteH * 0.055, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
             ctx.filter = 'none';
           }
 
-          // Body circle
-          ctx.globalAlpha = 1;
-          ctx.fillStyle = color;
-          ctx.beginPath();
-          ctx.arc(rpCX, rpCY, spriteR, 0, Math.PI * 2);
-          ctx.fill();
+          // Sprite (slot-keyed color from the character sheet)
+          const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
+          const rsx = Math.ceil(rRect.x);
+          const rsy = Math.ceil(rRect.y);
+          const rsw = Math.floor(rRect.x + rRect.width)  - rsx;
+          const rsh = Math.floor(rRect.y + rRect.height) - rsy;
 
-          // Visor (white oval on upper portion)
-          ctx.fillStyle = 'rgba(200,230,255,0.85)';
-          ctx.beginPath();
-          ctx.ellipse(rpCX + spriteR * 0.1, rpCY - spriteR * 0.18, spriteR * 0.55, spriteR * 0.35, 0, 0, Math.PI * 2);
-          ctx.fill();
+          ctx.save();
+          ctx.translate(rpCX, rpCY);
+          if (anim.facingLeft) ctx.scale(-1, 1);
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
+          ctx.restore();
+          ctx.imageSmoothingEnabled = true;
 
-          // Slot label above
-          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          // Username label (red for fellow impostors on an impostor's client)
+          const name = usernamesRef.current.get(rp.slot) ?? `Player ${rp.slot}`;
+          const isTeammate = impostorSetRef.current.has(rp.slot);
+          ctx.fillStyle = isTeammate ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.9)';
           ctx.strokeStyle = 'rgba(0,0,0,0.7)';
           ctx.lineWidth = Math.round(2 * dpr);
-          ctx.strokeText(`${rp.slot}`, rpCX, rpCY - spriteR - 3);
-          ctx.fillText(`${rp.slot}`, rpCX, rpCY - spriteR - 3);
+          ctx.strokeText(name, rpCX, rpCY - rSpriteH / 2 - 3);
+          ctx.fillText(name, rpCX, rpCY - rSpriteH / 2 - 3);
         }
 
         ctx.restore();

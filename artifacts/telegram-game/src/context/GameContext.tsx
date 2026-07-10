@@ -33,6 +33,8 @@ export interface RemotePlayer {
 
 export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
 
+export type PlayerRole = 'crewmate' | 'impostor';
+
 export interface GameState {
   phase: GamePhase;
   mySlot: number | null;
@@ -40,6 +42,10 @@ export interface GameState {
   hostSlot: number;
   players: LobbyPlayer[];
   errorMessage: string | null;
+  /** Set by the server's 0x1A packet at game start. Never trust other clients. */
+  myRole: PlayerRole | null;
+  /** Fellow impostor slots — only populated when myRole === 'impostor'. */
+  impostorSlots: number[];
 }
 
 export interface GameActions {
@@ -57,6 +63,8 @@ const DEFAULT_STATE: GameState = {
   hostSlot: 0,
   players: [],
   errorMessage: null,
+  myRole: null,
+  impostorSlots: [],
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -309,11 +317,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       }
 
       // ── 0x1A: role reveal → transition to playing ───────────────────────
-      if (opcode === 0x1A) {
+      // Crewmate: [0x1A, 0x00]
+      // Impostor: [0x1A, 0x01, impostorCount, slot_0, slot_1, ...]
+      if (opcode === 0x1A && event.data.byteLength >= 2) {
+        const roleByte = view.getUint8(1);
+        const myRole: PlayerRole = roleByte === 1 ? 'impostor' : 'crewmate';
+
+        const impostorSlots: number[] = [];
+        if (roleByte === 1 && event.data.byteLength >= 3) {
+          const count = view.getUint8(2);
+          for (let i = 0; i < count && 3 + i < event.data.byteLength; i++) {
+            impostorSlots.push(view.getUint8(3 + i));
+          }
+        }
+
         // Clear stale remote player data from the previous session
         remotePlayersRef.current.clear();
-        setState(s => ({ ...s, phase: 'playing' }));
-        console.log('[WS] 🎮 Role reveal received — entering game');
+        setState(s => ({ ...s, phase: 'playing', myRole, impostorSlots }));
+        console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
       }
 
