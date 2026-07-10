@@ -6,7 +6,7 @@
 // and canvas concerns, matching the collisionMap.ts pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { canMoveTo, resolveMovement, MAP_W, MAP_H, type Grid } from './collisionMap';
+import { canMoveTo, MAP_W, MAP_H, type Grid } from './collisionMap';
 import type { CharacterPose } from './characterSprites';
 
 export const PLAYER_COLOR = 'teal' as const;
@@ -18,10 +18,38 @@ export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE);
 // Collision is checked at the character's feet (bottom-center of sprite),
 // not the sprite center. FEET_OFFSET_Y shifts the test point down to the
 // base of the sprite; PLAYER_RADIUS is intentionally tiny (just the feet).
+// PLAYER_HALF_WIDTH adds two extra side test points (left & right of feet
+// center) so the character can't clip into walls horizontally. It is wider
+// than PLAYER_RADIUS intentionally — the sprite is much wider than it is tall
+// at its base, and pure radius alone lets the sides pass through thin walls.
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
-export const FEET_OFFSET_Y  = Math.round(_SPRITE_H_MAP_PX * 0.25);
-export const PLAYER_RADIUS  = 4;
+export const FEET_OFFSET_Y     = Math.round(_SPRITE_H_MAP_PX * 0.25);
+export const PLAYER_RADIUS     = 4;
+export const PLAYER_HALF_WIDTH = 10; // extra left/right collision extension (px)
 export const PLAYER_ANIM_INTERVAL_MS = 140;
+
+// ── Wide collision helpers (client-only) ─────────────────────────────────────
+// Tests three feet points: left, center, right. This gives the character a
+// wider effective hitbox horizontally without changing the vertical feel.
+
+function canMoveToWide(grid: Grid, cx: number, cy: number): boolean {
+  return (
+    canMoveTo(grid, cx,                      cy, PLAYER_RADIUS) &&
+    canMoveTo(grid, cx - PLAYER_HALF_WIDTH,  cy, PLAYER_RADIUS) &&
+    canMoveTo(grid, cx + PLAYER_HALF_WIDTH,  cy, PLAYER_RADIUS)
+  );
+}
+
+function resolveMovementWide(
+  grid: Grid,
+  x: number,  y: number,
+  nx: number, ny: number,
+): [number, number] {
+  if (canMoveToWide(grid, nx, ny)) return [nx, ny];
+  if (canMoveToWide(grid, nx, y))  return [nx, y];
+  if (canMoveToWide(grid, x,  ny)) return [x, ny];
+  return [x, y];
+}
 
 /** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
 export const PLAYER_SPAWN = {
@@ -97,7 +125,7 @@ export function stepPlayer(
       y = Math.max(0, Math.min(MAP_H, ny));
     } else {
       // Collision is tested at the feet (offset down from sprite centre).
-      const [fx, fy] = resolveMovement(grid, x + 0, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y, PLAYER_RADIUS);
+      const [fx, fy] = resolveMovementWide(grid, x, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y);
       x = fx;
       y = fy - FEET_OFFSET_Y;
     }
@@ -119,5 +147,5 @@ export function stepPlayer(
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
 export function isSpawnWalkable(grid: Grid): boolean {
-  return canMoveTo(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y + FEET_OFFSET_Y, PLAYER_RADIUS);
+  return canMoveToWide(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y + FEET_OFFSET_Y);
 }
