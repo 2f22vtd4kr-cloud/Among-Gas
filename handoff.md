@@ -694,6 +694,25 @@
 **State to restore**
 - None.
 
+### 2026-07-10 — Fresh import repair (re-registration + workflow start)
+
+**Done**
+- Re-registered all three artifacts (api-server, telegram-game, mockup-sandbox) via `verifyAndReplaceArtifactToml` after GitHub import dropped registration metadata.
+- Ran `pnpm install` (478 packages resolved, clean).
+- Started `artifacts/api-server: API Server` and `artifacts/telegram-game: web` workflows; both confirmed running.
+- Screenshot confirmed game renders correctly: map, character, WASD controls all visible.
+
+**Decisions & gotchas**
+- Standard post-import flow: verifyAndReplaceArtifactToml is idempotent and safe to re-run; TOML content was unchanged.
+- mockup-sandbox workflow was not started (not needed for core game use).
+
+**Left off / next steps**
+- User to verify shadow is clean on iOS (carry-over from 2026-07-09).
+- DB, Telegram SDK, multiplayer still not started.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Fix character outline stripes (root cause: alpha bleed)
 
 **Done**
