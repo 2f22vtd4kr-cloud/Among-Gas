@@ -26,6 +26,24 @@
 
 ## Sessions
 
+### 2026-07-10 — Re-import repair (routine)
+
+**Done**
+- Fresh re-import; recurring pattern confirmed again. `listArtifacts()` was empty, no workflows configured, but `artifacts/*/.replit-artifact/artifact.toml` files were intact.
+- Ran `pnpm install`, re-registered all three artifacts (`api-server`, `mockup-sandbox`, `telegram-game`) via `verifyAndReplaceArtifactToml()`, which recreated their workflows.
+- Restarted all three workflows; ran `pnpm --filter @workspace/db run push` — no schema changes needed (DB already in sync).
+- Verified via screenshot: lobby loads, WS handshake succeeds (`assigned slot 0`), no console errors.
+- No code changes made this session — pure environment repair.
+
+**Decisions & gotchas**
+- Same as prior sessions: this is expected on every fresh GitHub import/clone. See replit.md Gotchas section and `.agents/memory/artifact-reregistration.md`.
+
+**Left off / next steps**
+- Project is running and ready for further feature work. No open threads from this session.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Phase 9: Telegram haptics, theme binding, twa.ready/expand
 
 **Done**
