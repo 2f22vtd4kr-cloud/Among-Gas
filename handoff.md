@@ -1283,6 +1283,26 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 - Private-room guarantee: `startGame()` transitions phase to `ROAMING` synchronously in the same handler, so `joinLobby` will reject any late joiners with `'in_progress'`.
 - Typecheck clean. Lobby UI screenshot verified. Code review: Pass (no critical issues).
 
+---
+
+## 2026-07-10 — Phase D: Headless simulation runner
+
+**Done**
+- Implemented in `artifacts/api-server/src/sim/` — **not** `scripts/` as SINGLE_PLAY.md §8 originally sketched. The `pnpm-workspace` skill is explicit that `artifacts/*` and `scripts` are leaf packages that must never import from each other; the sim code needs `LobbyManager`/`CrewmateBot`/`ImpostorBot` directly, so it lives beside them in `api-server` instead.
+- `lobby.ts`: added an optional `setEventListener(fn)` sink emitting a typed `LobbyEvent` at every kill/taskStep/meetingStart/vote/meetingResult/sabotageStart/sabotageResolved/gameOver (no-op when unset — zero behavior change for real games); `createHeadlessLobby()` (zero players, no human host, reuses the existing tick loops); optional `impostorCountOverride` param on `startGame`; a new `disposeLobby(lobby)` method (extracted from the existing "tear down when last human leaves" logic) that clears pending meeting/sabotage timers — reused by both the human-leave path and the sim runner so finished lobbies can't leak late timer callbacks.
+- `sim/simulateGame.ts` — `runSimulationBatch(opts)`: worker-pool pattern, `concurrency` games in flight at once inside one `LobbyManager`, sharing its real 25Hz/5Hz loops unmodified (no clock-warp — see SINGLE_PLAY.md §8 for why). Per-game safety timeout marks stuck games `"timeout"`.
+- `sim/cli.ts` — `pnpm --filter @workspace/api-server run simulate -- --games N --bots N [--impostors N] [--concurrency N] [--timeoutMs N] [--quiet]`. Strict integer/range validation on all numeric flags (a bad `--concurrency` used to deadlock the batch silently — now throws immediately). NDJSON (events + per-game results + one final summary line) on stdout; human-readable log/summary on stderr. `LOG_LEVEL=silent` is set in the npm script itself so pino's dev pretty-printer doesn't interleave with the NDJSON stream.
+- `pnpm run typecheck` clean. Ran a code-review (architect) subagent — found 3 real issues (unvalidated CLI args could hang, logger noise breaking NDJSON, stale timers on lobby disposal), all fixed above and re-verified with fresh CLI runs (clean exit, well-formed NDJSON, no leftover intervals).
+
+**Finding surfaced by the tool (not fixed — out of scope for Phase D)**
+Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in the real game logic, not the harness: a dead body is never marked "already reported," so any crewmate bot that later wanders near the same old corpse re-triggers a fresh meeting — sometimes minutes after it was already voted on. `CrewmateBot` also prioritizes body-reporting over tasks, so once the first kill happens (usually ~15s in), the group gets stuck in report → inconclusive-vote → wander → re-report and never returns to tasks. This directly affects the proposed "tune bot difficulty for a fair, competitive solo mode" task — right now a solo game can only end via ejection or sabotage timeout, never via tasks. Recommend fixing "mark body as reported" as part of that task rather than here.
+
+**Left off / next steps**
+- Phase D complete per SINGLE_PLAY.md. Phase E (tuning pass) and the "fix repeated body report" bug are natural next steps — both map onto the already-proposed tasks #2/#3/#4.
+
+**State to restore**
+- None.
+
 **Decisions & gotchas**
 - Bot agents are seeded as `CrewmateBot` before `startGame()` so the slot is valid, then replaced with new instances after roles are assigned. New instances avoid stale internal state contamination across games.
 - `createLobby()` internally calls `removePlayer(tgUserId)`, so a user already in a lobby is migrated cleanly; no duplicate membership.

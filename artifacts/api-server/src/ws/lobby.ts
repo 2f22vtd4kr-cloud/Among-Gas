@@ -174,6 +174,22 @@ export interface IBotAgent {
   tick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 }
 
+/**
+ * Structured lifecycle events, emitted only to an optional listener
+ * (see `LobbyManager.setEventListener`). Used by the headless simulation
+ * runner (SINGLE_PLAY.md §8) to build a per-game event log without any
+ * polling — production code paths are unaffected when no listener is set.
+ */
+export type LobbyEvent =
+  | { type: 'kill'; code: string; attackerSlot: number; victimSlot: number; atMs: number }
+  | { type: 'taskStep'; code: string; slot: number; taskId: number; stepIndex: number; completedSteps: number; totalSteps: number; atMs: number }
+  | { type: 'meetingStart'; code: string; reporterSlot: number; bodySlot: number; atMs: number }
+  | { type: 'vote'; code: string; voterSlot: number; targetSlot: number; atMs: number }
+  | { type: 'meetingResult'; code: string; ejectedSlot: number; atMs: number }
+  | { type: 'sabotageStart'; code: string; systemId: number; attackerSlot: number; atMs: number }
+  | { type: 'sabotageResolved'; code: string; systemId: number; fixed: boolean; atMs: number }
+  | { type: 'gameOver'; code: string; winFlag: 1 | 2; atMs: number };
+
 // ── Packet builders ─────────────────────────────────────────────────────────
 
 /**
@@ -354,6 +370,40 @@ export class LobbyManager {
   /** 5Hz bot AI tick loop — runs alongside the 25Hz delta broadcast. */
   private _botInterval: ReturnType<typeof setInterval> | null = null;
 
+  /** Optional sink for LobbyEvent — set only by the headless simulation runner. */
+  private _eventListener: ((event: LobbyEvent) => void) | null = null;
+
+  /** Install (or clear, with null) a listener for structured lifecycle events. */
+  setEventListener(fn: ((event: LobbyEvent) => void) | null): void {
+    this._eventListener = fn;
+  }
+
+  private _emit(event: LobbyEvent): void {
+    this._eventListener?.(event);
+  }
+
+  /**
+   * Clear any pending meeting/sabotage timers and unregister a lobby.
+   * Used both when the last human leaves a lobby and by the headless
+   * simulation runner when a game finishes — without this, a lobby's
+   * `setTimeout`s (meeting discussion/voting, sabotage countdown) could
+   * still fire after the lobby object is gone, or — worse, once a lobby
+   * code is later reused — misattribute a stale event to a new game.
+   */
+  disposeLobby(lobby: Lobby): void {
+    if (lobby.meeting) {
+      if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
+      if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
+    }
+    if (lobby.sabotage) {
+      clearTimeout(lobby.sabotage.timeoutTimer);
+    }
+    this.lobbies.delete(lobby.code);
+    if (this.lobbies.size === 0) {
+      this._stopDeltaLoop();
+    }
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   private freshCode(): string {
@@ -432,6 +482,11 @@ export class LobbyManager {
   applyTaskStep(lobby: Lobby, playerSlot: number, taskId: number, stepIndex: number): boolean {
     const accepted = this.handleTaskStep(lobby, playerSlot, taskId, stepIndex);
     if (!accepted) return false;
+    this._emit({
+      type: 'taskStep', code: lobby.code, slot: playerSlot, taskId, stepIndex,
+      completedSteps: lobby.completedTaskSteps.size, totalSteps: lobby.totalTaskSteps,
+      atMs: Date.now(),
+    });
     this._broadcastTaskProgress(lobby);
     this.checkWinAfterTask(lobby);
     return true;
@@ -454,6 +509,7 @@ export class LobbyManager {
   applyKill(lobby: Lobby, attackerSlot: number, victimSlot: number): boolean {
     const applied = this.attemptKill(lobby, attackerSlot, victimSlot);
     if (!applied) return false;
+    this._emit({ type: 'kill', code: lobby.code, attackerSlot, victimSlot, atMs: Date.now() });
     this.broadcastKill(lobby, victimSlot, attackerSlot);
     this.checkWinAfterKill(lobby);
     return true;
@@ -507,6 +563,35 @@ export class LobbyManager {
     this.ensureDeltaLoop();
 
     logger.info(`[Lobby] Created ${code} — host: ${username} (userId=${tgUserId}, slot=0)`);
+    return lobby;
+  }
+
+  /**
+   * Create a lobby with zero players and no host — used only by the headless
+   * simulation runner (SINGLE_PLAY.md §8), which has no real WebSocket
+   * connection to attach as a human host. Caller fills every slot via
+   * `addBotPlayer` and then calls `startGame`. Registered + loop-started
+   * exactly like `createLobby`, so the existing 25Hz/5Hz loops (and, in turn,
+   * every other lobby already running in this manager) pick it up automatically.
+   */
+  createHeadlessLobby(): Lobby {
+    const code = this.freshCode();
+    const lobby: Lobby = {
+      code, phase: 'WAITING',
+      players: new Map(),
+      userIdToSlot: new Map(),
+      hostSlot: 0,
+      meeting: null,
+      completedTaskSteps: new Set(),
+      totalTaskSteps: 0,
+      sabotage: null,
+      sabotageCooldownMs: 0,
+    };
+
+    this.lobbies.set(code, lobby);
+    this.ensureDeltaLoop();
+
+    logger.info(`[Lobby] Created headless ${code} (simulation — no human host)`);
     return lobby;
   }
 
@@ -583,19 +668,8 @@ export class LobbyManager {
     // Without this check the lobby and its bot tick/delta loops would run forever.
     const hasHumans = Array.from(lobby.players.values()).some(p => !p.isBot);
     if (!hasHumans) {
-      if (lobby.meeting) {
-        if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
-        if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
-      }
-      if (lobby.sabotage) {
-        clearTimeout(lobby.sabotage.timeoutTimer);
-      }
-      this.lobbies.delete(code);
+      this.disposeLobby(lobby);
       logger.info(`[Lobby] Torn down lobby ${code} (no human players remaining)`);
-      // Stop the delta loop when there are no more active lobbies
-      if (this.lobbies.size === 0) {
-        this._stopDeltaLoop();
-      }
       return null;
     }
 
@@ -637,14 +711,24 @@ export class LobbyManager {
    * 3. Force every player into the next 0xFF delta so clients snap to spawns.
    * 4. Send each player their personalized 0x1A role reveal packet.
    */
-  startGame(lobby: Lobby): void {
+  /**
+   * @param impostorCountOverride Used only by the headless simulation runner
+   *   to force a specific impostor count (e.g. `--impostors 1`) instead of
+   *   the standard playerCount-based table. Ignored (clamped) if it doesn't
+   *   fit the lobby's player count. Real games never pass this.
+   */
+  startGame(lobby: Lobby, impostorCountOverride?: number): void {
     if (lobby.phase !== 'WAITING') return;
 
     const players = Array.from(lobby.players.values()).sort((a, b) => a.slot - b.slot);
     // Solo test run: a lone host has no one to be an impostor against (no
     // victims, no meetings) — force crewmate so tasks/movement/UI are
     // still testable instead of an unwinnable 1-impostor-0-crewmate game.
-    const impostorCount = players.length === 1 ? 0 : impostorCountFor(players.length);
+    const impostorCount = players.length === 1
+      ? 0
+      : impostorCountOverride !== undefined
+        ? Math.max(1, Math.min(impostorCountOverride, players.length - 1))
+        : impostorCountFor(players.length);
 
     // Fisher-Yates shuffle (GAME_SPEC.md §8)
     const shuffled = [...players];
@@ -761,6 +845,7 @@ export class LobbyManager {
     if (lobby.completedTaskSteps.size < lobby.totalTaskSteps) return;
     lobby.phase = 'GAMEOVER';
     this._broadcastVoteResult(lobby, NO_TARGET, 1); // crewmates win
+    this._emit({ type: 'gameOver', code: lobby.code, winFlag: 1, atMs: Date.now() });
     logger.info(`[Lobby] Crewmates win by tasks in ${lobby.code}`);
   }
 
@@ -775,6 +860,7 @@ export class LobbyManager {
     if (winFlag === 0) return;
     lobby.phase = 'GAMEOVER';
     this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
+    this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });
     logger.info(`[Lobby] Game over in ${lobby.code} after kill — winFlag=${winFlag}`);
   }
 
@@ -801,6 +887,7 @@ export class LobbyManager {
     };
     lobby.sabotageCooldownMs = SABOTAGE_COOLDOWN_MS;
 
+    this._emit({ type: 'sabotageStart', code: lobby.code, systemId, attackerSlot, atMs: Date.now() });
     logger.info(
       `[Lobby] Sabotage triggered in ${lobby.code}: system=${SABOTAGE_DEFS[systemId].name} ` +
       `by slot=${attackerSlot}`,
@@ -880,17 +967,22 @@ export class LobbyManager {
 
   private _resolveSabotage(lobby: Lobby): void {
     if (!lobby.sabotage) return;
+    const systemId = lobby.sabotage.systemId;
     clearTimeout(lobby.sabotage.timeoutTimer);
     lobby.sabotage = null;
+    this._emit({ type: 'sabotageResolved', code: lobby.code, systemId, fixed: true, atMs: Date.now() });
     logger.info(`[Lobby] Sabotage resolved in ${lobby.code}`);
   }
 
   /** Impostors win outright if a sabotage countdown reaches zero unfixed (GAME_SPEC.md §10). */
   private _sabotageTimeout(lobby: Lobby): void {
     if (!lobby.sabotage || lobby.phase !== 'ROAMING') return;
+    const systemId = lobby.sabotage.systemId;
     lobby.sabotage = null;
     lobby.phase = 'GAMEOVER';
     this._broadcastVoteResult(lobby, NO_TARGET, 2); // impostors win
+    this._emit({ type: 'sabotageResolved', code: lobby.code, systemId, fixed: false, atMs: Date.now() });
+    this._emit({ type: 'gameOver', code: lobby.code, winFlag: 2, atMs: Date.now() });
     logger.info(`[Lobby] Sabotage timed out in ${lobby.code} — impostors win`);
   }
 
@@ -1000,6 +1092,7 @@ export class LobbyManager {
       if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
     }
 
+    this._emit({ type: 'meetingStart', code: lobby.code, reporterSlot, bodySlot, atMs: Date.now() });
     logger.info(
       `[Lobby] Meeting called in ${lobby.code} by slot=${reporterSlot} ` +
       `(body=${bodySlot === NO_TARGET ? 'emergency' : bodySlot})`,
@@ -1028,6 +1121,7 @@ export class LobbyManager {
     if (meeting.votes.has(voterSlot)) return false;
 
     meeting.votes.set(voterSlot, targetSlot);
+    this._emit({ type: 'vote', code: lobby.code, voterSlot, targetSlot, atMs: Date.now() });
 
     const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;
     if (meeting.votes.size >= aliveCount) {
@@ -1096,6 +1190,10 @@ export class LobbyManager {
     if (winFlag !== 0) lobby.phase = 'GAMEOVER';
 
     this._broadcastVoteResult(lobby, ejectedSlot, winFlag);
+    this._emit({ type: 'meetingResult', code: lobby.code, ejectedSlot, atMs: Date.now() });
+    if (winFlag !== 0) {
+      this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });
+    }
     logger.info(
       `[Lobby] Meeting concluded in ${lobby.code} — ` +
       `ejected=${ejectedSlot === NO_TARGET ? 'none' : ejectedSlot}, winFlag=${winFlag}`,

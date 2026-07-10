@@ -123,24 +123,24 @@ The human client sees the bots as regular remote players — they move around, g
 
 ---
 
-## 8. Headless simulation runner
+## 8. Headless simulation runner ✅ DONE
 
-A new script (`scripts/src/simulateGame.ts`) starts a lobby with a configurable number of bots and zero human players and runs it to completion, capturing structured output.
+Implemented inside `artifacts/api-server/src/sim/` (not `scripts/` as originally sketched above — the workspace rule that leaf packages [`artifacts/*`, `scripts`] must never import from each other means the code that needs `LobbyManager`/`CrewmateBot`/`ImpostorBot` has to live alongside them, in `api-server`, rather than pulling those classes into `scripts`).
 
-It will:
-- Spin up an in-process lobby (reusing the existing `Lobby` class directly, no HTTP/WS needed for a pure simulation).
-- Drive the bot tick loop manually at a configurable speed multiplier (e.g. 10× wall-clock for fast playtests).
-- Capture a structured event log: every kill, every meeting, every vote, every task completion, the final win condition and time.
-- Write results as NDJSON to stdout (or a file) for aggregation.
+- `simulateGame.ts` — `runSimulationBatch(opts)`: creates one `LobbyManager`, spins up headless lobbies via `LobbyManager.createHeadlessLobby()` (zero players, no human host — a new method added for this purpose), fills them with bots via the existing `addBotPlayer`/`startGame`, and reuses every existing kill/task/meeting/sabotage code path unchanged.
+- `cli.ts` — parses `--games`, `--bots`, `--impostors`, `--concurrency`, `--timeoutMs`, `--quiet`; prints NDJSON events + per-game results + a final summary line to stdout, and a human-readable summary to stderr.
+- Event log: `LobbyManager` grew an optional `setEventListener(fn)` sink (a no-op when unset, so real multiplayer games are byte-for-byte unaffected) that emits a `LobbyEvent` at every kill, task step, meeting start, vote, meeting result, sabotage start/resolve, and game-over — the simulation listens on it instead of polling/diffing state, so events are exact rather than inferred.
+- **Speed strategy — batched concurrency, not clock-warp.** Games run genuinely concurrently (`--concurrency`, default 25) inside one `LobbyManager`, sharing its real 25 Hz delta / 5 Hz bot-tick loops unmodified. A batch of N games therefore finishes in roughly the wall-clock time of one game, not N×, without threading a scaled clock through every `Date.now()`/`setTimeout` call in the live timing code (meeting/sabotage countdowns, kill cooldowns) — those have a history of subtle bugs (see `.agents/memory/`) and stay completely untouched.
+- Per-game safety timeout (`--timeoutMs`, default 120000ms) — a game that never reaches `GAMEOVER` is recorded as `"timeout"` rather than hanging the batch forever.
 
-A thin runner CLI (`pnpm --filter @workspace/scripts simulate -- --games 100 --bots 5 --impostors 1`) produces aggregate stats:
+Run it via `pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 5 --impostors 1`. Aggregate summary (also emitted as a machine-readable `{"type":"summary",...}` NDJSON line on stdout):
 ```
+── Simulation results (100 games, 3m10s wall-clock) ──
 Crewmate win rate: 61%   Impostor win rate: 39%
-Avg game length:   4m22s  Avg tasks/game: 12.4
-Avg kills before meeting: 1.8
+Avg game length:   0m42s   Avg tasks completed: 0.0   Avg kills/game: 1.0   Avg meetings/game: 2.3
 ```
 
-This is the playtest tool — run it after tuning bot difficulty, kill cooldowns, or task counts to check balance before inviting real players.
+**Finding from first real runs:** every simulated game's `tasksCompleted` came back `0`, and `meetings` climbed steadily instead of games ending quickly. Root cause: a dead body is never marked "already reported" (no `reported` flag on the player, no removal from the map), so any crewmate bot that wanders near an old corpse re-triggers a fresh meeting — even minutes after it was already voted on. Crewmate bots also prioritize body-reporting over tasks, so once the first kill happens (usually within ~15s), the group gets stuck in a report → inconclusive-vote → wander → re-report loop and never touches tasks again. This is a real gameplay bug (not a simulator artifact — it reproduces with `--games 1`), and it directly bears on the proposed "tune bot difficulty for a fair, competitive solo mode" task: a solo game currently can only end via a lucky ejection or a sabotage timeout, never via tasks. Flagged for a follow-up fix rather than patched here, since it touches live meeting/report logic outside Phase D's scope.
 
 ---
 
