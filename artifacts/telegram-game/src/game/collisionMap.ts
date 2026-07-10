@@ -4,6 +4,7 @@ export {
   MAP_W, MAP_H,
   COLS, ROWS,
   CELL, CELL_X, CELL_Y,
+  KILL_RANGE_PX,
   buildCollisionGrid,
   isBlocked,
   canMoveTo,

@@ -50,3 +50,9 @@ export function fromWire(wire: number, mapDim: number): number {
  *  but behaved as ~0.3px threshold.  100 is the correct 1px² equivalent.)
  */
 export const DELTA_THRESHOLD_SQ = 100;
+
+/**
+ * Phase 5 — default impostor kill cooldown, in ms.
+ * GAME_SPEC.md §9: default 25s; host-configurable range 15s/25s/45s is future work.
+ */
+export const KILL_COOLDOWN_MS = 25_000;

@@ -3,6 +3,7 @@ import {
   buildCollisionGrid,
   COLS, ROWS, CELL_X, CELL_Y,
   MAP_W, MAP_H,
+  KILL_RANGE_PX,
   ZONES,
 } from '../game/collisionMap';
 import {
@@ -85,7 +86,8 @@ export default function GameMap() {
   const correctionRef = useCorrectionRef();
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
-  const { mySlot, players, myRole, impostorSlots } = useGameState();
+  const { mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs } = useGameState();
+  const { sendKill } = useGameActions();
 
   const mySlotRef = useRef<number | null>(mySlot);
   useEffect(() => { mySlotRef.current = mySlot; }, [mySlot]);
@@ -100,6 +102,40 @@ export default function GameMap() {
   useEffect(() => {
     impostorSetRef.current = new Set(impostorSlots);
   }, [impostorSlots]);
+
+  // ── Kill mechanics (Phase 5) ───────────────────────────────────────────────
+  const deadSlotsRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    deadSlotsRef.current = new Set(deadSlots);
+  }, [deadSlots]);
+
+  const amIDead = mySlot !== null && deadSlots.includes(mySlot);
+  const amIImpostor = myRole === 'impostor';
+
+  // Nearest killable target within range, recomputed a few times/sec for the
+  // kill-button UI. Recomputation lives outside the rAF loop since it only
+  // drives a low-frequency React state, not per-frame canvas rendering.
+  const [nearestTarget, setNearestTarget] = useState<number | null>(null);
+  useEffect(() => {
+    if (!amIImpostor || amIDead) { setNearestTarget(null); return; }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      if (!myPos) return;
+      let best: number | null = null;
+      let bestDistSq = KILL_RANGE_PX * KILL_RANGE_PX;
+      for (const rp of remotePlayersRef.current.values()) {
+        if (impostorSetRef.current.has(rp.slot)) continue; // no team kill
+        if (deadSlotsRef.current.has(rp.slot)) continue;
+        const dx = rp.x - myPos.x;
+        const dy = rp.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) { best = rp.slot; bestDistSq = distSq; }
+      }
+      setNearestTarget(best);
+    }, 150);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amIImpostor, amIDead]);
 
   // ── Role reveal overlay ───────────────────────────────────────────────────
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
@@ -283,8 +319,10 @@ export default function GameMap() {
         correctionRef.current = null;
       }
 
-      // Step player physics
-      playerStateRef.current = stepPlayer(grid, playerStateRef.current, keysRef.current, dtMs);
+      // Step player physics. Dead players (ghosts) walk through walls.
+      playerStateRef.current = stepPlayer(
+        grid, playerStateRef.current, keysRef.current, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+      );
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
@@ -408,11 +446,15 @@ export default function GameMap() {
           anim.y = rp.y;
           const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
           anim.animMs = rMoving ? anim.animMs + dtMs : 0;
-          const rPose: CharacterPose = rMoving
-            ? Math.floor(anim.animMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
-              ? 'walk-1'
-              : 'walk-2'
-            : 'idle';
+          // Phase 5: dead players always render the static "ghost" pose.
+          const rIsGhost = deadSlotsRef.current.has(rp.slot);
+          const rPose: CharacterPose = rIsGhost
+            ? 'ghost'
+            : rMoving
+              ? Math.floor(anim.animMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
+                ? 'walk-1'
+                : 'walk-2'
+              : 'idle';
 
           const rpCX = Math.round((rp.x - srcX) * scale);
           const rpCY = Math.round((rp.y - srcY) * scale);
@@ -421,8 +463,8 @@ export default function GameMap() {
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
           if (rpCY < -rSpriteH * 2 || rpCY > ch + rSpriteH * 2) continue;
 
-          // Ground shadow
-          {
+          // Ground shadow (ghosts float — no shadow)
+          if (!rIsGhost) {
             const blurPx = Math.max(2, Math.round(rSpriteH * 0.05));
             ctx.save();
             ctx.filter = `blur(${blurPx}px)`;
@@ -445,6 +487,7 @@ export default function GameMap() {
           ctx.save();
           ctx.translate(rpCX, rpCY);
           if (anim.facingLeft) ctx.scale(-1, 1);
+          if (rIsGhost) ctx.globalAlpha = 0.55;
           ctx.imageSmoothingEnabled = false;
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
@@ -453,7 +496,9 @@ export default function GameMap() {
           // Username label (red for fellow impostors on an impostor's client)
           const name = usernamesRef.current.get(rp.slot) ?? `Player ${rp.slot}`;
           const isTeammate = impostorSetRef.current.has(rp.slot);
-          ctx.fillStyle = isTeammate ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.9)';
+          ctx.fillStyle = rIsGhost
+            ? 'rgba(200,220,255,0.55)'
+            : isTeammate ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.9)';
           ctx.strokeStyle = 'rgba(0,0,0,0.7)';
           ctx.lineWidth = Math.round(2 * dpr);
           ctx.strokeText(name, rpCX, rpCY - rSpriteH / 2 - 3);
@@ -480,8 +525,9 @@ export default function GameMap() {
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
-      // Ground shadow
-      {
+      // Ground shadow (ghosts float — no shadow)
+      const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
+      if (!amIGhostFrame) {
         const blurPx = Math.max(2, Math.round(sH * 0.05));
         ctx.save();
         ctx.filter = `blur(${blurPx}px)`;
@@ -497,6 +543,7 @@ export default function GameMap() {
       ctx.save();
       ctx.translate(pCX, pCY);
       if (facingLeft) ctx.scale(-1, 1);
+      if (amIGhostFrame) ctx.globalAlpha = 0.55;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
@@ -619,6 +666,48 @@ export default function GameMap() {
               ✎ Edit Collision
             </Link>
           )}
+        </div>
+      )}
+
+      {/* ── Kill button + cooldown (Phase 5, impostor only) ───────────────── */}
+      {loaded && amIImpostor && !amIDead && (
+        <div style={{
+          position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 25,
+        }}>
+          <button
+            disabled={killCooldownMs > 0 || nearestTarget === null}
+            onClick={() => { if (nearestTarget !== null) sendKill(nearestTarget); }}
+            style={{
+              width: 76, height: 76, borderRadius: '50%',
+              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
+              letterSpacing: '0.05em', textTransform: 'uppercase',
+              color: killCooldownMs > 0 || nearestTarget === null ? 'rgba(255,150,150,0.35)' : '#ffe8e8',
+              background: killCooldownMs > 0 || nearestTarget === null
+                ? 'rgba(90,20,20,0.55)'
+                : 'radial-gradient(circle, rgba(210,20,20,0.95), rgba(120,0,0,0.95))',
+              border: `2px solid ${killCooldownMs > 0 || nearestTarget === null ? 'rgba(200,80,80,0.25)' : 'rgba(255,120,120,0.85)'}`,
+              boxShadow: killCooldownMs > 0 || nearestTarget === null ? 'none' : '0 0 22px rgba(255,40,40,0.55)',
+              cursor: killCooldownMs > 0 || nearestTarget === null ? 'default' : 'pointer',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Kill'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Dead / ghost-mode banner (Phase 5) ────────────────────────────── */}
+      {loaded && amIDead && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          padding: '6px 16px', zIndex: 25,
+          background: 'rgba(20,32,44,0.85)', color: '#a8c8e0',
+          fontFamily: 'sans-serif', fontSize: 12, fontWeight: 600,
+          letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
+          border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
+        }}>
+          👻 You are dead — ghost mode
         </div>
       )}
 

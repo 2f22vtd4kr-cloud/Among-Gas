@@ -8,3 +8,4 @@
 - [Collision generator tuning](collision-generator-tuning.md) — checkerboard/over-blocking bugs: verify via BFS connectivity not overlay looks; tune downsample threshold + small-prop base-fraction, not per-object hacks.
 - [Dev-only file-write endpoints](dev-only-file-write-endpoints.md) — pattern for in-app editors that persist to source files in static-build artifacts; CSRF/validation gotchas for Vite dev middleware.
 - [Shared lib build requirement](shared-lib-build.md) — lib/shared is composite TS; run `tsc --build lib/shared` after any change before running typecheck; index.ts must use named exports (not export *) to avoid MAP_W/MAP_H ambiguity.
+- [Timer/cooldown verification](kill-cooldown-verification.md) — mock screenshots miss server-init bugs in cooldowns/timers; verify with a raw WS client script against the live server.

@@ -925,3 +925,50 @@
 ### State to restore
 
 None. All changes merged and workflows verified clean.
+
+---
+
+## Phase 5 — Kill Mechanics (complete)
+
+**Session goal:** Implement GAME_SPEC.md §9 (Kill Mechanics): impostor kill button, ghost mode for dead players, kill cooldown.
+
+### What was built
+
+**Shared (`lib/shared`)**
+- `collisionMap.ts` — `KILL_RANGE_PX` (1.5× tile width `CELL_X`)
+- `coords.ts` — `KILL_COOLDOWN_MS` (25_000, per spec default)
+- Rebuilt (`tsc --build lib/shared`) after adding constants.
+
+**Server (`artifacts/api-server`)**
+- `lobby.ts` — `LobbyPlayer.killCooldownMs`; `attemptKill(lobby, attackerSlot, victimSlot)` (full server-side validation: alive/role checks, no-team-kill, cooldown, `KILL_RANGE_PX` proximity in pixel space); `broadcastKill()`; `buildKillPacket()`; `_tickKillCooldowns()` decrements every 40ms tick for ROAMING lobbies. **`killCooldownMs` starts at `0` (ready) for all players at game start** — the 25s cooldown applies only after a kill, not before the first one.
+- `wsServer.ts` — 0x11 move handler skips collision validation when `!player.alive` (ghost walk-through-walls); new 0x15 handler routes sub-opcode 0x01 to `attemptKill`/`broadcastKill`.
+
+**Client (`artifacts/telegram-game`)**
+- `GameContext.tsx` — `deadSlots`, `killCooldownMs` state; `sendKill(victimSlot)` action; inbound 0x15/0x01 handling (appends to `deadSlots`, resets own cooldown UI only if this client was the attacker); ~250ms interval decrements `killCooldownMs` while impostor+playing; new mock presets `kill-ready` and `ghost`.
+- `game/player.ts` — `stepPlayer(..., ghost)` param: bypasses collision (map-bounds clamp only) and forces the `'ghost'` pose when true.
+- `pages/GameMap.tsx` — ghost rendering (translucent, no shadow, `'ghost'` pose) for both local and remote dead players; kill button (bottom-center, visible only for alive impostors, disabled during cooldown/no target) with nearest-in-range-target polling (150ms, excludes self/teammates/dead); "You are dead — ghost mode" banner.
+
+### Protocol addition
+
+| Opcode | Direction | Layout | Meaning |
+|--------|-----------|--------|---------|
+| 0x15 sub 0x01 | C→S | `[0x15, 0x01, victimSlot]` (3 bytes) | Kill intent |
+| 0x15 sub 0x01 | S→C (bcast) | `[0x15, 0x01, victimSlot, attackerSlot]` (4 bytes) | Kill broadcast — **local extension of spec's 3-byte version**, adds `attackerSlot` so the attacking client can reset its own cooldown UI without a separate ack opcode. Backward-compatible (client tolerates 3-byte legacy form). |
+
+### Decisions & gotchas
+
+- **Cooldown-at-start bug (caught via live two-client WS test, not screenshots):** initial implementation set `killCooldownMs = KILL_COOLDOWN_MS` for impostors at game start, silently blocking the very first kill for 25s with no error surfaced to the client. Screenshots/mocks didn't catch it since they hardcode `killCooldownMs: 0`. Fixed by starting all players at `0`; cooldown is only (re)armed after a successful kill. **Lesson: any cooldown/timer feature must be verified with a live end-to-end protocol test (raw WS client), not just mock-driven UI screenshots.**
+- Verified end-to-end with a raw `ws` Node script hitting the live api-server directly (create room → join → start → move both to same walkable spawn point → kill): confirmed kill succeeds once, broadcasts to both clients, team-kill attempt is rejected, and an immediate re-kill attempt is rejected (cooldown + already-dead).
+- Kill proximity uses **pixel-space** squared distance against `KILL_RANGE_PX` on both client (UI target selection) and server (authoritative check) — same units, no wire/pixel mismatch.
+- Ghost movement bypass on the server is gated strictly on `!player.alive`, so it cannot be triggered by a still-alive player sending crafted packets.
+
+### Left off / next steps (Phase 6+)
+
+- Meetings & Voting (§6/7 in spec, opcode ranges not yet implemented)
+- Task system (Phase 7)
+- Sabotages & Vision (Phase 8)
+- Polish & Telegram Integration (Phase 9)
+
+### State to restore
+
+None. All changes verified (typecheck clean, live WS integration test passed, code review passed).

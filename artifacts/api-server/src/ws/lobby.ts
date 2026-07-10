@@ -17,10 +17,12 @@ import {
   toWire,
   DELTA_THRESHOLD_SQ,
   FEET_OFFSET_Y, PLAYER_RADIUS,
+  KILL_COOLDOWN_MS,
 } from '@workspace/shared/coords';
 import {
   buildCollisionGrid,
   canMoveTo,
+  KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
@@ -86,6 +88,8 @@ export interface LobbyPlayer {
   /** Assigned at game start (0x12). Server-side only — never broadcast. */
   role: PlayerRole;
   alive: boolean;
+  /** Impostor-only kill cooldown, ms remaining. Decremented each delta tick. */
+  killCooldownMs: number;
 }
 
 export interface Lobby {
@@ -168,6 +172,16 @@ export function buildRoleRevealPacket(role: 0 | 1, impostorSlots: number[] = [])
 }
 
 /**
+ * 0x15 sub 0x01 — kill broadcast (GAME_SPEC.md §9).
+ * Layout: [0x15, 0x01, victimSlot, attackerSlot]
+ * (attackerSlot is a local extension of the spec's 3-byte format, so the
+ * attacking client can reliably reset its own cooldown UI on confirmation.)
+ */
+export function buildKillPacket(victimSlot: number, attackerSlot: number): Buffer {
+  return Buffer.from([0x15, 0x01, victimSlot, attackerSlot]);
+}
+
+/**
  * 0xFF — delta sync broadcast
  *
  * Layout:
@@ -240,7 +254,7 @@ export class LobbyManager {
       x: SPAWN_X, y: SPAWN_Y,
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
-      role: 'crewmate', alive: true,
+      role: 'crewmate', alive: true, killCooldownMs: 0,
     };
 
     const lobby: Lobby = {
@@ -290,7 +304,7 @@ export class LobbyManager {
       x: SPAWN_X, y: SPAWN_Y,
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
-      role: 'crewmate', alive: true,
+      role: 'crewmate', alive: true, killCooldownMs: 0,
     };
     lobby.players.set(slot, player);
     lobby.userIdToSlot.set(tgUserId, slot);
@@ -377,6 +391,9 @@ export class LobbyManager {
     shuffled.forEach((p, i) => {
       p.role = i < impostorCount ? 'impostor' : 'crewmate';
       p.alive = true;
+      // Cooldown starts ready (0) at game start — GAME_SPEC.md §9's 25s cooldown
+      // applies only *after* a kill, not before the first one.
+      p.killCooldownMs = 0;
     });
 
     const impostorSlots = shuffled
@@ -410,6 +427,42 @@ export class LobbyManager {
     }
   }
 
+  // ── Kill mechanics (Phase 5) ──────────────────────────────────────────────
+
+  /**
+   * Validate + apply a kill attempt (GAME_SPEC.md §9).
+   * Returns true if the kill was applied (caller should broadcast it).
+   */
+  attemptKill(lobby: Lobby, attackerSlot: number, victimSlot: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+    if (attackerSlot === victimSlot) return false;
+
+    const attacker = lobby.players.get(attackerSlot);
+    const victim = lobby.players.get(victimSlot);
+    if (!attacker || !victim) return false;
+
+    if (!attacker.alive || attacker.role !== 'impostor') return false;
+    if (!victim.alive || victim.role === 'impostor') return false; // no team kill
+    if (attacker.killCooldownMs > 0) return false;
+
+    const dx = attacker.x - victim.x;
+    const dy = attacker.y - victim.y;
+    if (dx * dx + dy * dy > KILL_RANGE_PX * KILL_RANGE_PX) return false;
+
+    victim.alive = false;
+    attacker.killCooldownMs = KILL_COOLDOWN_MS;
+    return true;
+  }
+
+  broadcastKill(lobby: Lobby, victimSlot: number, attackerSlot: number): void {
+    const packet = buildKillPacket(victimSlot, attackerSlot);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) {
+        player.ws.send(packet);
+      }
+    }
+  }
+
   // ── 25Hz delta broadcast loop ─────────────────────────────────────────────
 
   /**
@@ -436,7 +489,17 @@ export class LobbyManager {
 
   private _tickDelta(): void {
     for (const lobby of this.lobbies.values()) {
+      if (lobby.phase === 'ROAMING') this._tickKillCooldowns(lobby);
       this._broadcastDelta(lobby);
+    }
+  }
+
+  /** Decrement each impostor's kill cooldown by one tick (40ms), floored at 0. */
+  private _tickKillCooldowns(lobby: Lobby): void {
+    for (const player of lobby.players.values()) {
+      if (player.killCooldownMs > 0) {
+        player.killCooldownMs = Math.max(0, player.killCooldownMs - 40);
+      }
     }
   }
 

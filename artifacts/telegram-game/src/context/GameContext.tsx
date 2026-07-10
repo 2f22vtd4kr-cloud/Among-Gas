@@ -13,7 +13,7 @@ import React, {
   useState,
   useCallback,
 } from 'react';
-import { fromWire, MAP_W, MAP_H } from '@workspace/shared/coords';
+import { fromWire, MAP_W, MAP_H, KILL_COOLDOWN_MS } from '@workspace/shared/coords';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +46,10 @@ export interface GameState {
   myRole: PlayerRole | null;
   /** Fellow impostor slots — only populated when myRole === 'impostor'. */
   impostorSlots: number[];
+  /** Slots killed this game (GAME_SPEC.md §9 — 0x15 sub 0x01 broadcast). Reset on role reveal. */
+  deadSlots: number[];
+  /** Impostor-only kill cooldown countdown, ms. 0 = ready to kill. Client-side display estimate. */
+  killCooldownMs: number;
 }
 
 export interface GameActions {
@@ -54,6 +58,8 @@ export interface GameActions {
   startGame: () => void;
   /** Send a 0x11 Move Intent packet (wire coords 0–32000). */
   sendMove: (wireX: number, wireY: number) => void;
+  /** Send a 0x15 sub 0x01 Kill RPC (impostor only; server re-validates). */
+  sendKill: (victimSlot: number) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -65,6 +71,8 @@ const DEFAULT_STATE: GameState = {
   errorMessage: null,
   myRole: null,
   impostorSlots: [],
+  deadSlots: [],
+  killCooldownMs: 0,
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -75,6 +83,7 @@ const GameActionsCtx = createContext<GameActions>({
   joinRoom: () => {},
   startGame: () => {},
   sendMove: () => {},
+  sendKill: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -176,6 +185,26 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: null, impostorSlots: [],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 5 — kill mechanics: impostor, cooldown ready, a crewmate in range to kill.
+  'kill-ready': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], killCooldownMs: 0,
+    },
+    remotePlayers: [
+      { slot: 1, x: MAP_W / 2 + 20, y: MAP_H / 2 + 6 }, // in kill range
+      { slot: 2, x: MAP_W / 2 - 90, y: MAP_H / 2 + 60 },
+      { slot: 3, x: MAP_W / 2 + 30, y: MAP_H / 2 + 140 },
+    ],
+  },
+  // Phase 5 — ghost mode: this client has been killed, sees the "You are dead" state.
+  ghost: {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [0],
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
@@ -323,6 +352,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     send(buf);
   }, [send]);
 
+  const sendKill = useCallback((victimSlot: number) => {
+    send([0x15, 0x01, victimSlot]);
+  }, [send]);
+
   useEffect(() => {
     // ── Dev mock mode: skip the real socket, force a fixed visual state ────
     const mock = getMockPreset();
@@ -428,7 +461,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         // Clear stale remote player data from the previous session
         remotePlayersRef.current.clear();
-        setState(s => ({ ...s, phase: 'playing', myRole, impostorSlots }));
+        // Cooldown starts ready (0) at game start — the 25s cooldown applies
+        // only after a kill, not before the impostor's first one.
+        setState(s => ({
+          ...s, phase: 'playing', myRole, impostorSlots,
+          deadSlots: [],
+          killCooldownMs: 0,
+        }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
       }
@@ -441,6 +480,31 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           remotePlayersRef.current,
           (x, y) => { correctionRef.current = { x, y }; },
         );
+        return;
+      }
+
+      // ── 0x15: RPC event ──────────────────────────────────────────────────
+      if (opcode === 0x15 && event.data.byteLength >= 2) {
+        const sub = view.getUint8(1);
+
+        // 0x01 — Kill broadcast: [0x15, 0x01, victimSlot, attackerSlot]
+        if (sub === 0x01 && event.data.byteLength >= 3) {
+          const victimSlot = view.getUint8(2);
+          const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
+          setState(s => (
+            s.deadSlots.includes(victimSlot)
+              ? s
+              : {
+                  ...s,
+                  deadSlots: [...s.deadSlots, victimSlot],
+                  // Only the attacking client resets its own cooldown UI.
+                  killCooldownMs: attackerSlot === mySlotRef.current
+                    ? KILL_COOLDOWN_MS
+                    : s.killCooldownMs,
+                }
+          ));
+          return;
+        }
         return;
       }
     };
@@ -460,7 +524,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => ws.close();
   }, []); // socket is created once
 
-  const actions: GameActions = { createRoom, joinRoom, startGame, sendMove };
+  // Client-side kill cooldown countdown display (server is authoritative for
+  // the actual kill validation; this just drives the impostor's UI timer).
+  useEffect(() => {
+    if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
+    if (state.killCooldownMs <= 0) return;
+    const id = setInterval(() => {
+      setState(s => ({ ...s, killCooldownMs: Math.max(0, s.killCooldownMs - 250) }));
+    }, 250);
+    return () => clearInterval(id);
+  }, [state.phase, state.myRole, state.killCooldownMs > 0]);
+
+  const actions: GameActions = { createRoom, joinRoom, startGame, sendMove, sendKill };
 
   return (
     <GameStateCtx.Provider value={state}>

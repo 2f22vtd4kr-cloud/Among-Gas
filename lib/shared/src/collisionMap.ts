@@ -34,6 +34,13 @@ export const CELL_Y = MAP_H / ROWS;   // ≈ 32.03 px
 // Keep CELL as the average for code that needs a single representative value
 export const CELL = (_CELL * MAP_W) / (COLS * _CELL); // same as MAP_W/COLS
 
+/**
+ * Phase 5 — kill range, in pixels, shared between client (kill-button
+ * proximity check) and server (authoritative kill validation).
+ * GAME_SPEC.md §9 calibrates this to ~1.5 map tiles.
+ */
+export const KILL_RANGE_PX = Math.round(CELL_X * 1.5);
+
 export type Grid = Uint8Array;
 
 /** Decode the RLE-encoded pixel-accurate grid produced from the reference image. */

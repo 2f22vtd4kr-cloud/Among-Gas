@@ -165,11 +165,13 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const pixelX = fromWire(wireX, MAP_W);
         const pixelY = fromWire(wireY, MAP_H);
 
-        // Validate against collision grid (same geometry as client: feet-center)
+        // Validate against collision grid (same geometry as client: feet-center).
+        // Phase 5: dead players are in ghost mode and walk through walls
+        // (GAME_SPEC.md §9), so collision is skipped once !player.alive.
         const feetX = pixelX;
         const feetY = pixelY + FEET_OFFSET_Y;
 
-        if (canMoveTo(collisionGrid, feetX, feetY, PLAYER_RADIUS)) {
+        if (!player.alive || canMoveTo(collisionGrid, feetX, feetY, PLAYER_RADIUS)) {
           // Valid position — update server-side state
           player.x = pixelX;
           player.y = pixelY;
@@ -179,6 +181,31 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           logger.debug(
             `[WS] Rejected 0x11 from slot=${slot}: wireX=${wireX} wireY=${wireY} clips a wall`,
           );
+        }
+
+        return;
+      }
+
+      // ── 0x15: RPC Event ───────────────────────────────────────────────────
+      if (opcode === 0x15) {
+        if (raw.length < 2) return;
+        const sub = raw.readUInt8(1);
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const attackerSlot = lobby.userIdToSlot.get(tgUserId);
+        if (attackerSlot === undefined) return;
+
+        // 0x01 — Kill (impostor only; server re-validates role/cooldown/range).
+        if (sub === 0x01) {
+          if (raw.length < 3) return;
+          const victimSlot = raw.readUInt8(2);
+          const applied = lobbyManager.attemptKill(lobby, attackerSlot, victimSlot);
+          if (applied) {
+            lobbyManager.broadcastKill(lobby, victimSlot, attackerSlot);
+            logger.info(`[WS] Kill in ${lobby.code}: slot=${attackerSlot} → slot=${victimSlot}`);
+          }
+          return;
         }
 
         return;

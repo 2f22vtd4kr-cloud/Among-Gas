@@ -63,12 +63,17 @@ function isKeyDown(keys: ReadonlySet<string>, aliases: string[]): boolean {
  * Advance the player one frame: reads currently-held keys, resolves the
  * intended move against the collision grid (with wall-sliding), and updates
  * the walk-cycle animation. Returns a new state object.
+ *
+ * `ghost` (Phase 5 — GAME_SPEC.md §9): a killed player enters ghost mode and
+ * walks through walls (collision is skipped, clamped only to map bounds),
+ * and always renders the single static "ghost" pose instead of walk-cycling.
  */
 export function stepPlayer(
   grid: Grid,
   state: PlayerState,
   keys: ReadonlySet<string>,
   dtMs: number,
+  ghost = false,
 ): PlayerState {
   let dx = 0;
   let dy = 0;
@@ -86,20 +91,28 @@ export function stepPlayer(
     const dist = (PLAYER_SPEED_PX_PER_SEC * dtMs) / 1000;
     const nx = x + (dx / len) * dist;
     const ny = y + (dy / len) * dist;
-    // Collision is tested at the feet (offset down from sprite centre).
-    const [fx, fy] = resolveMovement(grid, x + 0, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y, PLAYER_RADIUS);
-    x = fx;
-    y = fy - FEET_OFFSET_Y;
+    if (ghost) {
+      // No collision — clamp to map bounds only.
+      x = Math.max(0, Math.min(MAP_W, nx));
+      y = Math.max(0, Math.min(MAP_H, ny));
+    } else {
+      // Collision is tested at the feet (offset down from sprite centre).
+      const [fx, fy] = resolveMovement(grid, x + 0, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y, PLAYER_RADIUS);
+      x = fx;
+      y = fy - FEET_OFFSET_Y;
+    }
   }
 
   const facingLeft = dx !== 0 ? dx < 0 : state.facingLeft;
 
   const animElapsedMs = moving ? state.animElapsedMs + dtMs : 0;
-  const pose: CharacterPose = moving
-    ? Math.floor(animElapsedMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
-      ? 'walk-1'
-      : 'walk-2'
-    : 'idle';
+  const pose: CharacterPose = ghost
+    ? 'ghost'
+    : moving
+      ? Math.floor(animElapsedMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
+        ? 'walk-1'
+        : 'walk-2'
+      : 'idle';
 
   return { x, y, pose, facingLeft, animElapsedMs };
 }
