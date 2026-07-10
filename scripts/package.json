@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "hello": "tsx ./src/hello.ts",
+    "test:pathfinding": "tsx ./src/testPathfinding.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
@@ -12,6 +13,7 @@
     "tsx": "catalog:"
   },
   "dependencies": {
+    "@workspace/shared": "workspace:*",
     "sharp": "^0.35.3"
   }
 }

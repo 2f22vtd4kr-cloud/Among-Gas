@@ -1205,3 +1205,32 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **State to restore**
 - `/tmp/sim_reconcile.mjs` is a scratch verification script outside the repo, not committed — no cleanup needed.
+
+### 2026-07-10 — Phase A: A* pathfinding in lib/shared/src/pathfinding.ts
+
+**Done**
+- Implemented `lib/shared/src/pathfinding.ts` — A* pathfinding on the existing 104×58 collision grid.
+  - `findPath(grid, start, goal): PathResult | null` — full public API; accepts/returns pixel coords.
+  - `PathCache` class — caches per `(startCell, goalCell)` key; supports `invalidate(goal)` and `clear()`.
+  - MinHeap priority queue (internal), octile heuristic accounting for non-square cells (CELL_X ≠ CELL_Y), 8-directional movement, no corner-cutting, Bresenham line-of-sight for greedy path smoothing.
+- Exported `findPath`, `PathCache`, `Point`, `PathResult` from `lib/shared/src/index.ts`.
+- Added `@workspace/shared` dependency to `scripts/package.json`.
+- Added `scripts/src/testPathfinding.ts` smoke test + `"test:pathfinding"` script; 13/13 tests pass.
+- `pnpm run typecheck` passes clean across all packages.
+- Environment repair: `pnpm install`, workflows restarted (`api-server`, `telegram-game`).
+
+**Decisions & gotchas**
+- Cell sizes are non-square (CELL_X=31, CELL_Y=32.03); the octile heuristic uses actual pixel-space axis distances (dc*CELL_X, dr*CELL_Y) — not cell counts — so it remains admissible.
+- `emitDeclarationOnly: true` in shared lib tsconfig: no JS is emitted; consumers import directly from src/ via package exports. Runtime tests must run inside a package that has `@workspace/shared` in its dependencies.
+- Test points must be verified as walkable before calling findPath (the grid has ~43% blocked cells); the smoke test now discovers walkable cells dynamically at runtime.
+- Path smoothing is greedy string-pulling (Bresenham LOS). More aggressive than SIMPLE waypoint skipping — typically reduces 10-50 raw waypoints to 2-5 smoothed ones.
+
+**Left off / next steps**
+- Phase A complete. **Next: Phase B — bot agent base + server integration.**
+  - `artifacts/api-server/src/bot/BotAgent.ts` — abstract base class
+  - `artifacts/api-server/src/bot/CrewmateBot.ts` and `ImpostorBot.ts`
+  - Wire bot tick into the server's game loop alongside the 25 Hz broadcast
+  - Bots occupy real slot entries and appear in delta-sync broadcasts automatically
+
+**State to restore**
+- None.

@@ -146,8 +146,9 @@ This is the playtest tool — run it after tuning bot difficulty, kill cooldowns
 
 ## 9. Implementation phases
 
-**Phase A — Pathfinding (`lib/shared/src/pathfinding.ts`)**
+**Phase A — Pathfinding (`lib/shared/src/pathfinding.ts`)** ✅ DONE
 A\* on the existing collision grid. No other changes. Testable in isolation via a small script.
+Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass, avg 0.62ms/path.
 
 **Phase B — Bot agent base + server integration**
 - `artifacts/api-server/src/bot/BotAgent.ts` — abstract base class with `tick(gameState): Action[]`
