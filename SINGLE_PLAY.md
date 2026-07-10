@@ -162,12 +162,15 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 - Client: "Play Solo" button → `0x10/0x06` message
 - Server: handle `CREATE_SOLO`, auto-fill bot slots, auto-start
 
-**Phase D — Headless simulation runner**
-- Decouple `Lobby` from WS transport enough for in-process instantiation
-- `scripts/src/simulateGame.ts` + CLI
+**Phase D — Headless simulation runner** ✅ DONE
+- Implemented in `artifacts/api-server/src/sim/` (not `scripts/` — leaf packages can't import each other; see §8).
+- `createHeadlessLobby()` + event-listener sink on `LobbyManager`, `simulateGame.ts` + `cli.ts`.
+- See §8 for full details and the bug finding below.
 
-**Phase E — Tuning pass**
-- Run 100-game simulations, adjust bot difficulty parameters (hunt threshold, sabotage frequency, vote randomness) until crewmate/impostor win rates are in a reasonable range (target: 55/45 ± 10%).
+**Phase E — Fix dead-body re-report loop, then tuning pass** — 🔜 next session
+1. **Fix the bug §8 surfaced:** dead bodies are never marked "already reported," so bots repeatedly re-trigger meetings over the same old corpse instead of ever reaching tasks (`tasksCompleted: 0` in every simulated game so far). Add a `reported`/removed-from-map flag to a dead body once a meeting has been called over it, so `callMeeting` (or the body-report check bots use) stops treating it as reportable. Re-run the simulator afterward and confirm `tasksCompleted` moves off zero and `meetings`/game drops to a realistic count (1–2, not climbing indefinitely).
+2. **Then run the tuning pass:** 100-game simulations, adjust bot difficulty parameters (hunt threshold, sabotage frequency, vote randomness) until crewmate/impostor win rates land in a reasonable range (target: 55/45 ± 10%). Doing this before the bug fix would tune against broken data, since right now solo games can only end via ejection or sabotage timeout, never via tasks.
+- Maps onto the already-proposed project tasks "Catch bot crashes before they take down a solo game" (#3) and "Tune bot difficulty for a fair, competitive solo mode" (#4) — the bug fix belongs in whichever of those a future session picks up, or as its own task if neither fits.
 
 ---
 

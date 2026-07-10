@@ -1298,10 +1298,10 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in the real game logic, not the harness: a dead body is never marked "already reported," so any crewmate bot that later wanders near the same old corpse re-triggers a fresh meeting — sometimes minutes after it was already voted on. `CrewmateBot` also prioritizes body-reporting over tasks, so once the first kill happens (usually ~15s in), the group gets stuck in report → inconclusive-vote → wander → re-report and never returns to tasks. This directly affects the proposed "tune bot difficulty for a fair, competitive solo mode" task — right now a solo game can only end via ejection or sabotage timeout, never via tasks. Recommend fixing "mark body as reported" as part of that task rather than here.
 
 **Left off / next steps**
-- Phase D complete per SINGLE_PLAY.md. Phase E (tuning pass) and the "fix repeated body report" bug are natural next steps — both map onto the already-proposed tasks #2/#3/#4.
+- Phase D complete. SINGLE_PLAY.md §9 now defines **Phase E** for the next repo-import session: (1) fix the dead-body-never-reported bug so bots stop re-reporting old corpses and actually reach tasks, (2) re-run the simulator to confirm `tasksCompleted` and `meetings`/game are realistic, (3) then run the 100-game tuning pass for a 55/45±10% win-rate target. Maps onto proposed tasks #3/#4.
 
 **State to restore**
-- None.
+- None. Note: mid-session, `artifacts/telegram-game` and `artifacts/api-server` workflows both failed on restart with `EADDRINUSE` — caused by orphaned processes from a prior restart squatting on the ports, not a code issue. Fixed by killing the stale PIDs and restarting; if this recurs, check `lsof -i :<port>` for zombie processes before debugging code.
 
 **Decisions & gotchas**
 - Bot agents are seeded as `CrewmateBot` before `startGame()` so the slot is valid, then replaced with new instances after roles are assigned. New instances avoid stale internal state contamination across games.
