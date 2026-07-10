@@ -220,6 +220,15 @@ function astar(
 /**
  * Does the straight line between two cells cross any blocked cell?
  * Uses Bresenham's line algorithm.
+ *
+ * Diagonal Bresenham steps must reject corner-cutting the same way the A*
+ * neighbour expansion does (both axis-aligned cells adjacent to the step
+ * must be walkable) — otherwise this reports line-of-sight through a
+ * blocked corner that two individually-walkable diagonal cells straddle,
+ * producing a smoothed waypoint whose straight-line chord actually clips a
+ * wall. That silently broke a large fraction of in-game bot navigation
+ * (see .agents/memory/ for the investigation) even though the raw
+ * (unsmoothed) A* path was always correct.
  */
 function hasLineOfSight(
   grid: Grid,
@@ -238,8 +247,14 @@ function hasLineOfSight(
     if (!isWalkable(grid, c, r)) return false;
     if (c === c1 && r === r1) return true;
     const e2 = 2 * err;
-    if (e2 > -dr) { err -= dr; c += sc; }
-    if (e2 <  dc) { err += dc; r += sr; }
+    const stepC = e2 > -dr;
+    const stepR = e2 < dc;
+    if (stepC && stepR) {
+      // Diagonal Bresenham step — no corner-cutting through a blocked pair.
+      if (!isWalkable(grid, c + sc, r) || !isWalkable(grid, c, r + sr)) return false;
+    }
+    if (stepC) { err -= dr; c += sc; }
+    if (stepR) { err += dc; r += sr; }
   }
 }
 

@@ -14,7 +14,7 @@
 import { BotAgent, grid } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
-import { SABOTAGE_DEFS } from '@workspace/shared/sabotage';
+import { SABOTAGE_DEFS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
 import { NO_TARGET } from '@workspace/shared/coords';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
@@ -85,7 +85,13 @@ export class CrewmateBot extends BotAgent {
     const pad = def.pads[this._targetPadId];
     if (!pad) return;
 
-    const arrived = this.navigateTo(self, { x: pad.x, y: pad.y });
+    // Same wall-mounted-console caveat as tasks: approach within range rather
+    // than navigating to the exact (possibly unwalkable) pad pixel.
+    const goal = this.nearestApproachPoint(
+      { x: pad.x, y: pad.y },
+      SABOTAGE_INTERACTION_RANGE_PX - 30,
+    );
+    const arrived = this.navigateTo(self, goal);
     if (!arrived) return;
 
     // Attempt repair — delegate broadcast to manager convenience method
@@ -100,7 +106,7 @@ export class CrewmateBot extends BotAgent {
 
   private _nearbyDeadBody(lobby: Lobby, self: LobbyPlayer): number | null {
     for (const p of lobby.players.values()) {
-      if (p.alive) continue;
+      if (p.alive || p.bodyReported) continue;
       const dSq = CrewmateBot.distSq(self.x, self.y, p.x, p.y);
       if (dSq <= REPORT_RANGE_PX * REPORT_RANGE_PX) return p.slot;
     }
@@ -154,7 +160,14 @@ export class CrewmateBot extends BotAgent {
     taskId: number,
   ): void {
     const def = TASK_DEFS.find(t => t.id === taskId)!;
-    const goal: Point = { x: def.x, y: def.y };
+    // Consoles are often wall-mounted (exact pixel unwalkable); bots only need
+    // to be within TASK_INTERACTION_RANGE_PX, same as the server's own check.
+    // Cap the search radius below that range, minus navigateTo's ~25px arrival
+    // tolerance, so "arrived at approach point" always implies "in range".
+    const goal = this.nearestApproachPoint(
+      { x: def.x, y: def.y },
+      TASK_INTERACTION_RANGE_PX - 30,
+    );
     const arrived = this.navigateTo(self, goal);
     if (!arrived) return;
 

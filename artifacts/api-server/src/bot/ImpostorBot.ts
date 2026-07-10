@@ -21,7 +21,7 @@ import { BotAgent, grid } from './BotAgent.js';
 import { KILL_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DEFS, SABOTAGE_O2, type SabotageSystemId } from '@workspace/shared/sabotage';
 import { NO_TARGET } from '@workspace/shared/coords';
-import { TASK_DEFS } from '@workspace/shared/tasks';
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 
@@ -130,7 +130,10 @@ export class ImpostorBot extends BotAgent {
       return ImpostorBot.distSq(p.x, p.y, this._fakeTarget.x, this._fakeTarget.y) > 100 * 100;
     });
     const pool = choices.length > 0 ? choices : FAKE_TASK_POSITIONS;
-    this._fakeTarget = pool[Math.floor(Math.random() * pool.length)];
+    const raw = pool[Math.floor(Math.random() * pool.length)];
+    // Consoles are often wall-mounted (see CrewmateBot._handleTask) — approach
+    // within range rather than navigating to the exact, possibly-unwalkable pixel.
+    this._fakeTarget = this.nearestApproachPoint(raw, TASK_INTERACTION_RANGE_PX - 30);
     this._fakeDwellTicks = 0;
     this.clearPath();
   }

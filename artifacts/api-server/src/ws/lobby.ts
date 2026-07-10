@@ -52,8 +52,12 @@ function generateCode(): string {
 }
 
 // ── Spawn position (matches game/player.ts PLAYER_SPAWN formula) ─────────────
-const SPAWN_X = Math.round(350 * (MAP_W / 1040));
-const SPAWN_Y = Math.round(150 * (MAP_H / 580));
+// Exported so bot AI can use it as a known-reachable reference point when
+// verifying that a candidate destination is actually connected to the main
+// walkable area (the collision grid has isolated 1-cell pockets — see
+// .agents/memory/ — that are locally walkable but unreachable from spawn).
+export const SPAWN_X = Math.round(350 * (MAP_W / 1040));
+export const SPAWN_Y = Math.round(150 * (MAP_H / 580));
 
 /** Collision grid — built once for spawn-position validation. */
 const spawnGrid = buildCollisionGrid();
@@ -102,6 +106,15 @@ export interface LobbyPlayer {
   /** Assigned at game start (0x12). Server-side only — never broadcast. */
   role: PlayerRole;
   alive: boolean;
+  /**
+   * Once a meeting has been called over this player's body (dead player's
+   * own sprite doubles as the reportable "body" — see GAME_SPEC.md §14 #13),
+   * this flips true so the body stops being reportable. Without this, any
+   * crewmate (bot or human) wandering near an old corpse re-triggers a fresh
+   * meeting indefinitely, since a dead player's position never changes and
+   * `alive` alone can't distinguish "never reported" from "already voted on".
+   */
+  bodyReported?: boolean;
   /** Impostor-only kill cooldown, ms remaining. Decremented each delta tick. */
   killCooldownMs: number;
   /** Task IDs assigned to this player at game start (empty for impostors). */
@@ -1065,6 +1078,8 @@ export class LobbyManager {
     if (bodySlot !== NO_TARGET) {
       const body = lobby.players.get(bodySlot);
       if (!body || body.alive) return false; // must reference an actual dead body
+      if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
+      body.bodyReported = true;
     }
 
     const meeting: MeetingState = {
