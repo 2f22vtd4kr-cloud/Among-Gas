@@ -1,59 +1,55 @@
+/**
+ * WebSocket server — Phase 1 (auth handshake) + Phase 2 (lobby control)
+ *
+ * Lifecycle:
+ *   1. Client connects → 10s window to send initData (Telegram auth string)
+ *   2. Server validates auth, sends [0x01, slotId] ACK
+ *   3. Client sends [0x10, 0x01] to create a room  OR
+ *              sends [0x10, 0x02, ...6-byte code] to join a room
+ *   4. Server broadcasts [0x10, 0x03, ...] room update to all lobby members
+ */
 import { WebSocketServer, type WebSocket } from 'ws';
-import type { IncomingMessage } from 'node:http';
-import type { Server as HttpServer } from 'node:http';
+import type { IncomingMessage, Server as HttpServer } from 'node:http';
 import { verifyTelegramAuth, validateAuthConfig } from './auth.js';
+import {
+  LobbyManager,
+  buildJoinErrorPacket,
+  buildSlotAssignedPacket,
+} from './lobby.js';
 import { logger } from '../lib/logger.js';
-
-// ─── Per-connection state ───────────────────────────────────────────────────
 
 interface AuthSocket extends WebSocket {
   isVerified: boolean;
   tgUserId?: number;
   username?: string;
-  /** Player slot ID — placeholder in Phase 1; real slot assigned by LobbyManager in Phase 2. */
   playerSlotId?: number;
 }
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-/** URL path for WebSocket upgrades (must match Replit proxy routing for /api). */
 const WS_PATH = '/api/ws';
-
-/** Milliseconds a new connection has to complete auth before being closed. */
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
-// ─── Attach WebSocket server to an existing HTTP server ─────────────────────
+/** Singleton lobby manager shared across all connections. */
+const lobbyManager = new LobbyManager();
 
-/**
- * Validates auth config (fails hard in production without a bot token), then
- * upgrades the given HTTP server to also handle WebSocket connections at /api/ws.
- *
- * Must be called before httpServer.listen().
- */
 export function attachWsServer(httpServer: HttpServer): WebSocketServer {
   validateAuthConfig();
 
   const wss = new WebSocketServer({ noServer: true });
 
-  // Only upgrade connections that arrive on the correct path.
   httpServer.on('upgrade', (req: IncomingMessage, socket, head) => {
     const pathname = req.url?.split('?')[0] ?? '';
     if (pathname !== WS_PATH) {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => {
-      wss.emit('connection', ws, req);
-    });
+    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
   });
 
   wss.on('connection', (ws: AuthSocket) => {
     ws.isVerified = false;
 
-    // Kick unauthenticated connections that never send their auth frame.
     const handshakeTimer = setTimeout(() => {
       if (!ws.isVerified) {
-        logger.warn('WS handshake timeout — closing unauthenticated connection');
         ws.send(Buffer.from([0x00]));
         ws.close();
       }
@@ -62,16 +58,13 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
     ws.on('message', (raw: Buffer) => {
       if (!Buffer.isBuffer(raw) || raw.length === 0) return;
 
-      // ── Phase 1: authentication gateway ───────────────────────────────────
+      // ── Phase 1: auth handshake ───────────────────────────────────────────
       if (!ws.isVerified) {
         clearTimeout(handshakeTimer);
 
-        const initData = raw.toString('utf8');
-        const user = verifyTelegramAuth(initData);
-
+        const user = verifyTelegramAuth(raw.toString('utf8'));
         if (!user) {
-          logger.warn('WS handshake failed — invalid auth payload');
-          ws.send(Buffer.from([0x00])); // 0x00 = Handshake Fail
+          ws.send(Buffer.from([0x00]));
           ws.close();
           return;
         }
@@ -79,43 +72,90 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         ws.isVerified = true;
         ws.tgUserId = user.id;
         ws.username = user.username ?? `User${user.id}`;
-        ws.playerSlotId = 0; // placeholder — real slot assigned by LobbyManager in Phase 2
+        // Slot is assigned when the player creates/joins a lobby.
+        // For now, echo a temporary slot=0 to satisfy the handshake protocol;
+        // the real slot comes via the 0x10 0x03 room update.
+        ws.playerSlotId = 0;
 
-        logger.info(
-          { tgUserId: ws.tgUserId, username: ws.username },
-          'WS handshake OK',
-        );
-
-        // 0x01 = Handshake OK; Byte 1 = assigned player slot
         const ack = Buffer.alloc(2);
-        ack.writeUint8(0x01, 0);
-        ack.writeUint8(ws.playerSlotId, 1);
+        ack.writeUInt8(0x01, 0);
+        ack.writeUInt8(ws.playerSlotId, 1);
         ws.send(ack);
         return;
       }
 
-      // ── Authenticated: guard minimum frame length before any read ──────────
+      // ── Phase 2+: game opcodes ────────────────────────────────────────────
       if (raw.length < 1) return;
+      const opcode = raw.readUInt8(0);
 
-      // Route by opcode — Phase 2+ adds handlers for 0x10 lobby, 0x11 move, etc.
-      const opcode = raw.readUint8(0);
-      logger.debug(
-        { opcode: `0x${opcode.toString(16).padStart(2, '0')}`, tgUserId: ws.tgUserId },
-        'WS frame received (unhandled opcode)',
-      );
+      // ── 0x10: Lobby Control ───────────────────────────────────────────────
+      if (opcode === 0x10) {
+        if (raw.length < 2) return;
+        const sub = raw.readUInt8(1);
+        const tgUserId = ws.tgUserId!;
+        const username = ws.username!;
+
+        // 0x01 — Create room
+        if (sub === 0x01) {
+          const lobby = lobbyManager.createLobby(tgUserId, username, ws);
+          ws.playerSlotId = 0;
+          // Tell this client their authoritative slot before the broadcast
+          ws.send(buildSlotAssignedPacket(0));
+          lobbyManager.broadcastRoomUpdate(lobby);
+          logger.info(`[WS] Create room → ${lobby.code} (userId=${tgUserId})`);
+          return;
+        }
+
+        // 0x02 — Join room (bytes 2–7: 6-char ASCII room code)
+        if (sub === 0x02) {
+          if (raw.length < 8) return;
+          const roomCode = raw.slice(2, 8).toString('ascii').trim().toUpperCase();
+          const result = lobbyManager.joinLobby(roomCode, tgUserId, username, ws);
+
+          if (result === 'not_found') {
+            ws.send(buildJoinErrorPacket(0x01));
+            return;
+          }
+          if (result === 'in_progress') {
+            ws.send(buildJoinErrorPacket(0x02));
+            return;
+          }
+          if (result === 'full') {
+            ws.send(buildJoinErrorPacket(0x03));
+            return;
+          }
+
+          // Success — send authoritative slot to this client, then broadcast
+          ws.playerSlotId = result.userIdToSlot.get(tgUserId)!;
+          ws.send(buildSlotAssignedPacket(ws.playerSlotId));
+          lobbyManager.broadcastRoomUpdate(result);
+          logger.info(`[WS] Join room ${roomCode} → slot=${ws.playerSlotId} (userId=${tgUserId})`);
+          return;
+        }
+
+        return;
+      }
+
+      // Future opcodes (0x11 movement, 0x12 start, etc.) handled in later phases
     });
 
     ws.on('close', () => {
       clearTimeout(handshakeTimer);
-      logger.info({ tgUserId: ws.tgUserId, username: ws.username }, 'WS connection closed');
+
+      if (ws.tgUserId !== undefined) {
+        // Pass the closing socket so removePlayer can skip stale close events
+        // from reconnecting clients (reconnect-race guard).
+        const updatedLobby = lobbyManager.removePlayer(ws.tgUserId, ws);
+        if (updatedLobby) {
+          lobbyManager.broadcastRoomUpdate(updatedLobby);
+        }
+      }
     });
 
-    ws.on('error', (err) => {
-      clearTimeout(handshakeTimer);
-      logger.error({ err, tgUserId: ws.tgUserId }, 'WS socket error');
+    ws.on('error', (err: Error) => {
+      logger.error(`[WS] Socket error (userId=${ws.tgUserId ?? 'unauthenticated'}): ${err.message}`);
     });
   });
 
-  logger.info({ path: WS_PATH }, 'WebSocket server attached');
   return wss;
 }

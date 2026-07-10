@@ -789,3 +789,31 @@
 
 **State to restore**
 - None.
+
+---
+
+### 2026-07-10 — Phase 2: lobby manager, room codes, lobby UI
+
+**Done**
+- `artifacts/api-server/src/ws/lobby.ts` — new `LobbyManager` class: room code generation (32-char alphabet `ABCDEFGHJKLMNPQRSTUVWXYZ23456789`, 6 chars), slot assignment (0–14), host migration on disconnect, reconnect-race guard (stale socket close guard by comparing ws reference), `broadcastRoomUpdate`, `buildRoomUpdatePacket`, `buildJoinErrorPacket`, `buildSlotAssignedPacket`.
+- `artifacts/api-server/src/ws/wsServer.ts` — wired `0x10` opcode: sub `0x01` create, sub `0x02` join. Sends `0x10 0x05` slot-assignment packet to the joining client before broadcast. Added per-socket error listener. Disconnect cleanup passes closing ws reference to prevent race evictions.
+- `artifacts/telegram-game/src/context/GameContext.tsx` — replaces old `WsManager`+`useGameSocket` pattern. Manages WebSocket lifecycle, exposes `GameState` and `GameActions` (`createRoom`, `joinRoom`) via context. Handles opcodes: `0x00` auth failure, `0x01` handshake ACK, `0x10/0x03` room update, `0x10/0x04` join error, `0x10/0x05` authoritative slot assignment.
+- `artifacts/telegram-game/src/pages/Lobby.tsx` — new lobby screen: create room button, 6-char room code join form, room code display, live player list with slot badges, host label, "Start Game" button (host only, disabled < 2 players), connecting spinner, error banner.
+- `artifacts/telegram-game/src/App.tsx` — replaced `WsManager` with `GameProvider`, added phase-gated `/game` route (only shows `GameMap` when `phase === 'playing'`, falls back to `Lobby`).
+- Both packages pass `tsc --noEmit` with zero errors.
+
+**Decisions & gotchas**
+- Slot authority: handshake ACK `0x01` sends placeholder slot `0` (spec requirement); real per-client slot arrives via `0x10 0x05` immediately after create/join, before the room update broadcast. Client stores `mySlot` only from `0x10 0x05`.
+- Room update packet `0x10 0x03` layout: `[opcode, sub, playerCount, hostSlot, 6-byte ASCII code, (slot, usernameLen, username…) × N]` — same packet sent to all members.
+- `0x10 0x05` is an extension not in the raw GAME_SPEC.md (which reused `0x01`). Added to avoid the opcode collision noted in GAME_SPEC.md §6.
+- Reconnect-race guard: `removePlayer(tgUserId, closingWs)` skips eviction if the lobby's registered socket for that slot is no longer `closingWs`.
+- `LobbyManager` is a module-level singleton in `wsServer.ts`. In-memory only — all lobbies lost on server restart.
+
+**Left off / next steps**
+- Phase 3: `0x11` movement, server-side collision validation, 25Hz `0xFF` delta broadcast, client prediction + snap correction.
+- Phase 3 also: `0x12` start game → role assignment → `0x1A` role reveal → WAITING→SPAWN→ROAMING.
+- Start Game button in Lobby.tsx has no click handler yet — wire to `0x12` in Phase 3.
+- `artifacts/telegram-game/src/hooks/useGameSocket.ts` is now orphaned by GameContext — safe to delete.
+
+**State to restore**
+- None. All changes are committed-ready.
