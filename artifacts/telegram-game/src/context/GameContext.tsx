@@ -60,6 +60,16 @@ export interface VoteResultInfo {
   winner: 'crewmates' | 'impostors' | null;
 }
 
+/**
+ * A task assigned to this crewmate (Phase 7 — GAME_SPEC.md §10).
+ * `completedSteps` is incremented optimistically on the client when the player
+ * finishes a minigame step; the server is authoritative for global progress.
+ */
+export interface MyTask {
+  taskId: number;
+  completedSteps: number;
+}
+
 export interface GameState {
   phase: GamePhase;
   mySlot: number | null;
@@ -81,6 +91,10 @@ export interface GameState {
   hasVoted: boolean;
   /** Non-null right after a meeting concludes or a kill ends the game — drives the result/game-over overlay. */
   voteResult: VoteResultInfo | null;
+  /** Crewmate's assigned tasks (empty for impostors, populated by 0x1D packet). */
+  myTasks: MyTask[];
+  /** Global task completion 0–100 (broadcast by server on each step completion). */
+  globalTaskProgress: number;
 }
 
 export interface GameActions {
@@ -99,6 +113,11 @@ export interface GameActions {
   castVote: (targetSlot: number) => void;
   /** Dismiss the vote-result overlay after a meeting concludes without ending the game. */
   clearVoteResult: () => void;
+  /**
+   * Mark a minigame step as done (Phase 7). Optimistically updates local task
+   * progress and sends [0x15, 0x03, taskId, stepIndex] to the server.
+   */
+  completeTaskStep: (taskId: number, stepIndex: number) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -115,6 +134,8 @@ const DEFAULT_STATE: GameState = {
   meeting: null,
   hasVoted: false,
   voteResult: null,
+  myTasks: [],
+  globalTaskProgress: 0,
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -130,6 +151,7 @@ const GameActionsCtx = createContext<GameActions>({
   callEmergencyMeeting: () => {},
   castVote: () => {},
   clearVoteResult: () => {},
+  completeTaskStep: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -251,6 +273,19 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [], deadSlots: [0],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 7 — crewmate with tasks assigned; task progress bar visible.
+  'task-playing': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      myTasks: [
+        { taskId: 0, completedSteps: 0 },
+        { taskId: 2, completedSteps: 1 },
+      ],
+      globalTaskProgress: 30,
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
@@ -484,6 +519,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     setState(s => ({ ...s, voteResult: null }));
   }, []);
 
+  const completeTaskStep = useCallback((taskId: number, stepIndex: number) => {
+    // Always send — server validates proximity/role/order and rejects if invalid.
+    send([0x15, 0x03, taskId, stepIndex]);
+    // Optimistic update: only advance local completedSteps if the game is still
+    // in a valid state. This prevents desync when a meeting races with completion.
+    setState(s => {
+      if (s.meeting !== null) return s; // meeting started concurrently; server will reject
+      if (mySlotRef.current !== null && s.deadSlots.includes(mySlotRef.current)) return s;
+      return {
+        ...s,
+        myTasks: s.myTasks.map(t =>
+          t.taskId === taskId
+            ? { ...t, completedSteps: Math.max(t.completedSteps, stepIndex + 1) }
+            : t
+        ),
+      };
+    });
+  }, [send]);
+
   useEffect(() => {
     // ── Dev mock mode: skip the real socket, force a fixed visual state ────
     const mock = getMockPreset();
@@ -598,6 +652,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           meeting: null,
           hasVoted: false,
           voteResult: null,
+          myTasks: [],
+          globalTaskProgress: 0,
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
@@ -636,6 +692,32 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           ));
           return;
         }
+
+        // 0x03 — Task progress broadcast (S→C, 3 bytes): [0x15, 0x03, progressPercent]
+        // Phase 7: server broadcasts updated global task completion after each step.
+        // 3-byte length distinguishes this from C→S task-step (4 bytes).
+        if (sub === 0x03 && event.data.byteLength === 3) {
+          const percent = view.getUint8(2);
+          setState(s => ({ ...s, globalTaskProgress: percent }));
+          return;
+        }
+
+        return;
+      }
+
+      // ── 0x1D: task assignment (S→C, crewmates only) ─────────────────────
+      // Phase 7: layout [0x1D, taskCount, taskId_0, taskId_1, ...]
+      if (opcode === 0x1D && event.data.byteLength >= 2) {
+        const taskCount = view.getUint8(1);
+        const taskIds: number[] = [];
+        for (let i = 0; i < taskCount && 2 + i < event.data.byteLength; i++) {
+          taskIds.push(view.getUint8(2 + i));
+        }
+        setState(s => ({
+          ...s,
+          myTasks: taskIds.map(id => ({ taskId: id, completedSteps: 0 })),
+        }));
+        console.log(`[WS] 📋 Tasks assigned: [${taskIds.join(', ')}]`);
         return;
       }
 
@@ -709,6 +791,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const actions: GameActions = {
     createRoom, joinRoom, startGame, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
+    completeTaskStep,
   };
 
   return (

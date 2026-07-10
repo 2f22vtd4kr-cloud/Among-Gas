@@ -37,6 +37,8 @@ import {
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import TaskMinigame from '../components/TaskMinigame';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -97,9 +99,9 @@ export default function GameMap() {
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
-    meeting, hasVoted, voteResult,
+    meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
   } = useGameState();
-  const { sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult } = useGameActions();
+  const { sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep } = useGameActions();
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -209,6 +211,46 @@ export default function GameMap() {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amIImpostor, amIDead]);
+
+  // ── Task system (Phase 7) ─────────────────────────────────────────────────
+  // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
+  const myTasksRef = useRef(myTasks);
+  useEffect(() => { myTasksRef.current = myTasks; }, [myTasks]);
+
+  /** Closest in-range incomplete task (null when nothing is nearby). */
+  const [nearestTask, setNearestTask] = useState<{ taskId: number; stepIndex: number } | null>(null);
+  /** Which task minigame is currently open (null = none). */
+  const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+
+  // Auto-close the task panel whenever the game enters a state where task
+  // interaction is invalid: meeting in progress, player dead, or game over.
+  useEffect(() => {
+    if (meeting !== null || amIDead || voteResult?.winner) setActiveTaskId(null);
+  }, [meeting, amIDead, voteResult?.winner]);
+
+  useEffect(() => {
+    if (amIDead || meeting !== null || myRole !== 'crewmate') { setNearestTask(null); return; }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      if (!myPos) return;
+      let best: { taskId: number; stepIndex: number } | null = null;
+      let bestDistSq = TASK_INTERACTION_RANGE_PX * TASK_INTERACTION_RANGE_PX;
+      for (const t of myTasksRef.current) {
+        const def = TASK_DEFS[t.taskId];
+        if (!def || t.completedSteps >= def.steps) continue;
+        const dx = def.x - myPos.x;
+        const dy = def.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) {
+          best = { taskId: t.taskId, stepIndex: t.completedSteps };
+          bestDistSq = distSq;
+        }
+      }
+      setNearestTask(best);
+    }, 150);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amIDead, meeting, myRole]);
 
   // ── Role reveal overlay ───────────────────────────────────────────────────
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
@@ -487,6 +529,50 @@ export default function GameMap() {
         }
       }
 
+      // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
+      {
+        const snap = myTasksRef.current;
+        if (snap.length > 0 && !meetingActiveRef.current) {
+          ctx.textAlign = 'center';
+          for (const t of snap) {
+            const def = TASK_DEFS[t.taskId];
+            if (!def) continue;
+            const done = t.completedSteps >= def.steps;
+            const tx = Math.round((def.x - srcX) * scale);
+            const ty = Math.round((def.y - srcY) * scale);
+            if (tx < -60 || tx > cw + 60 || ty < -60 || ty > ch + 60) continue;
+            const markerR = Math.round(9 * dpr);
+            // Glow ring
+            ctx.beginPath();
+            ctx.arc(tx, ty, markerR + 3, 0, Math.PI * 2);
+            ctx.fillStyle = done ? 'rgba(50,180,50,0.2)' : 'rgba(255,220,40,0.18)';
+            ctx.fill();
+            // Marker circle
+            ctx.beginPath();
+            ctx.arc(tx, ty, markerR, 0, Math.PI * 2);
+            ctx.fillStyle = done ? 'rgba(50,180,50,0.85)' : 'rgba(255,210,30,0.9)';
+            ctx.fill();
+            ctx.strokeStyle = done ? 'rgba(30,140,30,0.9)' : 'rgba(180,140,0,0.9)';
+            ctx.lineWidth = Math.round(1.5 * dpr);
+            ctx.stroke();
+            // Icon
+            ctx.fillStyle = done ? '#0d3b0d' : '#3b2a00';
+            ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
+            ctx.textBaseline = 'middle';
+            ctx.fillText(done ? '✓' : '!', tx, ty);
+            // Label
+            ctx.textBaseline = 'top';
+            ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
+            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+            ctx.lineWidth = Math.round(3 * dpr);
+            ctx.strokeText(def.name, tx, ty + markerR + 3);
+            ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
+            ctx.fillText(def.name, tx, ty + markerR + 3);
+          }
+          ctx.textAlign = 'left';
+        }
+      }
+
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
@@ -683,6 +769,23 @@ export default function GameMap() {
 
       {loaded && <Joystick keysRef={keysRef} />}
 
+      {/* ── Task progress bar — thin strip at top of screen (Phase 7) ──────── */}
+      {loaded && myRole !== null && meeting === null && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, height: 5, zIndex: 30,
+          background: 'rgba(0,0,0,0.35)', pointerEvents: 'none',
+        }}>
+          <div style={{
+            height: '100%', width: `${globalTaskProgress}%`,
+            background: globalTaskProgress >= 100
+              ? '#2ecc71'
+              : 'linear-gradient(90deg, #f1c40f, #2ecc71)',
+            transition: 'width 0.6s ease',
+            borderRadius: '0 3px 3px 0',
+          }} />
+        </div>
+      )}
+
       {loaded && (
         <div style={{
           position: 'fixed', bottom: 16, left: 16,
@@ -741,6 +844,28 @@ export default function GameMap() {
               ✎ Edit Collision
             </Link>
           )}
+        </div>
+      )}
+
+      {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
+      {loaded && !amIDead && meeting === null && activeTaskId === null && nearestTask !== null && (
+        <div style={{
+          position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+        }}>
+          <button
+            onClick={() => setActiveTaskId(nearestTask.taskId)}
+            style={{
+              padding: '10px 24px', borderRadius: 10,
+              background: 'rgba(28,110,200,0.9)', color: '#dff0ff',
+              border: '1px solid rgba(100,180,255,0.5)',
+              fontFamily: 'sans-serif', fontWeight: 700, fontSize: 13,
+              letterSpacing: '0.03em', cursor: 'pointer',
+              backdropFilter: 'blur(6px)',
+              boxShadow: '0 0 18px rgba(60,140,255,0.35)',
+            }}
+          >
+            ⚙ {TASK_DEFS[nearestTask.taskId]?.name ?? 'Task'}
+          </button>
         </div>
       )}
 
@@ -916,6 +1041,32 @@ export default function GameMap() {
           )}
         </div>
       )}
+
+      {/* ── Task minigame overlay (Phase 7) ─────────────────────────────────── */}
+      {activeTaskId !== null && (() => {
+        const myTask = myTasks.find(t => t.taskId === activeTaskId);
+        const def = TASK_DEFS[activeTaskId];
+        if (!myTask || !def || myTask.completedSteps >= def.steps) {
+          // Task is fully done or invalid — auto-close
+          setTimeout(() => setActiveTaskId(null), 0);
+          return null;
+        }
+        const stepIndex = myTask.completedSteps;
+        return (
+          <TaskMinigame
+            key={`${activeTaskId}-${stepIndex}`}
+            taskId={activeTaskId}
+            stepIndex={stepIndex}
+            onComplete={() => {
+              completeTaskStep(activeTaskId, stepIndex);
+              // If this was the last step, close the panel
+              if (stepIndex + 1 >= def.steps) setActiveTaskId(null);
+              // Otherwise keep open — key change will remount for next step
+            }}
+            onClose={() => setActiveTaskId(null)}
+          />
+        );
+      })()}
 
       {/* ── Game over overlay (Phase 6) ─────────────────────────────────────── */}
       {voteResult?.winner && (

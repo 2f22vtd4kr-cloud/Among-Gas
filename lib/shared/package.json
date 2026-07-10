@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./coords": "./src/coords.ts",
     "./collisionMap": "./src/collisionMap.ts",
-    "./collisionData": "./src/collisionData.ts"
+    "./collisionData": "./src/collisionData.ts",
+    "./tasks": "./src/tasks.ts"
   }
 }

@@ -18,6 +18,7 @@ import {
   LobbyManager,
   buildJoinErrorPacket,
   buildSlotAssignedPacket,
+  buildTaskProgressPacket,
 } from './lobby.js';
 import { logger } from '../lib/logger.js';
 import {
@@ -208,6 +209,25 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
             // favor immediately — check before waiting for a meeting.
             lobbyManager.checkWinAfterKill(lobby);
           }
+          return;
+        }
+
+        // 0x03 — Task Step (C→S, 4 bytes): [0x15, 0x03, taskId, stepIndex]
+        // Phase 7: crewmate completes one step of an assigned task.
+        // Packet length 4 distinguishes this from S→C progress broadcast (3 bytes).
+        if (sub === 0x03 && raw.length === 4) {
+          const taskId = raw.readUInt8(2);
+          const stepIndex = raw.readUInt8(3);
+          const accepted = lobbyManager.handleTaskStep(lobby, attackerSlot, taskId, stepIndex);
+          if (!accepted) return;
+          const percent = lobby.totalTaskSteps > 0
+            ? Math.round((lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100)
+            : 0;
+          const progressPacket = buildTaskProgressPacket(percent);
+          for (const p of lobby.players.values()) {
+            if (p.ws.readyState === /* OPEN */ 1) p.ws.send(progressPacket);
+          }
+          lobbyManager.checkWinAfterTask(lobby);
           return;
         }
 

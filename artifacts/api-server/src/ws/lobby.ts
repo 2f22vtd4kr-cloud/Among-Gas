@@ -26,6 +26,7 @@ import {
   canMoveTo,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
+import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -92,6 +93,8 @@ export interface LobbyPlayer {
   alive: boolean;
   /** Impostor-only kill cooldown, ms remaining. Decremented each delta tick. */
   killCooldownMs: number;
+  /** Task IDs assigned to this player at game start (empty for impostors). */
+  assignedTasks: number[];
 }
 
 /**
@@ -120,6 +123,10 @@ export interface Lobby {
   hostSlot: number;
   /** Non-null only while phase === 'MEETING'. */
   meeting: MeetingState | null;
+  /** Completed step keys: `"${slot}:${taskId}:${stepIndex}"`. Populated at game start. */
+  completedTaskSteps: Set<string>;
+  /** Total assigned task steps across all crewmates (denominator for progress). */
+  totalTaskSteps: number;
 }
 
 export const MAX_PLAYERS = 15;
@@ -222,6 +229,23 @@ export function buildVoteResultPacket(ejectedSlot: number, winFlag: 0 | 1 | 2): 
 }
 
 /**
+ * 0x1D — task assignment (S→C, crewmates only, sent right after 0x1A).
+ * Layout: [0x1D, taskCount, taskId_0, taskId_1, ...]
+ */
+export function buildTaskAssignPacket(taskIds: number[]): Buffer {
+  return Buffer.from([0x1D, taskIds.length, ...taskIds]);
+}
+
+/**
+ * 0x15 sub 0x03 — global task progress broadcast (S→C, 3 bytes).
+ * Layout: [0x15, 0x03, progressPercent]  (percent: 0–100)
+ * Distinguished from C→S task-step (4 bytes) by packet length.
+ */
+export function buildTaskProgressPacket(percent: number): Buffer {
+  return Buffer.from([0x15, 0x03, Math.max(0, Math.min(100, Math.round(percent)))]);
+}
+
+/**
  * 0xFF — delta sync broadcast
  *
  * Layout:
@@ -295,6 +319,7 @@ export class LobbyManager {
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
       role: 'crewmate', alive: true, killCooldownMs: 0,
+      assignedTasks: [],
     };
 
     const lobby: Lobby = {
@@ -303,6 +328,8 @@ export class LobbyManager {
       userIdToSlot: new Map([[tgUserId, 0]]),
       hostSlot: 0,
       meeting: null,
+      completedTaskSteps: new Set(),
+      totalTaskSteps: 0,
     };
 
     this.lobbies.set(code, lobby);
@@ -346,6 +373,7 @@ export class LobbyManager {
       lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
       lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
       role: 'crewmate', alive: true, killCooldownMs: 0,
+      assignedTasks: [],
     };
     lobby.players.set(slot, player);
     lobby.userIdToSlot.set(tgUserId, slot);
@@ -464,10 +492,30 @@ export class LobbyManager {
       p.lastBroadcastWireY = -100_000;
     });
 
+    // ── Phase 7: Task assignment ──────────────────────────────────────────────
+    // Each crewmate gets TASKS_PER_CREWMATE randomly-assigned tasks.
+    const allTaskIds = TASK_DEFS.map(t => t.id);
+    lobby.completedTaskSteps = new Set();
+    lobby.totalTaskSteps = 0;
+
+    for (const p of players) {
+      if (p.role !== 'crewmate') { p.assignedTasks = []; continue; }
+      const shuffled = [...allTaskIds];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+      p.assignedTasks = shuffled.slice(0, TASKS_PER_CREWMATE);
+      for (const tid of p.assignedTasks) {
+        lobby.totalTaskSteps += TASK_DEFS.find(t => t.id === tid)!.steps;
+      }
+    }
+
     lobby.phase = 'ROAMING';
     logger.info(
       `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +
-      `${impostorCount} impostor(s) (slots: ${impostorSlots.join(',')})`,
+      `${impostorCount} impostor(s) (slots: ${impostorSlots.join(',')}), ` +
+      `totalTaskSteps=${lobby.totalTaskSteps}`,
     );
 
     for (const p of players) {
@@ -477,6 +525,10 @@ export class LobbyManager {
             ? buildRoleRevealPacket(1, impostorSlots)
             : buildRoleRevealPacket(0),
         );
+        // Send task assignment only to crewmates (impostors never receive 0x1D)
+        if (p.role === 'crewmate' && p.assignedTasks.length > 0) {
+          p.ws.send(buildTaskAssignPacket(p.assignedTasks));
+        }
       }
     }
   }
@@ -518,6 +570,19 @@ export class LobbyManager {
   }
 
   /**
+   * After a task step completes, check whether every crewmate task is now done.
+   * If so, crewmates win immediately (Phase 7, GAME_SPEC.md §10).
+   */
+  checkWinAfterTask(lobby: Lobby): void {
+    if (lobby.phase !== 'ROAMING') return;
+    if (lobby.totalTaskSteps === 0) return;
+    if (lobby.completedTaskSteps.size < lobby.totalTaskSteps) return;
+    lobby.phase = 'GAMEOVER';
+    this._broadcastVoteResult(lobby, NO_TARGET, 1); // crewmates win
+    logger.info(`[Lobby] Crewmates win by tasks in ${lobby.code}`);
+  }
+
+  /**
    * After a kill lands, check whether it just tipped the alive-player parity
    * in the impostors' favor (or wiped them out). If so, end the game right
    * away rather than waiting for a meeting to notice.
@@ -529,6 +594,59 @@ export class LobbyManager {
     lobby.phase = 'GAMEOVER';
     this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
     logger.info(`[Lobby] Game over in ${lobby.code} after kill — winFlag=${winFlag}`);
+  }
+
+  // ── Tasks (Phase 7) ──────────────────────────────────────────────────────────
+
+  /**
+   * Validate and record a completed task step (GAME_SPEC.md §10, Phase 7).
+   * Returns true if the step was accepted; caller should then broadcast progress
+   * and call checkWinAfterTask.
+   *
+   * Validation rules:
+   *   - Lobby must be ROAMING
+   *   - Player must be alive crewmate with this task assigned
+   *   - stepIndex must be the next pending step (all prior steps done)
+   *   - Step must not already be completed
+   */
+  handleTaskStep(lobby: Lobby, playerSlot: number, taskId: number, stepIndex: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+
+    const player = lobby.players.get(playerSlot);
+    if (!player || !player.alive || player.role !== 'crewmate') return false;
+    if (!player.assignedTasks.includes(taskId)) return false;
+
+    const def = TASK_DEFS.find(t => t.id === taskId);
+    if (!def || stepIndex < 0 || stepIndex >= def.steps) return false;
+
+    // Server-side proximity check: authoritative player position vs task console.
+    // Prevents a forged client from completing tasks from anywhere on the map.
+    const dx = player.x - def.x;
+    const dy = player.y - def.y;
+    if (dx * dx + dy * dy > TASK_INTERACTION_RANGE_PX * TASK_INTERACTION_RANGE_PX) {
+      logger.debug(
+        `[Lobby] Task step rejected (out of range): slot=${playerSlot} ` +
+        `taskId=${taskId} dist=${Math.sqrt(dx * dx + dy * dy).toFixed(0)} ` +
+        `range=${TASK_INTERACTION_RANGE_PX}`,
+      );
+      return false;
+    }
+
+    // Steps must be completed in order
+    for (let i = 0; i < stepIndex; i++) {
+      if (!lobby.completedTaskSteps.has(`${playerSlot}:${taskId}:${i}`)) return false;
+    }
+
+    const key = `${playerSlot}:${taskId}:${stepIndex}`;
+    if (lobby.completedTaskSteps.has(key)) return false; // already done
+
+    lobby.completedTaskSteps.add(key);
+    logger.info(
+      `[Lobby] Task step in ${lobby.code}: slot=${playerSlot} ` +
+      `taskId=${taskId} step=${stepIndex} ` +
+      `(${lobby.completedTaskSteps.size}/${lobby.totalTaskSteps})`,
+    );
+    return true;
   }
 
   // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
