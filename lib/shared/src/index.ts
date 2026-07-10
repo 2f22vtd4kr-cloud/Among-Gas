@@ -9,6 +9,8 @@ export {
   canMoveTo,
   resolveMovement,
   ZONES,
+  KILL_RANGE_PX,
+  REPORT_RANGE_PX,
 } from './collisionMap.js';
 export type { Grid, Zone, ZoneName } from './collisionMap.js';
 
@@ -19,4 +21,8 @@ export {
   toWire,
   fromWire,
   DELTA_THRESHOLD_SQ,
+  KILL_COOLDOWN_MS,
+  MEETING_DISCUSSION_MS,
+  MEETING_VOTING_MS,
+  NO_TARGET,
 } from './coords.js';

@@ -41,6 +41,15 @@ export const CELL = (_CELL * MAP_W) / (COLS * _CELL); // same as MAP_W/COLS
  */
 export const KILL_RANGE_PX = Math.round(CELL_X * 1.5);
 
+/**
+ * Phase 6 — report-body range, in pixels, shared between client (report
+ * button proximity check) and server (authoritative report validation).
+ * No physical "body prop" exists on the map yet (GAME_SPEC.md §11 known
+ * deviation): a dead player's live ghost position stands in for the body,
+ * so this is set a bit wider than kill range to make bodies easy to find.
+ */
+export const REPORT_RANGE_PX = Math.round(CELL_X * 2.5);
+
 export type Grid = Uint8Array;
 
 /** Decode the RLE-encoded pixel-accurate grid produced from the reference image. */

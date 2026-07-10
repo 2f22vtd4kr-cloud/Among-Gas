@@ -13,7 +13,11 @@ import React, {
   useState,
   useCallback,
 } from 'react';
-import { fromWire, MAP_W, MAP_H, KILL_COOLDOWN_MS } from '@workspace/shared/coords';
+import {
+  fromWire, MAP_W, MAP_H, KILL_COOLDOWN_MS,
+  MEETING_DISCUSSION_MS, MEETING_VOTING_MS, NO_TARGET,
+} from '@workspace/shared/coords';
+import { PLAYER_SPAWN } from '../game/player';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +39,27 @@ export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
 
 export type PlayerRole = 'crewmate' | 'impostor';
 
+/**
+ * Active meeting (Phase 6 — GAME_SPEC.md §6/§9). Set on the 0x1B receipt,
+ * cleared on 0x1C. Timing is client-mirrored from `startedAtMs` using the
+ * same MEETING_DISCUSSION_MS/MEETING_VOTING_MS constants the server uses to
+ * gate votes, so the countdown UI lines up with server enforcement.
+ */
+export interface MeetingInfo {
+  reporterSlot: number;
+  /** NO_TARGET (0xFF) = emergency button, no specific body. */
+  bodySlot: number;
+  /** performance.now()-style client timestamp when 0x1B was received. */
+  startedAtMs: number;
+}
+
+/** Result of the most recently concluded meeting or kill-triggered game end. */
+export interface VoteResultInfo {
+  /** NO_TARGET (0xFF) if no one was ejected. */
+  ejectedSlot: number;
+  winner: 'crewmates' | 'impostors' | null;
+}
+
 export interface GameState {
   phase: GamePhase;
   mySlot: number | null;
@@ -46,10 +71,16 @@ export interface GameState {
   myRole: PlayerRole | null;
   /** Fellow impostor slots — only populated when myRole === 'impostor'. */
   impostorSlots: number[];
-  /** Slots killed this game (GAME_SPEC.md §9 — 0x15 sub 0x01 broadcast). Reset on role reveal. */
+  /** Slots killed or ejected this game. Reset on role reveal. */
   deadSlots: number[];
   /** Impostor-only kill cooldown countdown, ms. 0 = ready to kill. Client-side display estimate. */
   killCooldownMs: number;
+  /** Non-null while a meeting (discussion or voting) is in progress. */
+  meeting: MeetingInfo | null;
+  /** True once this client has cast its vote for the current meeting. */
+  hasVoted: boolean;
+  /** Non-null right after a meeting concludes or a kill ends the game — drives the result/game-over overlay. */
+  voteResult: VoteResultInfo | null;
 }
 
 export interface GameActions {
@@ -60,6 +91,14 @@ export interface GameActions {
   sendMove: (wireX: number, wireY: number) => void;
   /** Send a 0x15 sub 0x01 Kill RPC (impostor only; server re-validates). */
   sendKill: (victimSlot: number) => void;
+  /** Send a 0x13 Report Body packet for a specific dead slot. */
+  reportBody: (bodySlot: number) => void;
+  /** Send a 0x13 Report packet with bodySlot = NO_TARGET (emergency button). */
+  callEmergencyMeeting: () => void;
+  /** Send a 0x14 Vote packet (targetSlot = NO_TARGET to skip). */
+  castVote: (targetSlot: number) => void;
+  /** Dismiss the vote-result overlay after a meeting concludes without ending the game. */
+  clearVoteResult: () => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -73,6 +112,9 @@ const DEFAULT_STATE: GameState = {
   impostorSlots: [],
   deadSlots: [],
   killCooldownMs: 0,
+  meeting: null,
+  hasVoted: false,
+  voteResult: null,
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -84,6 +126,10 @@ const GameActionsCtx = createContext<GameActions>({
   startGame: () => {},
   sendMove: () => {},
   sendKill: () => {},
+  reportBody: () => {},
+  callEmergencyMeeting: () => {},
+  castVote: () => {},
+  clearVoteResult: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -207,6 +253,71 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       myRole: 'crewmate', impostorSlots: [], deadSlots: [0],
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 6 — a dead body is nearby, report prompt should appear.
+  // Positioned relative to PLAYER_SPAWN (not MAP_W/2, unlike MOCK_REMOTE_POSITIONS
+  // above) since the local player's real physics position starts at spawn, and
+  // the report-proximity check reads the live playerStateRef, not a mock override.
+  'report-ready': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+    },
+    remotePlayers: [
+      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // in report range
+      { slot: 2, x: PLAYER_SPAWN.x - 90, y: PLAYER_SPAWN.y + 60 },
+      { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
+    ],
+  },
+  // Phase 6 — meeting just started, discussion window (no voting yet).
+  'meeting-discussion': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      meeting: { reporterSlot: 2, bodySlot: 1, startedAtMs: Date.now() },
+      hasVoted: false,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 6 — voting window open (discussion timer already elapsed).
+  'meeting-voting': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      meeting: { reporterSlot: 2, bodySlot: NO_TARGET, startedAtMs: Date.now() - MEETING_DISCUSSION_MS - 1000 },
+      hasVoted: false,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 6 — meeting concluded, someone was ejected, game continues.
+  'meeting-result': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1, 3],
+      meeting: null, voteResult: { ejectedSlot: 3, winner: null },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 6 — game over: crewmates win.
+  'gameover-crew': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      meeting: null, voteResult: { ejectedSlot: 1, winner: 'crewmates' },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 6 — game over: impostors win.
+  'gameover-impostor': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], deadSlots: [1, 2],
+      meeting: null, voteResult: { ejectedSlot: NO_TARGET, winner: 'impostors' },
+    },
+    remotePlayers: [
+      { slot: 2, x: MAP_W / 2 - 90, y: MAP_H / 2 + 60 },
+      { slot: 3, x: MAP_W / 2 + 30, y: MAP_H / 2 + 140 },
+    ],
   },
 };
 
@@ -356,6 +467,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     send([0x15, 0x01, victimSlot]);
   }, [send]);
 
+  const reportBody = useCallback((bodySlot: number) => {
+    send([0x13, bodySlot]);
+  }, [send]);
+
+  const callEmergencyMeeting = useCallback(() => {
+    send([0x13, NO_TARGET]);
+  }, [send]);
+
+  const castVote = useCallback((targetSlot: number) => {
+    setState(s => (s.hasVoted ? s : { ...s, hasVoted: true }));
+    send([0x14, targetSlot]);
+  }, [send]);
+
+  const clearVoteResult = useCallback(() => {
+    setState(s => ({ ...s, voteResult: null }));
+  }, []);
+
   useEffect(() => {
     // ── Dev mock mode: skip the real socket, force a fixed visual state ────
     const mock = getMockPreset();
@@ -467,6 +595,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           ...s, phase: 'playing', myRole, impostorSlots,
           deadSlots: [],
           killCooldownMs: 0,
+          meeting: null,
+          hasVoted: false,
+          voteResult: null,
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
@@ -507,6 +638,41 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
         return;
       }
+
+      // ── 0x1B: meeting start ──────────────────────────────────────────────
+      // Layout: [0x1B, reporterSlot, bodySlot]
+      if (opcode === 0x1B && event.data.byteLength >= 3) {
+        const reporterSlot = view.getUint8(1);
+        const bodySlot = view.getUint8(2);
+        setState(s => ({
+          ...s,
+          meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
+          hasVoted: false,
+          voteResult: null,
+        }));
+        return;
+      }
+
+      // ── 0x1C: vote result / eject (also used for a kill-triggered end) ──
+      // Layout: [0x1C, ejectedSlot, winFlag]  (winFlag: 0 none, 1 crew, 2 impostor)
+      if (opcode === 0x1C && event.data.byteLength >= 3) {
+        const ejectedSlot = view.getUint8(1);
+        const winByte = view.getUint8(2);
+        const winner: 'crewmates' | 'impostors' | null =
+          winByte === 1 ? 'crewmates' : winByte === 2 ? 'impostors' : null;
+
+        setState(s => ({
+          ...s,
+          meeting: null,
+          deadSlots: ejectedSlot !== NO_TARGET && !s.deadSlots.includes(ejectedSlot)
+            ? [...s.deadSlots, ejectedSlot]
+            : s.deadSlots,
+          voteResult: { ejectedSlot, winner },
+        }));
+        return;
+      }
+
+      return;
     };
 
     ws.onclose = () => {
@@ -535,7 +701,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [state.phase, state.myRole, state.killCooldownMs > 0]);
 
-  const actions: GameActions = { createRoom, joinRoom, startGame, sendMove, sendKill };
+  const actions: GameActions = {
+    createRoom, joinRoom, startGame, sendMove, sendKill,
+    reportBody, callEmergencyMeeting, castVote, clearVoteResult,
+  };
 
   return (
     <GameStateCtx.Provider value={state}>

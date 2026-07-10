@@ -26,6 +26,26 @@
 
 ## Sessions
 
+### 2026-07-10 — Phase 6 completion: meetings & voting (client-side)
+
+**Done**
+- Finished the client half of Phase 6 (server-side lobby/vote logic was already complete from an earlier session): `artifacts/telegram-game/src/context/GameContext.tsx` and `artifacts/telegram-game/src/pages/GameMap.tsx`.
+- `GameContext.tsx`: added `MeetingInfo`/`VoteResultInfo` types, `meeting`/`hasVoted`/`voteResult` state, `reportBody`/`callEmergencyMeeting`/`castVote`/`clearVoteResult` actions (0x13/0x14 wire sends), 0x1B/0x1C `onmessage` handlers, six new `MOCK_PRESETS` (`report-ready`, `meeting-discussion`, `meeting-voting`, `meeting-result`, `gameover-crew`, `gameover-impostor`).
+- `GameMap.tsx`: Report/Emergency buttons, meeting overlay (discussion countdown → voting list with per-player vote buttons + Skip, spectator note for dead players), ejection/no-ejection auto-dismiss banner, full-screen Game Over overlay with "Back to Lobby" (reload), movement freeze during meetings (swap in an empty `Set` for `keysRef.current` in the physics step).
+- Verified with `tsc --noEmit` (clean), mock-preset screenshots for every new screen, and a live two-lobby raw-WebSocket smoke test (3 real WS clients per lobby, DEV_MODE JSON auth) exercising: emergency meeting → skip-all vote → no ejection (`winFlag=0`); a second meeting with a plurality vote → ejection + immediate win via tally (`winFlag=2`); and a kill that tips alive-player parity → immediate `0x1C` win with no meeting (`checkWinAfterKill`, `ejectedSlot=NO_TARGET`). All wire payloads matched client-side parsing expectations.
+- Added `GAME_SPEC.md` §14 items #13/#14 documenting two intentional deviations (see below) and marked the §13 Phase 6 roadmap checklist complete.
+
+**Decisions & gotchas**
+- Report/Emergency are both wired through the same 0x13 opcode; the emergency variant is client-only "no specific body" (`bodySlot = NO_TARGET`) — there is no dedicated map "body" prop/asset. A dead player's own sprite is the reportable body until reported, per `GAME_SPEC.md` §14 #13.
+- Mock proximity presets that place remote players must anchor to the real local-player spawn (`PLAYER_SPAWN` from `game/player.ts`), not the shared `MOCK_REMOTE_POSITIONS` constant's map-center convention used by most other presets — the local player's physics state actually spawns near `PLAYER_SPAWN`, so any preset gating a UI element on proximity to the local player needs its own spawn-relative coordinates, not the shared constant.
+- Live WS testing a proximity-gated server action (e.g. kill) requires first sending real `0x11` move packets to put both players' server-side positions in range — spawn-scatter positions from `computeSpawnPosition` are not close enough by default, so a naive test script will silently time out waiting for a broadcast that the server never sends (it fails the range check with no log line).
+
+**Left off / next steps**
+- Phase 6 is complete end-to-end (server + client). Phase 7 (Tasks) is next per `GAME_SPEC.md` §13.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Re-import repair: re-registered artifacts, installed deps
 
 **Done**

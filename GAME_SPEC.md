@@ -560,11 +560,11 @@ Ordered by dependency. Each step is independently shippable and testable.
 3. Ghost mode rendering (dead players walk through walls, translucent).
 4. Kill cooldown timer UI.
 
-### Phase 6 — Meetings & Voting
-1. Report body (0x13) / Emergency button.
-2. Meeting overlay (discussion timer → voting UI).
-3. Vote packets (0x14) + server tally → 0x1C eject result.
-4. Eject animation + return to ROAMING.
+### Phase 6 — Meetings & Voting ✅ (2026-07-10)
+1. Report body (0x13) / Emergency button. ✅ — see §14 #13/#14 for the two implementation deviations.
+2. Meeting overlay (discussion timer → voting UI). ✅
+3. Vote packets (0x14) + server tally → 0x1C eject result. ✅ — also reused (ejectedSlot = NO_TARGET) for an immediate post-kill win check, so a kill that tips alive-player parity ends the game without waiting for a meeting.
+4. Eject animation + return to ROAMING. ✅ — non-win eject/no-eject renders as an auto-dismissing banner; a win renders a persistent Game Over overlay instead of returning to ROAMING.
 
 ### Phase 7 — Tasks
 1. Task assignment at game start.
@@ -604,3 +604,5 @@ This section documents issues in the source spec documents that are corrected in
 | 10 | Spec's "HTML5 client.js" describes a blank canvas | Our existing React/Canvas engine replaces it; canvas layers formalized in §11 |
 | 11 | No spec for `EJECTION` → vision spec during meetings | Meeting block: camera zooms to table, movement disabled, voting UI shown |
 | 12 | `handleGameStart` stub — no actual role shuffle | Full role assignment with information asymmetry in §8 |
+| 13 | Spec assumes a static "body" prop placed on the map at the kill location | Not implemented (no dedicated body prop/asset); Report instead scans nearby dead players' last known slot within `REPORT_RANGE_PX` and reports that slot directly. Functionally equivalent (same 0x13 payload, same server validation) but there is no persistent visual corpse on the map — a dead player's own sprite becomes the reportable "body" until reported. |
+| 14 | Spec ties the Emergency button to a physical map prop (e.g. a table/button object) | Implemented as an always-available UI button for any alive player once `ROAMING`, with no map-position requirement. Server-side validation is unaffected (`bodySlot = NO_TARGET`); this only changes the client affordance, trading a map prop for simpler/faster access on mobile. |

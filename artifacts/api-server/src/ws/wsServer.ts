@@ -204,10 +204,46 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           if (applied) {
             lobbyManager.broadcastKill(lobby, victimSlot, attackerSlot);
             logger.info(`[WS] Kill in ${lobby.code}: slot=${attackerSlot} → slot=${victimSlot}`);
+            // Phase 6: a kill can tip alive-player parity in the impostors'
+            // favor immediately — check before waiting for a meeting.
+            lobbyManager.checkWinAfterKill(lobby);
           }
           return;
         }
 
+        return;
+      }
+
+      // ── 0x13: Report Body / Emergency Meeting (C→S) ──────────────────────
+      // Layout: [0x13, bodySlot]  (bodySlot = 0xFF for the emergency button)
+      if (opcode === 0x13) {
+        if (raw.length !== 2) return;
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const reporterSlot = lobby.userIdToSlot.get(tgUserId);
+        if (reporterSlot === undefined) return;
+
+        const bodySlot = raw.readUInt8(1);
+        const started = lobbyManager.callMeeting(lobby, reporterSlot, bodySlot);
+        if (started) {
+          logger.info(`[WS] Meeting called in ${lobby.code} by slot=${reporterSlot}`);
+        }
+        return;
+      }
+
+      // ── 0x14: Vote (C→S) ──────────────────────────────────────────────────
+      // Layout: [0x14, targetSlot]  (targetSlot = 0xFF to skip)
+      if (opcode === 0x14) {
+        if (raw.length !== 2) return;
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const voterSlot = lobby.userIdToSlot.get(tgUserId);
+        if (voterSlot === undefined) return;
+
+        const targetSlot = raw.readUInt8(1);
+        lobbyManager.castVote(lobby, voterSlot, targetSlot);
         return;
       }
 

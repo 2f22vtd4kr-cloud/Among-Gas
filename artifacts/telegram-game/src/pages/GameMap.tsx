@@ -4,6 +4,7 @@ import {
   COLS, ROWS, CELL_X, CELL_Y,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
+  REPORT_RANGE_PX,
   ZONES,
 } from '../game/collisionMap';
 import {
@@ -30,7 +31,15 @@ import {
   useRemotePlayersRef,
   useCorrectionRef,
 } from '@/context/GameContext';
-import { toWire } from '@workspace/shared/coords';
+import {
+  toWire,
+  NO_TARGET,
+  MEETING_DISCUSSION_MS,
+  MEETING_VOTING_MS,
+} from '@workspace/shared/coords';
+
+/** Empty key set used to force-freeze local movement during a meeting. */
+const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 const ZOOM = 0.7;
@@ -86,8 +95,16 @@ export default function GameMap() {
   const correctionRef = useCorrectionRef();
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
-  const { mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs } = useGameState();
-  const { sendKill } = useGameActions();
+  const {
+    mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
+    meeting, hasVoted, voteResult,
+  } = useGameState();
+  const { sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult } = useGameActions();
+
+  const playerName = useCallback(
+    (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
+    [players],
+  );
 
   const mySlotRef = useRef<number | null>(mySlot);
   useEffect(() => { mySlotRef.current = mySlot; }, [mySlot]);
@@ -111,6 +128,59 @@ export default function GameMap() {
 
   const amIDead = mySlot !== null && deadSlots.includes(mySlot);
   const amIImpostor = myRole === 'impostor';
+
+  // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
+  // Movement freezes for everyone while a meeting is in progress — the server
+  // already ignores 0x11 outside ROAMING, this just keeps the local sprite
+  // from drifting through walls with no server correction to pull it back.
+  const meetingActiveRef = useRef(false);
+  useEffect(() => { meetingActiveRef.current = meeting !== null; }, [meeting]);
+
+  // Nearest reportable body within range — recomputed a few times/sec, same
+  // pattern as the impostor's nearestTarget kill check below.
+  const [nearestBody, setNearestBody] = useState<number | null>(null);
+  useEffect(() => {
+    if (amIDead || meeting !== null) { setNearestBody(null); return; }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      if (!myPos) return;
+      let best: number | null = null;
+      let bestDistSq = REPORT_RANGE_PX * REPORT_RANGE_PX;
+      for (const rp of remotePlayersRef.current.values()) {
+        if (!deadSlotsRef.current.has(rp.slot)) continue;
+        const dx = rp.x - myPos.x;
+        const dy = rp.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) { best = rp.slot; bestDistSq = distSq; }
+      }
+      setNearestBody(best);
+    }, 150);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amIDead, meeting]);
+
+  // Local countdown clock for the meeting overlay, ticked independently of
+  // the canvas rAF loop (this UI lives outside the canvas).
+  const [meetingNow, setMeetingNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!meeting) return;
+    const id = setInterval(() => setMeetingNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [meeting]);
+
+  const meetingElapsedMs = meeting ? meetingNow - meeting.startedAtMs : 0;
+  const inDiscussion = meeting ? meetingElapsedMs < MEETING_DISCUSSION_MS : false;
+  const meetingRemainingMs = meeting
+    ? Math.max(0, (inDiscussion ? MEETING_DISCUSSION_MS : MEETING_DISCUSSION_MS + MEETING_VOTING_MS) - meetingElapsedMs)
+    : 0;
+
+  // Auto-dismiss the "ejected / no one ejected" banner after a few seconds.
+  // Game-over results (voteResult.winner set) stay until the player reloads.
+  useEffect(() => {
+    if (!voteResult || voteResult.winner) return;
+    const t = setTimeout(() => clearVoteResult(), 4000);
+    return () => clearTimeout(t);
+  }, [voteResult, clearVoteResult]);
 
   // Nearest killable target within range, recomputed a few times/sec for the
   // kill-button UI. Recomputation lives outside the rAF loop since it only
@@ -320,8 +390,10 @@ export default function GameMap() {
       }
 
       // Step player physics. Dead players (ghosts) walk through walls.
+      // Movement freezes entirely during a meeting (server ignores 0x11 too).
+      const effectiveKeys = meetingActiveRef.current ? EMPTY_KEYS : keysRef.current;
       playerStateRef.current = stepPlayer(
-        grid, playerStateRef.current, keysRef.current, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
 
@@ -669,30 +741,213 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── Kill button + cooldown (Phase 5, impostor only) ───────────────── */}
-      {loaded && amIImpostor && !amIDead && (
+      {/* ── Kill / Report action row (Phase 5 kill, Phase 6 report) ───────── */}
+      {loaded && !amIDead && meeting === null && (amIImpostor || nearestBody !== null) && (
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, zIndex: 25,
+          display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
         }}>
+          {amIImpostor && (
+            <button
+              disabled={killCooldownMs > 0 || nearestTarget === null}
+              onClick={() => { if (nearestTarget !== null) sendKill(nearestTarget); }}
+              style={{
+                width: 76, height: 76, borderRadius: '50%',
+                fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
+                letterSpacing: '0.05em', textTransform: 'uppercase',
+                color: killCooldownMs > 0 || nearestTarget === null ? 'rgba(255,150,150,0.35)' : '#ffe8e8',
+                background: killCooldownMs > 0 || nearestTarget === null
+                  ? 'rgba(90,20,20,0.55)'
+                  : 'radial-gradient(circle, rgba(210,20,20,0.95), rgba(120,0,0,0.95))',
+                border: `2px solid ${killCooldownMs > 0 || nearestTarget === null ? 'rgba(200,80,80,0.25)' : 'rgba(255,120,120,0.85)'}`,
+                boxShadow: killCooldownMs > 0 || nearestTarget === null ? 'none' : '0 0 22px rgba(255,40,40,0.55)',
+                cursor: killCooldownMs > 0 || nearestTarget === null ? 'default' : 'pointer',
+                backdropFilter: 'blur(4px)',
+              }}
+            >
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Kill'}
+            </button>
+          )}
+          {nearestBody !== null && (
+            <button
+              onClick={() => reportBody(nearestBody)}
+              style={{
+                width: 76, height: 76, borderRadius: '50%',
+                fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
+                letterSpacing: '0.03em', textTransform: 'uppercase',
+                color: '#fff6d8',
+                background: 'radial-gradient(circle, rgba(220,160,20,0.95), rgba(140,90,0,0.95))',
+                border: '2px solid rgba(255,210,100,0.85)',
+                boxShadow: '0 0 22px rgba(255,190,40,0.5)',
+                cursor: 'pointer', backdropFilter: 'blur(4px)',
+              }}
+            >
+              🛑 Report
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
+      {loaded && !amIDead && meeting === null && (
+        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
-            disabled={killCooldownMs > 0 || nearestTarget === null}
-            onClick={() => { if (nearestTarget !== null) sendKill(nearestTarget); }}
+            onClick={callEmergencyMeeting}
             style={{
-              width: 76, height: 76, borderRadius: '50%',
-              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
-              letterSpacing: '0.05em', textTransform: 'uppercase',
-              color: killCooldownMs > 0 || nearestTarget === null ? 'rgba(255,150,150,0.35)' : '#ffe8e8',
-              background: killCooldownMs > 0 || nearestTarget === null
-                ? 'rgba(90,20,20,0.55)'
-                : 'radial-gradient(circle, rgba(210,20,20,0.95), rgba(120,0,0,0.95))',
-              border: `2px solid ${killCooldownMs > 0 || nearestTarget === null ? 'rgba(200,80,80,0.25)' : 'rgba(255,120,120,0.85)'}`,
-              boxShadow: killCooldownMs > 0 || nearestTarget === null ? 'none' : '0 0 22px rgba(255,40,40,0.55)',
-              cursor: killCooldownMs > 0 || nearestTarget === null ? 'default' : 'pointer',
-              backdropFilter: 'blur(4px)',
+              padding: '8px 14px', borderRadius: 8,
+              background: 'rgba(160,40,20,0.85)', color: '#ffe4d0',
+              border: '1px solid rgba(255,120,80,0.4)', fontFamily: 'sans-serif',
+              fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
+              textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(6px)',
             }}
           >
-            {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Kill'}
+            🚨 Emergency
+          </button>
+        </div>
+      )}
+
+      {/* ── Ejection / no-ejection banner (Phase 6) ─────────────────────────── */}
+      {voteResult && !voteResult.winner && !meeting && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          padding: '6px 16px', zIndex: 45,
+          background: 'rgba(20,32,44,0.9)', color: '#e8f0ff',
+          fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
+          letterSpacing: '0.03em', borderRadius: 8,
+          border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
+        }}>
+          {voteResult.ejectedSlot === NO_TARGET
+            ? '🗳️ No one was ejected'
+            : `🗳️ ${playerName(voteResult.ejectedSlot)} was ejected`}
+        </div>
+      )}
+
+      {/* ── Meeting overlay: discussion → voting (Phase 6) ─────────────────── */}
+      {meeting && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 60,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(6,10,18,0.94)', backdropFilter: 'blur(4px)', padding: 24,
+          overflowY: 'auto',
+        }}>
+          <div style={{ textAlign: 'center', marginBottom: 22 }}>
+            <div style={{
+              fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
+              letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
+            }}>
+              {meeting.bodySlot === NO_TARGET ? 'Emergency Meeting' : 'Body Reported'}
+            </div>
+            <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
+              {meeting.bodySlot === NO_TARGET
+                ? `${playerName(meeting.reporterSlot)} called an emergency meeting`
+                : `${playerName(meeting.reporterSlot)} found ${playerName(meeting.bodySlot)}'s body`}
+            </div>
+            <div style={{
+              marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
+              color: inDiscussion ? '#8ab8cc' : '#ffd166',
+            }}>
+              {Math.ceil(meetingRemainingMs / 1000)}s
+            </div>
+            <div style={{
+              fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
+              textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
+            }}>
+              {inDiscussion ? 'Discussion' : 'Cast your vote'}
+            </div>
+          </div>
+
+          {amIDead && (
+            <div style={{
+              color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
+            }}>
+              👻 You are dead — spectating
+            </div>
+          )}
+
+          {inDiscussion && !amIDead && (
+            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: 'sans-serif' }}>
+              Voting opens once discussion ends
+            </div>
+          )}
+
+          {!inDiscussion && !amIDead && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(320px, 90vw)' }}>
+              {players
+                .filter(p => !deadSlots.includes(p.slot))
+                .map(p => (
+                  <button
+                    key={p.slot}
+                    disabled={hasVoted}
+                    onClick={() => castVote(p.slot)}
+                    style={{
+                      padding: '10px 14px', borderRadius: 8, textAlign: 'left',
+                      background: hasVoted ? 'rgba(30,40,55,0.6)' : 'rgba(30,40,55,0.9)',
+                      color: hasVoted ? 'rgba(255,255,255,0.35)' : '#fff',
+                      border: '1px solid rgba(120,160,200,0.25)', fontFamily: 'sans-serif', fontSize: 14,
+                      cursor: hasVoted ? 'default' : 'pointer',
+                    }}
+                  >
+                    {p.slot === mySlot ? `${p.username} (you)` : p.username}
+                  </button>
+                ))}
+              <button
+                disabled={hasVoted}
+                onClick={() => castVote(NO_TARGET)}
+                style={{
+                  padding: '10px 14px', borderRadius: 8, textAlign: 'center', fontWeight: 700,
+                  background: hasVoted ? 'rgba(60,60,60,0.4)' : 'rgba(60,60,60,0.75)',
+                  color: hasVoted ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.85)',
+                  border: '1px solid rgba(150,150,150,0.25)', fontFamily: 'sans-serif', fontSize: 14,
+                  cursor: hasVoted ? 'default' : 'pointer',
+                }}
+              >
+                Skip Vote
+              </button>
+              {hasVoted && (
+                <div style={{ textAlign: 'center', color: 'rgba(150,220,150,0.85)', fontSize: 12, marginTop: 2 }}>
+                  Vote cast — waiting for others…
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Game over overlay (Phase 6) ─────────────────────────────────────── */}
+      {voteResult?.winner && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 70,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          background: voteResult.winner === 'impostors' ? 'rgba(44,0,0,0.94)' : 'rgba(0,16,48,0.94)',
+        }}>
+          <div style={{
+            fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
+            letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 14,
+          }}>
+            Game Over
+          </div>
+          <div style={{
+            fontSize: 42, fontWeight: 900, fontFamily: 'sans-serif',
+            letterSpacing: '0.05em', textTransform: 'uppercase',
+            color: voteResult.winner === 'impostors' ? '#ff3344' : '#44aaff',
+            textShadow: voteResult.winner === 'impostors'
+              ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
+              : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
+          }}>
+            {voteResult.winner === 'impostors' ? '☠ Impostors Win' : '✦ Crewmates Win'}
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            style={{
+              marginTop: 28, padding: '10px 22px', borderRadius: 8,
+              background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)',
+              border: '1px solid rgba(255,255,255,0.25)', fontFamily: 'sans-serif',
+              fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer',
+            }}
+          >
+            Back to Lobby
           </button>
         </div>
       )}

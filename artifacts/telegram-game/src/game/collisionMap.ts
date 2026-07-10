@@ -5,6 +5,7 @@ export {
   COLS, ROWS,
   CELL, CELL_X, CELL_Y,
   KILL_RANGE_PX,
+  REPORT_RANGE_PX,
   buildCollisionGrid,
   isBlocked,
   canMoveTo,

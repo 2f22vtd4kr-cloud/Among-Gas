@@ -56,3 +56,17 @@ export const DELTA_THRESHOLD_SQ = 100;
  * GAME_SPEC.md §9: default 25s; host-configurable range 15s/25s/45s is future work.
  */
 export const KILL_COOLDOWN_MS = 25_000;
+
+/**
+ * Phase 6 — meeting timing, in ms (GAME_SPEC.md §6 DISCUSSION → VOTING).
+ * Server is authoritative: votes are rejected until the discussion window
+ * elapses, and the meeting is auto-tallied once the voting window elapses
+ * (or earlier, once every alive player has voted). The client uses the same
+ * constants to drive its local discussion/voting countdown UI, timed from
+ * the 0x1B Meeting Start receipt.
+ */
+export const MEETING_DISCUSSION_MS = 15_000;
+export const MEETING_VOTING_MS = 30_000;
+
+/** Sentinel byte meaning "skip vote" / "emergency meeting" (no body) / "no one ejected". */
+export const NO_TARGET = 0xFF;

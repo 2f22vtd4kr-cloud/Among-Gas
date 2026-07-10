@@ -18,6 +18,8 @@ import {
   DELTA_THRESHOLD_SQ,
   FEET_OFFSET_Y, PLAYER_RADIUS,
   KILL_COOLDOWN_MS,
+  MEETING_DISCUSSION_MS, MEETING_VOTING_MS,
+  NO_TARGET,
 } from '@workspace/shared/coords';
 import {
   buildCollisionGrid,
@@ -70,7 +72,7 @@ function impostorCountFor(playerCount: number): number {
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type LobbyPhase = 'WAITING' | 'ROAMING' | 'GAMEOVER';
+export type LobbyPhase = 'WAITING' | 'ROAMING' | 'MEETING' | 'GAMEOVER';
 
 export type PlayerRole = 'crewmate' | 'impostor';
 
@@ -92,6 +94,22 @@ export interface LobbyPlayer {
   killCooldownMs: number;
 }
 
+/**
+ * Phase 6 — active meeting state (GAME_SPEC.md §6 DISCUSSION → VOTING).
+ * `votes` maps voterSlot → targetSlot (NO_TARGET = skip). Both timers are
+ * server-authoritative; the client only mirrors them for its countdown UI.
+ */
+export interface MeetingState {
+  reporterSlot: number;
+  /** NO_TARGET (0xFF) = emergency button, no specific body. */
+  bodySlot: number;
+  votes: Map<number, number>;
+  /** Becomes true once the discussion window elapses; votes are rejected before then. */
+  votingOpen: boolean;
+  discussionTimer: ReturnType<typeof setTimeout> | null;
+  votingTimer: ReturnType<typeof setTimeout> | null;
+}
+
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
@@ -100,6 +118,8 @@ export interface Lobby {
   /** tgUserId → slot (fast reverse lookup) */
   userIdToSlot: Map<number, number>;
   hostSlot: number;
+  /** Non-null only while phase === 'MEETING'. */
+  meeting: MeetingState | null;
 }
 
 export const MAX_PLAYERS = 15;
@@ -179,6 +199,26 @@ export function buildRoleRevealPacket(role: 0 | 1, impostorSlots: number[] = [])
  */
 export function buildKillPacket(victimSlot: number, attackerSlot: number): Buffer {
   return Buffer.from([0x15, 0x01, victimSlot, attackerSlot]);
+}
+
+/**
+ * 0x1B — meeting start broadcast (GAME_SPEC.md §6/§9 Phase 6).
+ * Layout: [0x1B, reporterSlot, bodySlot] (bodySlot = NO_TARGET for emergency).
+ */
+export function buildMeetingStartPacket(reporterSlot: number, bodySlot: number): Buffer {
+  return Buffer.from([0x1B, reporterSlot, bodySlot]);
+}
+
+/**
+ * 0x1C — vote result / eject broadcast (GAME_SPEC.md §6/§9 Phase 6).
+ * Layout: [0x1C, ejectedSlot, winFlag]
+ *   ejectedSlot: NO_TARGET (0xFF) if no one was ejected (tie or skip majority).
+ *   winFlag: 0 = game continues, 1 = crewmates win, 2 = impostors win.
+ * Also reused (with ejectedSlot = NO_TARGET) to end the game right after a
+ * kill tips the alive-player parity in the impostors' favor, without a vote.
+ */
+export function buildVoteResultPacket(ejectedSlot: number, winFlag: 0 | 1 | 2): Buffer {
+  return Buffer.from([0x1C, ejectedSlot, winFlag]);
 }
 
 /**
@@ -262,6 +302,7 @@ export class LobbyManager {
       players: new Map([[0, hostPlayer]]),
       userIdToSlot: new Map([[tgUserId, 0]]),
       hostSlot: 0,
+      meeting: null,
     };
 
     this.lobbies.set(code, lobby);
@@ -338,6 +379,10 @@ export class LobbyManager {
     logger.info(`[Lobby] Left ${code} — userId=${tgUserId} (slot=${slot})`);
 
     if (lobby.players.size === 0) {
+      if (lobby.meeting) {
+        if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
+        if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
+      }
       this.lobbies.delete(code);
       logger.info(`[Lobby] Torn down empty lobby ${code}`);
       // Stop the delta loop when there are no more active lobbies
@@ -351,6 +396,15 @@ export class LobbyManager {
       const lowestSlot = Math.min(...lobby.players.keys());
       lobby.hostSlot = lowestSlot;
       logger.info(`[Lobby] Host migrated to slot=${lowestSlot} in ${code}`);
+    }
+
+    // A departing voter may be the one holdout blocking an early tally.
+    if (lobby.phase === 'MEETING' && lobby.meeting?.votingOpen) {
+      const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;
+      if (lobby.meeting.votes.size >= aliveCount) {
+        if (lobby.meeting.votingTimer) { clearTimeout(lobby.meeting.votingTimer); lobby.meeting.votingTimer = null; }
+        this._tallyVotes(lobby);
+      }
     }
 
     return lobby;
@@ -461,6 +515,162 @@ export class LobbyManager {
         player.ws.send(packet);
       }
     }
+  }
+
+  /**
+   * After a kill lands, check whether it just tipped the alive-player parity
+   * in the impostors' favor (or wiped them out). If so, end the game right
+   * away rather than waiting for a meeting to notice.
+   */
+  checkWinAfterKill(lobby: Lobby): void {
+    if (lobby.phase !== 'ROAMING') return;
+    const winFlag = this._computeWinFlag(lobby);
+    if (winFlag === 0) return;
+    lobby.phase = 'GAMEOVER';
+    this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
+    logger.info(`[Lobby] Game over in ${lobby.code} after kill — winFlag=${winFlag}`);
+  }
+
+  // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
+
+  /**
+   * Validate + start a meeting from a report or emergency call
+   * (GAME_SPEC.md §6/§9). Returns true if the meeting was started
+   * (caller should log; the 0x1B broadcast happens here).
+   */
+  callMeeting(lobby: Lobby, reporterSlot: number, bodySlot: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+
+    const reporter = lobby.players.get(reporterSlot);
+    if (!reporter || !reporter.alive) return false;
+
+    if (bodySlot !== NO_TARGET) {
+      const body = lobby.players.get(bodySlot);
+      if (!body || body.alive) return false; // must reference an actual dead body
+    }
+
+    const meeting: MeetingState = {
+      reporterSlot,
+      bodySlot,
+      votes: new Map(),
+      votingOpen: false,
+      discussionTimer: null,
+      votingTimer: null,
+    };
+    lobby.phase = 'MEETING';
+    lobby.meeting = meeting;
+
+    meeting.discussionTimer = setTimeout(() => {
+      meeting.votingOpen = true;
+      meeting.discussionTimer = null;
+    }, MEETING_DISCUSSION_MS);
+
+    meeting.votingTimer = setTimeout(() => {
+      this._tallyVotes(lobby);
+    }, MEETING_DISCUSSION_MS + MEETING_VOTING_MS);
+
+    const packet = buildMeetingStartPacket(reporterSlot, bodySlot);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+
+    logger.info(
+      `[Lobby] Meeting called in ${lobby.code} by slot=${reporterSlot} ` +
+      `(body=${bodySlot === NO_TARGET ? 'emergency' : bodySlot})`,
+    );
+    return true;
+  }
+
+  /**
+   * Validate + record a vote (GAME_SPEC.md §6/§9). Auto-tallies early once
+   * every alive player has voted, instead of waiting out the full timer.
+   * Returns true if the vote was recorded.
+   */
+  castVote(lobby: Lobby, voterSlot: number, targetSlot: number): boolean {
+    const meeting = lobby.meeting;
+    if (lobby.phase !== 'MEETING' || !meeting || !meeting.votingOpen) return false;
+
+    const voter = lobby.players.get(voterSlot);
+    if (!voter || !voter.alive) return false;
+
+    if (targetSlot !== NO_TARGET) {
+      const target = lobby.players.get(targetSlot);
+      if (!target || !target.alive) return false; // can't vote for a dead/nonexistent slot
+    }
+
+    meeting.votes.set(voterSlot, targetSlot);
+
+    const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;
+    if (meeting.votes.size >= aliveCount) {
+      if (meeting.votingTimer) { clearTimeout(meeting.votingTimer); meeting.votingTimer = null; }
+      this._tallyVotes(lobby);
+    }
+    return true;
+  }
+
+  /** Compute the alive-player win condition. 0 = none, 1 = crewmates, 2 = impostors. */
+  private _computeWinFlag(lobby: Lobby): 0 | 1 | 2 {
+    let aliveImpostors = 0;
+    let aliveCrewmates = 0;
+    for (const p of lobby.players.values()) {
+      if (!p.alive) continue;
+      if (p.role === 'impostor') aliveImpostors++;
+      else aliveCrewmates++;
+    }
+    if (aliveImpostors === 0) return 1; // all impostors eliminated
+    if (aliveImpostors >= aliveCrewmates) return 2; // impostors reached/beat parity
+    return 0;
+  }
+
+  private _broadcastVoteResult(lobby: Lobby, ejectedSlot: number, winFlag: 0 | 1 | 2): void {
+    const packet = buildVoteResultPacket(ejectedSlot, winFlag);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+  }
+
+  /**
+   * Tally votes, apply ejection (if any), check for a win, and resume
+   * ROAMING (or move to GAMEOVER). Broadcasts the single 0x1C result packet.
+   */
+  private _tallyVotes(lobby: Lobby): void {
+    const meeting = lobby.meeting;
+    if (!meeting) return;
+    if (meeting.discussionTimer) clearTimeout(meeting.discussionTimer);
+    if (meeting.votingTimer) clearTimeout(meeting.votingTimer);
+
+    const counts = new Map<number, number>(); // target slot (or NO_TARGET = skip) → count
+    for (const target of meeting.votes.values()) {
+      counts.set(target, (counts.get(target) ?? 0) + 1);
+    }
+
+    let best: number[] = [];
+    let bestCount = 0;
+    for (const [target, count] of counts) {
+      if (count > bestCount) { bestCount = count; best = [target]; }
+      else if (count === bestCount) { best.push(target); }
+    }
+
+    // Eject only on an outright (non-tied) plurality for a real target — a
+    // tie, an empty vote, or a skip-majority all result in no ejection.
+    let ejectedSlot = NO_TARGET;
+    if (bestCount > 0 && best.length === 1 && best[0] !== NO_TARGET) {
+      ejectedSlot = best[0];
+      const ejected = lobby.players.get(ejectedSlot);
+      if (ejected) ejected.alive = false;
+    }
+
+    lobby.meeting = null;
+    lobby.phase = 'ROAMING';
+
+    const winFlag = this._computeWinFlag(lobby);
+    if (winFlag !== 0) lobby.phase = 'GAMEOVER';
+
+    this._broadcastVoteResult(lobby, ejectedSlot, winFlag);
+    logger.info(
+      `[Lobby] Meeting concluded in ${lobby.code} — ` +
+      `ejected=${ejectedSlot === NO_TARGET ? 'none' : ejectedSlot}, winFlag=${winFlag}`,
+    );
   }
 
   // ── 25Hz delta broadcast loop ─────────────────────────────────────────────
