@@ -120,6 +120,8 @@ export interface GameState {
 
 export interface GameActions {
   createRoom: () => void;
+  /** Create a private solo game pre-filled with `botCount` AI bots (1–14, default 4). */
+  createSolo: (botCount?: number) => void;
   joinRoom: (code: string) => void;
   startGame: () => void;
   /** Send a 0x11 Move Intent packet (wire coords 0–32000). */
@@ -170,6 +172,7 @@ const DEFAULT_STATE: GameState = {
 const GameStateCtx = createContext<GameState>(DEFAULT_STATE);
 const GameActionsCtx = createContext<GameActions>({
   createRoom: () => {},
+  createSolo: () => {},
   joinRoom: () => {},
   startGame: () => {},
   sendMove: () => {},
@@ -540,6 +543,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const createRoom = useCallback(() => { send([0x10, 0x01]); }, [send]);
+
+  const createSolo = useCallback((botCount: number = 4) => {
+    const count = Math.max(1, Math.min(14, Math.round(botCount)));
+    send([0x10, 0x06, count]);
+  }, [send]);
 
   const joinRoom = useCallback((code: string) => {
     const codeUpper = code.toUpperCase().slice(0, 6).padEnd(6, ' ');
@@ -931,7 +939,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [state.phase, state.myRole, state.sabotageCooldownMs > 0]);
 
   const actions: GameActions = {
-    createRoom, joinRoom, startGame, sendMove, sendKill,
+    createRoom, createSolo, joinRoom, startGame, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
     completeTaskStep, triggerSabotage, repairSabotage,
   };

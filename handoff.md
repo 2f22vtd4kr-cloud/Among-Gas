@@ -1271,3 +1271,25 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **State to restore**
 - None.
+
+---
+
+## 2026-07-10 — Phase C: Single-player lobby flow
+
+**Done**
+- `GameContext.tsx`: Added `createSolo(botCount?: number)` action (sends `[0x10, 0x06, botCount]`, default 4, clamped 1–14).
+- `Lobby.tsx`: Added "Play Solo vs Bots" panel with +/− bot count stepper (default 4, range 1–14) and green "Play Solo" button, visible only when not in a room.
+- `wsServer.ts`: Added `0x10/0x06` (`CREATE_SOLO`) handler — imports `CrewmateBot`/`ImpostorBot`, creates a private lobby, sends slot-assignment to human, fills remaining slots with `CrewmateBot` agents, calls `startGame()` (Fisher-Yates role assignment + 0x1A role-reveal to human), then iterates bots and swaps each agent to `ImpostorBot`/`CrewmateBot` based on assigned role.
+- Private-room guarantee: `startGame()` transitions phase to `ROAMING` synchronously in the same handler, so `joinLobby` will reject any late joiners with `'in_progress'`.
+- Typecheck clean. Lobby UI screenshot verified. Code review: Pass (no critical issues).
+
+**Decisions & gotchas**
+- Bot agents are seeded as `CrewmateBot` before `startGame()` so the slot is valid, then replaced with new instances after roles are assigned. New instances avoid stale internal state contamination across games.
+- `createLobby()` internally calls `removePlayer(tgUserId)`, so a user already in a lobby is migrated cleanly; no duplicate membership.
+- Invalid `botCount` (0 or >14 from a crafted packet) is clamped on both client and server.
+
+**Left off / next steps**
+- **Next: Phase D — Headless simulation runner** (`scripts/src/simulateGame.ts` + CLI).
+
+**State to restore**
+- None. All changes typecheck-clean, UI verified, code-reviewed.

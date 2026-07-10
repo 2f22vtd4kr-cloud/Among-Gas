@@ -70,8 +70,9 @@ function JoinForm({ onJoin }: { onJoin: (code: string) => void }) {
 
 export default function Lobby() {
   const state = useGameState();
-  const { createRoom, joinRoom, startGame } = useGameActions();
+  const { createRoom, createSolo, joinRoom, startGame } = useGameActions();
   const [, navigate] = useLocation();
+  const [botCount, setBotCount] = useState(4);
 
   // Auto-navigate to /game when the server signals game has started (0x1A)
   useEffect(() => {
@@ -138,9 +139,40 @@ export default function Lobby() {
               Create Room
             </button>
 
+            {/* ── Play Solo ─────────────────────────────────────────── */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4 space-y-3">
+              <p className="text-white/50 text-xs uppercase tracking-wider text-center">
+                Play Solo vs Bots
+              </p>
+              {/* Bot count stepper */}
+              <div className="flex items-center justify-center gap-4">
+                <button
+                  onClick={() => setBotCount(c => Math.max(1, c - 1))}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 text-white font-bold text-lg transition-all flex items-center justify-center"
+                >
+                  −
+                </button>
+                <span className="text-white font-semibold w-24 text-center text-sm">
+                  {botCount} {botCount === 1 ? 'bot' : 'bots'}
+                </span>
+                <button
+                  onClick={() => setBotCount(c => Math.min(14, c + 1))}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 active:scale-90 text-white font-bold text-lg transition-all flex items-center justify-center"
+                >
+                  +
+                </button>
+              </div>
+              <button
+                onClick={() => { haptic.medium(); createSolo(botCount); }}
+                className="w-full bg-green-700 hover:bg-green-600 active:scale-95 text-white font-semibold py-2.5 rounded-xl transition-all"
+              >
+                Play Solo
+              </button>
+            </div>
+
             <div className="flex items-center gap-3 text-white/20 text-xs">
               <div className="flex-1 h-px bg-white/10" />
-              OR
+              OR JOIN A ROOM
               <div className="flex-1 h-px bg-white/10" />
             </div>
 

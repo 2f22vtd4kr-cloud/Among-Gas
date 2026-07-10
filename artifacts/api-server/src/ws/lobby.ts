@@ -577,7 +577,12 @@ export class LobbyManager {
 
     logger.info(`[Lobby] Left ${code} — userId=${tgUserId} (slot=${slot})`);
 
-    if (lobby.players.size === 0) {
+    // Tear down when no human players remain.
+    // A solo game has bots occupying real slots; after the only human leaves,
+    // lobby.players.size > 0 but every remaining entry is isBot:true.
+    // Without this check the lobby and its bot tick/delta loops would run forever.
+    const hasHumans = Array.from(lobby.players.values()).some(p => !p.isBot);
+    if (!hasHumans) {
       if (lobby.meeting) {
         if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
         if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
@@ -586,7 +591,7 @@ export class LobbyManager {
         clearTimeout(lobby.sabotage.timeoutTimer);
       }
       this.lobbies.delete(code);
-      logger.info(`[Lobby] Torn down empty lobby ${code}`);
+      logger.info(`[Lobby] Torn down lobby ${code} (no human players remaining)`);
       // Stop the delta loop when there are no more active lobbies
       if (this.lobbies.size === 0) {
         this._stopDeltaLoop();

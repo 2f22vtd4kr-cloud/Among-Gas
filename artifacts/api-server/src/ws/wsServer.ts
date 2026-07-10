@@ -19,6 +19,8 @@ import {
   buildJoinErrorPacket,
   buildSlotAssignedPacket,
 } from './lobby.js';
+import { CrewmateBot } from '../bot/CrewmateBot.js';
+import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
 import {
@@ -183,6 +185,50 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           ws.send(buildSlotAssignedPacket(ws.playerSlotId));
           lobbyManager.broadcastRoomUpdate(result);
           logger.info(`[WS] Join room ${roomCode} → slot=${ws.playerSlotId} (userId=${tgUserId})`);
+          return;
+        }
+
+        // 0x06 — Create Solo game (C→S, 3 bytes): [0x10, 0x06, botCount]
+        // Creates a private room, fills it with AI bots, and auto-starts.
+        // botCount: 1–14 (default 4 if byte missing or out of range).
+        if (sub === 0x06) {
+          const BOT_NAMES = [
+            'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon',
+            'Zeta', 'Eta', 'Theta', 'Iota', 'Kappa',
+            'Lambda', 'Mu', 'Nu', 'Xi',
+          ];
+
+          const rawCount = raw.length >= 3 ? raw.readUInt8(2) : 4;
+          const botCount = Math.max(1, Math.min(14, rawCount));
+
+          // Create a private lobby (phase → ROAMING immediately after startGame,
+          // so joinLobby will reject any late joiners with 'in_progress').
+          const lobby = lobbyManager.createLobby(tgUserId, username, ws);
+          ws.playerSlotId = 0;
+          ws.send(buildSlotAssignedPacket(0));
+
+          // Add bots with placeholder CrewmateBot agents; roles are reassigned
+          // after startGame() runs its Fisher-Yates shuffle below.
+          for (let i = 0; i < botCount; i++) {
+            lobbyManager.addBotPlayer(lobby, i, BOT_NAMES[i], new CrewmateBot());
+          }
+
+          // Assign roles + spawn positions + send 0x1A role reveal to human.
+          lobbyManager.startGame(lobby);
+
+          // Swap bot agents to match their Fisher-Yates-assigned roles so the
+          // AI decision-making (impostor hunting vs crewmate tasks) is correct.
+          for (const player of lobby.players.values()) {
+            if (player.isBot) {
+              player.botAgent = player.role === 'impostor'
+                ? new ImpostorBot()
+                : new CrewmateBot();
+            }
+          }
+
+          logger.info(
+            `[WS] Solo game started: ${lobby.code} — ${botCount} bots (userId=${tgUserId})`,
+          );
           return;
         }
 
