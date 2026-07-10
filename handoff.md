@@ -1044,3 +1044,6 @@ Project was re-imported and artifact registration metadata (`.replit-artifact/ar
 
 ## 2026-07-10 — Re-import repair (again)
 Same pattern recurred on a subsequent re-import (no configured workflows, artifacts missing from `listArtifacts()`). Repaired identically: `verifyAndReplaceArtifactToml()` for api-server, mockup-sandbox, telegram-game → `pnpm install` → restarted all three workflows. Verified telegram-game lobby screen renders and WS handshake succeeds (slot 0 assigned); api-server listening on 8080. No source changes.
+
+## 2026-07-10 — Re-import repair (3rd occurrence)
+Same recurring failure mode again on a fresh import (no workflows, no artifacts registered). Repaired identically: `verifyAndReplaceArtifactToml()` for api-server, mockup-sandbox, telegram-game → `pnpm install` → `pnpm --filter @workspace/db run push` (no schema drift) → restarted all three workflows. Verified telegram-game lobby renders and WS handshake succeeds. No source changes.
