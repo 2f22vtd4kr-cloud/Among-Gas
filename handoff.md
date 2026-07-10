@@ -656,6 +656,24 @@
 **State to restore**
 - None (both debug-only edits used during investigation — `PLAYER_SPAWN` hardcode and `showCollision` default — were reverted before finishing).
 
+### 2026-07-10 — Fresh import repair (metadata only)
+
+**Done**
+- Fresh import again showed no configured workflows and `listArtifacts()` empty, while all three `artifact.toml` files were intact and unchanged. Same known failure mode as prior imports.
+- Repaired by re-running `verifyAndReplaceArtifactToml()` against each artifact's own unmodified toml (api-server, mockup-sandbox, telegram-game) — re-registered all three artifacts and their workflows without touching source code.
+- Ran `pnpm install` (lockfile up to date, 478 packages). Confirmed `DATABASE_URL` env var already present.
+- Restarted all three workflows; screenshotted `telegram-game` — renders correctly (map, character, shadow, minimap all fine).
+
+**Decisions & gotchas**
+- No code changes needed — this is purely artifact-registration metadata that gets dropped on import. See the existing gotcha in `replit.md`.
+
+**Left off / next steps**
+- User to confirm what they'd like next (just verifying it runs is done; game is live).
+- DB, Telegram SDK, multiplayer still pending (per earlier sessions).
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Restored blur shadow (reverted solid fill that re-introduced stripes)
 
 **Done**
