@@ -14,3 +14,4 @@
 - [Position-echo reconciliation](position-echo-reconciliation.md) — movement-only jitter in client-predicted multiplayer comes from blindly snapping to every echo of your own position; ack-match against sent history instead.
 - [Bot agent circular import pattern](bot-agent-pattern.md) — IBotAgent interface lives in lobby.ts to avoid ESM circular import; bot tick testing needs scripts package to declare @workspace/shared as dependency.
 - [Headless simulation runner](headless-simulation-runner.md) — sim tools needing artifact internals live inside that artifact (leaf packages can't import each other); event-listener not polling; batch concurrency not clock-warp; always clear timers on lobby disposal.
+- [Task-bar denominator vs dead crewmate](task-bar-dead-crewmate.md) — fixed total-steps-at-start denominator + dead player can't act = task-win becomes unreachable; decrement on death. Also: sim-batch shell timeouts, tuning noise.

@@ -9,9 +9,9 @@
  *   COOLDOWN  → After a kill: return to FAKING while cooldown drains.
  *
  * Sabotage:
- *   Every ~60s (configurable), trigger a sabotage to force crewmates apart
- *   and create hunting opportunities. Only fires when FAKING or HUNTING and
- *   no sabotage is currently active.
+ *   Every ~60s (configurable, ±jitter), trigger a sabotage to force
+ *   crewmates apart and create hunting opportunities. Only fires when
+ *   FAKING or HUNTING and no sabotage is currently active.
  *
  * Voting (MEETING phase):
  *   Vote for a random crewmate. If someone voted for this bot this meeting,
@@ -27,10 +27,32 @@ import type { Point } from '@workspace/shared';
 
 type BotState = 'FAKING' | 'HUNTING' | 'COOLDOWN';
 
-/** How isolated a target must be (px) before the impostor commits to a hunt. */
+/** How much isolation a target may lose before an active hunt is abandoned (px). */
 const ISOLATION_THRESHOLD_PX = 300;
 
-/** Sabotage trigger interval: ~60s = 300 × 200ms ticks. */
+/**
+ * How isolated a target must be (px) before the impostor *commits* to a new
+ * hunt (separate from ISOLATION_THRESHOLD_PX, which only governs abandoning
+ * an already-active hunt). Originally hardcoded at 0 ("must be strictly
+ * closer to the target than any other player"), which was a fairly strict
+ * bar — with 5 wandering bots, this rarely triggered (avg ~1.2-1.4 kills per
+ * ~34s game). Tuned negative during the Phase E win-rate pass (SINGLE_PLAY.md
+ * §9) after fixing the ejection-path task-bar bug pushed crew win rate to
+ * ~65-68%: making the impostor commit to slightly-less-than-perfectly-isolated
+ * targets increases kill frequency without changing hunt-abort behaviour.
+ */
+const HUNT_ACQUIRE_THRESHOLD_PX = -150;
+
+/**
+ * Sabotage trigger interval: ~60s = 300 × 200ms ticks.
+ * (SINGLE_PLAY.md §9 Phase E tuning notes: this was raised to 450 in an
+ * earlier pass of the same session, then reverted back to 300 after a
+ * separate correctness fix — ejected crewmates also drop their incomplete
+ * steps from the task-bar denominator, same as killed ones — pushed crew
+ * win rate to ~65% at interval=450. 300 + the ejection fix together landed
+ * back in the 55/45±10% target band; see SINGLE_PLAY.md for the full
+ * measurement history before changing this again.)
+ */
 const SABOTAGE_INTERVAL_TICKS = 300;
 
 /** How many ticks to linger at a fake task console before moving on. */
@@ -206,7 +228,7 @@ export class ImpostorBot extends BotAgent {
       }
     }
 
-    return bestScore >= 0 ? bestSlot : null;
+    return bestScore >= HUNT_ACQUIRE_THRESHOLD_PX ? bestSlot : null;
   }
 
   private _isolationScore(lobby: Lobby, self: LobbyPlayer, target: LobbyPlayer): number {

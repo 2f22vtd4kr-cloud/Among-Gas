@@ -525,6 +525,13 @@ export class LobbyManager {
     this._emit({ type: 'kill', code: lobby.code, attackerSlot, victimSlot, atMs: Date.now() });
     this.broadcastKill(lobby, victimSlot, attackerSlot);
     this.checkWinAfterKill(lobby);
+    // Dropping the victim's incomplete steps (attemptKill) can itself push
+    // completedTaskSteps.size to totalTaskSteps — re-check tasks too, but
+    // only if the kill didn't already end the game via parity/wipe above.
+    if (lobby.phase === 'ROAMING') {
+      this._broadcastTaskProgress(lobby);
+      this.checkWinAfterTask(lobby);
+    }
     return true;
   }
 
@@ -669,6 +676,8 @@ export class LobbyManager {
       return null;
     }
 
+    const departing = lobby.players.get(slot);
+
     this.userToLobbyMap.delete(tgUserId);
     lobby.players.delete(slot);
     lobby.userIdToSlot.delete(tgUserId);
@@ -690,6 +699,26 @@ export class LobbyManager {
       const lowestSlot = Math.min(...lobby.players.keys());
       lobby.hostSlot = lowestSlot;
       logger.info(`[Lobby] Host migrated to slot=${lowestSlot} in ${code}`);
+    }
+
+    // Same bug class as attemptKill/_tallyVotes: a departing crewmate can
+    // never submit their remaining task steps either, so drop them from the
+    // shared denominator or the task-win condition can become unreachable.
+    // Only relevant once a game is actually in progress (totalTaskSteps is
+    // 0 before ROAMING starts).
+    if (departing && lobby.totalTaskSteps > 0 && (lobby.phase === 'ROAMING' || lobby.phase === 'MEETING')) {
+      this._removeIncompleteTaskSteps(lobby, departing);
+      this._broadcastTaskProgress(lobby);
+      if (lobby.phase === 'ROAMING') {
+        const winFlag = this._computeWinFlag(lobby);
+        if (winFlag !== 0) {
+          lobby.phase = 'GAMEOVER';
+          this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
+          this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });
+        } else {
+          this.checkWinAfterTask(lobby);
+        }
+      }
     }
 
     // A departing voter may be the one holdout blocking an early tally.
@@ -836,7 +865,42 @@ export class LobbyManager {
 
     victim.alive = false;
     attacker.killCooldownMs = KILL_COOLDOWN_MS;
+    this._removeIncompleteTaskSteps(lobby, victim);
     return true;
+  }
+
+  /**
+   * When a crewmate dies, drop their still-incomplete assigned task steps
+   * from `totalTaskSteps` (GAME_SPEC.md §10 task bar is a ratio over *all*
+   * steps ever assigned — but a dead crewmate can never submit another step,
+   * per §9 "cannot interact"). Without this, any crewmate who dies with
+   * unfinished tasks makes `completedTaskSteps.size === totalTaskSteps`
+   * permanently unreachable, so the crew can only ever win by ejection or a
+   * kill-parity wipe — never by tasks — for the rest of the game. In
+   * practice this stalled a meaningful share of simulated games all the way
+   * to the safety timeout (no meeting ever called, no parity-ending kill,
+   * sabotage not resolved in time) because the one win condition that should
+   * have been reachable (finish remaining tasks) was silently impossible.
+   * Matches standard Among Us behaviour: a dead player's unfinished tasks
+   * are removed from the shared task bar, not stuck on it forever.
+   */
+  private _removeIncompleteTaskSteps(lobby: Lobby, victim: LobbyPlayer): void {
+    if (victim.role !== 'crewmate' || victim.assignedTasks.length === 0) return;
+    let removed = 0;
+    for (const taskId of victim.assignedTasks) {
+      const def = TASK_DEFS.find(t => t.id === taskId);
+      if (!def) continue;
+      for (let step = 0; step < def.steps; step++) {
+        if (!lobby.completedTaskSteps.has(`${victim.slot}:${taskId}:${step}`)) removed++;
+      }
+    }
+    if (removed > 0) {
+      lobby.totalTaskSteps -= removed;
+      logger.info(
+        `[Lobby] Dropped ${removed} incomplete task step(s) for dead slot=${victim.slot} ` +
+        `in ${lobby.code} (${lobby.completedTaskSteps.size}/${lobby.totalTaskSteps})`,
+      );
+    }
   }
 
   broadcastKill(lobby: Lobby, victimSlot: number, attackerSlot: number): void {
@@ -1195,16 +1259,30 @@ export class LobbyManager {
     if (bestCount > 0 && best.length === 1 && best[0] !== NO_TARGET) {
       ejectedSlot = best[0];
       const ejected = lobby.players.get(ejectedSlot);
-      if (ejected) ejected.alive = false;
+      if (ejected) {
+        ejected.alive = false;
+        // Same as a kill (see attemptKill): an ejected crewmate can no longer
+        // submit their remaining task steps, so drop them from the shared
+        // denominator or the task-win condition becomes unreachable for the
+        // rest of the game.
+        this._removeIncompleteTaskSteps(lobby, ejected);
+      }
     }
 
     lobby.meeting = null;
     lobby.phase = 'ROAMING';
 
-    const winFlag = this._computeWinFlag(lobby);
+    let winFlag = this._computeWinFlag(lobby);
+    // The ejection may have dropped the denominator far enough that the
+    // remaining (already-completed) steps now satisfy it — check tasks too
+    // whenever the ejection itself didn't already end the game via parity.
+    if (winFlag === 0 && lobby.totalTaskSteps > 0 && lobby.completedTaskSteps.size >= lobby.totalTaskSteps) {
+      winFlag = 1;
+    }
     if (winFlag !== 0) lobby.phase = 'GAMEOVER';
 
     this._broadcastVoteResult(lobby, ejectedSlot, winFlag);
+    this._broadcastTaskProgress(lobby);
     this._emit({ type: 'meetingResult', code: lobby.code, ejectedSlot, atMs: Date.now() });
     if (winFlag !== 0) {
       this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });

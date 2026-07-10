@@ -1331,6 +1331,35 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - None.
 
+### 2026-07-10 — Re-import repair (again) + Phase E: fix simulator timeouts, tune bot difficulty
+
+**Done**
+- Second re-import in the same day; ran the standard repair again (`verifyAndReplaceArtifactToml()` ×3, `pnpm install`, restarted all three workflows, verified lobby + WS handshake). No code loss — this repo re-registers cleanly every time via the artifact.toml files already checked in.
+- Picked up Phase E where a previous (out-of-credits) session left off mid-debugging a ~10% timeout rate in `artifacts/api-server/src/sim/_debugtimeout.ts`. Root cause found: `lobby.totalTaskSteps` is fixed at game start from every crewmate's assigned steps, but a dead crewmate can never submit another step — so any crewmate dying with unfinished tasks made the crew's task-completion win permanently unreachable, leaving ejection/kill-parity/sabotage-timeout as the only remaining outs, which plenty of games missed before the safety timeout.
+- Fix in `artifacts/api-server/src/ws/lobby.ts`: `attemptKill` now drops the victim's incomplete steps from `totalTaskSteps` (new `_removeIncompleteTaskSteps`), and `applyKill` re-runs the task-win check after a kill since the drop can itself complete the bar. This is a real gameplay fix (applies to human-vs-bot solo games too), not simulation-only.
+- Code review (architect subagent) caught that the same bug also applied to **ejected** crewmates, not just killed ones — `_tallyVotes` didn't drop the ejected player's incomplete steps either. Fixed the same way, plus a task-win re-check after ejection.
+- Ran the Phase E tuning pass in stages (had to re-measure after the ejection-path fix landed, since it changed the win-rate baseline substantially):
+  - Kill-path fix only + `SABOTAGE_INTERVAL_TICKS` 300→450: ~53-54.5% crew — looked fine, but was tuned against incomplete data.
+  - Ejection-path fix on top (same interval): jumped to ~64-67% crew — a real effect, not noise (ejections and kills happen at similar frequency; both had been silently blocking task-wins).
+  - Reverting the interval to 300 barely moved it (~68%) — sabotage frequency is a much weaker lever than expected once both task-bar paths are fixed.
+  - Found a better lever: `ImpostorBot._findIsolatedTarget`'s hunt-acquisition threshold was hardcoded at `0` (impostor needed to be strictly closer to a target than any witness to *start* a hunt) — separate from the existing `ISOLATION_THRESHOLD_PX`, which only governs abandoning an already-active hunt. Extracted as `HUNT_ACQUIRE_THRESHOLD_PX = -150` (impostor commits to slightly-less-perfectly-isolated targets). Landed at 57-61% crew across two 100-game batches — within the 55/45±10% target band.
+  - Final tuning: `SABOTAGE_INTERVAL_TICKS = 300` (back to original), `HUNT_ACQUIRE_THRESHOLD_PX = -150` (new), `ISOLATION_THRESHOLD_PX = 300` (unchanged). Timeout rate ~1-2% throughout.
+- A second follow-up code review caught a *third* instance of the same bug class: mid-game disconnect (`removePlayer`) also removed a crewmate without dropping their incomplete steps. Fixed the same way (call `_removeIncompleteTaskSteps`, then re-check win state, gated to skip while a meeting vote is open). Re-ran a 100-game batch afterward to confirm no regression: 57%/43%, timeout ~1% — this path isn't exercised by bot-vs-bot simulation since bots never disconnect, so this was a pure regression check, not a balance measurement.
+- `pnpm run typecheck` clean, `api-server` workflow rebuilt + restarted after every change, all three workflows verified running. Final measured win rate across 4+ separate 100-game batches: 57-61% crew / 39-43% impostor, consistently within the 55/45±10% target.
+- Updated `SINGLE_PLAY.md` §9 Phase E section to ✅ DONE with the full writeup above (all three bug instances + full tuning history).
+
+**Decisions & gotchas**
+- `_debugtimeout.ts` in `artifacts/api-server/src/sim/` is a reusable scratch debug tool (runs a batch, dumps the last ~40 events of every timeout game) — kept in the repo since it's generically useful for any future "why did this game stall" investigation, not just this bug.
+- 100-game simulation batches routinely exceed the ~5min shell command timeout at default concurrency (25) — either lower `--games`, redirect to a file and `pkill -f "src/sim/cli.ts"` + parse the partial NDJSON after a timeout (both work fine; games already finished are still valid data), or run in smaller batches.
+- Pino logger output goes to **stdout**, interleaved with the simulator's NDJSON — redirect stdout to a file and grep/parse it if you need both structured results and human-readable "Game over"/"Sabotage timed out"/"Meeting concluded" lines from the same run.
+
+**Left off / next steps**
+- Phase E is done. Remaining backlog per SINGLE_PLAY.md: Phase C (single-player lobby flow / `CREATE_SOLO` client button — check if already shipped, the lobby screenshot earlier this session already showed a working "Play Solo vs Bots" panel, so this may already be done and just not marked ✅ in the doc), and whatever's left of tasks #3 (bot crash-safety) / #4 (difficulty tuning, now effectively satisfied by this session's work — reconcile or close).
+- If win rate ever needs revisiting, don't trust a single 100-game batch — noise is ~±5pts; run 2-3 batches (or one large batch broken into chunks to dodge the shell timeout) before concluding a tuning change helped or hurt.
+
+**State to restore**
+- None. All changes typecheck-clean, simulator-verified, workflows restarted.
+
 ## IMPORTANT — First actions after next re-import
 1. Run the standard re-import repair (see Gotchas in replit.md):
    - `verifyAndReplaceArtifactToml()` for api-server, telegram-game, mockup-sandbox
@@ -1338,7 +1367,7 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
    - Restart all three workflows
 2. Verify telegram-game lobby loads and WS handshake succeeds (slot 0 assigned).
 3. Confirm the "Play Solo vs Bots" panel appears on the lobby screen.
-4. Pick up Phase D from SINGLE_PLAY.md.
+4. Phase E is done (dead-body report bug, timeout bug, tuning pass). Check SINGLE_PLAY.md §9 for what's left (Phase C confirmation, tasks #3/#4 reconciliation).
 
 **State to restore**
 - None. All changes typecheck-clean, UI verified, code-reviewed.
