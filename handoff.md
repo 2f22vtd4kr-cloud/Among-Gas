@@ -26,6 +26,26 @@
 
 ## Sessions
 
+### 2026-07-10 — Single-player / bot AI scope defined
+
+**Done**
+- Wrote `SINGLE_PLAY.md` — full scope document covering: bot architecture (server-side synthetic players, no WS), A* pathfinding on the existing collision grid, crewmate/impostor AI behaviour loops, single-player lobby flow (new `0x10/0x06 CREATE_SOLO` sub-action), headless simulation runner, 5-phase implementation plan, and key design decisions with recommendations.
+- Added pointer to `SINGLE_PLAY.md` in `replit.md` Pointers section.
+- No code changes — this session was planning only.
+
+**Decisions & gotchas**
+- Bots are server-side synthetic slots (`isBot: true`), not WS clients. Direct function calls into existing lobby handlers.
+- Pathfinding goes in `lib/shared/src/pathfinding.ts` (shared so future debug overlay can use it).
+- Bot tick rate: 5 Hz (separate from the 25 Hz broadcast loop, cheaper and sufficient).
+- New wire sub-action `0x10/0x06` for CREATE_SOLO — cleaner than overloading the existing CREATE.
+
+**Left off / next steps**
+- Implementation not started. Start with Phase A: `lib/shared/src/pathfinding.ts` (A* on collision grid).
+- Full phase breakdown in `SINGLE_PLAY.md §9`.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Re-import repair (routine, session 3)
 
 **Done**

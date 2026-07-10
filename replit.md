@@ -53,3 +53,5 @@ _Populate as you build — sharp edges, "always run X before Y" rules._
 ## Pointers
 
 - See the `pnpm-workspace` skill for workspace structure, TypeScript setup, and package details
+- `SINGLE_PLAY.md` — full scope doc for the single-player mode, bot AI, and headless playtest simulation feature (read before starting any bot/AI work)
+- `GAME_SPEC.md` — game mechanics specification and phase completion checklist
