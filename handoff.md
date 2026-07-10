@@ -633,6 +633,29 @@
 **State to restore**
 - None.
 
+### 2026-07-10 — Fixed gas-station checkerboard over-blocking (walkway + cone footprints)
+
+**Done**
+- User reported a checkerboard-style over-blocking bug at the gas station: (1) the walkway between the kiosk and gas pumps was un-walkable where they stood, (2) traffic cones blocked their whole sprite outline instead of just their base.
+- Root-caused via connected-component + BFS analysis: the automated red-line tracing pipeline (`scripts/src/analyzeCollisionMap.ts`) was correct/deterministic (data matched the reference image faithfully, 0 discrepancies), but two things combined to make the area feel over-blocked and choppy:
+  1. Downsample majority-vote threshold was 0.35 — low enough that the ~2px wall-dilation halo around every nearby traced line/prop tipped many cells over the line, fragmenting the gas-station/park floor into 22 disconnected walkable islands (largest only 417 cells) instead of one open area. Raised to 0.6 (verified against a full-map connectivity sweep — largest region jumped to 874/886 cells in that area, and the whole-map dominant region stayed intact at 2651 cells with no new fragmentation and no walls disappearing).
+  2. Small props (cones, bins, barrels — anything under ~3000px traced area) were blocked across their *entire* traced silhouette. Added a size-based rule: components under `SMALL_PROP_MAX_SIZE` only block the bottom `SMALL_PROP_BASE_FRACTION` (35%) of their bounding box — i.e. their base — leaving the rest of their footprint walkable. Large furniture/machinery (>3000px) is unaffected and still fully blocked.
+- Regenerated `collisionData.ts` from the updated script; typecheck clean; visually verified via full-map and gas-station reference-image overlays (no regressions elsewhere) and an in-game screenshot.
+- Cleaned up all temporary debug screenshots from this investigation.
+
+**Decisions & gotchas**
+- The in-game debug collision overlay (`showCollision`, toggle `[C]`) draws a marker in *every* cell (bold red if blocked, faint green if walkable) — this makes any area with a non-trivial number of real obstacles look "checkerboard-busy" regardless of whether the underlying data is actually fragmented or not. Don't judge a fix by whether the overlay "looks less busy" — verify with an actual connectivity/BFS check on the decoded grid instead.
+- `SMALL_PROP_MAX_SIZE` (3000) and `SMALL_PROP_BASE_FRACTION` (0.35) are tuned to this reference image's component-size distribution (cone interiors ~200-400px, real furniture ~4000px+). If a future reference-image update changes prop/furniture scale significantly, re-check the size histogram before assuming these thresholds still hold.
+- Cones are not separate sprite objects in code — they're baked into the flat background art and traced like everything else. There's no per-object hook to special-case; any cone-specific behavior has to go through this general small-prop-footprint rule in the generator.
+- The 0.35→0.6 downsample threshold change affects the whole map, not just the gas station — always re-run the full-map connectivity/overlay check after touching this value, not just the specific room being fixed.
+
+**Left off / next steps**
+- User to confirm gas-station walkway and cone collision feel right in actual play.
+- DB, Telegram SDK, multiplayer still pending.
+
+**State to restore**
+- None (both debug-only edits used during investigation — `PLAYER_SPAWN` hardcode and `showCollision` default — were reverted before finishing).
+
 ### 2026-07-09 — Restored blur shadow (reverted solid fill that re-introduced stripes)
 
 **Done**

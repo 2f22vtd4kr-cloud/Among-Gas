@@ -5,3 +5,4 @@
 - [Canvas image upscaling](image-upscaling.md) — canvas drawImage scaling never adds detail; pre-upscale with sharp lanczos3 into a real static asset instead.
 - [Sprite effect scale testing](sprite-shadow-scale.md) — shadows/outlines on the character sheet must be checked via in-game screenshot; subtle effects vanish after downscale to gameplay size.
 - [iOS Safari ctx.filter shadow fix](shadow-ios-fix.md) — blur shadow needs explicit ctx.filter="none" after restore(); radial gradient alone still stripes.
+- [Collision generator tuning](collision-generator-tuning.md) — checkerboard/over-blocking bugs: verify via BFS connectivity not overlay looks; tune downsample threshold + small-prop base-fraction, not per-object hacks.

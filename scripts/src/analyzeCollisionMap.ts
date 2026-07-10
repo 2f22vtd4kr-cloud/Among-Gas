@@ -35,6 +35,19 @@ const ROWS = MAP_H / CELL;
 // obstacle blobs top out ~5.3k px, room floors start ~9.4k px in this image).
 const COMPONENT_SIZE_THRESHOLD = 7000;
 
+// Small props (traffic cones, bins, signs, barrels — anything under this pixel
+// area) only block the ground they actually stand on, not their whole traced
+// silhouette. Isometric sprites are drawn taller than their footprint, so
+// blocking the full outline made walkways feel checkerboarded with obstacles
+// the player should be able to walk past. Only the bottom fraction (the base)
+// of the component's bounding box stays blocked; the rest becomes walkable.
+// Only applied to roughly squarish blobs (cones, bins) — long flat/thin
+// components (curbs, pipe cross-sections) keep their full footprint blocked,
+// since "top vs base" doesn't make sense for something that isn't upright.
+const SMALL_PROP_MAX_SIZE = 3000;
+const SMALL_PROP_BASE_FRACTION = 0.35;
+const SMALL_PROP_MIN_ASPECT = 0.4; // min(w,h)/max(w,h)
+
 function isRedPixel(data: Buffer, idx: number): boolean {
   const r = data[idx];
   const g = data[idx + 1];
@@ -97,19 +110,27 @@ async function main() {
     }
   }
 
-  // Connected-component label the remaining "inside candidate" pixels.
+  // Connected-component label the remaining "inside candidate" pixels,
+  // tracking each component's bounding box so small props can be reduced to
+  // a base-only footprint afterward.
   const compId = new Int32Array(N).fill(-1);
   const sizes: number[] = [];
+  const bboxes: [number, number, number, number][] = []; // minX, minY, maxX, maxY
   for (let start = 0; start < N; start++) {
     if (wall[start] || outside[start] || compId[start] !== -1) continue;
     const id = sizes.length;
     let size = 0;
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     const stack = [start];
     compId[start] = id;
     while (stack.length) {
       const idx = stack.pop()!;
       size++;
       const x = idx % width, y = (idx / width) | 0;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
       const neigh: [number, number][] = [[x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1]];
       for (const [nx, ny] of neigh) {
         if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
@@ -120,18 +141,43 @@ async function main() {
       }
     }
     sizes.push(size);
+    bboxes.push([minX, minY, maxX, maxY]);
   }
 
-  // blocked = wall OR outside OR (inside component below the size threshold)
+  // blocked = wall OR outside OR (inside component below the room-size
+  // threshold). Small, roughly-square (prop-scale) components only block
+  // their base — the bottom fraction of their bounding box — not the full
+  // silhouette. Also track wall/outside separately from the rest so the
+  // downsample step below can hold real walls/boundaries to a stricter bar
+  // than furniture-scale interior blocking.
   const blocked = new Uint8Array(N);
+  const wallOrOutside = new Uint8Array(N);
   for (let i = 0; i < N; i++) {
-    if (wall[i] || outside[i]) { blocked[i] = 1; continue; }
-    blocked[i] = sizes[compId[i]] < COMPONENT_SIZE_THRESHOLD ? 1 : 0;
+    if (wall[i] || outside[i]) { blocked[i] = 1; wallOrOutside[i] = 1; continue; }
+    const id = compId[i];
+    const size = sizes[id];
+    if (size >= COMPONENT_SIZE_THRESHOLD) { blocked[i] = 0; continue; }
+    if (size >= SMALL_PROP_MAX_SIZE) { blocked[i] = 1; continue; }
+    const [minX, minY, maxX, maxY] = bboxes[id];
+    const w = maxX - minX, h = maxY - minY;
+    const aspect = w > 0 && h > 0 ? Math.min(w, h) / Math.max(w, h) : 0;
+    if (aspect < SMALL_PROP_MIN_ASPECT) { blocked[i] = 1; continue; } // flat/thin: not prop-shaped, keep fully blocked
+    const y = (i / width) | 0;
+    const baseStartY = maxY - h * SMALL_PROP_BASE_FRACTION;
+    blocked[i] = y >= baseStartY ? 1 : 0;
   }
   const walkablePx = N - blocked.reduce((a, b) => a + b, 0);
   console.log(`image ${width}x${height}, components=${sizes.length}, walkable px=${walkablePx} (${((walkablePx / N) * 100).toFixed(1)}%)`);
 
-  // Downsample to the logical grid via majority vote per cell.
+  // Downsample to the logical grid via majority vote per cell. Two
+  // thresholds: real walls/outside-boundary use the original conservative
+  // bar (WALL_VOTE_THRESHOLD) so the outer boundary and room dividers can
+  // never thin out or leak. Furniture/prop-interior blocking (which is what
+  // was fragmenting open floors into disconnected islands near densely
+  // packed small obstacles) requires a clearer majority
+  // (INTERIOR_VOTE_THRESHOLD) before it can block a cell.
+  const WALL_VOTE_THRESHOLD = 0.35;
+  const INTERIOR_VOTE_THRESHOLD = 0.6;
   const scaleX = width / MAP_W;
   const scaleY = height / MAP_H;
   const grid = new Uint8Array(COLS * ROWS);
@@ -141,15 +187,18 @@ async function main() {
       const px1 = Math.floor((col + 1) * CELL * scaleX);
       const py0 = Math.floor(row * CELL * scaleY);
       const py1 = Math.floor((row + 1) * CELL * scaleY);
-      let blockedVotes = 0, total = 0;
+      let blockedVotes = 0, wallVotes = 0, total = 0;
       for (let y = py0; y < py1 && y < height; y++) {
         for (let x = px0; x < px1 && x < width; x++) {
           total++;
-          if (blocked[y * width + x]) blockedVotes++;
+          const idx = y * width + x;
+          if (blocked[idx]) blockedVotes++;
+          if (wallOrOutside[idx]) wallVotes++;
         }
       }
-      // Bias slightly toward blocked so thin walls never disappear entirely.
-      grid[row * COLS + col] = total > 0 && blockedVotes / total >= 0.35 ? 1 : 0;
+      const isWall = total > 0 && wallVotes / total >= WALL_VOTE_THRESHOLD;
+      const isInterior = total > 0 && blockedVotes / total >= INTERIOR_VOTE_THRESHOLD;
+      grid[row * COLS + col] = isWall || isInterior ? 1 : 0;
     }
   }
 
