@@ -38,6 +38,14 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import {
+  SABOTAGE_DEFS,
+  SABOTAGE_INTERACTION_RANGE_PX,
+  SABOTAGE_COUNTDOWN_MS,
+  SABOTAGE_LIGHTS,
+  LIGHTS_CREWMATE_VISION_RADIUS_PX,
+  type SabotageSystemId,
+} from '@workspace/shared/sabotage';
 import TaskMinigame from '../components/TaskMinigame';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -100,8 +108,12 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
+    sabotage, sabotageCooldownMs,
   } = useGameState();
-  const { sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep } = useGameActions();
+  const {
+    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
+    triggerSabotage, repairSabotage,
+  } = useGameActions();
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -130,6 +142,59 @@ export default function GameMap() {
 
   const amIDead = mySlot !== null && deadSlots.includes(mySlot);
   const amIImpostor = myRole === 'impostor';
+
+  // ── Sabotages & vision (Phase 8) ───────────────────────────────────────────
+  // Mirrored into refs so the rAF loop (fog-of-war + pad markers) can read the
+  // latest values without a stale closure, same pattern as deadSlotsRef above.
+  const sabotageRef = useRef(sabotage);
+  useEffect(() => { sabotageRef.current = sabotage; }, [sabotage]);
+  const myRoleRef = useRef(myRole);
+  useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
+
+  const [showSabotagePanel, setShowSabotagePanel] = useState(false);
+  useEffect(() => {
+    if (!amIImpostor || sabotage !== null) setShowSabotagePanel(false);
+  }, [amIImpostor, sabotage]);
+
+  /** Closest unfixed pad of the active sabotage within interaction range (crewmates only). */
+  const [nearestRepairPad, setNearestRepairPad] = useState<{ systemId: number; padId: number } | null>(null);
+  useEffect(() => {
+    if (amIDead || amIImpostor || !sabotage) { setNearestRepairPad(null); return; }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      const active = sabotageRef.current;
+      if (!myPos || !active) return;
+      const def = SABOTAGE_DEFS[active.systemId as SabotageSystemId];
+      if (!def) return;
+      let best: { systemId: number; padId: number } | null = null;
+      let bestDistSq = SABOTAGE_INTERACTION_RANGE_PX * SABOTAGE_INTERACTION_RANGE_PX;
+      def.pads.forEach((pad, padId) => {
+        if (active.fixedPads.includes(padId)) return;
+        const dx = pad.x - myPos.x;
+        const dy = pad.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
+      });
+      setNearestRepairPad(best);
+    }, 150);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [amIDead, amIImpostor, sabotage]);
+
+  // Local countdown clock for the sabotage banner, ticked independently of
+  // the canvas rAF loop — same pattern as meetingNow above.
+  const [sabotageNow, setSabotageNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!sabotage) return;
+    setSabotageNow(Date.now());
+    const id = setInterval(() => setSabotageNow(Date.now()), 250);
+    return () => clearInterval(id);
+  }, [sabotage]);
+
+  const sabotageRemainingMs = sabotage
+    ? Math.max(0, SABOTAGE_COUNTDOWN_MS - (sabotageNow - sabotage.startedAtMs))
+    : 0;
+  const sabotageDef = sabotage ? SABOTAGE_DEFS[sabotage.systemId as SabotageSystemId] : null;
 
   // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
   // Movement freezes for everyone while a meeting is in progress — the server
@@ -573,6 +638,48 @@ export default function GameMap() {
         }
       }
 
+      // ── 2.6 Sabotage pad markers (Phase 8, hidden during meetings) ─────────
+      {
+        const active = sabotageRef.current;
+        if (active && !meetingActiveRef.current) {
+          const def = SABOTAGE_DEFS[active.systemId as SabotageSystemId];
+          if (def) {
+            ctx.textAlign = 'center';
+            def.pads.forEach((pad, padId) => {
+              const done = active.fixedPads.includes(padId);
+              const tx = Math.round((pad.x - srcX) * scale);
+              const ty = Math.round((pad.y - srcY) * scale);
+              if (tx < -60 || tx > cw + 60 || ty < -60 || ty > ch + 60) return;
+              const markerR = Math.round(10 * dpr);
+              ctx.beginPath();
+              ctx.arc(tx, ty, markerR + 3, 0, Math.PI * 2);
+              ctx.fillStyle = done ? 'rgba(50,180,50,0.2)' : 'rgba(255,60,60,0.22)';
+              ctx.fill();
+              ctx.beginPath();
+              ctx.arc(tx, ty, markerR, 0, Math.PI * 2);
+              ctx.fillStyle = done ? 'rgba(50,180,50,0.85)' : 'rgba(230,50,50,0.9)';
+              ctx.fill();
+              ctx.strokeStyle = done ? 'rgba(30,140,30,0.9)' : 'rgba(140,0,0,0.9)';
+              ctx.lineWidth = Math.round(1.5 * dpr);
+              ctx.stroke();
+              ctx.fillStyle = '#fff';
+              ctx.font = `bold ${Math.round(11 * dpr)}px sans-serif`;
+              ctx.textBaseline = 'middle';
+              ctx.fillText(done ? '✓' : '⚠', tx, ty);
+              ctx.textBaseline = 'top';
+              ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
+              ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+              ctx.lineWidth = Math.round(3 * dpr);
+              const label = def.pads.length > 1 ? `${def.name} ${padId + 1}` : def.name;
+              ctx.strokeText(label, tx, ty + markerR + 3);
+              ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
+              ctx.fillText(label, tx, ty + markerR + 3);
+            });
+            ctx.textAlign = 'left';
+          }
+        }
+      }
+
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
@@ -708,6 +815,31 @@ export default function GameMap() {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
+
+      // ── 5. Fog-of-war (Phase 8 — Lights sabotage, crewmate view only) ─────
+      // Impostor vision is unaffected (GAME_SPEC.md §10), so no fog is drawn
+      // on an impostor's own client. Rendered as a full black overlay with a
+      // radial-gradient "hole" cut around the local player via destination-out
+      // compositing, matching the shadow/blur conventions used elsewhere here.
+      const activeSabotage = sabotageRef.current;
+      if (activeSabotage && activeSabotage.systemId === SABOTAGE_LIGHTS && myRoleRef.current === 'crewmate') {
+        const visionR = Math.round(LIGHTS_CREWMATE_VISION_RADIUS_PX * scale);
+        ctx.save();
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, cw, ch);
+        ctx.globalCompositeOperation = 'destination-out';
+        const grad = ctx.createRadialGradient(pCX, pCY, visionR * 0.35, pCX, pCY, visionR);
+        grad.addColorStop(0, 'rgba(0,0,0,1)');
+        grad.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(pCX, pCY, visionR, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        // iOS Safari fix: an explicit filter reset after restore() prevents
+        // the next frame's blur/shadow filters from striping (see memory).
+        ctx.filter = 'none';
+      }
 
       rafId = requestAnimationFrame(frame);
     };
@@ -870,7 +1002,9 @@ export default function GameMap() {
       )}
 
       {/* ── Kill / Report action row (Phase 5 kill, Phase 6 report) ───────── */}
-      {loaded && !amIDead && meeting === null && (amIImpostor || nearestBody !== null) && (
+      {/* Report is blocked server-side while a sabotage is active (GAME_SPEC.md §10 —
+          meetings can't be called mid-sabotage), so hide it (but not Kill) to match. */}
+      {loaded && !amIDead && meeting === null && (amIImpostor || (sabotage === null && nearestBody !== null)) && (
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
@@ -896,7 +1030,7 @@ export default function GameMap() {
               {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Kill'}
             </button>
           )}
-          {nearestBody !== null && (
+          {sabotage === null && nearestBody !== null && (
             <button
               onClick={() => reportBody(nearestBody)}
               style={{
@@ -916,8 +1050,118 @@ export default function GameMap() {
         </div>
       )}
 
+      {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
+      {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
+        <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}>
+          <button
+            disabled={sabotageCooldownMs > 0}
+            onClick={() => setShowSabotagePanel(true)}
+            style={{
+              width: 76, height: 76, borderRadius: '50%',
+              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
+              letterSpacing: '0.03em', textTransform: 'uppercase',
+              color: sabotageCooldownMs > 0 ? 'rgba(200,170,255,0.35)' : '#f0e4ff',
+              background: sabotageCooldownMs > 0
+                ? 'rgba(50,20,70,0.55)'
+                : 'radial-gradient(circle, rgba(130,40,200,0.95), rgba(60,10,110,0.95))',
+              border: `2px solid ${sabotageCooldownMs > 0 ? 'rgba(160,100,220,0.25)' : 'rgba(190,130,255,0.85)'}`,
+              boxShadow: sabotageCooldownMs > 0 ? 'none' : '0 0 22px rgba(150,60,255,0.5)',
+              cursor: sabotageCooldownMs > 0 ? 'default' : 'pointer',
+              backdropFilter: 'blur(4px)',
+            }}
+          >
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : '⚡ Sabotage'}
+          </button>
+        </div>
+      )}
+
+      {/* ── Repair button (Phase 8, crewmates only) ─────────────────────────── */}
+      {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
+        <div style={{
+          position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+        }}>
+          <button
+            onClick={() => repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId)}
+            style={{
+              padding: '10px 24px', borderRadius: 10,
+              background: 'rgba(200,50,50,0.9)', color: '#ffe8e8',
+              border: '1px solid rgba(255,120,120,0.5)',
+              fontFamily: 'sans-serif', fontWeight: 700, fontSize: 13,
+              letterSpacing: '0.03em', cursor: 'pointer',
+              backdropFilter: 'blur(6px)',
+              boxShadow: '0 0 18px rgba(255,60,60,0.35)',
+            }}
+          >
+            🔧 Repair {sabotageDef?.name ?? ''}
+          </button>
+        </div>
+      )}
+
+      {/* ── Sabotage active banner (Phase 8) ─────────────────────────────────── */}
+      {loaded && sabotage && sabotageDef && (
+        <div style={{
+          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          padding: '6px 16px', zIndex: 40, textAlign: 'center',
+          background: 'rgba(70,10,10,0.9)', color: '#ffe4e4',
+          fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
+          letterSpacing: '0.03em', borderRadius: 8,
+          border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
+        }}>
+          ⚠ {sabotageDef.name} sabotaged — {Math.ceil(sabotageRemainingMs / 1000)}s
+          {sabotageDef.pads.length > 1 && (
+            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} fixed)</span>
+          )}
+        </div>
+      )}
+
+      {/* ── Sabotage panel overlay (Phase 8, impostor only) ─────────────────── */}
+      {showSabotagePanel && amIImpostor && sabotage === null && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 55,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(6,10,18,0.85)', backdropFilter: 'blur(4px)', gap: 14,
+          }}
+          onClick={() => setShowSabotagePanel(false)}
+        >
+          <div style={{
+            fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
+            letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4,
+          }}>
+            Choose a system to sabotage
+          </div>
+          {Object.values(SABOTAGE_DEFS).map(def => (
+            <button
+              key={def.id}
+              onClick={(e) => { e.stopPropagation(); triggerSabotage(def.id); setShowSabotagePanel(false); }}
+              style={{
+                padding: '12px 32px', borderRadius: 10, minWidth: 180,
+                background: 'rgba(130,40,200,0.85)', color: '#f0e4ff',
+                border: '1px solid rgba(190,130,255,0.5)',
+                fontFamily: 'sans-serif', fontWeight: 700, fontSize: 14,
+                letterSpacing: '0.03em', cursor: 'pointer',
+              }}
+            >
+              {def.name}
+            </button>
+          ))}
+          <button
+            onClick={() => setShowSabotagePanel(false)}
+            style={{
+              marginTop: 8, padding: '8px 20px', borderRadius: 8,
+              background: 'transparent', color: 'rgba(255,255,255,0.6)',
+              border: '1px solid rgba(255,255,255,0.25)',
+              fontFamily: 'sans-serif', fontSize: 12, cursor: 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
       {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
-      {loaded && !amIDead && meeting === null && (
+      {loaded && !amIDead && meeting === null && sabotage === null && (
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
             onClick={callEmergencyMeeting}

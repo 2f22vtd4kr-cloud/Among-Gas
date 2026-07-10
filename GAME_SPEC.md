@@ -566,17 +566,17 @@ Ordered by dependency. Each step is independently shippable and testable.
 3. Vote packets (0x14) + server tally → 0x1C eject result. ✅ — also reused (ejectedSlot = NO_TARGET) for an immediate post-kill win check, so a kill that tips alive-player parity ends the game without waiting for a meeting.
 4. Eject animation + return to ROAMING. ✅ — non-win eject/no-eject renders as an auto-dismissing banner; a win renders a persistent Game Over overlay instead of returning to ROAMING.
 
-### Phase 7 — Tasks
-1. Task assignment at game start.
-2. Task minigame UIs (simple interactions per task type).
-3. 0x15 sub 0x03 step progression + server global progress broadcast.
-4. Task progress bar in HUD.
+### Phase 7 — Tasks ✅ (2026-07-10)
+1. Task assignment at game start. ✅
+2. Task minigame UIs (simple interactions per task type). ✅
+3. 0x15 sub 0x03 step progression + server global progress broadcast. ✅
+4. Task progress bar in HUD. ✅
 
-### Phase 8 — Sabotages & Vision
-1. Impostor sabotage panel.
-2. Sabotage state machine server-side.
-3. Lights: fog-of-war lightmask Layer 2 implementation.
-4. O₂ / Reactor: dual-pad fix UI.
+### Phase 8 — Sabotages & Vision ✅ (2026-07-10)
+1. Impostor sabotage panel. ✅
+2. Sabotage state machine server-side. ✅ — see §14 #15–#17 for implementation deviations.
+3. Lights: fog-of-war lightmask Layer 2 implementation. ✅ — rendered only while a Lights sabotage is active (not a permanent baseline mechanic).
+4. O₂ / Reactor: dual-pad fix UI. ✅ — pad markers on canvas + proximity-gated Repair button.
 
 ### Phase 9 — Polish & Telegram Integration
 1. `@telegram-apps/sdk-react` SDK.
@@ -606,3 +606,6 @@ This section documents issues in the source spec documents that are corrected in
 | 12 | `handleGameStart` stub — no actual role shuffle | Full role assignment with information asymmetry in §8 |
 | 13 | Spec assumes a static "body" prop placed on the map at the kill location | Not implemented (no dedicated body prop/asset); Report instead scans nearby dead players' last known slot within `REPORT_RANGE_PX` and reports that slot directly. Functionally equivalent (same 0x13 payload, same server validation) but there is no persistent visual corpse on the map — a dead player's own sprite becomes the reportable "body" until reported. |
 | 14 | Spec ties the Emergency button to a physical map prop (e.g. a table/button object) | Implemented as an always-available UI button for any alive player once `ROAMING`, with no map-position requirement. Server-side validation is unaffected (`bodySlot = NO_TARGET`); this only changes the client affordance, trading a map prop for simpler/faster access on mobile. |
+| 15 | §3's opcode matrix has no S→C broadcast opcode for sabotage state (only the §10 RPC sub-codes `0x15` sub `0x04`/`0x05` cover the C→S trigger/repair requests) | Added opcode `0x16` "Sabotage Control" (S→C only): sub `0x01` Started `[0x16,0x01,systemId,attackerSlot]`, sub `0x02` Pad Fixed `[0x16,0x02,systemId,padId]`, sub `0x03` Fixed `[0x16,0x03,systemId]`. Same style of undocumented wire extension as opcode `0x1D` (Phase 7 task assignment, S→C only, also missing from §3 — noted here retroactively since it was never previously recorded). |
+| 16 | §10 describes O₂/Reactor as requiring two crewmates to "hold" two pads "simultaneously" | Repairs are discrete one-shot RPCs (`0x15` sub `0x05`), not a continuous hold, so there is no server concept of two clients holding at once. Implemented as: two *different* pads each fixed within a rolling `SABOTAGE_PAD_SYNC_WINDOW_MS` (10s) window of each other count as simultaneous. A lone crewmate repeatedly hitting the same pad never resolves it — a second crewmate on the other pad is still required. |
+| 17 | §10 says "Server broadcasts vision change to all clients via dedicated update" for the Lights effect | No separate vision-change opcode was added. The client already knows the active sabotage's `systemId` from the `0x16` sub `0x01` broadcast, so a crewmate client renders the fog-of-war locally whenever `systemId === SABOTAGE_LIGHTS`, with no extra packet. Functionally equivalent (same trigger, same crewmate-only effect) but saves a wire message. |

@@ -7,8 +7,10 @@
  *   game-start handling (0x12 → 0x1A role reveal).
  * Phase 4: Fisher-Yates role assignment with information asymmetry
  *   (personalized 0x1A packets), spread spawn positions at game start.
+ * Phase 8: Sabotage state machine (trigger/repair/timeout), meeting block
+ *   while a sabotage is active.
  *
- * Protocol reference: GAME_SPEC.md §6, §7, §8
+ * Protocol reference: GAME_SPEC.md §6, §7, §8, §10
  */
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
@@ -27,6 +29,15 @@ import {
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import {
+  SABOTAGE_DEFS,
+  SABOTAGE_INTERACTION_RANGE_PX,
+  SABOTAGE_COUNTDOWN_MS,
+  SABOTAGE_COOLDOWN_MS,
+  SABOTAGE_PAD_SYNC_WINDOW_MS,
+  isSabotageSystemId,
+  type SabotageSystemId,
+} from '@workspace/shared/sabotage';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -113,6 +124,20 @@ export interface MeetingState {
   votingTimer: ReturnType<typeof setTimeout> | null;
 }
 
+/**
+ * Phase 8 — active sabotage state (GAME_SPEC.md §10).
+ * `startedAtMs` is mirrored by clients to drive their own countdown UI
+ * (same pattern as MeetingState's timers). `padFixedAt` tracks, for
+ * two-pad systems (O2/Reactor), when each pad index was last fixed — two
+ * different pads fixed within SABOTAGE_PAD_SYNC_WINDOW_MS resolves it.
+ */
+export interface SabotageState {
+  systemId: SabotageSystemId;
+  startedAtMs: number;
+  padFixedAt: Map<number, number>;
+  timeoutTimer: ReturnType<typeof setTimeout>;
+}
+
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
@@ -127,6 +152,10 @@ export interface Lobby {
   completedTaskSteps: Set<string>;
   /** Total assigned task steps across all crewmates (denominator for progress). */
   totalTaskSteps: number;
+  /** Non-null only while a sabotage is active (Phase 8). */
+  sabotage: SabotageState | null;
+  /** Global cooldown (ms remaining) before impostors may trigger another sabotage. */
+  sabotageCooldownMs: number;
 }
 
 export const MAX_PLAYERS = 15;
@@ -246,6 +275,32 @@ export function buildTaskProgressPacket(percent: number): Buffer {
 }
 
 /**
+ * 0x16 sub 0x01 — sabotage started (S→C, Phase 8, GAME_SPEC.md §10).
+ * Layout: [0x16, 0x01, systemId, attackerSlot]
+ * (attackerSlot lets the triggering client start its own cooldown UI,
+ * same rationale as buildKillPacket's attackerSlot.)
+ */
+export function buildSabotageStartPacket(systemId: number, attackerSlot: number): Buffer {
+  return Buffer.from([0x16, 0x01, systemId, attackerSlot]);
+}
+
+/**
+ * 0x16 sub 0x02 — sabotage pad-fixed progress (S→C, two-pad systems only).
+ * Layout: [0x16, 0x02, systemId, padId]
+ */
+export function buildSabotagePadFixedPacket(systemId: number, padId: number): Buffer {
+  return Buffer.from([0x16, 0x02, systemId, padId]);
+}
+
+/**
+ * 0x16 sub 0x03 — sabotage fixed / cleared (S→C).
+ * Layout: [0x16, 0x03, systemId]
+ */
+export function buildSabotageFixedPacket(systemId: number): Buffer {
+  return Buffer.from([0x16, 0x03, systemId]);
+}
+
+/**
  * 0xFF — delta sync broadcast
  *
  * Layout:
@@ -330,6 +385,8 @@ export class LobbyManager {
       meeting: null,
       completedTaskSteps: new Set(),
       totalTaskSteps: 0,
+      sabotage: null,
+      sabotageCooldownMs: 0,
     };
 
     this.lobbies.set(code, lobby);
@@ -378,6 +435,7 @@ export class LobbyManager {
     lobby.players.set(slot, player);
     lobby.userIdToSlot.set(tgUserId, slot);
     this.userToLobbyMap.set(tgUserId, roomCode);
+    // (sabotage / sabotageCooldownMs are lobby-level and already initialized in createLobby)
 
     logger.info(`[Lobby] Joined ${roomCode} — ${username} (userId=${tgUserId}, slot=${slot})`);
     return lobby;
@@ -410,6 +468,9 @@ export class LobbyManager {
       if (lobby.meeting) {
         if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
         if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
+      }
+      if (lobby.sabotage) {
+        clearTimeout(lobby.sabotage.timeoutTimer);
       }
       this.lobbies.delete(code);
       logger.info(`[Lobby] Torn down empty lobby ${code}`);
@@ -596,6 +657,122 @@ export class LobbyManager {
     logger.info(`[Lobby] Game over in ${lobby.code} after kill — winFlag=${winFlag}`);
   }
 
+  // ── Sabotages (Phase 8) ────────────────────────────────────────────────────
+
+  /**
+   * Validate + trigger a sabotage (GAME_SPEC.md §10). Returns true if the
+   * sabotage was started (caller should broadcast it via buildSabotageStartPacket).
+   */
+  triggerSabotage(lobby: Lobby, attackerSlot: number, systemId: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+    if (lobby.sabotage !== null) return false; // one sabotage at a time
+    if (lobby.sabotageCooldownMs > 0) return false;
+    if (!isSabotageSystemId(systemId)) return false;
+
+    const attacker = lobby.players.get(attackerSlot);
+    if (!attacker || !attacker.alive || attacker.role !== 'impostor') return false;
+
+    lobby.sabotage = {
+      systemId,
+      startedAtMs: Date.now(),
+      padFixedAt: new Map(),
+      timeoutTimer: setTimeout(() => this._sabotageTimeout(lobby), SABOTAGE_COUNTDOWN_MS),
+    };
+    lobby.sabotageCooldownMs = SABOTAGE_COOLDOWN_MS;
+
+    logger.info(
+      `[Lobby] Sabotage triggered in ${lobby.code}: system=${SABOTAGE_DEFS[systemId].name} ` +
+      `by slot=${attackerSlot}`,
+    );
+    return true;
+  }
+
+  broadcastSabotageStart(lobby: Lobby, systemId: number, attackerSlot: number): void {
+    const packet = buildSabotageStartPacket(systemId, attackerSlot);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+  }
+
+  /**
+   * Validate + apply a repair action on one pad of the currently active
+   * sabotage (GAME_SPEC.md §10). Returns:
+   *   'fixed'    — this repair resolved the sabotage; caller should broadcast
+   *                buildSabotageFixedPacket and resume ROAMING.
+   *   'progress' — a pad was recorded but the sabotage isn't resolved yet
+   *                (two-pad systems); caller should broadcast
+   *                buildSabotagePadFixedPacket.
+   *   'rejected' — no-op; the action failed validation.
+   */
+  attemptRepair(lobby: Lobby, playerSlot: number, systemId: number, padId: number): 'fixed' | 'progress' | 'rejected' {
+    const sabotage = lobby.sabotage;
+    if (!sabotage || sabotage.systemId !== systemId) return 'rejected';
+
+    const player = lobby.players.get(playerSlot);
+    if (!player || !player.alive || player.role !== 'crewmate') return 'rejected';
+
+    const def = SABOTAGE_DEFS[sabotage.systemId];
+    const pad = def.pads[padId];
+    if (!pad) return 'rejected';
+
+    const dx = player.x - pad.x;
+    const dy = player.y - pad.y;
+    if (dx * dx + dy * dy > SABOTAGE_INTERACTION_RANGE_PX * SABOTAGE_INTERACTION_RANGE_PX) {
+      return 'rejected';
+    }
+
+    if (def.pads.length === 1) {
+      // Single-pad systems (Lights): any one interaction fixes it immediately.
+      this._resolveSabotage(lobby);
+      return 'fixed';
+    }
+
+    // Multi-pad systems (O2, Reactor): require two *different* pads fixed
+    // within the sync window — recording the same pad twice never satisfies
+    // the other one, so a lone crewmate can't clear it alone.
+    const now = Date.now();
+    sabotage.padFixedAt.set(padId, now);
+
+    for (const [otherPadId, otherFixedAt] of sabotage.padFixedAt) {
+      if (otherPadId === padId) continue;
+      if (Math.abs(now - otherFixedAt) <= SABOTAGE_PAD_SYNC_WINDOW_MS) {
+        this._resolveSabotage(lobby);
+        return 'fixed';
+      }
+    }
+    return 'progress';
+  }
+
+  broadcastSabotagePadFixed(lobby: Lobby, systemId: number, padId: number): void {
+    const packet = buildSabotagePadFixedPacket(systemId, padId);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+  }
+
+  broadcastSabotageFixed(lobby: Lobby, systemId: number): void {
+    const packet = buildSabotageFixedPacket(systemId);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+  }
+
+  private _resolveSabotage(lobby: Lobby): void {
+    if (!lobby.sabotage) return;
+    clearTimeout(lobby.sabotage.timeoutTimer);
+    lobby.sabotage = null;
+    logger.info(`[Lobby] Sabotage resolved in ${lobby.code}`);
+  }
+
+  /** Impostors win outright if a sabotage countdown reaches zero unfixed (GAME_SPEC.md §10). */
+  private _sabotageTimeout(lobby: Lobby): void {
+    if (!lobby.sabotage || lobby.phase !== 'ROAMING') return;
+    lobby.sabotage = null;
+    lobby.phase = 'GAMEOVER';
+    this._broadcastVoteResult(lobby, NO_TARGET, 2); // impostors win
+    logger.info(`[Lobby] Sabotage timed out in ${lobby.code} — impostors win`);
+  }
+
   // ── Tasks (Phase 7) ──────────────────────────────────────────────────────────
 
   /**
@@ -658,6 +835,10 @@ export class LobbyManager {
    */
   callMeeting(lobby: Lobby, reporterSlot: number, bodySlot: number): boolean {
     if (lobby.phase !== 'ROAMING') return false;
+    // Phase 8: 0x13 (report/emergency) is rejected outright while any sabotage
+    // is active (GAME_SPEC.md §10) — crewmates must fix it (or run the clock
+    // out) before a meeting can be called.
+    if (lobby.sabotage !== null) return false;
 
     const reporter = lobby.players.get(reporterSlot);
     if (!reporter || !reporter.alive) return false;
@@ -820,7 +1001,10 @@ export class LobbyManager {
 
   private _tickDelta(): void {
     for (const lobby of this.lobbies.values()) {
-      if (lobby.phase === 'ROAMING') this._tickKillCooldowns(lobby);
+      if (lobby.phase === 'ROAMING') {
+        this._tickKillCooldowns(lobby);
+        this._tickSabotageCooldown(lobby);
+      }
       this._broadcastDelta(lobby);
     }
   }
@@ -831,6 +1015,13 @@ export class LobbyManager {
       if (player.killCooldownMs > 0) {
         player.killCooldownMs = Math.max(0, player.killCooldownMs - 40);
       }
+    }
+  }
+
+  /** Decrement the lobby-wide sabotage cooldown by one tick (40ms), floored at 0. */
+  private _tickSabotageCooldown(lobby: Lobby): void {
+    if (lobby.sabotageCooldownMs > 0) {
+      lobby.sabotageCooldownMs = Math.max(0, lobby.sabotageCooldownMs - 40);
     }
   }
 

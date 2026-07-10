@@ -8,6 +8,7 @@
     "./coords": "./src/coords.ts",
     "./collisionMap": "./src/collisionMap.ts",
     "./collisionData": "./src/collisionData.ts",
-    "./tasks": "./src/tasks.ts"
+    "./tasks": "./src/tasks.ts",
+    "./sabotage": "./src/sabotage.ts"
   }
 }

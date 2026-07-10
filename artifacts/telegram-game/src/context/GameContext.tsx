@@ -17,6 +17,9 @@ import {
   fromWire, MAP_W, MAP_H, KILL_COOLDOWN_MS,
   MEETING_DISCUSSION_MS, MEETING_VOTING_MS, NO_TARGET,
 } from '@workspace/shared/coords';
+import {
+  SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
+} from '@workspace/shared/sabotage';
 import { PLAYER_SPAWN } from '../game/player';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -70,6 +73,19 @@ export interface MyTask {
   completedSteps: number;
 }
 
+/**
+ * Active sabotage (Phase 8 — GAME_SPEC.md §10). Set on 0x16 sub 0x01 receipt,
+ * cleared on sub 0x03. `startedAtMs` is mirrored client-side (same pattern as
+ * MeetingInfo) to drive the countdown UI against SABOTAGE_COUNTDOWN_MS.
+ * `fixedPads` tracks which pad indices have already been fixed, for the
+ * two-pad O2/Reactor systems' progress UI.
+ */
+export interface SabotageInfo {
+  systemId: number;
+  startedAtMs: number;
+  fixedPads: number[];
+}
+
 export interface GameState {
   phase: GamePhase;
   mySlot: number | null;
@@ -95,6 +111,10 @@ export interface GameState {
   myTasks: MyTask[];
   /** Global task completion 0–100 (broadcast by server on each step completion). */
   globalTaskProgress: number;
+  /** Non-null while a sabotage is active (Phase 8). */
+  sabotage: SabotageInfo | null;
+  /** Impostor-only sabotage cooldown countdown, ms. 0 = ready to sabotage. Client-side display estimate. */
+  sabotageCooldownMs: number;
 }
 
 export interface GameActions {
@@ -118,6 +138,10 @@ export interface GameActions {
    * progress and sends [0x15, 0x03, taskId, stepIndex] to the server.
    */
   completeTaskStep: (taskId: number, stepIndex: number) => void;
+  /** Send a 0x15 sub 0x04 Sabotage RPC (impostor only; server re-validates). */
+  triggerSabotage: (systemId: number) => void;
+  /** Send a 0x15 sub 0x05 Repair RPC (crewmate only; server re-validates proximity). */
+  repairSabotage: (systemId: number, padId: number) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -136,6 +160,8 @@ const DEFAULT_STATE: GameState = {
   voteResult: null,
   myTasks: [],
   globalTaskProgress: 0,
+  sabotage: null,
+  sabotageCooldownMs: 0,
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -152,6 +178,8 @@ const GameActionsCtx = createContext<GameActions>({
   castVote: () => {},
   clearVoteResult: () => {},
   completeTaskStep: () => {},
+  triggerSabotage: () => {},
+  repairSabotage: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -354,6 +382,32 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       { slot: 3, x: MAP_W / 2 + 30, y: MAP_H / 2 + 140 },
     ],
   },
+  // Phase 8 — impostor, sabotage cooldown ready, can open the sabotage panel.
+  'sabotage-ready': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], killCooldownMs: 0, sabotageCooldownMs: 0,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 8 — Lights sabotage active, crewmate view: fog-of-war vision reduced to 15%.
+  'sabotage-lights': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      sabotage: { systemId: SABOTAGE_LIGHTS, startedAtMs: Date.now(), fixedPads: [] },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Phase 8 — O2 sabotage active, crewmate view: one of two pads already fixed.
+  'sabotage-o2': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      sabotage: { systemId: 0x02, startedAtMs: Date.now(), fixedPads: [0] },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
 };
 
 /** Returns the requested dev mock preset, or null if none/invalid/prod. */
@@ -538,6 +592,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     });
   }, [send]);
 
+  const triggerSabotage = useCallback((systemId: number) => {
+    send([0x15, 0x04, systemId]);
+  }, [send]);
+
+  const repairSabotage = useCallback((systemId: number, padId: number) => {
+    send([0x15, 0x05, systemId, padId]);
+  }, [send]);
+
   useEffect(() => {
     // ── Dev mock mode: skip the real socket, force a fixed visual state ────
     const mock = getMockPreset();
@@ -654,6 +716,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           voteResult: null,
           myTasks: [],
           globalTaskProgress: 0,
+          sabotage: null,
+          sabotageCooldownMs: 0,
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
@@ -699,6 +763,45 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (sub === 0x03 && event.data.byteLength === 3) {
           const percent = view.getUint8(2);
           setState(s => ({ ...s, globalTaskProgress: percent }));
+          return;
+        }
+
+        return;
+      }
+
+      // ── 0x16: sabotage control (Phase 8, GAME_SPEC.md §10) ──────────────
+      // sub 0x01 — Started: [0x16, 0x01, systemId, attackerSlot]
+      // sub 0x02 — Pad fixed (progress): [0x16, 0x02, systemId, padId]
+      // sub 0x03 — Fixed / cleared: [0x16, 0x03, systemId]
+      if (opcode === 0x16 && event.data.byteLength >= 3) {
+        const sub = view.getUint8(1);
+        const systemId = view.getUint8(2);
+
+        if (sub === 0x01) {
+          const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
+          setState(s => ({
+            ...s,
+            sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [] },
+            // Only the triggering client resets its own cooldown UI.
+            sabotageCooldownMs: attackerSlot === mySlotRef.current
+              ? SABOTAGE_COOLDOWN_MS
+              : s.sabotageCooldownMs,
+          }));
+          return;
+        }
+
+        if (sub === 0x02 && event.data.byteLength >= 4) {
+          const padId = view.getUint8(3);
+          setState(s => (
+            !s.sabotage || s.sabotage.systemId !== systemId || s.sabotage.fixedPads.includes(padId)
+              ? s
+              : { ...s, sabotage: { ...s.sabotage, fixedPads: [...s.sabotage.fixedPads, padId] } }
+          ));
+          return;
+        }
+
+        if (sub === 0x03) {
+          setState(s => (s.sabotage?.systemId === systemId ? { ...s, sabotage: null } : s));
           return;
         }
 
@@ -788,10 +891,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [state.phase, state.myRole, state.killCooldownMs > 0]);
 
+  // Client-side sabotage cooldown countdown display (server is authoritative
+  // for the actual trigger validation; this just drives the impostor's UI timer).
+  useEffect(() => {
+    if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
+    if (state.sabotageCooldownMs <= 0) return;
+    const id = setInterval(() => {
+      setState(s => ({ ...s, sabotageCooldownMs: Math.max(0, s.sabotageCooldownMs - 250) }));
+    }, 250);
+    return () => clearInterval(id);
+  }, [state.phase, state.myRole, state.sabotageCooldownMs > 0]);
+
   const actions: GameActions = {
     createRoom, joinRoom, startGame, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
-    completeTaskStep,
+    completeTaskStep, triggerSabotage, repairSabotage,
   };
 
   return (

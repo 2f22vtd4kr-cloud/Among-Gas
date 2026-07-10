@@ -20,6 +20,7 @@ import {
   buildSlotAssignedPacket,
   buildTaskProgressPacket,
 } from './lobby.js';
+import { isSabotageSystemId } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
 import {
   buildCollisionGrid,
@@ -228,6 +229,34 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
             if (p.ws.readyState === /* OPEN */ 1) p.ws.send(progressPacket);
           }
           lobbyManager.checkWinAfterTask(lobby);
+          return;
+        }
+
+        // 0x04 — Sabotage trigger (C→S, 3 bytes): [0x15, 0x04, systemId]
+        // Phase 8: impostor-only; server re-validates role/cooldown/single-sabotage.
+        if (sub === 0x04 && raw.length === 3) {
+          const systemId = raw.readUInt8(2);
+          if (!isSabotageSystemId(systemId)) return;
+          const triggered = lobbyManager.triggerSabotage(lobby, attackerSlot, systemId);
+          if (triggered) {
+            lobbyManager.broadcastSabotageStart(lobby, systemId, attackerSlot);
+            logger.info(`[WS] Sabotage triggered in ${lobby.code}: system=${systemId} by slot=${attackerSlot}`);
+          }
+          return;
+        }
+
+        // 0x05 — Repair (C→S, 4 bytes): [0x15, 0x05, systemId, padId]
+        // Phase 8: crewmate-only; server re-validates role/proximity/active sabotage.
+        if (sub === 0x05 && raw.length === 4) {
+          const systemId = raw.readUInt8(2);
+          const padId = raw.readUInt8(3);
+          const result = lobbyManager.attemptRepair(lobby, attackerSlot, systemId, padId);
+          if (result === 'fixed') {
+            lobbyManager.broadcastSabotageFixed(lobby, systemId);
+            logger.info(`[WS] Sabotage fixed in ${lobby.code}: system=${systemId} by slot=${attackerSlot}`);
+          } else if (result === 'progress') {
+            lobbyManager.broadcastSabotagePadFixed(lobby, systemId, padId);
+          }
           return;
         }
 
