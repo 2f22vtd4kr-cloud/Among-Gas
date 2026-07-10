@@ -40,8 +40,10 @@
 - New wire sub-action `0x10/0x06` for CREATE_SOLO — cleaner than overloading the existing CREATE.
 
 **Left off / next steps**
-- Implementation not started. Start with Phase A: `lib/shared/src/pathfinding.ts` (A* on collision grid).
+- Implementation not started. **Next session: begin Phase A — `lib/shared/src/pathfinding.ts` (A\* pathfinding on the collision grid).** This is the foundation everything else (bot movement, simulation runner) depends on.
+- After Phase A is verified, proceed to Phase B (bot agent base + server integration), then C (single-player lobby flow), D (headless simulation runner), E (tuning).
 - Full phase breakdown in `SINGLE_PLAY.md §9`.
+- User confirmed: build starts from Phase A on the next repo import session.
 
 **State to restore**
 - None.
