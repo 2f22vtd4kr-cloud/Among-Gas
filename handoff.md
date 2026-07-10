@@ -694,6 +694,34 @@
 **State to restore**
 - None.
 
+### 2026-07-10 — Phase 1: WebSocket foundation
+
+**Done**
+- Added `ws` + `@types/ws` to `artifacts/api-server`.
+- `artifacts/api-server/src/ws/auth.ts` — Telegram HMAC-SHA256 verification; DEV_MODE bypass
+  (accepts raw `{ id, username }` JSON when `TELEGRAM_BOT_TOKEN` is not set).
+- `artifacts/api-server/src/ws/wsServer.ts` — `attachWsServer(httpServer)`: uses `noServer: true`
+  + HTTP `upgrade` event; only accepts upgrades on `/api/ws`; sends 0x01 ack on success.
+- `artifacts/api-server/src/index.ts` — refactored from `app.listen()` to `http.createServer(app)`,
+  shared with WS server. Error handling moved to `httpServer.on('error', ...)`.
+- `artifacts/telegram-game/src/hooks/useGameSocket.ts` — client hook: connects, sends dev-mode
+  JSON auth, logs `✅ handshake OK — assigned slot 0` on success.
+- `artifacts/telegram-game/src/App.tsx` — `WsManager` component (renders null, calls hook once).
+- Verified: browser console shows handshake OK; server log confirms DEV_MODE + connection.
+
+**Decisions & gotchas**
+- WS shares the same HTTP server as Express (no new port) — `noServer: true` + `upgrade` event.
+- Only upgrades on `/api/ws` — all other upgrade requests are `.destroy()`-ed.
+- DEV_MODE active when `TELEGRAM_BOT_TOKEN` is absent or `"DEBUG_MOCK_TOKEN"`.
+- Player slot is `0` placeholder in Phase 1; real slot assignment comes in Phase 2 (LobbyManager).
+- `api-zod` lib needs `tsc -p lib/api-zod/tsconfig.json` before `api-server` typecheck passes (pre-existing issue; declarations aren't committed).
+
+**Left off / next steps**
+- Phase 2: LobbyManager + lobby create/join UI (opcode 0x10).
+
+**State to restore**
+- All three workflows running. WS connected and handshaking in browser.
+
 ### 2026-07-10 — Master game spec written (GAME_SPEC.md)
 
 **Done**

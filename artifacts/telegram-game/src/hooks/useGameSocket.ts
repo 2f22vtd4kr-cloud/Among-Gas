@@ -42,6 +42,8 @@ export function useGameSocket() {
     };
 
     socket.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+      // Guard: must have at least 1 byte to read opcode
+      if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 1) return;
       const view = new DataView(event.data);
       const opcode = view.getUint8(0);
 
@@ -50,6 +52,8 @@ export function useGameSocket() {
           console.error('[WS] ❌ handshake rejected by server');
           break;
         case 0x01: {
+          // Guard: must have byte 1 for slot
+          if (event.data.byteLength < 2) break;
           const slot = view.getUint8(1);
           console.log(`[WS] ✅ handshake OK — assigned slot ${slot}`);
           break;
