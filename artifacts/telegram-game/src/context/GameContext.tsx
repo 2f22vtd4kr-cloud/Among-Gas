@@ -258,6 +258,12 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       players: [{ slot: 0, username: 'DevPlayer' }, { slot: 1, username: 'Alice' }],
     },
   },
+  'lobby-solo': {
+    state: {
+      phase: 'lobby', mySlot: 0, hostSlot: 0, roomCode: 'SOLO01',
+      players: [{ slot: 0, username: 'DevPlayer' }],
+    },
+  },
   'lobby-guest': {
     state: {
       phase: 'lobby', mySlot: 1, hostSlot: 0, roomCode: 'ABC123',

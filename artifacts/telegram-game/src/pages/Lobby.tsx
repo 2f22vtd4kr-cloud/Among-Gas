@@ -194,6 +194,20 @@ export default function Lobby() {
               </button>
             )}
 
+            {/* Test Run (host only, solo) — skips the "need another player"
+                wait so a single dev/tester can start a real game alone.
+                Server always assigns the lone player crewmate (no impostor
+                with zero possible victims), so movement, tasks, and the HUD
+                are all testable; kills/meetings/sabotages need 2+ players. */}
+            {isHost && state.players.length === 1 && (
+              <button
+                onClick={() => { haptic.medium(); startGame(); }}
+                className="w-full bg-white/5 border border-white/15 hover:bg-white/10 active:scale-95 text-white/70 text-sm font-medium py-2.5 rounded-xl transition-all"
+              >
+                Test Run (Solo)
+              </button>
+            )}
+
             {!isHost && (
               <p className="text-center text-white/30 text-sm">
                 Waiting for the host to start…

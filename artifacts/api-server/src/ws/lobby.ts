@@ -523,7 +523,10 @@ export class LobbyManager {
     if (lobby.phase !== 'WAITING') return;
 
     const players = Array.from(lobby.players.values()).sort((a, b) => a.slot - b.slot);
-    const impostorCount = impostorCountFor(players.length);
+    // Solo test run: a lone host has no one to be an impostor against (no
+    // victims, no meetings) — force crewmate so tasks/movement/UI are
+    // still testable instead of an unwinnable 1-impostor-0-crewmate game.
+    const impostorCount = players.length === 1 ? 0 : impostorCountFor(players.length);
 
     // Fisher-Yates shuffle (GAME_SPEC.md §8)
     const shuffled = [...players];
@@ -835,6 +838,12 @@ export class LobbyManager {
    */
   callMeeting(lobby: Lobby, reporterSlot: number, bodySlot: number): boolean {
     if (lobby.phase !== 'ROAMING') return false;
+    // Solo test run: a 1-player lobby has 0 impostors (see startGame), so a
+    // meeting/vote tally would immediately trip _computeWinFlag's "0 alive
+    // impostors → crewmates win" rule and end the test session with nothing
+    // to vote on. Meetings are meaningless solo anyway — reject them so the
+    // tester can keep testing movement/tasks until they leave the lobby.
+    if (lobby.players.size === 1) return false;
     // Phase 8: 0x13 (report/emergency) is rejected outright while any sabotage
     // is active (GAME_SPEC.md §10) — crewmates must fix it (or run the clock
     // out) before a meeting can be called.
