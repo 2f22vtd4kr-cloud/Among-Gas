@@ -3,8 +3,15 @@ import NotFound from '@/pages/not-found';
 import GameMap from '@/pages/GameMap';
 import CollisionEditor from '@/pages/CollisionEditor';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
+import { useGameSocket } from '@/hooks/useGameSocket';
 
 const queryClient = new QueryClient();
+
+/** Mounts once at app root — manages the WebSocket connection lifecycle. */
+function WsManager() {
+  useGameSocket();
+  return null;
+}
 
 function Router() {
   return (
@@ -20,6 +27,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+        <WsManager />
         <Router />
       </WouterRouter>
     </QueryClientProvider>
