@@ -26,6 +26,34 @@
 
 ## Sessions
 
+### 2026-07-10 — Phase 4 completion: fixed undefined vars + role reveal overlay
+
+**Done**
+- Post-import setup: ran `pnpm install`, built shared lib (`pnpm --filter @workspace/shared exec tsc --build`), restarted all three workflows — all running cleanly.
+- Fixed two undefined variable bugs left by the previous Vercel session in `artifacts/telegram-game/src/pages/GameMap.tsx`:
+  - `remoteAnimMap` (used at line ~349 in the rAF loop) was never defined → added `remoteAnimMapRef` as a component-level `useRef<Map<number, RemoteAnim>>(new Map())` and read it as `.current` inside the loop.
+  - `PLAYER_COLOR` (used for the local player's sprite color) was never defined → replaced with `slotColor(mySlotRef.current ?? 0)` so the local player gets a slot-keyed color matching the same system used for remote players.
+- Implemented the Phase 4 role reveal overlay (the last missing piece):
+  - Keyframes (`rrFade`, `rrScale`, 3.2s) injected once via `useEffect([], [])` with cleanup.
+  - Full-screen overlay rendered when `showReveal && myRole` — dark red for Impostor, dark blue for Crewmate, with glow text shadow.
+  - Impostors see a "Fellow impostors: …" line listing teammate names (slot-filtered via `players` state).
+  - `pointerEvents: 'none'` so the fading overlay never blocks input.
+  - `remoteAnimMapRef.current.clear()` on role reveal so remote animations reset from spawn positions.
+- `pnpm run typecheck` passes clean across all packages.
+
+**Decisions & gotchas**
+- The `remoteAnimMapRef` is declared outside the main rAF `useEffect` (at component level) so it persists across re-renders without being captured in the effect's dependency array — reads it via `.current`, which is the correct pattern for mutable state that the rAF loop owns.
+- `PLAYER_COLOR` was removed in favour of `slotColor(mySlotRef.current ?? 0)`: the local player's color is now consistent with remote players (both slot-keyed) and stays in sync if the server ever reassigns a slot.
+- Role reveal retrigger: the reveal fires whenever `myRole` changes (via `useEffect([myRole])`). For Phase 4 (single game per session) this is fine. For future multi-round support, the server would need to reset `myRole → null` between rounds or send a reveal nonce so the effect retriggers correctly.
+- Keyframe animation duration (3.2s) is intentionally identical to the `showReveal` timeout (3200ms) so the DOM removal happens exactly when the animation ends — no `onAnimationEnd` handler needed.
+
+**Left off / next steps**
+- Phase 4 is now fully implemented end-to-end (server: role assignment + 0x1A packets; client: reveal overlay + slot-keyed colors + remote sprites).
+- Phase 5 (kill mechanics) is next: kill button (impostor only, proximity-gated), 0x15 sub 0x01 client→server→broadcast, ghost mode, kill cooldown timer UI.
+
+**State to restore**
+- None.
+
 ### 2026-07-09 — Re-registered artifacts after import; regenerated collision map from updated reference image
 
 **Done**

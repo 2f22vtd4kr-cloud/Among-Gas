@@ -66,6 +66,8 @@ export default function GameMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
+  /** Per-slot animation state for remote players, maintained across rAF frames. */
+  const remoteAnimMapRef = useRef<Map<number, RemoteAnim>>(new Map());
 
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
@@ -103,10 +105,33 @@ export default function GameMap() {
   const [showReveal, setShowReveal] = useState(false);
   useEffect(() => {
     if (!myRole) return;
+    // Clear stale remote animation state so sprites animate fresh from spawns.
+    remoteAnimMapRef.current.clear();
     setShowReveal(true);
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
   }, [myRole]);
+
+  // Inject role-reveal keyframes once (avoids a CSS file dependency)
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes rrFade {
+        0%   { opacity: 0; }
+        12%  { opacity: 1; }
+        80%  { opacity: 1; }
+        100% { opacity: 0; }
+      }
+      @keyframes rrScale {
+        0%   { transform: scale(0.82) translateY(12px); }
+        12%  { transform: scale(1)    translateY(0);    }
+        80%  { transform: scale(1)    translateY(0);    }
+        100% { transform: scale(0.96) translateY(-6px); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => { document.head.removeChild(style); };
+  }, []);
 
   // ── Resize canvas ─────────────────────────────────────────────────────────
   const sizeCanvas = useCallback(() => {
@@ -346,7 +371,7 @@ export default function GameMap() {
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
-      const remoteAnims = remoteAnimMap;
+      const remoteAnims = remoteAnimMapRef.current;
       // Prune animation state for slots that no longer exist
       for (const slot of remoteAnims.keys()) {
         if (!remotePlayers.has(slot)) remoteAnims.delete(slot);
@@ -438,7 +463,7 @@ export default function GameMap() {
       const playerCX = (px - srcX) * scale;
       const playerCY = (py - srcY) * scale;
 
-      const rect = getCharacterFrameRect(PLAYER_COLOR, pose);
+      const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
       const sx = Math.ceil(rect.x);
       const sy = Math.ceil(rect.y);
       const sw = Math.floor(rect.x + rect.width)  - sx;
@@ -588,6 +613,52 @@ export default function GameMap() {
               ✎ Edit Collision
             </Link>
           )}
+        </div>
+      )}
+
+      {/* ── Role reveal overlay (Phase 4) ─────────────────────────────────── */}
+      {showReveal && myRole && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          background: myRole === 'impostor'
+            ? 'rgba(44, 0, 0, 0.92)'
+            : 'rgba(0, 16, 48, 0.92)',
+          animation: 'rrFade 3.2s ease forwards',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ textAlign: 'center', animation: 'rrScale 3.2s ease forwards' }}>
+            <div style={{
+              fontSize: 12, color: 'rgba(255,255,255,0.5)',
+              fontFamily: 'sans-serif', letterSpacing: '0.3em',
+              textTransform: 'uppercase', marginBottom: 16,
+            }}>
+              You are
+            </div>
+            <div style={{
+              fontSize: 50, fontWeight: 900, fontFamily: 'sans-serif',
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: myRole === 'impostor' ? '#ff3344' : '#44aaff',
+              textShadow: myRole === 'impostor'
+                ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
+                : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
+            }}>
+              {myRole === 'impostor' ? '☠ Impostor' : '✦ Crewmate'}
+            </div>
+            {myRole === 'impostor' && impostorSlots.filter(s => s !== mySlot).length > 0 && (
+              <div style={{
+                marginTop: 20, color: 'rgba(255,130,130,0.8)', fontSize: 13,
+                fontFamily: 'sans-serif', letterSpacing: '0.04em',
+              }}>
+                Fellow impostor{impostorSlots.filter(s => s !== mySlot).length > 1 ? 's' : ''}:{' '}
+                {impostorSlots
+                  .filter(s => s !== mySlot)
+                  .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)
+                  .join(', ')}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
