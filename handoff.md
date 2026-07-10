@@ -1290,6 +1290,21 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **Left off / next steps**
 - **Next: Phase D — Headless simulation runner** (`scripts/src/simulateGame.ts` + CLI).
+  - See SINGLE_PLAY.md §8 for full spec.
+  - Decouple `Lobby` from WS transport enough for in-process instantiation.
+  - `scripts/src/simulateGame.ts` + CLI: `pnpm --filter @workspace/scripts simulate -- --games 100 --bots 5 --impostors 1`
+  - NDJSON output: per-event log + aggregate win-rate/length stats to stdout.
+- After Phase D: Phase E difficulty tuning (run 100-game sims, adjust `HUNT_ISOLATION_THRESHOLD`, sabotage interval, vote skip-bias until 55/45 ± 10% win-rate split).
+- Three follow-up tasks already queued (#2, #3, #4) covering Phase D, a solo crash-safety test, and the tuning pass.
+
+## IMPORTANT — First actions after next re-import
+1. Run the standard re-import repair (see Gotchas in replit.md):
+   - `verifyAndReplaceArtifactToml()` for api-server, telegram-game, mockup-sandbox
+   - `pnpm install`
+   - Restart all three workflows
+2. Verify telegram-game lobby loads and WS handshake succeeds (slot 0 assigned).
+3. Confirm the "Play Solo vs Bots" panel appears on the lobby screen.
+4. Pick up Phase D from SINGLE_PLAY.md.
 
 **State to restore**
 - None. All changes typecheck-clean, UI verified, code-reviewed.
