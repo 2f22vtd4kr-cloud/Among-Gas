@@ -694,6 +694,34 @@
 **State to restore**
 - None.
 
+### 2026-07-10 — Master game spec written (GAME_SPEC.md)
+
+**Done**
+- Read all 7 spec documents supplied by the user (Modules 1–4 + server.ts frameworks).
+- Cross-referenced against the existing codebase (what's already built vs. what isn't).
+- Identified and resolved 12 problems in the raw spec docs (coordinate overflow, port conflict,
+  opcode collision, DataView/Buffer bug, dev-mode auth bypass, delta threshold recalibration, etc.).
+- Wrote `GAME_SPEC.md` — the single source of truth for all future implementation sessions.
+  Covers: network protocol, coordinate wire format, auth, lobby lifecycle, delta sync engine,
+  role assignment, kill mechanics, tasks/sabotages, canvas layers, Telegram SDK, implementation
+  roadmap (9 phases), and a fixes table vs. the raw specs.
+- No implementation was done this session (intentional — spec-only day).
+
+**Decisions & gotchas**
+- Wire coordinates use 0–32000 normalization (not x*100) — Int16 overflow fix for 4956px map.
+- WebSocket must share Express HTTP server (no new port). Use `ws` with `{ server: httpServer }`.
+- Opcodes: 0x01 = auth handshake only; lobby responses use 0x10 sub 0x03/0x04.
+- Dev mode: when `TELEGRAM_BOT_TOKEN` is absent, accept raw JSON `{ id, username }` for local testing.
+- Client-side prediction is the intended movement model (move locally, server corrects if needed).
+- Implementation order: WS foundation → lobby → movement → roles → kills → meetings → tasks → sabotages → Telegram SDK.
+
+**Left off / next steps**
+- Start Phase 1 of GAME_SPEC.md roadmap: WebSocket foundation on api-server.
+- Collision box height tweak (FEET_OFFSET_Y 0.42→0.25) needs iOS verification.
+
+**State to restore**
+- Read GAME_SPEC.md before any multiplayer implementation work.
+
 ### 2026-07-10 — Fresh import repair (re-registration + workflow start)
 
 **Done**
