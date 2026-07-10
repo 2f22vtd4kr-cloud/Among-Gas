@@ -1122,3 +1122,24 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 **State to restore**
 - `artifacts/api-server/bot_shake_repro.mjs` exists but is not part of the shipped product — disposable diagnostic script, keep or delete per the note above once the bug is closed.
 - Broader, still-not-started asks from this session (do after the shake bug, in this order): (1) build a persistent single-player bot AI mode usable both as real solo gameplay and as an automated bug-hunting test harness, with its own tracking doc separate from this file; (2) formalize "playtest after every update" as a standing practice (not yet written into `replit.md`); (3) document the rule that any feature built for one mode (single-player or multiplayer) must be wired into both, so they don't drift apart; (4) update `GAME_SPEC.md`'s impostor-count table to document the solo-test-mode exception (flagged in an earlier code-review pass, not yet done); (5) no integration tests exist yet for the solo `startGame`/`callMeeting` paths.
+
+### 2026-07-10 — Screen-shaking bug: root cause found + fix applied (unverified on real device)
+
+**Done**
+- Re-issued the paused `AskQuestion` verbatim per the previous entry's instruction. User answers: device = phone browser (Replit preview in iPhone Safari, not the real Telegram app/WebView), trigger = mostly "immediately when the map appeared" (with a caveat it might have been closer to when movement started), reproducible = yes (though only tried once), and critically: **the map canvas itself shook while buttons/UI stayed still**.
+- That last detail pinpointed the mechanism: `GameMap.tsx`'s render loop derives `srcW/srcH` (camera crop) from `canvas.width`/`canvas.height` each frame (not from `window.innerWidth/innerHeight` directly), and the old resize effect mutated `canvas.width`/`canvas.height` synchronously on every `window resize` event. iOS Safari fires a burst of resize events with different `innerWidth`/`innerHeight` while its dynamic toolbar animates in/out (most visible right after page load) — each event thrashed the canvas buffer size, which changed the crop rect each time and read visually as the map "shaking" while DOM-based buttons/HUD (unaffected by canvas buffer size) stayed still. This is why the server-side bot repro (`bot_shake_repro.mjs`) found nothing — it's a client-only, iOS-only, resize-burst artifact with no equivalent in a desktop dev browser.
+- Fix: debounced the resize handler in `GameMap.tsx` (150ms trailing timeout before calling `sizeCanvas`), and also listen on `window.visualViewport`'s resize event (more accurate on mobile Safari). Cleanup clears the pending timeout.
+- Rebuilt `lib/shared` (`tsc --build`), full `tsc --noEmit` on `telegram-game` passes clean, workflow restarted, verified via `?mock=playing` screenshot that rendering is unaffected.
+- Code-reviewed via architect subagent: **provisional pass** — mechanism and implementation are sound, no listener leaks/stale closures, safe for desktop. Flagged residual risk: `sizeCanvas` still reads `window.innerWidth/innerHeight` rather than `visualViewport.width/height`, so if jitter persists on-device the next step is switching the sizing *source*, not just debouncing it.
+- Recorded the general pattern in `.agents/memory/ios-canvas-resize-shake.md` (durable lesson: canvas-only phone shake with stable DOM UI + no server/bot repro → suspect resize-event-burst canvas thrash, not game logic).
+
+**Decisions & gotchas**
+- **This fix is NOT yet confirmed on a real device.** The environment has no way to test real iOS Safari toolbar-animation behavior (no Playwright, no physical device, and the "phone browser" the user saw was Replit's preview iframe on their iPhone, not a controlled test harness). Do not mark this bug fully closed until the user confirms live.
+- If the user reports the shake still happens after this fix, the next move per the code review is to switch `sizeCanvas`'s dimension source from `window.innerWidth/innerHeight` to `window.visualViewport.width/height` (with a fallback), not to re-derive new server-side hypotheses — those are already ruled out.
+
+**Left off / next steps**
+- Ask the user to retest solo mode on their iPhone and report back whether the shake is gone, changed, or unchanged.
+- If gone: delete `artifacts/api-server/bot_shake_repro.mjs` (disposable diagnostic) or evolve it into the persistent single-player bot harness described in the previous entry's "State to restore" — that broader backlog (bot AI mode, playtest-after-every-update practice, single/multiplayer parity rule, `GAME_SPEC.md` impostor-count doc update, solo integration tests) is still untouched and should resume after this is confirmed closed.
+
+**State to restore**
+- None new. Prior session's disposable-script and backlog notes above still apply.

@@ -371,8 +371,26 @@ export default function GameMap() {
 
   useEffect(() => {
     sizeCanvas();
-    window.addEventListener('resize', sizeCanvas);
-    return () => window.removeEventListener('resize', sizeCanvas);
+    // Debounce: iOS Safari fires a burst of `resize` events with different
+    // innerWidth/innerHeight values while its dynamic toolbar (URL bar) is
+    // animating in/out — most visibly right after the page first loads and
+    // right after the user starts scrolling/dragging. Resizing the canvas
+    // buffer on every intermediate event thrashes canvas.width/height, which
+    // changes the render loop's srcW/srcH crop each time and reads as the
+    // whole map "shaking" even though the render loop itself is stable
+    // per-frame. Wait for the burst to settle before committing a resize.
+    let timeoutId: number | undefined;
+    const handleResize = () => {
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(sizeCanvas, 150);
+    };
+    window.addEventListener('resize', handleResize);
+    window.visualViewport?.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      window.visualViewport?.removeEventListener('resize', handleResize);
+      if (timeoutId !== undefined) window.clearTimeout(timeoutId);
+    };
   }, [sizeCanvas]);
 
   // ── Load map image ─────────────────────────────────────────────────────────
