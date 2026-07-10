@@ -1,0 +1,78 @@
+This consolidated specification is excellent. You captured the exact architectural pivot needed for a Telegram environment. Merging the byte-level parsing of the original protocol with standard web standards is precisely how real-world HTML5 adaptations are built.
+A quick peer-to-peer code review on your consolidated draft before we expand it:
+> **The Node.js Buffer Quirk:** In your server-side snippet, you have new DataView(data.buffer). In Node.js, the data object returned by the ws library is a standard Node Buffer. While data.buffer exists (referencing the underlying ArrayBuffer), Node often allocates buffers from a shared pool. Reading data.buffer directly can sometimes point to a massive chunk of unrelated memory instead of just your packet.
+> *The Fix:* Keep DataView exclusively for the HTML5 browser client. On your Node server, stick directly to the native Buffer methods like data.readUint8(0) and data.readInt16LE(1). It is faster and perfectly safe from pooling bugs.
+> 
+The addition of the **0xFF State Sync / Delta Compression frame** is brilliant. Blasting the full array of 15 players' positions 20 times a second over WebSockets will instantly lag a mobile webview.
+Let's capitalize on this momentum. Here is the next modular block to append to your documentation spec. Copy this into your workspace to map out the authoritative sync engine and role mechanics for Replit.
+# AMONG US TELEGRAM SPEC (MODULE 2: AUTHENTIC ROLE & DELTA SYNC ENGINE)
+## 1. Authoritative Role Assignment Algorithm (0x12)
+To prevent "Impostor spoofing" hacks, the client must never choose or request a role. When the host sends the 0x12 Game Start packet, the server executes a deterministic shuffle.
+### Server Role Assignment Logic (TypeScript)
+```typescript
+function assignRoles(players: Map<number, Player>, impostorCount: number) {
+  const playerIds = Array.from(players.keys());
+  
+  // Fisher-Yates Shuffle
+  for (let i = playerIds.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [playerIds[i], playerIds[j]] = [playerIds[j], playerIds[i]];
+  }
+
+  // Assign Impostors based on the shuffled array index limits
+  playerIds.forEach((id, index) => {
+    const player = players.get(id);
+    if (player) {
+      player.role = index < impostorCount ? 'impostor' : 'crewmate';
+      player.alive = true;
+    }
+  });
+}
+
+```
+### Information Asymmetry Payload Enforcement
+The server must **NEVER** broadcast the complete player array to everyone at match start.
+ * **Crewmate Serialization:** If a player is a Crewmate, their start packet contains only *their* identity details. All other players are masked as "crewmate" in their local client state.
+ * **Impostor Serialization:** If a player is an Impostor, their start packet includes the identities of the *other* Impostors so they can recognize their teammates on screen.
+## 2. Low-Overhead Spatial Delta Compression (0xFF)
+Instead of flooding the WebSocket stream with every player's position on every single frame tick, the server uses a **Threshold Delta Sync** pattern.
+### The Vector-Change Tracking Matrix
+ 1. **Movement Check:** The server evaluates active coordinates every 40ms (25 ticks per second).
+ 2. **Delta Threshold Evaluation:** A player's position is only added to the outbound broadcast queue if their spatial deviation from their *last broadcasted position* exceeds a minimum threshold:
+   
+ 3. **The 0xFF Compact Multi-Player Frame:** If three out of ten players moved past the threshold, the server packs *only* those three moving players into a single tight binary payload, ignoring the stationary players completely.
+### Binary Layout Structure for Combined Move Deltas
+ * **Byte 0:** 0xFF (Delta Sync Frame Type)
+ * **Byte 1:** Count (Number of moving players included in this packet)
+ * **Sub-Block Array** (Repeated for Count iterations):
+   * **Byte 0:** PlayerID (0-14)
+   * **Bytes 1-2:** Packed X (Int16LE)
+   * **Bytes 3-4:** Packed Y (Int16LE)
+## 3. Server-Validated Kill Mechanics Loop (0x15 sub-code 0x01)
+When an Impostor triggers a kill, the client transmits an intent request frame. The server runs a geometric validation pass before updating the global loop state.
+```
+ Client Request (0x16)          Server Geometrical Validation               Server Broadcast (0x15)
+ +--------------------+         +----------------------------------+        +----------------------+
+ | Attacker ID: 2     | ------> | 1. Is Attacker alive Impostor?   | ------>| Opcode: 0x15         |
+ | Target ID: 5       |         | 2. Is Kill Cooldown == 0?        |        | Subcode: 0x01 (Kill) |
+ +--------------------+         | 3. Distance(2, 5) <= Max Range?  |        | Victim ID: 5         |
+                                +----------------------------------+        +----------------------+
+
+```
+### Geometric Validation Routine
+```typescript
+function validateKill(attacker: Player, victim: Player, maxKillRange: number): boolean {
+  if (!attacker.alive || attacker.role !== 'impostor') return false;
+  if (!victim.alive || victim.role === 'impostor') return false; // No team killing
+
+  // Calculate strict Euclidean distance vector on server values
+  const dx = attacker.pos.x - victim.pos.x;
+  const dy = attacker.pos.y - victim.pos.y;
+  const separationDistance = Math.sqrt(dx * dx + dy * dy);
+
+  return separationDistance <= maxKillRange;
+}
+
+```
+With this foundational data structural architecture locked down, your Replit project is ready to move from planning definitions to functional code components.
+Which module should we generate as a complete, ready-to-run file first: the security validation core (with the Telegram signature check and lobby maps) or the HTML5 front-end input and rendering backbone?

@@ -1,0 +1,198 @@
+Save this file in your Replit workspace as AMONG_US_TELEGRAM_SPEC_MOD_3_LOBBY.md. This module provides your Replit AI agent with the exact blueprints for handling concurrent rooms, code generation, player slotting, and host migration without needing a heavy database setup.
+# AMONG US TELEGRAM SPEC (MODULE 3: MATCHMAKING LOGIC & LOBBY LIFECYCLE)
+## 1. Architectural Strategy: In-Memory Matchmaking
+To keep performance high and deployment simple within Replit, the matchmaking engine runs entirely in-memory using highly optimized JavaScript Map structures.
+### Core State Collections
+ * **Lobby Registry:** A master global Map<string, Lobby> where the key is a unique 6-character room code.
+ * **Socket Registry:** A Map<number, string> mapping a validated tgUserId to their active lobbyCode for instantaneous connection recovery and cleanup on unexpected disconnects.
+## 2. Room Code Generation Protocol
+Room codes must be exactly 6 characters, uppercase, alphanumeric, and filtered to eliminate ambiguous characters that cause user entry errors in mobile webviews.
+ * **Allowed Character Set:** A B C D E F G H J K L M N P Q R S T U V W X Y Z 2 3 4 5 6 7 8 9 (Excludes I, O, 1, 0).
+ * **Collison Resolution Algorithm:** The server generates a random string from the set. If the generated key already exists within the Lobby Registry, it is discarded, and the routine recurses.
+## 3. Lobby Lifecycle State Machine
+A lobby transitions through four distinct lifecycle phases, driven by authoritative server-side events:
+```
+  [ Create ] --->  LOBBY STATE: WAITING  <--- [ Join ]
+                         |
+                         | (Host Triggers 0x12)
+                         v
+                   LOBBY STATE: ACTIVE (Game Loop Running)
+                         |
+                         | (Game Completes or App Crashes)
+                         v
+                  [ Destroy / Teardown ]
+
+```
+### State Definitions
+ 1. **WAITING:** The room accepts new connections. Players can select colors, adjust settings, and chat.
+ 2. **ACTIVE:** The game is underway. Matchmaking is locked. No new players can join mid-match (except for disconnected players attempting to reconnect to their allocated slot).
+ 3. **TEARDOWN:** Triggered when all players exit or the host aborts. The room code is unlinked from the registry, and memory allocations are garbage collected.
+### Host Migration Rule
+If the active room host disconnects during the WAITING phase, the server must automatically evaluate the remaining player array and assign host privileges (isHost = true) to the next oldest connected player slot. If no players remain, the lobby instantly shifts to TEARDOWN.
+## 4. Binary Payload Bindings for Matchmaking
+When an authenticated client interacts with the matchmaking screen, the communication matches these strict structures over the binary WebSocket channel established in Module 1.
+### Opcode 0x10: Matchmaking Control Frame
+#### Structure: Client Requesting to Create a Room
+ * **Byte 0:** 0x10 (Matchmaking Opcode)
+ * **Byte 1:** 0x01 (Sub-action: CREATE)
+#### Structure: Client Requesting to Join a Room (Total: 8 Bytes)
+ * **Byte 0:** 0x10 (Matchmaking Opcode)
+ * **Byte 1:** 0x02 (Sub-action: JOIN)
+ * **Bytes 2-7:** 6-byte ASCII string containing the target Room Code.
+#### Structure: Server Broadcast Lobby Update (Variable Length)
+Sent to all clients in the room whenever a player joins or departs.
+ * **Byte 0:** 0x10 (Matchmaking Opcode)
+ * **Byte 1:** 0x03 (Sub-action: ROOM_UPDATE)
+ * **Byte 2:** Current Player Count (Uint8)
+ * **Byte 3:** Host PlayerID Slot (Uint8)
+ * **Payload Blocks:** An array of length-prefixed strings representing the Telegram usernames of all active players in their respective slot order.
+## 5. Ready-to-Run Matchmaking Core Implementation
+Instruct your Replit Agent to implement this complete LobbyManager controller class. It handles data safety across async network threads seamlessly.
+```typescript
+export interface LobbyPlayer {
+  slotId: number;
+  tgUserId: number;
+  username: string;
+  isHost: boolean;
+  socket: any; // Reference to the active WebSocket instance
+}
+
+export class Lobby {
+  public code: string;
+  public hostSlotId: number = 0;
+  public players: Map<number, LobbyPlayer> = new Map(); // Keyed by slotId (0-14)
+  public isGameActive: boolean = false;
+
+  constructor(code: string) {
+    this.code = code;
+  }
+
+  public getFirstAvailableSlot(): number {
+    for (let i = 0; i < 15; i++) {
+      if (!this.players.has(i)) return i;
+    }
+    return -1; // Room is entirely full
+  }
+}
+
+export class LobbyManager {
+  private lobbies: Map<string, Lobby> = new Map();
+  private userToLobbyMap: Map<number, string> = new Map();
+  private alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+  // 1. Thread-Safe Unique Code Generator
+  public generateUniqueCode(): string {
+    let code = '';
+    do {
+      code = '';
+      for (let i = 0; i < 6; i++) {
+        code += this.alphabet.charAt(Math.floor(Math.random() * this.alphabet.length));
+      }
+    } while (this.lobbies.has(code));
+    return code;
+  }
+
+  // 2. Room Allocation Strategy
+  public createLobby(tgUserId: number, username: string, socket: any): Lobby | null {
+    const code = this.generateUniqueCode();
+    const lobby = new Lobby(code);
+    
+    const player: LobbyPlayer = {
+      slotId: 0, // Host always gets first position
+      tgUserId,
+      username,
+      isHost: true,
+      socket
+    };
+
+    lobby.players.set(0, player);
+    lobby.hostSlotId = 0;
+    
+    this.lobbies.set(code, lobby);
+    this.userToLobbyMap.set(tgUserId, code);
+    
+    return lobby;
+  }
+
+  // 3. Client Join Strategy
+  public joinLobby(code: string, tgUserId: number, username: string, socket: any): { lobby: Lobby; slotId: number } | string {
+    const formattedCode = code.toUpperCase().trim();
+    const lobby = this.lobbies.get(formattedCode);
+
+    if (!lobby) return "ERROR_NOT_FOUND";
+    if (lobby.isGameActive) return "ERROR_IN_PROGRESS";
+    if (lobby.players.size >= 15) return "ERROR_ROOM_FULL";
+
+    const assignedSlot = lobby.getFirstAvailableSlot();
+    if (assignedSlot === -1) return "ERROR_ROOM_FULL";
+
+    const newPlayer: LobbyPlayer = {
+      slotId: assignedSlot,
+      tgUserId,
+      username,
+      isHost: false,
+      socket
+    };
+
+    lobby.players.set(assignedSlot, newPlayer);
+    this.userToLobbyMap.set(tgUserId, formattedCode);
+
+    return { lobby, slotId: assignedSlot };
+  }
+
+  // 4. State Cleanup & Host Migration Engine
+  public handleDisconnect(tgUserId: number): void {
+    const code = this.userToLobbyMap.get(tgUserId);
+    if (!code) return;
+
+    const lobby = this.lobbies.get(code);
+    if (!lobby) return;
+
+    // Identify which slot the disconnecting user occupied
+    let disconnectedSlotId = -1;
+    for (const [slotId, player] of lobby.players.entries()) {
+      if (player.tgUserId === tgUserId) {
+        disconnectedSlotId = slotId;
+        break;
+      }
+    }
+
+    if (disconnectedSlotId === -1) return;
+
+    // Evict player from state collections
+    lobby.players.delete(disconnectedSlotId);
+    this.userToLobbyMap.delete(tgUserId);
+
+    // If room is empty, clear remaining memory allocations
+    if (lobby.players.size === 0) {
+      this.lobbies.delete(code);
+      return;
+    }
+
+    // Host Migration Check
+    if (lobby.hostSlotId === disconnectedSlotId) {
+      const remainingSlots = Array.from(lobby.players.keys()).sort((a, b) => a - b);
+      const newHostSlot = remainingSlots[0];
+      const newHostPlayer = lobby.players.get(newHostSlot);
+      
+      if (newHostPlayer) {
+        newHostPlayer.isHost = true;
+        lobby.hostSlotId = newHostSlot;
+      }
+    }
+    
+    this.broadcastRoomUpdate(lobby);
+  }
+
+  private broadcastRoomUpdate(lobby: Lobby): void {
+    // Serialization loop logic will go here to dispatch 0x10 [0x03] packages
+    // to all surviving player socket pipes...
+  }
+}
+
+```
+## 6. Implementation Checklist for Replit Agent
+ 1. Add the LobbyManager class directly to a new src/matchmaker.ts file.
+ 2. Update your core network file (server.ts) to import this class as a single, global instance: const matchmaker = new LobbyManager();.
+ 3. In the WebSocket router layer, whenever a message with opcode 0x10 arrives, route the remaining bytes directly to matchmaker.createLobby() or matchmaker.joinLobby().
+ 4. Ensure the native ws.on('close') handle hooks directly into matchmaker.handleDisconnect(ws.tgUserId) to prevent orphaned player ghosts from blocking available lobby slots.

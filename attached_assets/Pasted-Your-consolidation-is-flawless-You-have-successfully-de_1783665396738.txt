@@ -1,0 +1,65 @@
+Your consolidation is flawless. You have successfully designed a clean, production-ready blueprint that perfectly balances the lightweight binary efficiency of the original *Among Us* protocol with the security and sandbox realities of a Telegram Mini App. Putting this into a single file means your Replit AI agent won't constantly lose context or conflict with itself on its networking philosophy.
+To complete this blueprint so your workspace has 100% of the architecture locked down before we start spitting out code files, we need to map out the actual game systems.
+Here is **Module 4: Tasks, Sabotages, and UI Engine**. Let's add this final piece to the master document so the engine's core mechanics are fully standardized.
+## 6. Module 4: Tasks, Sabotages, and UI Engine
+### 6.1 RPC Sub-Opcode Specification (0x15)
+All interaction mechanics utilize the single 0x15 RPC Opcode header. The second byte (Byte 1) dictates the exact subsystem being targeted.
+| Sub-Opcode | Action Name | Sender | Payload Layout | Expected Server Validation |
+|---|---|---|---|---|
+| **0x01** | Execute Kill | Impostor | Byte 2: Victim ID | Proximity check + Kill Cooldown check |
+| **0x02** | Vent Toggle | Impostor | Byte 2: Vent ID | Proximity check. Sets player invisibility state. |
+| **0x03** | Task Step Update | Crewmate | Byte 2: Task ID. Byte 3: Step Index. | Verifies player is assigned this specific Task ID. |
+| **0x04** | Trigger Sabotage | Impostor | Byte 2: System ID (Lights, O2, Reactor) | Global sabotage cooldown check. |
+| **0x05** | Repair Interaction | Crewmate | Byte 2: System ID. Byte 3: Component State. | Updates localized interactive console maps. |
+### 6.2 Authoritative Sabotage State Engine
+When an Impostor transmits a 0x04 payload, the server takes absolute control of the environment timer variables.
+```
+       [ Normal Play ]
+              |
+              | Impostor sends 0x15 + 0x04 (Sabotage O2)
+              v
+     [ SABOTAGE ACTIVE ] ---> Starts 30s Countdown
+              |
+     +--------+--------+
+     |                 |
+     v                 v
+[Fix Fails]      [Both Pads Fixed]
+     |                 |
+     v                 v
+Impostors Win    Return to Normal Play
+
+```
+#### Server Sabotage State Schema
+```typescript
+interface SabotageSystemState {
+  activeSabotageId: number | null; // 0x01 = Lights, 0x02 = O2, 0x03 = Reactor
+  countdownRemaining: number;       // Seconds left before automated failure win
+  repairProgress: {
+    padA: boolean;                  // For dual-interaction sabotages (Reactor/O2)
+    padB: boolean;
+  };
+  timerReference: NodeJS.Timeout | null;
+}
+
+```
+#### Global Mechanics Rules
+ * **The Meeting Block:** If a sabotage countdown is active, the server must reject any inbound 0x13 (Report Body / Emergency Button) requests, forcing players to handle the critical threat first.
+ * **The Lights Vector:** When a Lights sabotage occurs, the server modifies the impostorVisionRadius and crewmateVisionRadius constants globally, reducing crew vision down to a 0.2-unit radius while leaving Impostor vision completely unaffected.
+### 6.3 Task Management Matrix
+Tasks are tracked as explicit bitmasks or index steps on the server to prevent simple memory injection hacks from the client webview.
+ * **Task Progression Frame (0x15 Sub 0x03 Response):** When a user successfully finishes a task step, the server updates their data object, calculates the global completion ratio (\frac{\text{Total Done}}{\text{Total Assigned}}), and broadcasts a minimal 2-byte update frame ([0x15, 0x03, Math.round(Ratio * 100)]) to update the global progress bar across all client screens simultaneously.
+### 6.4 Telegram UI & Canvas Integration Rules
+Because the HTML5 frontend is running in a mobile Telegram Mini App context, player engagement must be adapted for native mobile constraints:
+ 1. **Haptic Feedback Routing:** When an emergency meeting is called or a kill occurs, the frontend JavaScript engine must tap directly into the Telegram WebApp micro-vibrations API:
+   ```javascript
+   if (window.Telegram?.WebApp?.HapticFeedback) {
+       window.Telegram.WebApp.HapticFeedback.notificationOccurred('error'); // Trigger heavy shake
+   }
+   
+   ```
+ 2. **Dynamic Overlay Canvas Layers:** The visual engine must maintain a separate rendering queue for localized canvas view ports:
+   * **Layer 0 (Background):** Map layout tiles and collision matrices.
+   * **Layer 1 (Entities):** Active player characters, ghost sprites, dead body assets.
+   * **Layer 2 (Lightmask Matrix):** Raycasted visibility circle overlay (filled black on areas outside player vision bounds).
+   * **Layer 3 (UI Display):** Virtual joysticks, interactive task screens, and chat/voting modals.
+Now that the master blueprint file is complete and entirely optimized for Telegram, your architectural documentation is fully closed. We can shift directly into generating operational code files.

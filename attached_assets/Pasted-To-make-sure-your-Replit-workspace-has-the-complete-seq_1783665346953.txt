@@ -1,0 +1,137 @@
+To make sure your Replit workspace has the complete sequence, here is the definitive **Module 1: Network Architecture & Packet Serialization**.
+This is the absolute foundation. Save this file in Replit as AMONG_US_TELEGRAM_SPEC_MOD_1_NETWORKING.md. Once this file is in your workspace, your Replit AI agent will know exactly how to spin up the server, validate Telegram users, and establish the binary data pipeline before writing any game loops.
+# AMONG US TELEGRAM SPEC (MODULE 1: NETWORK ARCHITECTURE & PACKET SERIALIZATION)
+## 1. Network Topology & Environment Constraints
+Because the client application executes within a sandboxed Telegram Mini App Webview, it operates under web browser security constraints:
+ * **No Direct UDP Sockets:** Native UDP (dgram) is unsupported. The network layer must use **Secure WebSockets (wss://)** running over TCP.
+ * **No Double Reliability Layer:** Do not implement application-level packet delivery confirmations (ACKs, retries, or nonces). TCP implicitly handles packet ordering and guarantees delivery.
+ * **Binary Serialization Mandatory:** Webviews experience performance degradation when parsing high-frequency text strings. The connection data type must be forced to raw binary buffers (arraybuffer on client, Buffer on server).
+## 2. Secure Telegram Handshake & Verification Phase
+Every incoming client connection must validate its payload against Telegram's security infrastructure before getting assigned an internal slot ID.
+### Connection Lifecycle
+ 1. The client connects via wss://your-replit-domain.repl.co?initData=ENCODED_STRING.
+ 2. The server halts any game interaction, extracts the initData parameter, and performs an HMAC-SHA256 integrity token validation pass against the active bot secret key.
+ 3. If validation succeeds, the connection is upgraded, the user's authentic identity is mapped, and the server transmits a **Handshake Acknowledge Packet (0x01)**.
+ 4. If validation fails, the server transmits a **Handshake Terminate Packet (0x00)** and destroys the socket immediately.
+## 3. The Complete Binary Protocol Blueprint (The Opcode Matrix)
+Every frame sent across the WebSocket connection begins with a single **1-byte message header (Opcode)**, followed by an immutable, packed Little-Endian payload.
+| Opcode (Byte 0) | Packet Name | Data Direction | Byte Size | Payload Layout Description |
+|---|---|---|---|---|
+| **0x00** | Handshake Fail | Server \rightarrow Client | 1 Byte | No payload. Instantly closes connection. |
+| **0x01** | Handshake Success | Server \rightarrow Client | 2 Bytes | Byte 1: Assigned Player ID Slot (0-14). |
+| **0x10** | Join/Create Lobby | Client \rightarrow Server | Variable | Byte 1: Create Flag (0=Join, 1=Create). Bytes 2-7: 6-char Room Code string. |
+| **0x11** | Player Move Request | Client \rightarrow Server | 5 Bytes | Bytes 1-2: Target X (\text{Float} \times 100). Bytes 3-4: Target Y (\text{Float} \times 100). |
+| **0x12** | Game Start Command | Client \rightarrow Server | 1 Byte | Sent by Host only. Triggers role shuffle execution loop. |
+| **0x15** | RPC Component Event | Bidirectional | Variable | Byte 1: RPC Sub-action ID (Kill, Vent, Sabotage, Use). |
+| **0xFF** | State Delta Broadcast | Server \rightarrow Client | Variable | Byte 1: Total count of active objects. Sub-blocks: Packed data arrays. |
+## 4. Low-Level Byte Packing & Parsing Rules
+Multi-byte numbers must be written and read using **Little-Endian (LE)**. Floating-point values (like coordinates) must be converted into 2-byte signed integers (Int16) to conserve bandwidth.
+### Numeric Coordinate Transformation Formula
+### String Serialization Protocol
+Strings (like lobby codes or chat entries) are packed via a **Length-Prefixed Structure**:
+ * **Byte 0:** String length L (expressed as a standard Uint8 integer).
+ * **Bytes 1 to L:** The literal string string characters encoded using UTF-8.
+## 5. Ready-to-Run Engine Foundation Code Blocks
+### Node.js Authorization Server Base Setup (server.ts)
+Instruct your Replit Agent to implement this foundation engine logic. Note that it utilizes direct Buffer operations instead of DataView on the server to prevent Node buffer pooling memory allocation bugs.
+```typescript
+import { WebSocketServer, WebSocket } from 'ws';
+import { URL } from 'url';
+
+const wss = new WebSocketServer({ port: 8080 });
+
+interface ClientSession extends WebSocket {
+  isVerified: boolean;
+  playerId?: number;
+}
+
+wss.on('connection', (ws: ClientSession, req) => {
+  ws.isVerified = false;
+
+  // 1. Parse connection string for validation
+  const parameters = new URL(req.url || '', 'ws://localhost').searchParams;
+  const initData = parameters.get('initData');
+
+  if (!initData) {
+    ws.send(Buffer.from([0x00])); // Handshake Fail
+    return ws.close();
+  }
+
+  // 2. Mock Verification Routine (Replace with crypto check from Module 2)
+  const isSecured = initData.startsWith('user='); 
+  
+  if (isSecured) {
+    ws.isVerified = true;
+    ws.playerId = Math.floor(Math.random() * 15); // Allocate slot id
+    
+    // Send Handshake Success (0x01) + assigned player slot id
+    const response = Buffer.alloc(2);
+    response.writeUint8(0x01, 0);
+    response.writeUint8(ws.playerId, 1);
+    ws.send(response);
+  } else {
+    ws.send(Buffer.from([0x00]));
+    return ws.close();
+  }
+
+  // 3. Low-Level Inbound Binary Frame Processor
+  ws.on('message', (rawFrame: Buffer) => {
+    if (!ws.isVerified || !Buffer.isBuffer(rawFrame)) return;
+
+    const opCode = rawFrame.readUint8(0);
+
+    if (opCode === 0x11) { // Process Movement Data
+      if (rawFrame.length < 5) return;
+      const rawX = rawFrame.readInt16LE(1);
+      const rawY = rawFrame.readInt16LE(3);
+      
+      const trueX = rawX / 100;
+      const trueY = rawY / 100;
+      
+      // Update Server Coordinates for validation loop...
+    }
+  });
+});
+
+```
+### HTML5 Browser Client Interface Implementation (client.js)
+Provide this template configuration script to the frontend asset engine inside the Telegram interface:
+```javascript
+const socket = new WebSocket(`wss://${window.location.host}?initData=${encodeURIComponent(window.Telegram.WebApp.initData)}`);
+socket.binaryType = 'arraybuffer';
+
+let clientPlayerId = null;
+
+socket.onmessage = (event) => {
+  const buffer = event.data;
+  const view = new DataView(buffer);
+  const opCode = view.getUint8(0);
+
+  if (opCode === 0x01) { // Handshake Confirmation
+    clientPlayerId = view.getUint8(1);
+    console.log(`Connected successfully. Assigned player network index: ${clientPlayerId}`);
+  }
+
+  if (opCode === 0xFF) { // Delta State Synchronizer
+    const elementCount = view.getUint8(1);
+    // Parse dynamic game arrays updated by server logic...
+  }
+};
+
+// High-frequency transmission loop function for position updates
+function transmitSpatialVector(x, y) {
+  if (socket.readyState !== WebSocket.OPEN) return;
+
+  const arrayBuffer = new ArrayBuffer(5);
+  const view = new DataView(arrayBuffer);
+
+  // Set packet format structures
+  view.setUint8(0, 0x11); // Movement Opcode
+  view.setInt16(1, Math.round(x * 100), true); // true = Little-Endian conversion
+  view.setInt16(3, Math.round(y * 100), true);
+
+  socket.send(arrayBuffer);
+}
+
+```
+Now that Module 1 (Networking Base) and Module 2 (Auth & Delta Sync Engine) are clearly defined, your architectural landscape is locked down.

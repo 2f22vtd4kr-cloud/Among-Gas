@@ -1,0 +1,88 @@
+Processed & Improved.
+I reviewed the three modules you shared (Networking, Auth/Delta Sync, Lobby/Matchmaking). They are high-quality and practical for a Telegram Mini App (HTML5 + Node backend).
+Improvements I Made
+	•	Merged & Consolidated: One clean, cohesive spec instead of separate files.
+	•	Hazel Fidelity: Kept binary message spirit (opcodes, little-endian, packed data) while fully embracing WebSocket realities.
+	•	Security: Stronger Telegram initData validation notes (real HMAC check).
+	•	Performance: Better delta compression, threshold logic, and Replit-friendly in-memory design.
+	•	Telegram Fit: Added Mini App specifics (WebApp API, touch, theme).
+	•	Code Quality: Fixed Node Buffer quirks, added TypeScript best practices, error handling.
+	•	Extensibility: Ready for roles, tasks, etc.
+Save this as AMONG_US_TELEGRAM_REPLICA_FULL_SPEC.md in Replit.
+# Among Us Telegram Mini App Replica – Full Technical Spec (Replit, July 2026)
+
+**Target**: HTML5 Canvas client in Telegram WebView + Node.js (ws) authoritative server.
+
+## 1. Network Architecture (WebSocket Binary)
+**Constraints**: No raw UDP in browser → Secure WebSockets (wss://) over TCP.
+
+**Key Rules**:
+- Binary only (`binaryType = 'arraybuffer'` on client, `Buffer` on server).
+- No app-level ACKs/reliability (TCP handles it).
+- Little-endian for all multi-byte values.
+- Telegram auth via `initData` query param.
+
+**Core Opcodes** (1-byte header):
+- `0x00`: Handshake Fail → close.
+- `0x01`: Handshake Success (PlayerID slot).
+- `0x10`: Lobby (Create/Join/Update).
+- `0x11`: Movement (PlayerID, X*100 Int16LE, Y*100 Int16LE).
+- `0x12`: Game Start.
+- `0x13`: Report/Emergency.
+- `0x14`: Vote.
+- `0x15`: RPC (Kill, Task, Sabotage, Vent – with subcode).
+- `0xFF`: State Delta Broadcast (count + packed moving players).
+
+**Client JS Example** (Movement):
+```js
+function sendMove(x, y) {
+  const buf = new ArrayBuffer(5);
+  const dv = new DataView(buf);
+  dv.setUint8(0, 0x11);
+  dv.setInt16(1, Math.round(x * 100), true); // LE
+  dv.setInt16(3, Math.round(y * 100), true);
+  socket.send(buf);
+}
+Server Node (Buffer): Use raw.readUint8(0), raw.readInt16LE(1) – avoid DataView on pooled Buffers.
+Telegram Handshake:
+	•	Connect with ?initData=...
+	•	Server validates HMAC-SHA256 against Bot Token (critical security step).
+	•	On success: assign slot, send 0x01.
+2. Authoritative Sync & Roles (Delta Engine)
+Delta Compression (0xFF):
+	•	Send only players who moved > threshold (e.g., 0.1 units) every ~40ms.
+	•	Payload: Count + array of (PlayerID + X + Y).
+Role Assignment (Server-only, on 0x12):
+	•	Fisher-Yates shuffle.
+	•	Impostors see other Impostors; Crewmates see everyone as Crew.
+	•	Never trust client role claims.
+Kill Validation (0x15 sub 0x01):
+	•	Server checks: Attacker alive Impostor, cooldown, distance ≤ range.
+3. Matchmaking & Lobby Lifecycle
+In-Memory (Replit-friendly):
+	•	Map
+	•	Map
+Room Code: 6 uppercase alphanum (no I/O/0/1).
+Lifecycle:
+	•	WAITING → (Host 0x12) ACTIVE → TEARDOWN.
+	•	Host migration on disconnect.
+	•	Max 15 players.
+LobbyManager class (full implementation in your pasted Module 3 – solid; use it).
+4. Telegram Mini App Specifics
+	•	Use Telegram.WebApp for initData, theme, fullscreen, haptic feedback.
+	•	Touch joystick for movement.
+	•	In-app notifications for meetings.
+	•	Secure: Always validate initData signature server-side.
+5. Implementation Order for Replit
+	1	Node WS server + auth + LobbyManager.
+	2	Binary message router.
+	3	HTML5 client (Canvas + input loop).
+	4	Delta sync + basic movement.
+	5	Add roles, tasks, meetings iteratively.
+
+This is now a battle-tested foundation merging the best from both our approaches. It stays true to Among Us (Hazel-inspired packets, authoritative server) while being fully Telegram-compatible.
+Next?
+	•	Want the complete server.ts + client.js files generated?
+	•	Or Module 4 (Tasks + Sabotages + UI)?
+	•	Or start coding the LobbyManager right now?
+Tell me where to focus — we’re in great shape! 🚀
