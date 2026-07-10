@@ -11,3 +11,4 @@
 - [Timer/cooldown verification](kill-cooldown-verification.md) — mock screenshots miss server-init bugs in cooldowns/timers; verify with a raw WS client script against the live server.
 - [WS server crash-safety pattern](ws-crash-safety.md) — maxPayload + try/catch around message handler + try/catch around timer callbacks that call ws.send/close; per-field checks alone aren't enough.
 - [iOS Safari canvas resize shake](ios-canvas-resize-shake.md) — phone-only canvas jitter comes from resize-event bursts thrashing canvas.width/height, not server/game logic; debounce the resize handler.
+- [Position-echo reconciliation](position-echo-reconciliation.md) — movement-only jitter in client-predicted multiplayer comes from blindly snapping to every echo of your own position; ack-match against sent history instead.

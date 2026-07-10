@@ -192,7 +192,7 @@ const GameRemotePlayersCtx = createContext<React.RefObject<Map<number, RemotePla
 /** Mutable ref holding a pending server position correction for the local player.
  *  Set by the 0xFF handler when the server disagrees with local position.
  *  Cleared by the rAF loop after applying. */
-const GameCorrectionCtx = createContext<React.RefObject<{ x: number; y: number } | null>>(
+const GameCorrectionCtx = createContext<React.RefObject<{ wireX: number; wireY: number } | null>>(
   { current: null },
 );
 
@@ -209,8 +209,8 @@ export function useRemotePlayersRef(): React.RefObject<Map<number, RemotePlayer>
   return useContext(GameRemotePlayersCtx);
 }
 
-/** Returns a stable ref to the pending server correction ({x,y} or null). */
-export function useCorrectionRef(): React.RefObject<{ x: number; y: number } | null> {
+/** Returns a stable ref to the pending server correction ({wireX,wireY} or null). */
+export function useCorrectionRef(): React.RefObject<{ wireX: number; wireY: number } | null> {
   return useContext(GameCorrectionCtx);
 }
 
@@ -487,7 +487,7 @@ function applyDeltaPacket(
   view: DataView,
   mySlot: number | null,
   remotePlayersMap: Map<number, RemotePlayer>,
-  onCorrection: (x: number, y: number) => void,
+  onCorrection: (wireX: number, wireY: number) => void,
 ): void {
   if (view.byteLength < 2) return;
   const count = view.getUint8(1);
@@ -499,15 +499,18 @@ function applyDeltaPacket(
     const wireX = view.getInt16(off, true); off += 2;
     const wireY = view.getInt16(off, true); off += 2;
 
-    const x = fromWire(wireX, MAP_W);
-    const y = fromWire(wireY, MAP_H);
-
     if (slot === mySlot) {
-      // Server correction for our own position (wall clip rejection).
-      // The snap threshold (~5 wire units ≈ 0.5px) avoids jitter from
-      // floating-point round-trip differences.
-      onCorrection(x, y);
+      // Echo of the server's last-accepted position for our own player.
+      // This is NOT necessarily a "correction" — most of the time it's
+      // just an ack of a position we already sent (and have since moved
+      // past locally, since local movement isn't paused waiting for
+      // acks). Pass raw wire ints; the consumer (GameMap's rAF loop)
+      // reconciles against its own recently-sent history to tell a real
+      // wall-clip rejection apart from ordinary round-trip lag.
+      onCorrection(wireX, wireY);
     } else {
+      const x = fromWire(wireX, MAP_W);
+      const y = fromWire(wireY, MAP_H);
       remotePlayersMap.set(slot, { slot, x, y });
     }
   }
@@ -527,7 +530,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const remotePlayersRef = useRef<Map<number, RemotePlayer>>(new Map());
 
   // Pending server correction for local player — read & cleared by GameMap's rAF loop
-  const correctionRef = useRef<{ x: number; y: number } | null>(null);
+  const correctionRef = useRef<{ wireX: number; wireY: number } | null>(null);
 
   const send = useCallback((buf: Uint8Array | number[]) => {
     const ws = socketRef.current;
@@ -741,7 +744,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           view,
           mySlotRef.current,
           remotePlayersRef.current,
-          (x, y) => { correctionRef.current = { x, y }; },
+          (wireX, wireY) => { correctionRef.current = { wireX, wireY }; },
         );
         return;
       }

@@ -1143,3 +1143,25 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **State to restore**
 - None new. Prior session's disposable-script and backlog notes above still apply.
+
+### 2026-07-10 — Screen-shaking bug, take 2: real root cause (movement-time jitter, not resize)
+
+**Done**
+- User retested after the resize-debounce fix: shake still happens, and specifically **begins with the first movement** (not on map load) — ruling out the previous fix's mechanism as the (sole) cause.
+- Found the real bug in `GameContext.tsx`'s 0xFF handler (`applyDeltaPacket`): every delta-sync packet's echo of the local player's *own* position was treated as an authoritative "correction" and blindly snapped to in `GameMap.tsx`'s rAF loop, unconditionally, every tick — no threshold (a code comment described an intended "~0.5px snap threshold" that was never actually implemented).
+- Confirmed via `api-server/src/ws/wsServer.ts`'s 0x11 handler that the server just stores whatever position the client sends and only *silently keeps the old position* on an actual wall-clip rejection — it doesn't flag rejections explicitly. So the vast majority of "corrections" are just stale acks of a position the client already sent and moved past locally (local movement never pauses for acks). Snapping backward on every one of these (arriving ~1 RTT after being sent, each ~40ms while moving) produced a persistent sawtooth/rubber-band jitter — invisible while idle (ack ≈ current position), visible the instant movement starts. This is also why the earlier bot script (`bot_shake_repro.mjs`) found nothing: it only checked server-echoed positions for monotonicity over the wire, never exercising the client's own prediction+correction code path.
+- Fix: replaced the blind snap with ack-based reconciliation. `applyDeltaPacket` now passes raw wire ints (not pre-converted pixel floats) to the correction callback; `correctionRef`'s type changed from `{x,y}` to `{wireX,wireY}` throughout (context, hook, provider, GameMap usage). `GameMap.tsx` now keeps a small capped (40-entry) rolling history of wire positions it has itself sent (`pendingSentRef`); an incoming correction that matches something in that history is a normal ack (dropped, local prediction untouched); one that doesn't match means the server actually fell back to an older valid position (real wall-clip rejection) — only then does it snap.
+- Validated the reconciliation algorithm with a standalone Node timing simulation (`/tmp/sim_reconcile.mjs`, not committed) covering continuous movement at 30-250ms latency plus jitter (zero unnecessary snaps in all cases) and an injected 200ms real rejection window (correctly produces snaps that pull the player back, resumes clean acks right after).
+- `tsc --build` on `lib/shared` + full `telegram-game` typecheck clean. Workflow restarted, `?mock=playing` screenshot confirms no rendering regression. Code-reviewed via architect subagent: **pass**, with one noted non-blocking caveat (see below).
+
+**Decisions & gotchas**
+- The ack-matching is coordinate-only (no sequence numbers), so there's a theoretical edge case: a genuine "fallback to older position" could be misclassified as a normal ack if that exact coordinate happens to still be in the pending-send history. The reviewer flagged this as a protocol ambiguity, not a bug in this patch, and suggested adding move sequence IDs / explicit ack IDs to the wire protocol as a future hardening step if this ever resurfaces — not done here to keep the fix minimal and avoid a wire-protocol change.
+- **Still not verified on a real device.** Static analysis + the timing simulation are strong evidence the mechanism is fixed, but this environment cannot simulate real iOS Safari/Telegram WebView network conditions or real wall-collision retries under latency. Both are called out by the reviewer as required live checks: (1) sustained movement smoothness on-device, (2) repeatedly pushing into walls under real latency to confirm the server-rejection snap-back still works (i.e. this fix must not have silently disabled wall enforcement).
+
+**Left off / next steps**
+- Ask the user to retest solo mode movement on their iPhone. If shake is fully gone: close out both shake-bug entries, then resume the broader backlog noted in the previous entry (bot AI mode, playtest-after-every-update practice, etc.).
+- If shake persists in some other form, don't re-litigate resize or reconciliation from scratch — get specifics first (does it still track with movement start, or something else now) since both plausible client-side causes have now been addressed.
+- If the ambiguity edge case above ever shows up as a real symptom (e.g. player visibly gets stuck at a wall it should be able to walk along), the fix is sequence-numbered moves/acks, not another coordinate-based heuristic.
+
+**State to restore**
+- `/tmp/sim_reconcile.mjs` is a scratch verification script outside the repo, not committed — no cleanup needed.

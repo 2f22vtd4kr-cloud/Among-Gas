@@ -34,6 +34,7 @@ import {
 } from '@/context/GameContext';
 import {
   toWire,
+  fromWire,
   NO_TARGET,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
@@ -104,6 +105,10 @@ export default function GameMap() {
   const remotePlayersRef = useRemotePlayersRef();
   // Server correction for our own position (set by 0xFF handler in GameContext).
   const correctionRef = useCorrectionRef();
+  // Rolling history of wire positions we ourselves have sent, oldest first.
+  // Used to tell a real wall-clip rejection apart from an ordinary echo of
+  // a position we already sent (see the reconciliation comment below).
+  const pendingSentRef = useRef<Array<{ wireX: number; wireY: number }>>([]);
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
   const {
@@ -507,15 +512,44 @@ export default function GameMap() {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
       lastTs = ts;
 
-      // Apply any pending server correction before stepping physics.
-      // This lets the server push back against wall-clip attempts.
+      // Reconcile any pending server position echo before stepping physics.
+      //
+      // The 0xFF broadcast always includes our own last-known-accepted
+      // position, even when nothing was rejected — it's simply an ack of
+      // whatever we most recently sent, arriving one round trip later.
+      // Local movement never waits for that ack, so by the time it arrives
+      // we've already moved further in the same direction. Blindly
+      // snapping to every echo fights local prediction and reads as
+      // continuous shake/jitter as soon as the player starts moving.
+      //
+      // Instead, compare the echoed wire position against our own recent
+      // send history: if it matches something we sent, it's just a normal
+      // ack — drop it and keep predicting forward. If it doesn't match
+      // anything we sent recently, the server actually fell back to an
+      // older valid position (a real wall-clip rejection) — snap to it.
       if (correctionRef.current) {
-        playerStateRef.current = {
-          ...playerStateRef.current,
-          x: correctionRef.current.x,
-          y: correctionRef.current.y,
-        };
+        const { wireX: cWireX, wireY: cWireY } = correctionRef.current;
         correctionRef.current = null;
+
+        const pending = pendingSentRef.current;
+        const ackIndex = pending.findIndex(
+          (p) => p.wireX === cWireX && p.wireY === cWireY,
+        );
+
+        if (ackIndex !== -1) {
+          // Confirmed — everything up to and including this send is stale
+          // history now; local prediction already accounts for it.
+          pending.splice(0, ackIndex + 1);
+        } else {
+          // Not something we sent recently — the server rejected our
+          // latest move(s) and is holding us at an earlier valid spot.
+          playerStateRef.current = {
+            ...playerStateRef.current,
+            x: fromWire(cWireX, MAP_W),
+            y: fromWire(cWireY, MAP_H),
+          };
+          pending.length = 0;
+        }
       }
 
       // Step player physics. Dead players (ghosts) walk through walls.
@@ -534,6 +568,10 @@ export default function GameMap() {
         // Only send if position has changed in wire space
         if (wireX !== lastSentWireX || wireY !== lastSentWireY) {
           sendMove(wireX, wireY);
+          pendingSentRef.current.push({ wireX, wireY });
+          // Bounded history — comfortably covers any realistic round trip
+          // at the 25Hz send rate without growing unbounded.
+          if (pendingSentRef.current.length > 40) pendingSentRef.current.shift();
           lastSentWireX = wireX;
           lastSentWireY = wireY;
           lastMoveSentTs = ts;
