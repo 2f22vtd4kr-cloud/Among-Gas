@@ -146,8 +146,9 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby) return;
 
-        // Phase 3: accept movement in WAITING and ROAMING.
-        // Phase 4 will restrict to ROAMING only (after role assignment).
+        // Phase 4: movement only allowed while ROAMING (post role assignment).
+        if (lobby.phase !== 'ROAMING') return;
+
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
         const player = lobby.players.get(slot);
