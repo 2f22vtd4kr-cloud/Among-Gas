@@ -106,6 +106,10 @@ export interface LobbyPlayer {
   killCooldownMs: number;
   /** Task IDs assigned to this player at game start (empty for impostors). */
   assignedTasks: number[];
+  /** True for server-side synthetic bot slots (no real WS connection). */
+  isBot?: true;
+  /** Bot AI agent — present only when isBot is true. */
+  botAgent?: IBotAgent;
 }
 
 /**
@@ -159,6 +163,16 @@ export interface Lobby {
 }
 
 export const MAX_PLAYERS = 15;
+
+/**
+ * Minimal interface that server-side bot agents must implement.
+ * Defined here (not in bot/BotAgent.ts) to avoid a circular import:
+ * BotAgent imports from lobby.ts; lobby.ts needs only this interface.
+ */
+export interface IBotAgent {
+  /** Called every 200ms while the lobby is ROAMING or MEETING. */
+  tick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
+}
 
 // ── Packet builders ─────────────────────────────────────────────────────────
 
@@ -337,6 +351,8 @@ export class LobbyManager {
   readonly userToLobbyMap = new Map<number, string>();
 
   private _deltaInterval: ReturnType<typeof setInterval> | null = null;
+  /** 5Hz bot AI tick loop — runs alongside the 25Hz delta broadcast. */
+  private _botInterval: ReturnType<typeof setInterval> | null = null;
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -360,6 +376,103 @@ export class LobbyManager {
   getLobbyForUser(tgUserId: number): Lobby | null {
     const code = this.userToLobbyMap.get(tgUserId);
     return code ? (this.lobbies.get(code) ?? null) : null;
+  }
+
+  // ── Bot slot management ──────────────────────────────────────────────────
+
+  /**
+   * Add a bot player to a lobby that is still in WAITING phase.
+   * The bot occupies a real slot just like a human player, except:
+   *   - Its ws is a NullWebSocket sentinel (readyState = 3 / CLOSED),
+   *     so all broadcast helpers naturally skip it.
+   *   - Its tgUserId is a negative number (-(botIndex + 1)) to avoid
+   *     collisions with real Telegram user IDs.
+   *   - It is NOT added to userToLobbyMap (bots don't have WS connections).
+   *
+   * Call addBotPlayer before startGame; startGame will assign the role and
+   * spawn position just like for any other player.
+   */
+  addBotPlayer(lobby: Lobby, botIndex: number, username: string, agent: IBotAgent): LobbyPlayer | null {
+    const slot = this.nextFreeSlot(lobby);
+    if (slot === null) return null;
+
+    const fakeTgUserId = -(botIndex + 1); // guaranteed negative → no collision
+    // NullWebSocket: readyState=3 (CLOSED) so every `ws.readyState === 1` check skips it
+    const nullWs = { readyState: 3 as const, send: (_data: unknown) => {} } as unknown as WebSocket;
+
+    const player: LobbyPlayer = {
+      slot,
+      tgUserId: fakeTgUserId,
+      username,
+      ws: nullWs,
+      x: SPAWN_X, y: SPAWN_Y,
+      lastBroadcastWireX: -100_000,
+      lastBroadcastWireY: -100_000,
+      role: 'crewmate', // overwritten by startGame
+      alive: true,
+      killCooldownMs: 0,
+      assignedTasks: [],
+      isBot: true,
+      botAgent: agent,
+    };
+
+    lobby.players.set(slot, player);
+    lobby.userIdToSlot.set(fakeTgUserId, slot);
+    logger.info(`[Lobby] Bot added to ${lobby.code} — "${username}" (slot=${slot})`);
+    return player;
+  }
+
+  // ── Convenience action methods (used by both wsServer and bot agents) ────
+
+  /**
+   * Complete a task step and broadcast progress + check win.
+   * Combines handleTaskStep + task-progress broadcast + checkWinAfterTask into
+   * a single call so bot agents and the WS handler share the same logic.
+   */
+  applyTaskStep(lobby: Lobby, playerSlot: number, taskId: number, stepIndex: number): boolean {
+    const accepted = this.handleTaskStep(lobby, playerSlot, taskId, stepIndex);
+    if (!accepted) return false;
+    this._broadcastTaskProgress(lobby);
+    this.checkWinAfterTask(lobby);
+    return true;
+  }
+
+  private _broadcastTaskProgress(lobby: Lobby): void {
+    const percent = lobby.totalTaskSteps > 0
+      ? Math.round((lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100)
+      : 0;
+    const packet = buildTaskProgressPacket(percent);
+    for (const p of lobby.players.values()) {
+      if (p.ws.readyState === /* OPEN */ 1) p.ws.send(packet);
+    }
+  }
+
+  /**
+   * Attempt a kill and, if successful, broadcast it and check win condition.
+   * Returns true if the kill was applied.
+   */
+  applyKill(lobby: Lobby, attackerSlot: number, victimSlot: number): boolean {
+    const applied = this.attemptKill(lobby, attackerSlot, victimSlot);
+    if (!applied) return false;
+    this.broadcastKill(lobby, victimSlot, attackerSlot);
+    this.checkWinAfterKill(lobby);
+    return true;
+  }
+
+  /**
+   * Attempt a sabotage repair and broadcast the result.
+   * Returns the same 'fixed' | 'progress' | 'rejected' as attemptRepair.
+   */
+  applyRepair(
+    lobby: Lobby,
+    playerSlot: number,
+    systemId: number,
+    padId: number,
+  ): 'fixed' | 'progress' | 'rejected' {
+    const result = this.attemptRepair(lobby, playerSlot, systemId, padId);
+    if (result === 'fixed') this.broadcastSabotageFixed(lobby, systemId);
+    else if (result === 'progress') this.broadcastSabotagePadFixed(lobby, systemId, padId);
+    return result;
   }
 
   // ── Create ───────────────────────────────────────────────────────────────
@@ -998,14 +1111,44 @@ export class LobbyManager {
       this._tickDelta();
     }, 40); // 25Hz
 
-    logger.info('[Lobby] Delta loop started');
+    this._botInterval = setInterval(() => {
+      this._tickBots();
+    }, 200); // 5Hz — sufficient for AI decisions, much cheaper than 25Hz
+
+    logger.info('[Lobby] Delta loop + bot tick loop started');
   }
 
   private _stopDeltaLoop(): void {
     if (this._deltaInterval === null) return;
     clearInterval(this._deltaInterval);
     this._deltaInterval = null;
-    logger.info('[Lobby] Delta loop stopped (no active lobbies)');
+    if (this._botInterval !== null) {
+      clearInterval(this._botInterval);
+      this._botInterval = null;
+    }
+    logger.info('[Lobby] Delta loop + bot tick loop stopped (no active lobbies)');
+  }
+
+  /**
+   * 5Hz bot AI tick — called from _botInterval.
+   * Runs every bot agent's tick() in every active lobby (ROAMING or MEETING).
+   * Errors in individual bots are caught so a buggy agent can't crash the loop.
+   */
+  private _tickBots(): void {
+    for (const lobby of this.lobbies.values()) {
+      if (lobby.phase !== 'ROAMING' && lobby.phase !== 'MEETING') continue;
+      for (const player of lobby.players.values()) {
+        if (!player.isBot || !player.botAgent) continue;
+        try {
+          player.botAgent.tick(lobby, player, this);
+        } catch (err) {
+          logger.error(
+            { err },
+            `[Bot] Error in bot tick — lobby=${lobby.code} slot=${player.slot}`,
+          );
+        }
+      }
+    }
   }
 
   private _tickDelta(): void {

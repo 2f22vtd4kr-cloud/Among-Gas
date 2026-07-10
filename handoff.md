@@ -1234,3 +1234,40 @@ Same recurring failure mode again on a fresh import (no workflows, no artifacts 
 
 **State to restore**
 - None.
+
+### 2026-07-10 — Phase B: Bot agent base + server integration
+
+**Done**
+- `artifacts/api-server/src/bot/BotAgent.ts` — abstract base class.
+  - `navigateTo(self, goal)` — moves bot 80px/tick along A* path; mutates `self.x`/`self.y` directly so the 25Hz delta loop broadcasts movement automatically.
+  - `chooseVote()` abstract — overridden per subclass.
+  - `randomWalkablePoint()` — fallback for wandering.
+  - `PathCache` instance per bot — avoids recomputing same-cell paths.
+- `artifacts/api-server/src/bot/CrewmateBot.ts` — priority loop: (1) sabotage repair, (2) report body, (3) task navigation+completion, (4) wander. Votes randomly with 20% skip bias.
+- `artifacts/api-server/src/bot/ImpostorBot.ts` — FAKING/HUNTING/COOLDOWN state machine. Isolation scoring gates hunts. Sabotage trigger every ~60s. Votes for accuser first, else random crewmate.
+- `artifacts/api-server/src/ws/lobby.ts`:
+  - Added `IBotAgent` interface (avoids circular import — bots import from lobby.ts, lobby only needs this minimal interface).
+  - Added `isBot?: true` and `botAgent?: IBotAgent` to `LobbyPlayer`.
+  - Added `addBotPlayer(lobby, botIndex, username, agent)` — creates slot with NullWebSocket sentinel (readyState=3, no-op send).
+  - Added convenience methods: `applyTaskStep`, `applyKill`, `applyRepair` — each calls the validation method + broadcasts + win-check, shared by both WS handler and bots.
+  - Added `_botInterval` (5Hz/200ms) started alongside `_deltaInterval` in `ensureDeltaLoop`.
+  - Added `_tickBots()` — iterates all bot slots in ROAMING/MEETING lobbies, calls `agent.tick()` with error isolation.
+- `artifacts/api-server/src/ws/wsServer.ts` — refactored to use `applyKill`, `applyTaskStep`, `applyRepair` (de-duplicates broadcast+win-check logic).
+- `pnpm run typecheck` passes clean across all packages.
+
+**Decisions & gotchas**
+- `IBotAgent` interface lives in `lobby.ts` (not `BotAgent.ts`) to avoid ESM circular import: `BotAgent.ts` imports `Lobby`/`LobbyPlayer`/`LobbyManager` from `lobby.ts`; `lobby.ts` only imports the interface, which is erased at runtime.
+- NullWebSocket: `{ readyState: 3, send: () => {} } as unknown as WebSocket` — readyState=3 (CLOSED) means all `player.ws.readyState === 1` guards naturally skip bot slots. Zero special-casing in broadcast methods.
+- `addBotPlayer` does NOT add to `userToLobbyMap` (bots have no WS connection). It DOES add to `userIdToSlot` (negative tgUserId) for consistency, but this is only needed if the bot slot is ever looked up by fake userId (it currently isn't).
+- Bot movement: 80px/200ms = 400px/s. Map is 3224px wide → cross-map in ~8s. Feels natural.
+- Bot tick error isolation: try/catch per agent so a single bot crash can't kill the loop.
+
+**Left off / next steps**
+- Phase B complete — bots move, fight, task, sabotage, vote.
+- **Next: Phase C — Single-player lobby flow.**
+  - Client: "Play Solo" button → `0x10/0x06` message (botCount default=4)
+  - Server: handle `CREATE_SOLO` sub-action — create private lobby, `addBotPlayer` × N, `startGame` immediately, return 0x10/0x03 Update + 0x12 Start sequence
+  - No additional client code beyond the button and the new opcode send
+
+**State to restore**
+- None.

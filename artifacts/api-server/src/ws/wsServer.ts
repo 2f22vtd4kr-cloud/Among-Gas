@@ -18,7 +18,6 @@ import {
   LobbyManager,
   buildJoinErrorPacket,
   buildSlotAssignedPacket,
-  buildTaskProgressPacket,
 } from './lobby.js';
 import { isSabotageSystemId } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
@@ -253,13 +252,9 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (sub === 0x01) {
           if (raw.length < 3) return;
           const victimSlot = raw.readUInt8(2);
-          const applied = lobbyManager.attemptKill(lobby, attackerSlot, victimSlot);
+          const applied = lobbyManager.applyKill(lobby, attackerSlot, victimSlot);
           if (applied) {
-            lobbyManager.broadcastKill(lobby, victimSlot, attackerSlot);
             logger.info(`[WS] Kill in ${lobby.code}: slot=${attackerSlot} → slot=${victimSlot}`);
-            // Phase 6: a kill can tip alive-player parity in the impostors'
-            // favor immediately — check before waiting for a meeting.
-            lobbyManager.checkWinAfterKill(lobby);
           }
           return;
         }
@@ -270,16 +265,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (sub === 0x03 && raw.length === 4) {
           const taskId = raw.readUInt8(2);
           const stepIndex = raw.readUInt8(3);
-          const accepted = lobbyManager.handleTaskStep(lobby, attackerSlot, taskId, stepIndex);
-          if (!accepted) return;
-          const percent = lobby.totalTaskSteps > 0
-            ? Math.round((lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100)
-            : 0;
-          const progressPacket = buildTaskProgressPacket(percent);
-          for (const p of lobby.players.values()) {
-            if (p.ws.readyState === /* OPEN */ 1) p.ws.send(progressPacket);
-          }
-          lobbyManager.checkWinAfterTask(lobby);
+          lobbyManager.applyTaskStep(lobby, attackerSlot, taskId, stepIndex);
           return;
         }
 
@@ -301,12 +287,9 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (sub === 0x05 && raw.length === 4) {
           const systemId = raw.readUInt8(2);
           const padId = raw.readUInt8(3);
-          const result = lobbyManager.attemptRepair(lobby, attackerSlot, systemId, padId);
+          const result = lobbyManager.applyRepair(lobby, attackerSlot, systemId, padId);
           if (result === 'fixed') {
-            lobbyManager.broadcastSabotageFixed(lobby, systemId);
             logger.info(`[WS] Sabotage fixed in ${lobby.code}: system=${systemId} by slot=${attackerSlot}`);
-          } else if (result === 'progress') {
-            lobbyManager.broadcastSabotagePadFixed(lobby, systemId, padId);
           }
           return;
         }

@@ -150,10 +150,12 @@ This is the playtest tool — run it after tuning bot difficulty, kill cooldowns
 A\* on the existing collision grid. No other changes. Testable in isolation via a small script.
 Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass, avg 0.62ms/path.
 
-**Phase B — Bot agent base + server integration**
-- `artifacts/api-server/src/bot/BotAgent.ts` — abstract base class with `tick(gameState): Action[]`
-- `CrewmateBot.ts` and `ImpostorBot.ts` extending it
-- Bot tick loop wired into the server's game loop (runs alongside the 25 Hz broadcast)
+**Phase B — Bot agent base + server integration** ✅ DONE
+- `artifacts/api-server/src/bot/BotAgent.ts` — abstract base with `navigateTo`, `PathCache`, `tick` dispatch
+- `CrewmateBot.ts` — priority loop: sabotage repair → body report → task → wander
+- `ImpostorBot.ts` — FAKING/HUNTING/COOLDOWN state machine + periodic sabotage
+- `IBotAgent` interface + `isBot`/`botAgent` on `LobbyPlayer` (NullWebSocket sentinel)
+- 5Hz `_botInterval` in `LobbyManager`; `addBotPlayer`, `applyKill`, `applyTaskStep`, `applyRepair` convenience methods
 - Bots appear as real slot entries; delta-sync broadcasts their positions automatically
 
 **Phase C — Single-player lobby flow**
