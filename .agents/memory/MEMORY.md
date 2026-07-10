@@ -9,3 +9,4 @@
 - [Dev-only file-write endpoints](dev-only-file-write-endpoints.md) — pattern for in-app editors that persist to source files in static-build artifacts; CSRF/validation gotchas for Vite dev middleware.
 - [Shared lib build requirement](shared-lib-build.md) — lib/shared is composite TS; run `tsc --build lib/shared` after any change before running typecheck; index.ts must use named exports (not export *) to avoid MAP_W/MAP_H ambiguity.
 - [Timer/cooldown verification](kill-cooldown-verification.md) — mock screenshots miss server-init bugs in cooldowns/timers; verify with a raw WS client script against the live server.
+- [WS server crash-safety pattern](ws-crash-safety.md) — maxPayload + try/catch around message handler + try/catch around timer callbacks that call ws.send/close; per-field checks alone aren't enough.

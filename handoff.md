@@ -1047,3 +1047,26 @@ Same pattern recurred on a subsequent re-import (no configured workflows, artifa
 
 ## 2026-07-10 — Re-import repair (3rd occurrence)
 Same recurring failure mode again on a fresh import (no workflows, no artifacts registered). Repaired identically: `verifyAndReplaceArtifactToml()` for api-server, mockup-sandbox, telegram-game → `pnpm install` → `pnpm --filter @workspace/db run push` (no schema drift) → restarted all three workflows. Verified telegram-game lobby renders and WS handshake succeeds. No source changes.
+
+## 2026-07-10 — WS server crash-hardening (packet validation follow-up)
+
+**Done**
+- An external repo analysis (Grok) flagged "no input validation on packets — easy to crash server" as a real gap, despite being wrong about most other claims (task system, sabotages, voting, Telegram integration, canvas rendering are all already shipped — Phases 1-9 complete per GAME_SPEC.md).
+- Verified the claim was partially true and fixed it in `artifacts/api-server/src/ws/wsServer.ts`:
+  - `WebSocketServer` now sets `maxPayload: 4096` — oversized frames are rejected at the socket layer (confirmed via live test: server closes the connection with code 1009).
+  - Added `sanitizeUsername()` (truncates to 64 UTF-8 bytes) applied at auth time. Without this, an oversized username (trivially achievable via the DEV_MODE JSON auth bypass, which trusts client-supplied `{id, username}` verbatim) would make `buildRoomUpdatePacket`'s `buf.writeUInt8(usernameBufs[i].length, ...)` throw a RangeError (usernames are length-prefixed as UInt8, max 255) — and that throw was unguarded, so it would crash the whole Node process for every active lobby, not just the offending connection.
+  - Wrapped the `ws.on('message', ...)` body in try/catch (extracted to a named `handleMessage(ws, raw)` function) so any future unexpected exception during message processing closes just that one connection instead of taking down the server.
+  - Code review caught a related edge case: the handshake-timeout `setTimeout` callback (`ws.send()`/`ws.close()` on a socket that raced closed just before the timer fired) ran outside the message handler's try/catch and could also throw uncaught — added a `readyState === OPEN` guard + its own try/catch.
+- Verified live via raw WS scripts: oversized username → no crash, room packet still builds; oversized payload → clean close(1009), server stays up; handshake-race (5 sockets that connect then immediately disconnect) → no crash; normal auth/gameplay unaffected afterward (screenshotted lobby, still works).
+- `pnpm --filter @workspace/shared exec tsc --build` + `pnpm --filter @workspace/api-zod exec tsc --build` were required before `tsc --noEmit` on api-server would pass (composite project references — see replit.md gotchas / memory).
+
+**Decisions & gotchas**
+- The repo's *existing* packet-length/opcode guards in `wsServer.ts`/`lobby.ts` were already solid (every `readUInt8`/`readInt16LE` is preceded by a length check; Map-based slot/task/sabotage lookups already fail safe via `undefined`). The actual crash vector was specifically the *unguarded exception path* (no maxPayload, no try/catch, no username length bound) — not missing per-field bounds checks.
+- `test_sabotage.mjs`'s `connect()` helper has a pre-existing bug unrelated to this fix: it caches `state.slot` from the initial auth ACK (always reports slot 0 as a placeholder) and never updates it after the real lobby slot arrives via the `0x10 0x05` packet. This makes the `attackerSlot mismatch` assertion flaky — it only passes when Fisher-Yates happens to pick the host (real slot 0) as the impostor, and fails (assertion, not a real bug) about 1-in-3 runs when a joined player (real slot 1 or 2) is picked instead. Confirmed via 3 repeated runs. Not fixed in this session (out of scope) — a future session updating this test should have `connect()`'s message handler also update `state.slot` on `0x10 0x05`.
+
+**Left off / next steps**
+- Fix `test_sabotage.mjs`'s stale-slot tracking if it's touched again.
+- Two follow-up tasks were proposed after the earlier re-import session (automated cooldown/timer regression test, native mobile companion) but the user cancelled both — not pursued.
+
+**State to restore**
+- None. All changes typecheck-clean, live-tested, code-reviewed (one issue found and fixed before this entry).

@@ -42,6 +42,33 @@ interface AuthSocket extends WebSocket {
 const WS_PATH = '/api/ws';
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
+/**
+ * Hard cap on any single WS frame. The largest legitimate client→server
+ * packet is a real Telegram initData string (a few hundred bytes); 4KB
+ * leaves generous headroom while rejecting oversized frames at the socket
+ * layer before they ever reach application code.
+ */
+const MAX_PAYLOAD_BYTES = 4096;
+
+/**
+ * Usernames are written into buildRoomUpdatePacket as a UInt8 length prefix,
+ * which throws (RangeError) for values > 255. Telegram's own limits keep
+ * real usernames well under this, but DEV_MODE trusts a client-supplied
+ * JSON payload verbatim (see auth.ts), so this must be enforced server-side
+ * regardless of the auth path — one oversized username must never be able
+ * to crash packet building (and thus the whole process) for every lobby.
+ */
+const MAX_USERNAME_BYTES = 64;
+
+/** Truncate to a safe UTF-8 byte length for use in length-prefixed packets. */
+function sanitizeUsername(raw: string): string {
+  let buf = Buffer.from(raw, 'utf8');
+  if (buf.length <= MAX_USERNAME_BYTES) return raw;
+  buf = buf.subarray(0, MAX_USERNAME_BYTES);
+  // Avoid splitting a multi-byte UTF-8 sequence in half.
+  return buf.toString('utf8').replace(/\uFFFD+$/, '');
+}
+
 /** Singleton lobby manager shared across all connections. */
 const lobbyManager = new LobbyManager();
 
@@ -51,7 +78,7 @@ const collisionGrid = buildCollisionGrid();
 export function attachWsServer(httpServer: HttpServer): WebSocketServer {
   validateAuthConfig();
 
-  const wss = new WebSocketServer({ noServer: true });
+  const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_PAYLOAD_BYTES });
 
   httpServer.on('upgrade', (req: IncomingMessage, socket, head) => {
     const pathname = req.url?.split('?')[0] ?? '';
@@ -66,13 +93,37 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
     ws.isVerified = false;
 
     const handshakeTimer = setTimeout(() => {
-      if (!ws.isVerified) {
-        ws.send(Buffer.from([0x00]));
-        ws.close();
+      // Guard against a socket that closed in the race right before this
+      // timer fires — send()/close() on an already-closing socket can throw,
+      // and this runs outside the message handler's try/catch (it's a timer
+      // callback, not a 'message' event), so an uncaught throw here would
+      // crash the whole process for every active lobby.
+      try {
+        if (!ws.isVerified && ws.readyState === ws.OPEN) {
+          ws.send(Buffer.from([0x00]));
+          ws.close();
+        }
+      } catch (err) {
+        logger.error({ err }, '[WS] Error during handshake-timeout close — ignoring');
       }
     }, HANDSHAKE_TIMEOUT_MS);
 
     ws.on('message', (raw: Buffer) => {
+      try {
+        handleMessage(ws, raw);
+      } catch (err) {
+        // Defense-in-depth: a single malformed/unexpected packet must never
+        // crash the process and take down every active lobby. Log and close
+        // just this connection instead.
+        logger.error(
+          { err, userId: ws.tgUserId ?? 'unauthenticated' },
+          '[WS] Unhandled error processing message — closing connection',
+        );
+        ws.close();
+      }
+    });
+
+    function handleMessage(ws: AuthSocket, raw: Buffer): void {
       if (!Buffer.isBuffer(raw) || raw.length === 0) return;
 
       // ── Phase 1: auth handshake ───────────────────────────────────────────
@@ -88,7 +139,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
 
         ws.isVerified = true;
         ws.tgUserId = user.id;
-        ws.username = user.username ?? `User${user.id}`;
+        ws.username = sanitizeUsername(user.username ?? `User${user.id}`);
         ws.playerSlotId = 0;
 
         const ack = Buffer.alloc(2);
@@ -308,7 +359,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         logger.info(`[WS] Game started in ${lobby.code} by slot=${ws.playerSlotId}`);
         return;
       }
-    });
+    }
 
     ws.on('close', () => {
       clearTimeout(handshakeTimer);
