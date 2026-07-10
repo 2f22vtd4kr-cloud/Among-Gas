@@ -19,7 +19,7 @@ export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE);
 // not the sprite center. FEET_OFFSET_Y shifts the test point down to the
 // base of the sprite; PLAYER_RADIUS is intentionally tiny (just the feet).
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
-export const FEET_OFFSET_Y  = Math.round(_SPRITE_H_MAP_PX * 0.42);
+export const FEET_OFFSET_Y  = Math.round(_SPRITE_H_MAP_PX * 0.25);
 export const PLAYER_RADIUS  = 4;
 export const PLAYER_ANIM_INTERVAL_MS = 140;
 
