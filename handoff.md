@@ -972,3 +972,6 @@ None. All changes merged and workflows verified clean.
 ### State to restore
 
 None. All changes verified (typecheck clean, live WS integration test passed, code review passed).
+
+## 2026-07-10 — Re-import repair
+Project was re-imported and artifact registration metadata (`.replit-artifact/artifact.toml` → workflows) was dropped again, same failure mode documented in replit.md Gotchas. Repaired via `verifyAndReplaceArtifactToml()` for all three artifacts (api-server, telegram-game, mockup-sandbox), ran `pnpm install`, restarted workflows. Verified telegram-game loads, WS handshake succeeds, API server listening on 8080. No source changes made.
