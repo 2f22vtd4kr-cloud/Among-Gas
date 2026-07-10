@@ -817,3 +817,66 @@
 
 **State to restore**
 - None. All changes are committed-ready.
+
+---
+
+## Phase 3 — Real-time Movement (complete)
+
+**Session goal:** Wire up real-time position sync between all players in a lobby.
+
+### What was built
+
+**New package: `lib/shared/`** (`@workspace/shared`)
+- `src/collisionData.ts` — canonical RLE grid data (moved from telegram-game; now the single source of truth used by both client and server)
+- `src/collisionMap.ts` — collision utilities: `buildCollisionGrid`, `canMoveTo`, `resolveMovement`, `isBlocked`, `ZONES`, `MAP_W`, `MAP_H`, `CELL_X`, `CELL_Y`
+- `src/coords.ts` — wire coordinate normalization: `WIRE_SCALE=32000`, `toWire()`, `fromWire()`, `FEET_OFFSET_Y`, `PLAYER_RADIUS`, `DELTA_THRESHOLD_SQ=100`
+- `src/index.ts` — explicit named re-exports (avoids MAP_W/MAP_H duplication ambiguity)
+
+**Server changes (`artifacts/api-server`)**
+- `lobby.ts` — `LobbyPlayer` now has `x`, `y`, `lastBroadcastWireX/Y`; 25Hz delta loop (lazy start / stops when all lobbies torn down); `buildDeltaPacket()` (0xFF), `buildRoleRevealPacket()` (0x1A), `startGame()` transitions WAITING→ROAMING and sends 0x1A to all
+- `wsServer.ts` — handles `0x11` (move intent, validated against shared collision grid, exact 5-byte length check), `0x12` (host-only game start → calls `startGame()`)
+
+**Client changes (`artifacts/telegram-game`)**
+- `GameContext.tsx` — new actions: `sendMove(wireX, wireY)`, `startGame()`; `remotePlayersRef` + `correctionRef` exposed as React refs (updated by 0xFF handler, read in rAF without re-renders); handles 0x1A (sets `phase='playing'`); prunes `remotePlayersRef` on 0x10/0x03 to prevent ghost rendering
+- `GameMap.tsx` — sends 0x11 at 25Hz (throttled, wire-space delta filtered); reads correctionRef in rAF to snap position on server rejection; renders remote players as slot-colored Among Us-style circles (body + visor + ground shadow + slot label)
+- `Lobby.tsx` — Start Game button wired to `startGame()`; auto-navigates to `/game` via `useLocation` when `phase === 'playing'`
+
+**Other**
+- `artifacts/telegram-game/src/game/collisionData.ts` → re-export stub from `@workspace/shared/collisionData`
+- `artifacts/telegram-game/src/game/collisionMap.ts` → re-export stub from `@workspace/shared/collisionMap`
+- `artifacts/telegram-game/vite.config.ts` — collision editor write endpoint updated to write `lib/shared/src/collisionData.ts` (was: `src/game/collisionData.ts`)
+- `scripts/src/analyzeCollisionMap.ts` — OUT path updated to `lib/shared/src/collisionData.ts`
+
+### Protocol reference (all implemented)
+
+| Opcode | Direction | Layout | Meaning |
+|--------|-----------|--------|---------|
+| 0x11   | C→S       | `[0x11, wireX:Int16LE, wireY:Int16LE]` (5 bytes) | Move intent |
+| 0x12   | C→S       | `[0x12]` | Host requests game start |
+| 0x1A   | S→C       | `[0x1A, role:Uint8]` | Role reveal (0=crewmate) |
+| 0xFF   | S→C (bcast) | `[0xFF, N, (slot:Uint8, wireX:Int16LE, wireY:Int16LE)×N]` | Delta sync |
+
+### Decisions & gotchas
+
+- **Wire coords:** `Int16LE` in range 0–32000. `WIRE_SCALE/MAP_W ≈ 9.93` wire units per pixel. `DELTA_THRESHOLD_SQ=100` ≈ Δwire>10 units ≈ 1px movement threshold.
+- **Shared lib declarations:** `lib/shared` is a composite TS project. Run `tsc --build lib/shared` after any change to coords.ts or collisionMap.ts; the artifacts' typecheck depends on the emitted `.d.ts` files.
+- **Delta loop lifecycle:** Loop starts lazily on first lobby create, stops when `lobbies.size === 0` after last lobby teardown. No permanent background spin.
+- **Remote player ghost prevention:** `remotePlayersRef` is pruned on every `0x10/0x03` room update against the authoritative player list.
+- **Phase 3 accepts 0x11 in WAITING state** (pragmatic for testing); Phase 4 should restrict to ROAMING only.
+- **Remote player rendering:** Colored circles (slot-keyed palette) with visor + shadow. Sprite-sheet rendering for remotes is Phase 4.
+- **Correction mechanism:** Server's 0xFF includes the local player's own slot on wall-clip rejection. Client applies it via `correctionRef` (a context ref, not state — avoids re-renders).
+- **vite.config.ts imports from shared lib:** `import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData'` — direct TS source import (Vite resolves TS natively).
+
+### Left off / next steps (Phase 4)
+
+- Full role assignment (impostor selection, spawn positions per role)
+- Remote player sprite rendering (currently colored circles)
+- Task system / sabotage mechanics
+- Kill button for impostors
+- Restrict movement validation to ROAMING state only
+- `0x13` kill intent, `0x14` report body, `0x15` vote
+- Orphaned file: `artifacts/telegram-game/src/hooks/useGameSocket.ts` — safe to delete
+
+### State to restore
+
+None. All changes merged and workflows verified clean.

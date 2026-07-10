@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { defineConfig, type Plugin } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
-import { CELL, COLS, ROWS } from './src/game/collisionData';
+import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dev-only API for the in-app Collision Editor (/collision-editor).
@@ -95,7 +95,8 @@ function collisionEditorApiPlugin(): Plugin {
               return;
             }
             const runs = encodeRuns(grid);
-            const filePath = path.resolve(import.meta.dirname, 'src/game/collisionData.ts');
+            // Write to the canonical location in lib/shared (used by both client and server).
+            const filePath = path.resolve(import.meta.dirname, '../../lib/shared/src/collisionData.ts');
             const content = `// Maintained via the in-app Collision Editor (/collision-editor).
 // Originally seeded by scripts/src/analyzeCollisionMap.ts from a red-line
 // reference image; manual edits made through the editor live here now.

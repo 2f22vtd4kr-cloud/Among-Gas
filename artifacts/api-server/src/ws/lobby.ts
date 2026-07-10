@@ -1,16 +1,22 @@
 /**
- * Lobby & Matchmaking — Phase 2
+ * Lobby & Matchmaking — Phase 2 + Phase 3
  *
- * Implements LobbyManager, room code generation, slot assignment,
- * host migration on disconnect, and room update broadcast packets.
+ * Phase 2: LobbyManager, room code generation, slot assignment,
+ *   host migration on disconnect, room update broadcast.
+ * Phase 3: Per-player position tracking, 25Hz delta broadcast loop,
+ *   game-start handling (0x12 → 0x1A role reveal).
  *
- * Protocol reference: GAME_SPEC.md §6
+ * Protocol reference: GAME_SPEC.md §6, §7
  */
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
+import {
+  MAP_W, MAP_H,
+  toWire,
+  DELTA_THRESHOLD_SQ,
+} from '@workspace/shared/coords';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
-// Uppercase alphanumeric, excluding ambiguous chars: I, O, 0, 1
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
 
@@ -22,6 +28,10 @@ function generateCode(): string {
   return code;
 }
 
+// ── Spawn position (matches game/player.ts PLAYER_SPAWN formula) ─────────────
+const SPAWN_X = Math.round(350 * (MAP_W / 1040));
+const SPAWN_Y = Math.round(150 * (MAP_H / 580));
+
 // ── Types ───────────────────────────────────────────────────────────────────
 
 export type LobbyPhase = 'WAITING' | 'ROAMING' | 'GAMEOVER';
@@ -31,6 +41,12 @@ export interface LobbyPlayer {
   tgUserId: number;
   username: string;
   ws: WebSocket;
+  /** Current pixel position (feet center — y includes FEET_OFFSET_Y). */
+  x: number;
+  y: number;
+  /** Wire-space position at the time of last 0xFF broadcast. */
+  lastBroadcastWireX: number;
+  lastBroadcastWireY: number;
 }
 
 export interface Lobby {
@@ -49,7 +65,6 @@ export const MAX_PLAYERS = 15;
 
 /**
  * 0x10 0x05 — slot assignment (sent individually to the joining player)
- *
  * Layout: [0x10, 0x05, slotId]
  */
 export function buildSlotAssignedPacket(slot: number): Buffer {
@@ -93,11 +108,47 @@ export function buildRoomUpdatePacket(lobby: Lobby): Buffer {
 
 /**
  * 0x10 0x04 — join error
- *
  * Error codes: 0x01 = not found, 0x02 = in progress, 0x03 = full
  */
 export function buildJoinErrorPacket(errorCode: 0x01 | 0x02 | 0x03): Buffer {
   return Buffer.from([0x10, 0x04, errorCode]);
+}
+
+/**
+ * 0x1A — role reveal (sent individually to each player at game start)
+ * Layout: [0x1A, role]  where role = 0 (crewmate) | 1 (impostor)
+ * Phase 3: all players receive role=0 (crewmate); real assignment in Phase 4.
+ */
+export function buildRoleRevealPacket(role: 0 | 1): Buffer {
+  return Buffer.from([0x1A, role]);
+}
+
+/**
+ * 0xFF — delta sync broadcast
+ *
+ * Layout:
+ *   Byte 0:   0xFF
+ *   Byte 1:   N (number of moving players, Uint8)
+ *   [× N]:
+ *     Byte 0:    slot (Uint8)
+ *     Bytes 1–2: X (Int16LE, wire-normalized 0–32000)
+ *     Bytes 3–4: Y (Int16LE, wire-normalized 0–32000)
+ *
+ * Total: 2 + N×5 bytes.
+ */
+export function buildDeltaPacket(
+  players: Array<{ slot: number; wireX: number; wireY: number }>,
+): Buffer {
+  const buf = Buffer.alloc(2 + players.length * 5);
+  let off = 0;
+  buf.writeUInt8(0xFF, off++);
+  buf.writeUInt8(players.length, off++);
+  for (const p of players) {
+    buf.writeUInt8(p.slot, off++);
+    buf.writeInt16LE(p.wireX, off); off += 2;
+    buf.writeInt16LE(p.wireY, off); off += 2;
+  }
+  return buf;
 }
 
 // ── LobbyManager ────────────────────────────────────────────────────────────
@@ -107,6 +158,8 @@ export class LobbyManager {
   readonly lobbies = new Map<string, Lobby>();
   /** tgUserId → room code */
   readonly userToLobbyMap = new Map<number, string>();
+
+  private _deltaInterval: ReturnType<typeof setInterval> | null = null;
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -135,15 +188,18 @@ export class LobbyManager {
   // ── Create ───────────────────────────────────────────────────────────────
 
   createLobby(tgUserId: number, username: string, ws: WebSocket): Lobby {
-    // Remove from any existing lobby first
     this.removePlayer(tgUserId);
 
     const code = this.freshCode();
-    const hostPlayer: LobbyPlayer = { slot: 0, tgUserId, username, ws };
+    const hostPlayer: LobbyPlayer = {
+      slot: 0, tgUserId, username, ws,
+      x: SPAWN_X, y: SPAWN_Y,
+      lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
+      lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
+    };
 
     const lobby: Lobby = {
-      code,
-      phase: 'WAITING',
+      code, phase: 'WAITING',
       players: new Map([[0, hostPlayer]]),
       userIdToSlot: new Map([[tgUserId, 0]]),
       hostSlot: 0,
@@ -151,6 +207,7 @@ export class LobbyManager {
 
     this.lobbies.set(code, lobby);
     this.userToLobbyMap.set(tgUserId, code);
+    this.ensureDeltaLoop();
 
     logger.info(`[Lobby] Created ${code} — host: ${username} (userId=${tgUserId}, slot=0)`);
     return lobby;
@@ -158,13 +215,6 @@ export class LobbyManager {
 
   // ── Join ─────────────────────────────────────────────────────────────────
 
-  /**
-   * Returns the Lobby on success, or an error string on failure.
-   * Error strings map to protocol error codes:
-   *   'not_found' → 0x01
-   *   'in_progress' → 0x02
-   *   'full' → 0x03
-   */
   joinLobby(
     roomCode: string,
     tgUserId: number,
@@ -179,7 +229,7 @@ export class LobbyManager {
     if (lobby.userIdToSlot.has(tgUserId)) {
       const slot = lobby.userIdToSlot.get(tgUserId)!;
       const existing = lobby.players.get(slot)!;
-      existing.ws = ws; // refresh socket reference
+      existing.ws = ws;
       this.userToLobbyMap.set(tgUserId, roomCode);
       logger.info(`[Lobby] Rejoin ${roomCode} — ${username} (slot=${slot})`);
       return lobby;
@@ -188,10 +238,14 @@ export class LobbyManager {
     const slot = this.nextFreeSlot(lobby);
     if (slot === null) return 'full';
 
-    // Remove from any other lobby
     this.removePlayer(tgUserId);
 
-    const player: LobbyPlayer = { slot, tgUserId, username, ws };
+    const player: LobbyPlayer = {
+      slot, tgUserId, username, ws,
+      x: SPAWN_X, y: SPAWN_Y,
+      lastBroadcastWireX: toWire(SPAWN_X, MAP_W),
+      lastBroadcastWireY: toWire(SPAWN_Y, MAP_H),
+    };
     lobby.players.set(slot, player);
     lobby.userIdToSlot.set(tgUserId, slot);
     this.userToLobbyMap.set(tgUserId, roomCode);
@@ -202,16 +256,6 @@ export class LobbyManager {
 
   // ── Remove / disconnect ───────────────────────────────────────────────────
 
-  /**
-   * Remove a player from their current lobby (called on WS close).
-   *
-   * Pass `closingWs` to guard against a reconnect race: if the player has
-   * already rejoined with a new socket, the old socket's close event must
-   * not evict the live session.
-   *
-   * Handles host migration in WAITING state.
-   * Returns the updated Lobby (or null if it was torn down / they weren't in one).
-   */
   removePlayer(tgUserId: number, closingWs?: WebSocket): Lobby | null {
     const code = this.userToLobbyMap.get(tgUserId);
     if (!code) return null;
@@ -222,9 +266,6 @@ export class LobbyManager {
     const slot = lobby.userIdToSlot.get(tgUserId);
     if (slot === undefined) return null;
 
-    // Reconnect-race guard: only evict if the closing socket is still the
-    // registered socket for this slot. If the player reconnected before the
-    // old socket finished closing, leave the live session intact.
     if (closingWs !== undefined && lobby.players.get(slot)?.ws !== closingWs) {
       logger.info(`[Lobby] Stale close ignored for userId=${tgUserId} (slot=${slot}) in ${code}`);
       return null;
@@ -236,14 +277,16 @@ export class LobbyManager {
 
     logger.info(`[Lobby] Left ${code} — userId=${tgUserId} (slot=${slot})`);
 
-    // Teardown empty lobby
     if (lobby.players.size === 0) {
       this.lobbies.delete(code);
       logger.info(`[Lobby] Torn down empty lobby ${code}`);
+      // Stop the delta loop when there are no more active lobbies
+      if (this.lobbies.size === 0) {
+        this._stopDeltaLoop();
+      }
       return null;
     }
 
-    // Host migration in WAITING state
     if (lobby.phase === 'WAITING' && slot === lobby.hostSlot) {
       const lowestSlot = Math.min(...lobby.players.keys());
       lobby.hostSlot = lowestSlot;
@@ -257,6 +300,80 @@ export class LobbyManager {
 
   broadcastRoomUpdate(lobby: Lobby): void {
     const packet = buildRoomUpdatePacket(lobby);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) {
+        player.ws.send(packet);
+      }
+    }
+  }
+
+  // ── Game start (Phase 3: minimal, roles in Phase 4) ──────────────────────
+
+  /**
+   * Transition lobby to ROAMING. Sends 0x1A (role=crewmate) to every player.
+   * Phase 4 will extend this with real role assignment and spawning positions.
+   */
+  startGame(lobby: Lobby): void {
+    if (lobby.phase !== 'WAITING') return;
+    lobby.phase = 'ROAMING';
+    logger.info(`[Lobby] Game started in ${lobby.code}`);
+
+    const crewmatePacket = buildRoleRevealPacket(0);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) {
+        player.ws.send(crewmatePacket);
+      }
+    }
+  }
+
+  // ── 25Hz delta broadcast loop ─────────────────────────────────────────────
+
+  /**
+   * Start the delta broadcast loop if it isn't already running.
+   * Called lazily when the first lobby is created so we don't spin
+   * unnecessarily when no lobbies exist.
+   */
+  ensureDeltaLoop(): void {
+    if (this._deltaInterval !== null) return;
+
+    this._deltaInterval = setInterval(() => {
+      this._tickDelta();
+    }, 40); // 25Hz
+
+    logger.info('[Lobby] Delta loop started');
+  }
+
+  private _stopDeltaLoop(): void {
+    if (this._deltaInterval === null) return;
+    clearInterval(this._deltaInterval);
+    this._deltaInterval = null;
+    logger.info('[Lobby] Delta loop stopped (no active lobbies)');
+  }
+
+  private _tickDelta(): void {
+    for (const lobby of this.lobbies.values()) {
+      this._broadcastDelta(lobby);
+    }
+  }
+
+  private _broadcastDelta(lobby: Lobby): void {
+    const moving: Array<{ slot: number; wireX: number; wireY: number }> = [];
+
+    for (const player of lobby.players.values()) {
+      const wireX = toWire(player.x, MAP_W);
+      const wireY = toWire(player.y, MAP_H);
+      const dx = wireX - player.lastBroadcastWireX;
+      const dy = wireY - player.lastBroadcastWireY;
+      if (dx * dx + dy * dy > DELTA_THRESHOLD_SQ) {
+        moving.push({ slot: player.slot, wireX, wireY });
+        player.lastBroadcastWireX = wireX;
+        player.lastBroadcastWireY = wireY;
+      }
+    }
+
+    if (moving.length === 0) return;
+
+    const packet = buildDeltaPacket(moving);
     for (const player of lobby.players.values()) {
       if (player.ws.readyState === /* OPEN */ 1) {
         player.ws.send(packet);

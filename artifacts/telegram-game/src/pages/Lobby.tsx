@@ -4,8 +4,9 @@
  * Shows when the player is authenticated but not yet in a game.
  * Lets the host create a room or any player join by room code.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
+import { useLocation } from 'wouter';
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
@@ -68,7 +69,13 @@ function JoinForm({ onJoin }: { onJoin: (code: string) => void }) {
 
 export default function Lobby() {
   const state = useGameState();
-  const { createRoom, joinRoom } = useGameActions();
+  const { createRoom, joinRoom, startGame } = useGameActions();
+  const [, navigate] = useLocation();
+
+  // Auto-navigate to /game when the server signals game has started (0x1A)
+  useEffect(() => {
+    if (state.phase === 'playing') navigate('/game');
+  }, [state.phase, navigate]);
 
   const isInRoom = state.roomCode !== null;
   const isHost = state.mySlot !== null && state.mySlot === state.hostSlot;
@@ -177,6 +184,7 @@ export default function Lobby() {
             {/* Start game (host only) */}
             {isHost && (
               <button
+                onClick={startGame}
                 disabled={state.players.length < 2}
                 className="w-full bg-green-600 hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 text-white font-semibold py-3 rounded-xl transition-all"
                 title={state.players.length < 2 ? 'Need at least 2 players' : ''}

@@ -1,5 +1,5 @@
 /**
- * WebSocket server — Phase 1 (auth handshake) + Phase 2 (lobby control)
+ * WebSocket server — Phase 1 (auth) + Phase 2 (lobby) + Phase 3 (movement)
  *
  * Lifecycle:
  *   1. Client connects → 10s window to send initData (Telegram auth string)
@@ -7,6 +7,9 @@
  *   3. Client sends [0x10, 0x01] to create a room  OR
  *              sends [0x10, 0x02, ...6-byte code] to join a room
  *   4. Server broadcasts [0x10, 0x03, ...] room update to all lobby members
+ *   5. Host sends [0x12] to start game → server sends [0x1A, role] to all
+ *   6. Clients send [0x11, wireX(Int16LE), wireY(Int16LE)] at ~25Hz
+ *   7. Server validates movement, updates position, broadcasts [0xFF, ...] at 25Hz
  */
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { IncomingMessage, Server as HttpServer } from 'node:http';
@@ -17,6 +20,15 @@ import {
   buildSlotAssignedPacket,
 } from './lobby.js';
 import { logger } from '../lib/logger.js';
+import {
+  buildCollisionGrid,
+  canMoveTo,
+} from '@workspace/shared/collisionMap';
+import {
+  fromWire,
+  MAP_W, MAP_H,
+  FEET_OFFSET_Y, PLAYER_RADIUS,
+} from '@workspace/shared/coords';
 
 interface AuthSocket extends WebSocket {
   isVerified: boolean;
@@ -30,6 +42,9 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
 
 /** Singleton lobby manager shared across all connections. */
 const lobbyManager = new LobbyManager();
+
+/** Collision grid — built once at startup, shared across all validations. */
+const collisionGrid = buildCollisionGrid();
 
 export function attachWsServer(httpServer: HttpServer): WebSocketServer {
   validateAuthConfig();
@@ -72,9 +87,6 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         ws.isVerified = true;
         ws.tgUserId = user.id;
         ws.username = user.username ?? `User${user.id}`;
-        // Slot is assigned when the player creates/joins a lobby.
-        // For now, echo a temporary slot=0 to satisfy the handshake protocol;
-        // the real slot comes via the 0x10 0x03 room update.
         ws.playerSlotId = 0;
 
         const ack = Buffer.alloc(2);
@@ -99,7 +111,6 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (sub === 0x01) {
           const lobby = lobbyManager.createLobby(tgUserId, username, ws);
           ws.playerSlotId = 0;
-          // Tell this client their authoritative slot before the broadcast
           ws.send(buildSlotAssignedPacket(0));
           lobbyManager.broadcastRoomUpdate(lobby);
           logger.info(`[WS] Create room → ${lobby.code} (userId=${tgUserId})`);
@@ -112,20 +123,10 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           const roomCode = raw.slice(2, 8).toString('ascii').trim().toUpperCase();
           const result = lobbyManager.joinLobby(roomCode, tgUserId, username, ws);
 
-          if (result === 'not_found') {
-            ws.send(buildJoinErrorPacket(0x01));
-            return;
-          }
-          if (result === 'in_progress') {
-            ws.send(buildJoinErrorPacket(0x02));
-            return;
-          }
-          if (result === 'full') {
-            ws.send(buildJoinErrorPacket(0x03));
-            return;
-          }
+          if (result === 'not_found') { ws.send(buildJoinErrorPacket(0x01)); return; }
+          if (result === 'in_progress') { ws.send(buildJoinErrorPacket(0x02)); return; }
+          if (result === 'full') { ws.send(buildJoinErrorPacket(0x03)); return; }
 
-          // Success — send authoritative slot to this client, then broadcast
           ws.playerSlotId = result.userIdToSlot.get(tgUserId)!;
           ws.send(buildSlotAssignedPacket(ws.playerSlotId));
           lobbyManager.broadcastRoomUpdate(result);
@@ -136,15 +137,70 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         return;
       }
 
-      // Future opcodes (0x11 movement, 0x12 start, etc.) handled in later phases
+      // ── 0x11: Move Intent (C→S) ───────────────────────────────────────────
+      // Layout: [0x11, wireX(Int16LE, 2 bytes), wireY(Int16LE, 2 bytes)]  = 5 bytes
+      if (opcode === 0x11) {
+        if (raw.length !== 5) return; // exactly [opcode, wireX(2), wireY(2)]
+
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+
+        // Phase 3: accept movement in WAITING and ROAMING.
+        // Phase 4 will restrict to ROAMING only (after role assignment).
+        const slot = lobby.userIdToSlot.get(tgUserId);
+        if (slot === undefined) return;
+        const player = lobby.players.get(slot);
+        if (!player) return;
+
+        // Decode wire-space coordinates (Int16LE, 0–32000)
+        const wireX = raw.readInt16LE(1);
+        const wireY = raw.readInt16LE(3);
+
+        // Clamp to valid wire range
+        if (wireX < 0 || wireX > 32000 || wireY < 0 || wireY > 32000) return;
+
+        // Convert to pixel space
+        const pixelX = fromWire(wireX, MAP_W);
+        const pixelY = fromWire(wireY, MAP_H);
+
+        // Validate against collision grid (same geometry as client: feet-center)
+        const feetX = pixelX;
+        const feetY = pixelY + FEET_OFFSET_Y;
+
+        if (canMoveTo(collisionGrid, feetX, feetY, PLAYER_RADIUS)) {
+          // Valid position — update server-side state
+          player.x = pixelX;
+          player.y = pixelY;
+        } else {
+          // Invalid (wall clip) — server will broadcast the last valid position
+          // on the next delta tick, which the client applies as a correction.
+          logger.debug(
+            `[WS] Rejected 0x11 from slot=${slot}: wireX=${wireX} wireY=${wireY} clips a wall`,
+          );
+        }
+
+        return;
+      }
+
+      // ── 0x12: Game Start (host only) ─────────────────────────────────────
+      if (opcode === 0x12) {
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        if (lobby.hostSlot !== ws.playerSlotId) return; // host only
+        if (lobby.phase !== 'WAITING') return;
+
+        lobbyManager.startGame(lobby);
+        logger.info(`[WS] Game started in ${lobby.code} by slot=${ws.playerSlotId}`);
+        return;
+      }
     });
 
     ws.on('close', () => {
       clearTimeout(handshakeTimer);
 
       if (ws.tgUserId !== undefined) {
-        // Pass the closing socket so removePlayer can skip stale close events
-        // from reconnecting clients (reconnect-race guard).
         const updatedLobby = lobbyManager.removePlayer(ws.tgUserId, ws);
         if (updatedLobby) {
           lobbyManager.broadcastRoomUpdate(updatedLobby);

@@ -1,8 +1,9 @@
 /**
  * GameContext — shared multiplayer state & socket actions
  *
- * Wraps the WebSocket lifecycle and exposes lobby state + actions to the
- * whole component tree. Replaces the old WsManager + useGameSocket pattern.
+ * Phase 2: WebSocket lifecycle, lobby state (room code, players, host).
+ * Phase 3: Remote player positions via 0xFF delta sync, sendMove() action,
+ *   game-start via 0x12, phase transition on 0x1A role reveal.
  */
 import React, {
   createContext,
@@ -12,12 +13,22 @@ import React, {
   useState,
   useCallback,
 } from 'react';
+import { fromWire, MAP_W, MAP_H } from '@workspace/shared/coords';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export interface LobbyPlayer {
   slot: number;
   username: string;
+}
+
+/** Remote player position in pixel space (updated by 0xFF packets). */
+export interface RemotePlayer {
+  slot: number;
+  /** Pixel X (sprite centre). */
+  x: number;
+  /** Pixel Y (sprite centre). */
+  y: number;
 }
 
 export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
@@ -34,6 +45,9 @@ export interface GameState {
 export interface GameActions {
   createRoom: () => void;
   joinRoom: (code: string) => void;
+  startGame: () => void;
+  /** Send a 0x11 Move Intent packet (wire coords 0–32000). */
+  sendMove: (wireX: number, wireY: number) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -45,10 +59,28 @@ const DEFAULT_STATE: GameState = {
   errorMessage: null,
 };
 
-// ── Context ──────────────────────────────────────────────────────────────────
+// ── Contexts ─────────────────────────────────────────────────────────────────
 
 const GameStateCtx = createContext<GameState>(DEFAULT_STATE);
-const GameActionsCtx = createContext<GameActions>({ createRoom: () => {}, joinRoom: () => {} });
+const GameActionsCtx = createContext<GameActions>({
+  createRoom: () => {},
+  joinRoom: () => {},
+  startGame: () => {},
+  sendMove: () => {},
+});
+
+/** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
+ *  Updated by 0xFF packets; read by the rAF loop in GameMap without triggering re-renders. */
+const GameRemotePlayersCtx = createContext<React.RefObject<Map<number, RemotePlayer>>>(
+  { current: new Map() },
+);
+
+/** Mutable ref holding a pending server position correction for the local player.
+ *  Set by the 0xFF handler when the server disagrees with local position.
+ *  Cleared by the rAF loop after applying. */
+const GameCorrectionCtx = createContext<React.RefObject<{ x: number; y: number } | null>>(
+  { current: null },
+);
 
 export function useGameState(): GameState {
   return useContext(GameStateCtx);
@@ -56,6 +88,16 @@ export function useGameState(): GameState {
 
 export function useGameActions(): GameActions {
   return useContext(GameActionsCtx);
+}
+
+/** Returns a stable ref to the remote players map — safe to read inside rAF. */
+export function useRemotePlayersRef(): React.RefObject<Map<number, RemotePlayer>> {
+  return useContext(GameRemotePlayersCtx);
+}
+
+/** Returns a stable ref to the pending server correction ({x,y} or null). */
+export function useCorrectionRef(): React.RefObject<{ x: number; y: number } | null> {
+  return useContext(GameCorrectionCtx);
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -90,7 +132,6 @@ function parseRoomUpdate(
 
   let off = 10; // 2 + 1 + 1 + 6
   const players: LobbyPlayer[] = [];
-
   const decoder = new TextDecoder('utf-8');
 
   for (let i = 0; i < playerCount; i++) {
@@ -106,14 +147,58 @@ function parseRoomUpdate(
   return { playerCount, hostSlot, roomCode, players };
 }
 
+/**
+ * Parse 0xFF delta sync packet and update the remote players map.
+ *
+ * Layout:
+ *   Byte 0:   0xFF
+ *   Byte 1:   N (player count)
+ *   [× N]:  slot(Uint8) + X(Int16LE) + Y(Int16LE)
+ */
+function applyDeltaPacket(
+  view: DataView,
+  mySlot: number | null,
+  remotePlayersMap: Map<number, RemotePlayer>,
+  onCorrection: (x: number, y: number) => void,
+): void {
+  if (view.byteLength < 2) return;
+  const count = view.getUint8(1);
+  let off = 2;
+
+  for (let i = 0; i < count; i++) {
+    if (off + 5 > view.byteLength) break;
+    const slot = view.getUint8(off++);
+    const wireX = view.getInt16(off, true); off += 2;
+    const wireY = view.getInt16(off, true); off += 2;
+
+    const x = fromWire(wireX, MAP_W);
+    const y = fromWire(wireY, MAP_H);
+
+    if (slot === mySlot) {
+      // Server correction for our own position (wall clip rejection).
+      // The snap threshold (~5 wire units ≈ 0.5px) avoids jitter from
+      // floating-point round-trip differences.
+      onCorrection(x, y);
+    } else {
+      remotePlayersMap.set(slot, { slot, x, y });
+    }
+  }
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<GameState>(DEFAULT_STATE);
   const socketRef = useRef<WebSocket | null>(null);
-  // Track mySlot in a ref so callbacks can read the current value without
-  // causing stale closures.
+
+  // mySlot in a ref so callbacks don't need stale-closure workarounds
   const mySlotRef = useRef<number | null>(null);
+
+  // Remote player positions — updated every 40ms, never triggers re-renders
+  const remotePlayersRef = useRef<Map<number, RemotePlayer>>(new Map());
+
+  // Pending server correction for local player — read & cleared by GameMap's rAF loop
+  const correctionRef = useRef<{ x: number; y: number } | null>(null);
 
   const send = useCallback((buf: Uint8Array | number[]) => {
     const ws = socketRef.current;
@@ -122,18 +207,27 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const createRoom = useCallback(() => {
-    send([0x10, 0x01]);
-  }, [send]);
+  const createRoom = useCallback(() => { send([0x10, 0x01]); }, [send]);
 
   const joinRoom = useCallback((code: string) => {
     const codeUpper = code.toUpperCase().slice(0, 6).padEnd(6, ' ');
     const buf = new Uint8Array(8);
-    buf[0] = 0x10;
-    buf[1] = 0x02;
-    const encoder = new TextEncoder();
-    const codeBytes = encoder.encode(codeUpper);
+    buf[0] = 0x10; buf[1] = 0x02;
+    const codeBytes = new TextEncoder().encode(codeUpper);
     buf.set(codeBytes.slice(0, 6), 2);
+    send(buf);
+  }, [send]);
+
+  const startGame = useCallback(() => {
+    send([0x12]);
+  }, [send]);
+
+  const sendMove = useCallback((wireX: number, wireY: number) => {
+    const buf = new Uint8Array(5);
+    const view = new DataView(buf.buffer);
+    view.setUint8(0, 0x11);
+    view.setInt16(1, wireX, true); // Little-Endian
+    view.setInt16(3, wireY, true);
     send(buf);
   }, [send]);
 
@@ -157,7 +251,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // ── 0x01: handshake ACK (slot assigned) ────────────────────────────
+      // ── 0x01: handshake ACK ─────────────────────────────────────────────
       if (opcode === 0x01 && event.data.byteLength >= 2) {
         const slot = view.getUint8(1);
         mySlotRef.current = slot;
@@ -170,18 +264,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (opcode === 0x10 && event.data.byteLength >= 2) {
         const sub = view.getUint8(1);
 
-        // 0x03: room update (broadcast to all lobby members)
+        // 0x03: room update
         if (sub === 0x03) {
           const parsed = parseRoomUpdate(view);
           if (!parsed) return;
           setState(s => ({
             ...s,
-            // Preserve mySlot — it is set authoritatively by 0x10 0x05
             roomCode: parsed.roomCode,
             hostSlot: parsed.hostSlot,
             players: parsed.players,
             errorMessage: null,
           }));
+          // Prune remote players that are no longer in the room.
+          // This prevents departed players from rendering as ghost circles.
+          const activeSlots = new Set(parsed.players.map(p => p.slot));
+          const mySlot = mySlotRef.current;
+          for (const slot of remotePlayersRef.current.keys()) {
+            if (!activeSlots.has(slot) || slot === mySlot) {
+              remotePlayersRef.current.delete(slot);
+            }
+          }
           return;
         }
 
@@ -193,20 +295,37 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             0x02: 'Game already in progress',
             0x03: 'Room is full',
           };
-          setState(s => ({
-            ...s,
-            errorMessage: messages[errCode] ?? 'Unknown error',
-          }));
+          setState(s => ({ ...s, errorMessage: messages[errCode] ?? 'Unknown error' }));
           return;
         }
 
-        // 0x05: slot assignment — authoritative per-client slot after create/join
+        // 0x05: authoritative slot assignment
         if (sub === 0x05 && event.data.byteLength >= 3) {
           const slot = view.getUint8(2);
           mySlotRef.current = slot;
           setState(s => ({ ...s, mySlot: slot }));
           return;
         }
+      }
+
+      // ── 0x1A: role reveal → transition to playing ───────────────────────
+      if (opcode === 0x1A) {
+        // Clear stale remote player data from the previous session
+        remotePlayersRef.current.clear();
+        setState(s => ({ ...s, phase: 'playing' }));
+        console.log('[WS] 🎮 Role reveal received — entering game');
+        return;
+      }
+
+      // ── 0xFF: delta sync — update remote player positions ───────────────
+      if (opcode === 0xFF) {
+        applyDeltaPacket(
+          view,
+          mySlotRef.current,
+          remotePlayersRef.current,
+          (x, y) => { correctionRef.current = { x, y }; },
+        );
+        return;
       }
     };
 
@@ -223,14 +342,18 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     };
 
     return () => ws.close();
-  }, []); // intentionally empty — socket is created once
+  }, []); // socket is created once
 
-  const actions: GameActions = { createRoom, joinRoom };
+  const actions: GameActions = { createRoom, joinRoom, startGame, sendMove };
 
   return (
     <GameStateCtx.Provider value={state}>
       <GameActionsCtx.Provider value={actions}>
-        {children}
+        <GameRemotePlayersCtx.Provider value={remotePlayersRef}>
+          <GameCorrectionCtx.Provider value={correctionRef}>
+            {children}
+          </GameCorrectionCtx.Provider>
+        </GameRemotePlayersCtx.Provider>
       </GameActionsCtx.Provider>
     </GameStateCtx.Provider>
   );

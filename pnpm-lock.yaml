@@ -176,6 +176,9 @@ importers:
       '@workspace/db':
         specifier: workspace:*
         version: link:../../lib/db
+      '@workspace/shared':
+        specifier: workspace:*
+        version: link:../../lib/shared
       cookie-parser:
         specifier: ^1.4.7
         version: 1.4.7
@@ -410,6 +413,10 @@ importers:
         version: 3.25.76
 
   artifacts/telegram-game:
+    dependencies:
+      '@workspace/shared':
+        specifier: workspace:*
+        version: link:../../lib/shared
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
@@ -643,6 +650,8 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+
+  lib/shared: {}
 
   scripts:
     dependencies:

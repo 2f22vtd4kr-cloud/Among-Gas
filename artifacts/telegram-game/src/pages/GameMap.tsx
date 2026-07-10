@@ -20,36 +20,49 @@ import {
 } from '../game/characterSprites';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
+import { useGameActions, useRemotePlayersRef, useCorrectionRef } from '@/context/GameContext';
+import { toWire } from '@workspace/shared/coords';
 
 // ── Camera ────────────────────────────────────────────────────────────────────
-// Screen CSS pixels per map pixel. Calibrated against reference Among Us
-// screenshots — small figure with a wide view of surrounding rooms.
 const ZOOM = 0.7;
-
-// Hard cap on the DPR used to size the canvas buffer and scale the map draw.
-// The map source asset (map-hires.webp) has a fixed native resolution; the
-// per-frame draw stretches it by a factor of `ZOOM * dpr`. Once that factor
-// exceeds ~1 we're upsampling native image pixels, which reads as visibly
-// blurry (bilinear/bicubic interpolation adds no real detail) — this is most
-// noticeable on high-DPR phones (iPhones are typically dpr=3). Capping dpr at
-// 1/ZOOM keeps the map stretch factor at exactly 1 (pure 1:1, no upsampling)
-// on any device, at the cost of slightly less-dense text/UI on very high-DPR
-// screens. See .agents/memory/image-upscaling.md.
 const MAX_RENDER_DPR = 1 / ZOOM;
 const getRenderDpr = () => Math.min(window.devicePixelRatio || 1, MAX_RENDER_DPR);
 
-// Player sprite display size in MAP pixels (scaled from the original 1652-wide canvas)
+// Player sprite display size in MAP pixels
 const PLAYER_DISPLAY_HEIGHT = Math.round(36 * (MAP_W / 1652));
 const PLAYER_DISPLAY_WIDTH  = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CHARACTER_CELL_HEIGHT);
 
-export default function GameMap() {
-  // Single screen-sized canvas — the whole scene is drawn here each rAF.
-  // Buffer dimensions = viewport × DPR so each canvas pixel maps 1:1 to a
-  // physical screen pixel with no CSS-transform scaling blur.
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+// ── Movement throttle: send 0x11 at most once per 40ms (25Hz) ────────────────
+const MOVE_SEND_INTERVAL_MS = 40;
 
+// ── Remote player visual ─────────────────────────────────────────────────────
+// Draw remote players as colored circles while sprites are Phase 3 scope.
+// Colors cycle through a palette keyed by slot number.
+const REMOTE_COLORS = [
+  '#e74c3c', // red
+  '#3498db', // blue
+  '#2ecc71', // green
+  '#f39c12', // orange
+  '#9b59b6', // purple
+  '#1abc9c', // teal
+  '#e67e22', // dark orange
+  '#34495e', // dark gray
+  '#e91e63', // pink
+  '#00bcd4', // cyan
+  '#8bc34a', // light green
+  '#ff5722', // deep orange
+  '#607d8b', // blue gray
+  '#795548', // brown
+  '#9e9e9e', // gray
+];
+
+function remoteColor(slot: number): string {
+  return REMOTE_COLORS[slot % REMOTE_COLORS.length];
+}
+
+export default function GameMap() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
-  // OffscreenCanvas after bleed cleanup, or raw img before it finishes
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
 
   const [loaded,       setLoaded]       = useState(false);
@@ -58,17 +71,22 @@ export default function GameMap() {
   const [hoverZone,    setHoverZone]    = useState<string | null>(null);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
 
-  // Mirror showCollision into a ref so the rAF loop reads it without stale closure.
   const showCollisionRef = useRef(false);
   useEffect(() => { showCollisionRef.current = showCollision; }, [showCollision]);
 
-  // ── Resize canvas buffer to viewport × DPR ────────────────────────────────
+  // ── Network ───────────────────────────────────────────────────────────────
+  const { sendMove } = useGameActions();
+  const remotePlayersRef = useRemotePlayersRef();
+  // Server correction for our own position (set by 0xFF handler in GameContext).
+  const correctionRef = useCorrectionRef();
+
+  // ── Resize canvas ─────────────────────────────────────────────────────────
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = getRenderDpr();
-    const w   = window.innerWidth;
-    const h   = window.innerHeight;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
     canvas.width  = Math.round(w * dpr);
     canvas.height = Math.round(h * dpr);
     canvas.style.width  = `${w}px`;
@@ -92,7 +110,6 @@ export default function GameMap() {
     };
     img.onerror = () => { if (!cancelled) setError(true); };
     img.src = `${import.meta.env.BASE_URL}map-hires.png`;
-    // Already cached (e.g. HMR reload)
     if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
@@ -103,27 +120,14 @@ export default function GameMap() {
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
-      // Draw to an OffscreenCanvas and wipe 5px at every inter-row boundary.
-      // Some rows' artwork overflows the fractional cell boundary into the next
-      // row's space; with imageSmoothingEnabled=false those stray pixels render
-      // as a visible dark artifact above the character's head when walking.
       const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
       const octx = oc.getContext('2d')!;
       octx.drawImage(img, 0, 0);
-      // Wipe 5px at every inter-row boundary to prevent row bleed.
       const cellH = img.naturalHeight / CHARACTER_SHEET_ROWS;
       for (let row = 1; row < CHARACTER_SHEET_ROWS; row++) {
         const boundary = Math.ceil(row * cellH);
         octx.clearRect(0, boundary, img.naturalWidth, 5);
       }
-      // Two-pass pixel normalisation:
-      // 1. Binarize alpha (> 20 → 255, else → 0) so map tile grout lines
-      //    cannot bleed through semi-transparent outline edge pixels.
-      // 2. Normalise dark pixels to pure black.  The visor's vertical stripes
-      //    bleed teal tint into the outline pixels at the head's curved edge,
-      //    producing alternating dark/lighter-teal bands that look like
-      //    horizontal stripes at game scale.  Clamping all dark pixels
-      //    (average brightness < 80/255) to #000 gives a uniform outline.
       const id = octx.getImageData(0, 0, oc.width, oc.height);
       const px = id.data;
       for (let i = 0; i < px.length; i += 4) {
@@ -132,7 +136,6 @@ export default function GameMap() {
           px[i + 3] = 0;
         } else {
           px[i + 3] = 255;
-          // Normalise dark pixels → pure black so outline is stripe-free
           if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 80) {
             px[i] = 0; px[i + 1] = 0; px[i + 2] = 0;
           }
@@ -147,7 +150,7 @@ export default function GameMap() {
     return () => { cancelled = true; img.onload = null; };
   }, []);
 
-  // ── Track held movement keys (WASD + arrows) ──────────────────────────────
+  // ── Track held movement keys ──────────────────────────────────────────────
   const keysRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
@@ -195,47 +198,70 @@ export default function GameMap() {
 
     const grid = buildCollisionGrid();
     if (!isSpawnWalkable(grid)) {
-      // eslint-disable-next-line no-console
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
 
     let rafId = 0;
     let lastTs: number | null = null;
+    /** Timestamp of the last 0x11 sent. */
+    let lastMoveSentTs = 0;
+    /** Wire-space position at last send (for delta filtering). */
+    let lastSentWireX = -1;
+    let lastSentWireY = -1;
 
     const frame = (ts: number) => {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
       lastTs = ts;
 
+      // Apply any pending server correction before stepping physics.
+      // This lets the server push back against wall-clip attempts.
+      if (correctionRef.current) {
+        playerStateRef.current = {
+          ...playerStateRef.current,
+          x: correctionRef.current.x,
+          y: correctionRef.current.y,
+        };
+        correctionRef.current = null;
+      }
+
       // Step player physics
       playerStateRef.current = stepPlayer(grid, playerStateRef.current, keysRef.current, dtMs);
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
+
+      // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
+      const sinceLastSend = ts - lastMoveSentTs;
+      if (sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
+        const wireX = toWire(px, MAP_W);
+        const wireY = toWire(py, MAP_H);
+        // Only send if position has changed in wire space
+        if (wireX !== lastSentWireX || wireY !== lastSentWireY) {
+          sendMove(wireX, wireY);
+          lastSentWireX = wireX;
+          lastSentWireY = wireY;
+          lastMoveSentTs = ts;
+        }
+      }
 
       // Canvas buffer size and DPR
       const cw  = canvas.width;
       const ch  = canvas.height;
       const dpr = getRenderDpr();
 
-      // How many map pixels are visible across the viewport
-      const srcW = (cw / dpr) / ZOOM;   // map px wide
-      const srcH = (ch / dpr) / ZOOM;   // map px tall
+      const srcW = (cw / dpr) / ZOOM;
+      const srcH = (ch / dpr) / ZOOM;
 
-      // Camera center = player; clamped so we don't show outside the map
       const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
       const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
 
-      // scale: map pixels → canvas buffer pixels
       const scale = ZOOM * dpr;
 
       // ── 1. Clear + Map ───────────────────────────────────────────────────
-      // Must clear first: transparent sprite pixels from the previous frame
-      // would show through even though the map drawImage is fully opaque,
-      // because compositing happens at the pixel level after the fact.
       ctx.clearRect(0, 0, cw, ch);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
 
-      // ── 2. Collision overlay (only visible cells) ─────────────────────────
+      // ── 2. Collision overlay ──────────────────────────────────────────────
       if (showCollisionRef.current) {
         const colStart = Math.max(0,        Math.floor(srcX / CELL_X));
         const colEnd   = Math.min(COLS - 1, Math.ceil((srcX + srcW) / CELL_X));
@@ -244,7 +270,6 @@ export default function GameMap() {
 
         const cellW = CELL_X * scale;
         const cellH = CELL_Y * scale;
-        // Draw a smaller centered marker per cell so the grid looks finer
         const mW = cellW * 0.5;
         const mH = cellH * 0.5;
         const mOX = (cellW - mW) / 2;
@@ -264,7 +289,6 @@ export default function GameMap() {
           }
         }
 
-        // Grid lines (only over visible area)
         ctx.strokeStyle = 'rgba(255,255,255,0.08)';
         ctx.lineWidth = 0.5;
         for (let row = rowStart; row <= rowEnd + 1; row++) {
@@ -276,7 +300,6 @@ export default function GameMap() {
           ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, ch); ctx.stroke();
         }
 
-        // Zone outlines + labels
         ctx.font         = `bold ${Math.round(9 * dpr)}px monospace`;
         ctx.textBaseline = 'top';
         for (const zone of ZONES) {
@@ -292,34 +315,84 @@ export default function GameMap() {
         }
       }
 
-      // ── 3. Player sprite ──────────────────────────────────────────────────
+      // ── 3. Remote players ─────────────────────────────────────────────────
+      // Rendered before the local player so local player is always on top.
+      const remotePlayers = remotePlayersRef.current;
+      if (remotePlayers.size > 0) {
+        const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
+        const spriteR = spriteH * 0.35; // circle radius ≈ sprite body width
+
+        ctx.save();
+        ctx.textBaseline = 'bottom';
+        ctx.textAlign = 'center';
+        ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
+
+        for (const rp of remotePlayers.values()) {
+          const rpCX = Math.round((rp.x - srcX) * scale);
+          const rpCY = Math.round((rp.y - srcY) * scale);
+
+          // Skip players that are off-screen (with margin)
+          if (rpCX < -spriteR * 2 || rpCX > cw + spriteR * 2) continue;
+          if (rpCY < -spriteR * 2 || rpCY > ch + spriteR * 2) continue;
+
+          const color = remoteColor(rp.slot);
+
+          // Ground shadow
+          {
+            const blurPx = Math.max(2, Math.round(spriteH * 0.05));
+            ctx.save();
+            ctx.filter = `blur(${blurPx}px)`;
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = '#000000';
+            ctx.beginPath();
+            ctx.ellipse(rpCX, rpCY + spriteH * 0.48, spriteR * 0.7, spriteH * 0.055, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+            ctx.filter = 'none';
+          }
+
+          // Body circle
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(rpCX, rpCY, spriteR, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Visor (white oval on upper portion)
+          ctx.fillStyle = 'rgba(200,230,255,0.85)';
+          ctx.beginPath();
+          ctx.ellipse(rpCX + spriteR * 0.1, rpCY - spriteR * 0.18, spriteR * 0.55, spriteR * 0.35, 0, 0, Math.PI * 2);
+          ctx.fill();
+
+          // Slot label above
+          ctx.fillStyle = 'rgba(255,255,255,0.9)';
+          ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+          ctx.lineWidth = Math.round(2 * dpr);
+          ctx.strokeText(`${rp.slot}`, rpCX, rpCY - spriteR - 3);
+          ctx.fillText(`${rp.slot}`, rpCX, rpCY - spriteR - 3);
+        }
+
+        ctx.restore();
+      }
+
+      // ── 4. Local player sprite ────────────────────────────────────────────
       const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
       const spriteW = PLAYER_DISPLAY_WIDTH  * scale;
-      // Player screen position in canvas buffer pixels
       const playerCX = (px - srcX) * scale;
       const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(PLAYER_COLOR, pose);
-      // Ceil the source ORIGIN so we never start before the cell boundary —
-      // floor would pull in the last fractional pixel of the previous row/col,
-      // which with imageSmoothingEnabled=false nearest-neighbor blows up into
-      // a visible dark artifact at the top of the sprite.
-      // Floor the source END (derived from the far boundary) so we never pull
-      // in the first fractional pixel of the next row/col either.
       const sx = Math.ceil(rect.x);
       const sy = Math.ceil(rect.y);
       const sw = Math.floor(rect.x + rect.width)  - sx;
       const sh = Math.floor(rect.y + rect.height) - sy;
 
-      // Snap player position to integer canvas pixels to eliminate sub-pixel
-      // jitter and give bilinear sampling a clean, stable input each frame.
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
       const sH  = Math.round(spriteH);
 
-      // Ground shadow — soft dark oval directly under the character's feet,
-      // matching the Among Us-style grounding shadow in the reference.
+      // Ground shadow
       {
         const blurPx = Math.max(2, Math.round(sH * 0.05));
         ctx.save();
@@ -327,34 +400,17 @@ export default function GameMap() {
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
         ctx.beginPath();
-        ctx.ellipse(
-          pCX,
-          pCY + sH * 0.48,   // just at the base of the sprite
-          sW  * 0.28,         // wide enough to sit under the feet
-          sH  * 0.055,        // thin flat oval
-          0, 0, Math.PI * 2,
-        );
+        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28, sH * 0.055, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
-        ctx.filter = 'none'; // guard against iOS Safari filter leak
+        ctx.filter = 'none';
       }
 
-      // Sprite draw.
-      // Source alpha is binarized (0 or 255, no semi-transparent pixels) so
-      // nearest-neighbour is now safe: hard source edges produce hard output
-      // edges with no tile-line bleed-through. Bilinear was previously needed
-      // to blend the original semi-transparent outline fringe, but after
-      // binarization it only re-introduces semi-transparent output pixels at
-      // every body edge, letting tile grout lines show through as stripes.
       ctx.save();
       ctx.translate(pCX, pCY);
       if (facingLeft) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(
-        sprite,
-        sx, sy, sw, sh,
-        -sW / 2, -sH / 2, sW, sH,
-      );
+      ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
       rafId = requestAnimationFrame(frame);
@@ -362,9 +418,9 @@ export default function GameMap() {
 
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
-  }, [loaded, spriteLoaded]);
+  }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  // ── Mouse hover → zone label (for collision debug) ────────────────────────
+  // ── Mouse hover → zone label ──────────────────────────────────────────────
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!showCollision) return;
     const { x: px, y: py } = playerStateRef.current;
@@ -377,7 +433,7 @@ export default function GameMap() {
     const mapX = srcX + (e.clientX / vw) * srcW;
     const mapY = srcY + (e.clientY / vh) * srcH;
     const found = ZONES.find(
-      z => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
+      (z) => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
     );
     setHoverZone(found?.label ?? null);
   };
@@ -388,7 +444,6 @@ export default function GameMap() {
       onMouseMove={handleMouseMove}
       onMouseLeave={() => setHoverZone(null)}
     >
-      {/* Loading / error states */}
       {!loaded && !error && (
         <div style={{
           position: 'absolute', inset: 0,
@@ -408,24 +463,16 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── Single screen-sized canvas ─────────────────────────────────────
-          CSS size = viewport (no scaling); buffer = viewport × DPR.
-          Each frame draws only the visible map slice so map pixels map 1:1
-          to physical screen pixels — no CSS-transform downscale blur.   */}
       <canvas
         ref={canvasRef}
         style={{
-          display: 'block',
-          position: 'absolute',
-          top: 0, left: 0,
+          display: 'block', position: 'absolute', top: 0, left: 0,
           opacity: loaded ? 1 : 0,
         }}
       />
 
-      {/* ── Joystick (touch devices) ──────────────────────────────────────── */}
       {loaded && <Joystick keysRef={keysRef} />}
 
-      {/* ── HUD: keyboard hint (hidden on touch-primary devices) ─────────── */}
       {loaded && (
         <div style={{
           position: 'fixed', bottom: 16, left: 16,
@@ -440,7 +487,6 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── HUD: debug controls ──────────────────────────────────────────── */}
       {loaded && (
         <div style={{
           position: 'fixed', bottom: 16, right: 16,
@@ -475,8 +521,7 @@ export default function GameMap() {
               href="/collision-editor"
               style={{
                 padding: '6px 14px',
-                background: 'rgba(20,32,44,0.85)',
-                color: '#8ab8cc',
+                background: 'rgba(20,32,44,0.85)', color: '#8ab8cc',
                 border: '1px solid rgba(100,160,200,0.3)',
                 borderRadius: 6, fontFamily: 'monospace', fontSize: 12,
                 backdropFilter: 'blur(6px)', letterSpacing: '0.03em',
