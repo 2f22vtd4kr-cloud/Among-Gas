@@ -26,6 +26,23 @@
 
 ## Sessions
 
+### 2026-07-10 — Re-import repair: re-registered artifacts, installed deps
+
+**Done**
+- Project was re-imported and lost artifact/workflow registration (workflows list was empty, `listArtifacts()` returned `[]`) even though all three `.replit-artifact/artifact.toml` files were intact and unmodified.
+- Repaired by calling `verifyAndReplaceArtifactToml()` against each artifact's own unchanged toml (api-server, telegram-game, mockup-sandbox) — this re-registered all three artifacts and their workflows without touching source code.
+- Ran `pnpm install` (node_modules was missing after import) and restarted all three workflows.
+- Verified via screenshot: telegram-game loads its lobby UI and the WS handshake succeeds (slot assigned). `DATABASE_URL` was already present in the environment.
+
+**Decisions & gotchas**
+- No code changes were made; this was pure re-registration + dependency install, per the existing gotcha note in `replit.md`.
+
+**Left off / next steps**
+- None — project is running as it was before the import. Resume Phase 4 work per the previous session's notes below.
+
+**State to restore**
+- None.
+
 ### 2026-07-10 — Phase 4 completion: fixed undefined vars + role reveal overlay
 
 **Done**
