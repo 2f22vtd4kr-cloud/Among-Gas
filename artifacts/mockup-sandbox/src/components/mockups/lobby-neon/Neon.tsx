@@ -1,127 +1,173 @@
 /**
- * СОСЕД — Soviet Nosy Neighbor Clipboard
+ * ТАЛОН НА ТОПЛИВО — Soviet Fuel Ration Coupon
  *
- * Visual concept: You've been handed an official-looking clipboard by the
- * overly-serious neighbor. Aged yellowed paper, red rubber stamps, typewriter
- * labels, Soviet-era form aesthetics. Satirical propaganda parody of "yard
- * surveillance." Every button is a form row to fill out.
+ * The lobby is a Soviet-era fuel ration coupon.
+ * Cream/white paper, red stamps, perforated tearoff edges,
+ * numbered sections, bureaucratic form aesthetic.
+ * Among Us chunky cartoon style on top.
  */
 import React, { useState } from 'react';
 
-// ── Rubber stamp SVG ─────────────────────────────────────────────────────────
+// ── Perforated edge component ─────────────────────────────────────────────────
 
-const StampWatermark = () => (
-  <svg
-    width="160" height="160"
-    viewBox="0 0 160 160"
-    style={{ position: 'absolute', right: -20, top: 40, opacity: 0.06, pointerEvents: 'none', transform: 'rotate(-25deg)' }}
-  >
-    <circle cx="80" cy="80" r="74" stroke="#b01c1c" strokeWidth="5" fill="none"/>
-    <circle cx="80" cy="80" r="60" stroke="#b01c1c" strokeWidth="2" fill="none"/>
-    <text x="80" y="72" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontWeight="900" fontSize="13" fill="#b01c1c" letterSpacing="3">ОДОБРЕНО</text>
-    <text x="80" y="92" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontWeight="700" fontSize="9" fill="#b01c1c" letterSpacing="2">ДВОРОВОЙ</text>
-    <text x="80" y="104" textAnchor="middle" fontFamily="'Montserrat', sans-serif" fontWeight="700" fontSize="9" fill="#b01c1c" letterSpacing="2">КОМИТЕТ</text>
-  </svg>
-);
-
-// ── Soviet star SVG ──────────────────────────────────────────────────────────
-
-const SovietStar = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 16 16">
-    <polygon
-      points="8,1 9.8,6.2 15.5,6.2 10.8,9.5 12.6,14.7 8,11.4 3.4,14.7 5.2,9.5 0.5,6.2 6.2,6.2"
-      fill="#b01c1c"
-    />
-  </svg>
-);
-
-// ── Form row button ───────────────────────────────────────────────────────────
-
-interface FormRowProps {
-  number: string;
-  label: string;
-  sublabel?: string;
-  checked?: boolean;
-  accent?: boolean;
-  onClick?: () => void;
-  disabled?: boolean;
+function PerforatedEdge({ vertical }: { vertical?: boolean }) {
+  const count = vertical ? 18 : 22;
+  return (
+    <div style={{
+      display: 'flex',
+      flexDirection: vertical ? 'column' : 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      padding: vertical ? '4px 0' : '0 4px',
+      ...(vertical
+        ? { width: 16, alignSelf: 'stretch' }
+        : { height: 16, width: '100%' }
+      ),
+    }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{
+          width: vertical ? 8 : 6,
+          height: vertical ? 6 : 8,
+          borderRadius: '50%',
+          background: '#e0d8c0',
+          border: '1.5px solid #c8c0a0',
+          flexShrink: 0,
+        }} />
+      ))}
+    </div>
+  );
 }
 
-function FormRow({ number, label, sublabel, checked, accent, onClick, disabled }: FormRowProps) {
-  const [active, setActive] = useState(false);
+// ── Coupon section ────────────────────────────────────────────────────────────
 
+interface CouponSectionProps {
+  letter: string;
+  series: string;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  accent?: string;
+}
+
+function CouponSection({ letter, series, title, subtitle, children, accent = '#1a3a7a' }: CouponSectionProps) {
   return (
-    <button
-      onPointerDown={() => setActive(true)}
-      onPointerUp={() => { setActive(false); onClick?.(); }}
-      onPointerLeave={() => setActive(false)}
-      disabled={disabled}
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        width: '100%',
-        border: `2px solid ${accent ? '#b01c1c' : '#2a1a0a'}`,
-        borderRadius: 0,
-        borderBottom: `2px solid ${accent ? '#b01c1c' : '#2a1a0a'}`,
-        background: active ? (accent ? 'rgba(176,28,28,0.08)' : 'rgba(42,26,10,0.06)') : 'transparent',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        padding: '10px 12px',
-        textAlign: 'left' as const,
-        transition: 'background 0.08s ease',
-        gap: 12,
-      }}
-    >
-      {/* Row number */}
-      <span style={{
-        fontFamily: "'Space Mono', monospace",
-        fontSize: 11,
-        color: '#8a7060',
-        minWidth: 22,
-      }}>{number}.</span>
-
-      {/* Big checkbox */}
+    <div style={{
+      background: '#f8f4e4',
+      display: 'flex',
+      gap: 0,
+    }}>
+      {/* Left margin tab */}
       <div style={{
-        width: 22,
-        height: 22,
-        border: `2px solid ${accent ? '#b01c1c' : '#4a3020'}`,
-        background: checked ? '#b01c1c' : 'transparent',
+        width: 36,
+        background: accent,
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
+        padding: '8px 4px',
         flexShrink: 0,
-        borderRadius: 2,
+        gap: 4,
       }}>
-        {checked && <span style={{ color: '#fff', fontSize: 14, lineHeight: 1, fontWeight: 900 }}>✓</span>}
+        <span style={{
+          fontFamily: "'Montserrat', sans-serif",
+          fontWeight: 900,
+          fontSize: 20,
+          color: '#fff',
+          textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+        }}>{letter}</span>
+        <span style={{
+          fontFamily: "'Space Mono', monospace",
+          fontSize: 7,
+          color: 'rgba(255,255,255,0.6)',
+          writingMode: 'vertical-rl' as const,
+          letterSpacing: '0.1em',
+        }}>{series}</span>
       </div>
 
-      {/* Label */}
-      <div style={{ flex: 1 }}>
+      {/* Perforated separator */}
+      <PerforatedEdge vertical />
+
+      {/* Content */}
+      <div style={{ flex: 1, padding: '10px 10px' }}>
         <div style={{
           fontFamily: "'Montserrat', sans-serif",
-          fontWeight: 700,
-          fontSize: 13,
-          color: accent ? '#b01c1c' : '#2a1a0a',
+          fontWeight: 900,
+          fontSize: 12,
+          color: '#1a0a00',
           textTransform: 'uppercase' as const,
-          letterSpacing: '0.04em',
-        }}>{label}</div>
-        {sublabel && (
+          letterSpacing: '0.06em',
+          marginBottom: subtitle ? 1 : 6,
+        }}>{title}</div>
+        {subtitle && (
           <div style={{
             fontFamily: "'Space Mono', monospace",
-            fontSize: 9,
-            color: '#8a7060',
-            marginTop: 1,
-          }}>{sublabel}</div>
+            fontSize: 8,
+            color: '#7a6a50',
+            marginBottom: 8,
+          }}>{subtitle}</div>
         )}
+        {children}
       </div>
+    </div>
+  );
+}
 
-      {/* Arrow */}
-      <span style={{
-        fontFamily: "'Space Mono', monospace",
-        fontSize: 12,
-        color: accent ? '#b01c1c' : '#8a7060',
-      }}>›</span>
-    </button>
+// ── Chunky action button (Among-Us style, paper-toned) ────────────────────────
+
+function CouponButton({ label, color, shadowColor, onClick, disabled }: {
+  label: string; color: string; shadowColor: string; onClick?: () => void; disabled?: boolean;
+}) {
+  const [pressed, setPressed] = useState(false);
+  return (
+    <button
+      onPointerDown={() => setPressed(true)}
+      onPointerUp={() => { setPressed(false); onClick?.(); }}
+      onPointerLeave={() => setPressed(false)}
+      disabled={disabled}
+      style={{
+        width: '100%',
+        background: disabled ? '#c8c0a0' : color,
+        border: '3px solid #1a0a00',
+        borderRadius: 10,
+        padding: '10px',
+        boxShadow: pressed ? 'none' : `0 4px 0 ${shadowColor}`,
+        transform: pressed ? 'translateY(4px)' : 'none',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.5 : 1,
+        fontFamily: "'Montserrat', sans-serif",
+        fontWeight: 900,
+        fontSize: 14,
+        color: '#fff',
+        textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+        letterSpacing: '0.05em',
+        textTransform: 'uppercase' as const,
+        transition: 'transform 0.06s, box-shadow 0.06s',
+      }}
+    >{label}</button>
+  );
+}
+
+// ── Soviet stamp circle ───────────────────────────────────────────────────────
+
+function StampMark({ text, subtext, x, y, rotate, color = '#c81818' }: {
+  text: string; subtext: string; x: number; y: number; rotate: number; color?: string;
+}) {
+  return (
+    <div style={{
+      position: 'absolute',
+      left: x,
+      top: y,
+      transform: `rotate(${rotate}deg)`,
+      pointerEvents: 'none',
+      opacity: 0.12,
+    }}>
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="44" stroke={color} strokeWidth="4" fill="none"/>
+        <circle cx="50" cy="50" r="36" stroke={color} strokeWidth="2" fill="none"/>
+        <text x="50" y="46" textAnchor="middle" fontFamily="Montserrat" fontWeight="900" fontSize="11" fill={color} letterSpacing="2">{text}</text>
+        <text x="50" y="60" textAnchor="middle" fontFamily="Montserrat" fontWeight="700" fontSize="8" fill={color} letterSpacing="1">{subtext}</text>
+      </svg>
+    </div>
   );
 }
 
@@ -137,54 +183,45 @@ export function Neon() {
   if (view === 'room') {
     return (
       <div style={rootStyle}>
-        <div style={clipboardWrap}>
-          <ClipboardHeader title="ДВОРОВОЙ ПРОТОКОЛ №2" subtitle="Журнал участников" />
-          <div style={clipboardBody}>
-            <StampWatermark />
+        <div style={outerCoupon}>
+          <CouponHeader />
+          <PerforatedEdge />
 
-            {/* Room code */}
-            <div style={fieldGroup}>
-              <label style={fieldLabel}>КОД ЯВКИ <SovietStar size={10} /></label>
-              <div style={stampBox}>
-                <span style={stampCodeText}>XYZ789</span>
-              </div>
-              <p style={fieldHint}>Сообщить лично. Не по телефону.</p>
+          <CouponSection letter="★" series="ВАША КОМНАТА" title="КОД ДОСТУПА НА АЗС" accent="#c81818">
+            <div style={{ textAlign: 'center', padding: '4px 0 8px' }}>
+              <span style={{
+                fontFamily: "'Space Mono', monospace",
+                fontWeight: 700,
+                fontSize: 38,
+                color: '#c81818',
+                letterSpacing: '0.18em',
+              }}>XYZ789</span>
             </div>
+            <p style={hintText}>Сообщить устно. Не писать мелом на асфальте.</p>
+          </CouponSection>
 
-            <div style={fieldGroupDivider} />
+          <PerforatedEdge />
 
-            {/* Player list */}
-            <div style={fieldGroup}>
-              <label style={fieldLabel}>СПИСОК ЯВИВШИХСЯ ({mockPlayers.length} / 15)</label>
-              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                {mockPlayers.map((name, i) => (
-                  <div key={name} style={tableRow}>
-                    <span style={tableNum}>{String(i + 1).padStart(2, '0')}</span>
-                    <span style={tableName}>{name}</span>
-                    {i === 0 && <span style={tableRole}>ОРГАН.</span>}
-                  </div>
-                ))}
-                <div style={{ ...tableRow, opacity: 0.3 }}>
-                  <span style={tableNum}>03</span>
-                  <span style={{ ...tableName, fontStyle: 'italic' }}>____________</span>
-                  <span style={tableRole}>_____</span>
+          <CouponSection letter="Б" series="УЧАСТНИКИ" title={`СТОЯТ В ОЧЕРЕДИ — ${mockPlayers.length}/15`} accent="#1a3a7a">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 8 }}>
+              {mockPlayers.map((name, i) => (
+                <div key={name} style={rosterRow}>
+                  <span style={rosterNum}>{String(i + 1).padStart(2,'0')}</span>
+                  <span style={rosterName}>{name}</span>
+                  {i === 0 && <span style={rosterRole}>ОРГАН.</span>}
                 </div>
+              ))}
+              <div style={{ ...rosterRow, opacity: 0.3 }}>
+                <span style={rosterNum}>03</span>
+                <span style={{ ...rosterName, fontStyle: 'italic' }}>ожидается...</span>
               </div>
             </div>
+            <CouponButton label="ВЫДАТЬ БЕНЗИН ВСЕМ" color="#1a6a1a" shadowColor="#0a3a0a" onClick={() => {}} />
+            <button style={backBtn} onClick={() => setView('home')}>← вернуть талон</button>
+          </CouponSection>
 
-            <div style={fieldGroupDivider} />
-
-            <FormRow
-              number="А"
-              label="НАЧАТЬ ИГРУ"
-              sublabel="Минимум 2 участника обязательно"
-              accent
-              onClick={() => {}}
-            />
-            <button onClick={() => setView('home')} style={backBtn}>
-              ← Отозвать заявку
-            </button>
-          </div>
+          <PerforatedEdge />
+          <CouponFooter />
         </div>
       </div>
     );
@@ -192,117 +229,134 @@ export function Neon() {
 
   return (
     <div style={rootStyle}>
-      <div style={clipboardWrap}>
-        <ClipboardHeader title="ДВОРОВОЙ ПРОТОКОЛ" subtitle="Надзорный комитет — р-н №7" />
+      <div style={outerCoupon}>
+        {/* Stamp watermarks */}
+        <StampMark text="ОДОБРЕНО" subtext="АЗС №47" x={200} y={120} rotate={-18} />
+        <StampMark text="ТОПЛИВО" subtext="ВЫДАНО" x={20} y={300} rotate={12} color="#1a3a7a" />
+        <StampMark text="AMONG GAS" subtext="© 2024" x={210} y={480} rotate={-8} />
 
-        <div style={clipboardBody}>
-          <StampWatermark />
+        <CouponHeader />
+        <PerforatedEdge />
 
-          {/* Form header */}
-          <div style={formHeader}>
-            <SovietStar size={12} />
-            <span style={formHeaderText}>ЗАЯВЛЕНИЕ НА УЧАСТИЕ</span>
-            <SovietStar size={12} />
+        {/* Section A: Create Room */}
+        <CouponSection
+          letter="А"
+          series="СЕРИЯ ГАЗ-1"
+          title="Занять заправку"
+          subtitle="Создать комнату — стать организатором"
+          accent="#c81818"
+        >
+          <CouponButton label="ОТКРЫТЬ АЗС ДЛЯ ВСЕХ" color="#c81818" shadowColor="#7a0808" onClick={() => setView('room')} />
+        </CouponSection>
+
+        <PerforatedEdge />
+
+        {/* Section B: Solo bots */}
+        <CouponSection
+          letter="Б"
+          series="СЕРИЯ ГАЗ-2"
+          title="Тренировочный заезд"
+          subtitle="С ботами. Бензин условный."
+          accent="#c88018"
+        >
+          <div style={stepperRow}>
+            <span style={stepperLabel}>БОТОВ В ОЧЕРЕДИ:</span>
+            <div style={stepperControl}>
+              <button style={stepBtn} onClick={() => setBotCount(c => Math.max(1, c - 1))}>−</button>
+              <span style={stepVal}>{botCount}</span>
+              <button style={stepBtn} onClick={() => setBotCount(c => Math.min(14, c + 1))}>+</button>
+            </div>
           </div>
+          <CouponButton label="ТРЕНИРОВАТЬСЯ" color="#c88018" shadowColor="#7a4a08" />
+        </CouponSection>
 
-          {/* Main action rows */}
-          <div style={{ border: '2px solid #2a1a0a', marginBottom: 12 }}>
-            <FormRow
-              number="01"
-              label="Занять двор"
-              sublabel="Создать комнату — стать организатором"
-              accent
+        <PerforatedEdge />
+
+        {/* Section C: Join by code */}
+        <CouponSection
+          letter="В"
+          series="СЕРИЯ ГАЗ-3"
+          title="Войти по коду талона"
+          subtitle="Код вам выдали лично"
+          accent="#1a3a7a"
+        >
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input
+              value={code}
+              onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
+              placeholder="______"
+              maxLength={6}
+              style={codeInput}
+            />
+            <CouponButton
+              label="ВЪЕ-ЗД"
+              color="#1a3a7a"
+              shadowColor="#0a1a4a"
+              disabled={code.length < 6}
               onClick={() => setView('room')}
             />
-            <FormRow
-              number="02"
-              label="Войти по коду"
-              sublabel="Код вам должны были передать"
-            />
           </div>
+          <p style={hintText}>* Без кода — в конец очереди. Такие правила.</p>
+        </CouponSection>
 
-          <div style={fieldGroupDivider} />
-
-          {/* Solo box */}
-          <div style={soloSection}>
-            <div style={soloHeader}>
-              <span style={soloHeaderText}>☐ ТРЕНИРОВКА С БОТАМИ</span>
-              <span style={{ ...fieldHint, margin: 0 }}>Самостоятельная подготовка</span>
-            </div>
-
-            {/* Bot stepper — styled as a form field */}
-            <div style={formField}>
-              <span style={fieldLabel}>КОЛ-ВО БОТОВ</span>
-              <div style={stepperRow}>
-                <button style={stepBtn} onClick={() => setBotCount(c => Math.max(1, c - 1))}>−</button>
-                <div style={stepDisplay}>
-                  <span style={stepVal}>{botCount}</span>
-                </div>
-                <button style={stepBtn} onClick={() => setBotCount(c => Math.min(14, c + 1))}>+</button>
-              </div>
-            </div>
-
-            <FormRow
-              number="03"
-              label="НАЧАТЬ ТРЕНИРОВКУ"
-              sublabel="Результаты не считаются"
-              accent
-            />
-          </div>
-
-          <div style={fieldGroupDivider} />
-
-          {/* Code input */}
-          <div style={fieldGroup}>
-            <label style={fieldLabel}>ВВЕСТИ КОД ЯВКИ</label>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={code}
-                onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))}
-                placeholder="______"
-                maxLength={6}
-                style={codeInput}
-              />
-              <button
-                disabled={code.length < 6}
-                style={{ ...submitBtn, opacity: code.length < 6 ? 0.4 : 1 }}
-                onClick={() => setView('room')}
-              >
-                ПОДАТЬ
-              </button>
-            </div>
-            <p style={fieldHint}>* Код выдаётся организатором лично в руки</p>
-          </div>
-
-          {/* Footer stamp line */}
-          <div style={footerLine}>
-            <span style={footerText}>Форма ДК-7 / Ред. 1991 г.</span>
-            <SovietStar size={10} />
-          </div>
-        </div>
+        <PerforatedEdge />
+        <CouponFooter />
       </div>
     </div>
   );
 }
 
-// ── Clipboard header sub-component ───────────────────────────────────────────
+// ── Coupon header & footer ────────────────────────────────────────────────────
 
-function ClipboardHeader({ title, subtitle }: { title: string; subtitle: string }) {
+function CouponHeader() {
   return (
-    <div style={clipHeader}>
-      {/* Clip mechanism */}
-      <div style={clip}>
-        <div style={clipArm} />
-        <div style={clipBody} />
-      </div>
-      <div style={clipHeaderInner}>
-        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 2 }}>
-          <SovietStar size={14} />
-          <SovietStar size={14} />
-          <SovietStar size={14} />
+    <div style={headerWrap}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        {/* Gas droplet logo */}
+        <div style={dropletLogo}>
+          <svg width="36" height="44" viewBox="0 0 36 44">
+            <path d="M18 2 C18 2 2 18 2 28 A16 16 0 0 0 34 28 C34 18 18 2 18 2Z" fill="#c81818" stroke="#1a0a00" strokeWidth="2.5"/>
+            <ellipse cx="13" cy="26" rx="4" ry="6" fill="rgba(255,255,255,0.25)" transform="rotate(-15 13 26)"/>
+          </svg>
         </div>
-        <h1 style={clipTitle}>{title}</h1>
-        <p style={clipSubtitle}>{subtitle}</p>
+        <div>
+          <div style={brandName}>AMONG GAS</div>
+          <div style={brandSub}>ТОПЛИВНЫЙ ТАЛОН / FUEL COUPON</div>
+        </div>
+        {/* Series number top right */}
+        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+          <div style={seriesLabel}>СЕРИЯ</div>
+          <div style={seriesNum}>ГАЗ-2024</div>
+          <div style={seriesLabel}>№ 001337</div>
+        </div>
+      </div>
+      <div style={headerRule} />
+      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+        <span style={metaText}>ДЕЙСТВИТЕЛЕН ДО: КОНЦА КРИЗИСА</span>
+        <span style={metaText}>ОБМЕНУ НЕ ПОДЛЕЖИТ</span>
+      </div>
+    </div>
+  );
+}
+
+function CouponFooter() {
+  return (
+    <div style={footerWrap}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <div>
+          <div style={metaText}>ВЫДАН: АЗС «СРЕДИ НАС», г. Россия</div>
+          <div style={metaText}>ОСНОВАНИЕ: Топливный кризис пост. №2024-∞</div>
+        </div>
+        <div style={barcodeWrap}>
+          {Array.from({ length: 14 }).map((_, i) => (
+            <div key={i} style={{
+              width: i % 3 === 0 ? 3 : 2,
+              height: i % 5 === 0 ? 28 : 20,
+              background: '#1a0a00',
+              borderRadius: 1,
+            }} />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -317,229 +371,162 @@ const rootStyle: React.CSSProperties = {
   maxWidth: 390,
   margin: '0 auto',
   overflow: 'hidden',
-  background: '#8a7a6a',
+  background: '#8a8070',
   backgroundImage: `
-    repeating-linear-gradient(0deg, transparent, transparent 28px, rgba(0,0,0,0.04) 28px, rgba(0,0,0,0.04) 29px),
-    repeating-linear-gradient(90deg, transparent, transparent 28px, rgba(0,0,0,0.04) 28px, rgba(0,0,0,0.04) 29px)
+    repeating-linear-gradient(0deg, transparent, transparent 30px, rgba(0,0,0,0.05) 30px, rgba(0,0,0,0.05) 31px)
   `,
   display: 'flex',
   alignItems: 'flex-start',
   justifyContent: 'center',
-  paddingTop: 20,
+  paddingTop: 14,
   fontFamily: "'Outfit', sans-serif",
 };
 
-const clipboardWrap: React.CSSProperties = {
-  width: 'calc(100% - 28px)',
-  maxWidth: 340,
-  display: 'flex',
-  flexDirection: 'column',
-  boxShadow: '3px 6px 24px rgba(0,0,0,0.45), 1px 2px 6px rgba(0,0,0,0.3)',
-  borderRadius: 4,
+const outerCoupon: React.CSSProperties = {
+  width: 'calc(100% - 20px)',
+  maxWidth: 350,
+  background: '#f8f4e4',
+  border: '3px solid #1a0a00',
+  borderRadius: 6,
   overflow: 'hidden',
-};
-
-const clipHeader: React.CSSProperties = {
-  background: '#c8311a',
   position: 'relative',
-  padding: '12px 16px 14px',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  borderBottom: '4px solid #8a1a08',
+  boxShadow: '3px 5px 20px rgba(0,0,0,0.4)',
 };
 
-const clip: React.CSSProperties = {
-  position: 'absolute',
-  top: -8,
-  left: '50%',
-  transform: 'translateX(-50%)',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  zIndex: 5,
+const headerWrap: React.CSSProperties = {
+  padding: '12px 14px 8px',
+  background: '#f8f4e4',
 };
 
-const clipArm: React.CSSProperties = {
-  width: 60,
-  height: 10,
-  background: '#606870',
-  border: '2px solid #303840',
-  borderRadius: 3,
+const dropletLogo: React.CSSProperties = {
+  flexShrink: 0,
 };
 
-const clipBody: React.CSSProperties = {
-  width: 44,
-  height: 16,
-  background: '#808890',
-  border: '2px solid #404850',
-  borderRadius: '0 0 4px 4px',
-  borderTop: 'none',
-};
-
-const clipHeaderInner: React.CSSProperties = {
-  marginTop: 10,
-  textAlign: 'center',
-};
-
-const clipTitle: React.CSSProperties = {
+const brandName: React.CSSProperties = {
   fontFamily: "'Montserrat', sans-serif",
   fontWeight: 900,
-  fontSize: 16,
-  color: '#fff9f0',
-  letterSpacing: '0.1em',
-  textTransform: 'uppercase',
-  margin: '4px 0 2px',
-  textShadow: '0 1px 3px rgba(0,0,0,0.4)',
+  fontSize: 22,
+  color: '#c81818',
+  letterSpacing: '0.08em',
+  textShadow: `-1.5px -1.5px 0 #1a0a00, 1.5px -1.5px 0 #1a0a00, -1.5px 1.5px 0 #1a0a00, 1.5px 1.5px 0 #1a0a00`,
+  lineHeight: 1,
 };
 
-const clipSubtitle: React.CSSProperties = {
+const brandSub: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
-  fontSize: 9,
-  color: 'rgba(255,249,240,0.65)',
+  fontSize: 7,
+  color: '#5a4a30',
   letterSpacing: '0.12em',
   textTransform: 'uppercase',
-  margin: 0,
+  marginTop: 2,
 };
 
-const clipboardBody: React.CSSProperties = {
-  background: '#f0e8d0',
-  backgroundImage: 'repeating-linear-gradient(transparent, transparent 24px, rgba(176,28,28,0.06) 24px, rgba(176,28,28,0.06) 25px)',
-  padding: '14px 14px 16px',
-  position: 'relative',
-  overflow: 'hidden',
-};
-
-const formHeader: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  marginBottom: 10,
-};
-
-const formHeaderText: React.CSSProperties = {
+const seriesLabel: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
-  fontSize: 9,
-  color: '#8a2010',
-  letterSpacing: '0.15em',
+  fontSize: 7,
+  color: '#8a7a60',
+  letterSpacing: '0.1em',
   textTransform: 'uppercase',
 };
 
-const fieldGroup: React.CSSProperties = {
-  marginBottom: 10,
-};
-
-const fieldGroupDivider: React.CSSProperties = {
-  height: 1,
-  background: 'rgba(42,26,10,0.18)',
-  margin: '10px 0',
-};
-
-const fieldLabel: React.CSSProperties = {
-  display: 'block',
+const seriesNum: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
-  fontSize: 9,
   fontWeight: 700,
-  color: '#5a3a1a',
-  letterSpacing: '0.15em',
-  textTransform: 'uppercase',
-  marginBottom: 5,
+  fontSize: 12,
+  color: '#1a0a00',
 };
 
-const fieldHint: React.CSSProperties = {
+const headerRule: React.CSSProperties = {
+  height: 2,
+  background: 'repeating-linear-gradient(90deg, #c81818 0px, #c81818 6px, transparent 6px, transparent 10px)',
+  margin: '6px 0',
+};
+
+const metaText: React.CSSProperties = {
+  fontFamily: "'Space Mono', monospace",
+  fontSize: 7,
+  color: '#7a6a50',
+  letterSpacing: '0.04em',
+};
+
+const hintText: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
   fontSize: 8,
-  color: '#8a7060',
-  margin: '4px 0 0',
+  color: '#8a7a60',
+  margin: '6px 0 0',
   fontStyle: 'italic',
 };
 
-const stampBox: React.CSSProperties = {
-  border: '2px solid #b01c1c',
-  borderRadius: 4,
-  padding: '8px 14px',
-  display: 'inline-block',
-  background: 'rgba(176,28,28,0.04)',
-};
-
-const stampCodeText: React.CSSProperties = {
-  fontFamily: "'Montserrat', sans-serif",
-  fontWeight: 900,
-  fontSize: 32,
-  color: '#b01c1c',
-  letterSpacing: '0.2em',
-};
-
-const tableRow: React.CSSProperties = {
+const rosterRow: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  borderBottom: '1px solid rgba(42,26,10,0.12)',
-  padding: '5px 0',
-  gap: 10,
+  gap: 8,
+  borderBottom: '1px solid rgba(26,10,0,0.1)',
+  paddingBottom: 4,
 };
 
-const tableNum: React.CSSProperties = {
+const rosterNum: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
-  fontSize: 10,
-  color: '#8a7060',
-  minWidth: 22,
+  fontSize: 9,
+  color: '#8a7a60',
+  minWidth: 20,
 };
 
-const tableName: React.CSSProperties = {
+const rosterName: React.CSSProperties = {
   flex: 1,
   fontFamily: "'Montserrat', sans-serif",
   fontWeight: 600,
   fontSize: 12,
-  color: '#2a1a0a',
+  color: '#1a0a00',
 };
 
-const tableRole: React.CSSProperties = {
+const rosterRole: React.CSSProperties = {
+  fontFamily: "'Space Mono', monospace",
+  fontSize: 8,
+  color: '#c81818',
+  fontWeight: 700,
+};
+
+const backBtn: React.CSSProperties = {
+  width: '100%',
+  marginTop: 8,
+  background: 'transparent',
+  border: '1.5px dashed rgba(26,10,0,0.25)',
+  borderRadius: 6,
+  padding: '7px',
+  color: '#7a6a50',
   fontFamily: "'Space Mono', monospace",
   fontSize: 9,
-  color: '#b01c1c',
-  fontWeight: 700,
-};
-
-const soloSection: React.CSSProperties = {
-  border: '1px dashed rgba(42,26,10,0.25)',
-  padding: '10px',
-  marginBottom: 0,
-};
-
-const soloHeader: React.CSSProperties = {
-  display: 'flex',
-  alignItems: 'baseline',
-  justifyContent: 'space-between',
-  marginBottom: 8,
-};
-
-const soloHeaderText: React.CSSProperties = {
-  fontFamily: "'Montserrat', sans-serif",
-  fontWeight: 700,
-  fontSize: 11,
-  color: '#2a1a0a',
-  letterSpacing: '0.04em',
-};
-
-const formField: React.CSSProperties = {
-  marginBottom: 8,
+  cursor: 'pointer',
 };
 
 const stepperRow: React.CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: 10,
-  marginTop: 4,
+  justifyContent: 'space-between',
+  marginBottom: 8,
+};
+
+const stepperLabel: React.CSSProperties = {
+  fontFamily: "'Space Mono', monospace",
+  fontSize: 9,
+  color: '#5a4a30',
+  letterSpacing: '0.05em',
+};
+
+const stepperControl: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 8,
 };
 
 const stepBtn: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  border: '2px solid #2a1a0a',
-  borderRadius: 2,
+  width: 26,
+  height: 26,
+  border: '2px solid #1a0a00',
+  borderRadius: 4,
   background: 'transparent',
-  color: '#2a1a0a',
+  color: '#1a0a00',
   fontSize: 16,
   fontWeight: 700,
   cursor: 'pointer',
@@ -550,74 +537,38 @@ const stepBtn: React.CSSProperties = {
   lineHeight: 1,
 };
 
-const stepDisplay: React.CSSProperties = {
-  border: '2px solid #2a1a0a',
-  borderRadius: 2,
-  padding: '2px 12px',
-  background: 'rgba(255,255,255,0.5)',
-  minWidth: 44,
-  textAlign: 'center',
-};
-
 const stepVal: React.CSSProperties = {
   fontFamily: "'Space Mono', monospace",
   fontWeight: 700,
-  fontSize: 16,
-  color: '#2a1a0a',
+  fontSize: 18,
+  color: '#1a0a00',
+  minWidth: 30,
+  textAlign: 'center',
 };
 
 const codeInput: React.CSSProperties = {
   flex: 1,
-  border: '2px solid #2a1a0a',
-  borderRadius: 2,
-  background: 'rgba(255,255,255,0.5)',
+  border: '2px solid #1a0a00',
+  borderRadius: 6,
+  background: 'rgba(255,255,255,0.6)',
   padding: '8px 10px',
   fontFamily: "'Space Mono', monospace",
   fontWeight: 700,
   fontSize: 18,
-  color: '#2a1a0a',
+  color: '#1a0a00',
   letterSpacing: '0.2em',
   textAlign: 'center',
   outline: 'none',
 };
 
-const submitBtn: React.CSSProperties = {
-  background: '#b01c1c',
-  border: '2px solid #2a1a0a',
-  borderRadius: 2,
-  color: '#fff',
-  fontFamily: "'Montserrat', sans-serif",
-  fontWeight: 800,
-  fontSize: 11,
-  padding: '0 14px',
-  cursor: 'pointer',
-  letterSpacing: '0.08em',
+const footerWrap: React.CSSProperties = {
+  padding: '8px 14px 10px',
+  background: '#f0ecd6',
+  borderTop: '1px solid rgba(26,10,0,0.1)',
 };
 
-const backBtn: React.CSSProperties = {
-  width: '100%',
-  background: 'transparent',
-  border: '1px dashed rgba(42,26,10,0.3)',
-  borderRadius: 2,
-  color: '#5a3a1a',
-  fontFamily: "'Space Mono', monospace",
-  fontSize: 10,
-  padding: '8px',
-  cursor: 'pointer',
-  marginTop: 10,
-};
-
-const footerLine: React.CSSProperties = {
+const barcodeWrap: React.CSSProperties = {
   display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between',
-  marginTop: 12,
-  paddingTop: 8,
-  borderTop: '1px solid rgba(42,26,10,0.15)',
-};
-
-const footerText: React.CSSProperties = {
-  fontFamily: "'Space Mono', monospace",
-  fontSize: 8,
-  color: '#8a7060',
+  alignItems: 'flex-end',
+  gap: 2,
 };
