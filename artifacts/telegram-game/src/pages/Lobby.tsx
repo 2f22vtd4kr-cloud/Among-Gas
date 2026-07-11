@@ -30,11 +30,13 @@ const POSE_ROW: Record<string, number> = {
 };
 const SLOT_COLORS = ['teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta'];
 
-/** One frame of the balaclava sprite sheet via CSS background. */
+/** One frame of the balaclava sprite sheet via CSS background.
+ *  clipBottom trims the ground-shadow row built into the sprite art (~18%).
+ */
 function CharSprite({
-  color, pose = 'idle', size = 48, flipped = false,
+  color, pose = 'idle', size = 48, flipped = false, clipBottom = true,
 }: {
-  color: string; pose?: string; size?: number; flipped?: boolean;
+  color: string; pose?: string; size?: number; flipped?: boolean; clipBottom?: boolean;
 }) {
   const col    = COLOR_COL[color] ?? 0;
   const row    = POSE_ROW[pose]   ?? 0;
@@ -43,7 +45,8 @@ function CharSprite({
   const sheetH = SHEET_H * scale;
   const posX   = -(col * CELL_W * scale);
   const posY   = -(row * CELL_H * scale);
-  const height = Math.round(CELL_H * scale);
+  // 82% clips the elliptical ground shadow at the bottom of each sprite cell
+  const height = Math.round(CELL_H * scale * (clipBottom ? 0.82 : 1));
 
   return (
     <div style={{
@@ -55,6 +58,7 @@ function CharSprite({
       imageRendering: 'pixelated',
       transform: flipped ? 'scaleX(-1)' : undefined,
       flexShrink: 0,
+      overflow: 'hidden',
     }} />
   );
 }
@@ -381,7 +385,7 @@ export default function Lobby() {
           style={{ marginBottom: 8 }}
         >
           <div className="au-btn-icon">
-            <CharSprite color="teal" pose="walk-2" size={46} />
+            <CharSprite color="teal" pose="idle" size={46} />
           </div>
           <div className="au-btn-label">СОЗДАТЬ КОМНАТУ</div>
         </button>
@@ -431,7 +435,7 @@ export default function Lobby() {
           style={{ marginBottom: joinExpanded ? 0 : 0 }}
         >
           <div className="au-btn-icon">
-            <CharSprite color="navy" pose="hold-item" size={46} />
+            <CharSprite color="navy" pose="idle" size={46} />
           </div>
           <div className="au-btn-label">ВОЙТИ С КОДОМ</div>
         </button>

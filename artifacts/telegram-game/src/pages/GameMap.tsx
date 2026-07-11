@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { haptic } from '../lib/haptics';
+import { sfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
   COLS, ROWS, CELL_X, CELL_Y,
@@ -88,6 +89,43 @@ const MOVE_SEND_INTERVAL_MS = 40;
 // ── Player color: keyed by lobby slot, cycling the 7 sheet colors ────────────
 function slotColor(slot: number): CharacterColor {
   return CHARACTER_COLORS[slot % CHARACTER_COLORS.length];
+}
+
+// ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
+const _POSE_ROW: Record<string, number> = {
+  idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
+  mask: 5, 'hold-item': 6, 'sit-hug-knees': 7, 'sit-crouch': 8,
+};
+const _SHEET_COLS = 7;
+const _SHEET_PX_W = CHARACTER_CELL_WIDTH * _SHEET_COLS;
+const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
+
+function CharSpriteUI({
+  color, pose = 'idle', size = 64, flipped = false,
+}: {
+  color: string; pose?: string; size?: number; flipped?: boolean;
+}) {
+  const colIdx = CHARACTER_COLORS.indexOf(color as CharacterColor);
+  const col = colIdx >= 0 ? colIdx : 0;
+  const row = _POSE_ROW[pose] ?? 0;
+  const scale = size / CHARACTER_CELL_WIDTH;
+  const bgW   = _SHEET_PX_W * scale;
+  const bgH   = _SHEET_PX_H * scale;
+  const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
+  const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
+  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.82); // clip ground shadow
+
+  return (
+    <div style={{
+      width: size, height, flexShrink: 0, overflow: 'hidden',
+      backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+      backgroundSize: `${bgW}px ${bgH}px`,
+      backgroundPosition: `${posX}px ${posY}px`,
+      backgroundRepeat: 'no-repeat',
+      imageRendering: 'pixelated',
+      transform: flipped ? 'scaleX(-1)' : undefined,
+    }} />
+  );
 }
 
 // ── Remote player animation state (per slot, maintained across frames) ───────
@@ -355,10 +393,27 @@ export default function GameMap() {
     // Clear stale remote animation state so sprites animate fresh from spawns.
     remoteAnimMapRef.current.clear();
     setShowReveal(true);
+    sfx('roundStart', 0.75);
     if (isMockReveal) return;
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
   }, [myRole, isMockReveal]);
+
+  // ── Sound effects for game-over and meeting ───────────────────────────────
+  useEffect(() => {
+    if (!voteResult?.winner) return;
+    if (voteResult.winner === 'impostors') sfx('victoryImpostor', 0.8);
+    else sfx('victoryCrewmate', 0.8);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voteResult?.winner]);
+
+  const prevMeetingRef = useRef<typeof meeting>(null);
+  useEffect(() => {
+    if (meeting !== null && prevMeetingRef.current === null) {
+      sfx(meeting.bodySlot === NO_TARGET ? 'meeting' : 'bodyReport', 0.85);
+    }
+    prevMeetingRef.current = meeting;
+  }, [meeting]);
 
   // Inject role-reveal keyframes once (avoids a CSS file dependency)
   useEffect(() => {
@@ -1390,43 +1445,99 @@ export default function GameMap() {
         );
       })()}
 
-      {/* ── Game over overlay (Phase 6) ─────────────────────────────────────── */}
-      {voteResult?.winner && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 70,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: voteResult.winner === 'impostors' ? 'rgba(44,0,0,0.94)' : 'rgba(0,16,48,0.94)',
-        }}>
+      {/* ── Game over overlay (Phase 6) — Among Gas styled ──────────────────── */}
+      {voteResult?.winner && (() => {
+        const isImpWin = voteResult.winner === 'impostors';
+        const accent   = isImpWin ? '#ff3344' : '#4dcdff';
+        const outline  = '-4px -4px 0 #000,4px -4px 0 #000,-4px 4px 0 #000,4px 4px 0 #000,-4px 0 0 #000,4px 0 0 #000,0 -4px 0 #000,0 4px 0 #000';
+        const glow     = isImpWin
+          ? ',0 0 40px rgba(255,50,50,0.8),0 0 80px rgba(255,50,50,0.3)'
+          : ',0 0 40px rgba(60,180,255,0.8),0 0 80px rgba(60,180,255,0.3)';
+        return (
           <div style={{
-            fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
-            letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 14,
+            position: 'fixed', inset: 0, zIndex: 70,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: isImpWin
+              ? 'radial-gradient(ellipse at 50% 40%, #5a0000 0%, #1a0000 60%, #000 100%)'
+              : 'radial-gradient(ellipse at 50% 40%, #001850 0%, #000d28 60%, #000 100%)',
+            padding: '0 28px',
           }}>
-            Конец игры
+            {/* КОНЕЦ ИГРЫ label */}
+            <p style={{
+              fontFamily: "'Fredoka One', sans-serif",
+              fontSize: 12, color: 'rgba(255,255,255,0.38)',
+              letterSpacing: '0.35em', textTransform: 'uppercase', marginBottom: 20,
+            }}>
+              Конец игры
+            </p>
+
+            {/* Character row */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
+              {players.map(p => (
+                <CharSpriteUI
+                  key={p.slot}
+                  color={slotColor(p.slot)}
+                  pose={deadSlots.includes(p.slot) ? 'ghost' : 'idle'}
+                  size={50}
+                  flipped={p.slot % 2 === 0}
+                />
+              ))}
+            </div>
+
+            {/* Winner title */}
+            <div style={{
+              fontFamily: "'Fredoka One', sans-serif",
+              fontSize: 52, color: accent, letterSpacing: '0.04em',
+              textShadow: outline + glow,
+              textAlign: 'center', lineHeight: 1.1, marginBottom: 36,
+              whiteSpace: 'pre-line',
+            }}>
+              {isImpWin ? 'ПРЕДАТЕЛИ\nПОБЕДИЛИ' : 'ЭКИПАЖ\nПОБЕДИЛ'}
+            </div>
+
+            {/* В ЛОББИ button — Among Gas pill style */}
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                display: 'flex', alignItems: 'stretch',
+                width: '100%', maxWidth: 260, minHeight: 60,
+                borderRadius: 8, border: '2.5px solid rgba(0,0,0,0.5)',
+                boxShadow: isImpWin ? '0 7px 0 #6b0000' : '0 7px 0 #00316b',
+                overflow: 'hidden', cursor: 'pointer', padding: 0, background: 'none',
+                transition: 'transform 0.08s, box-shadow 0.08s',
+              }}
+              onMouseDown={e => {
+                (e.currentTarget as HTMLButtonElement).style.transform = 'translateY(6px)';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = isImpWin ? '0 1px 0 #6b0000' : '0 1px 0 #00316b';
+              }}
+              onMouseUp={e => {
+                (e.currentTarget as HTMLButtonElement).style.transform = '';
+                (e.currentTarget as HTMLButtonElement).style.boxShadow = isImpWin ? '0 7px 0 #6b0000' : '0 7px 0 #00316b';
+              }}
+            >
+              <div style={{
+                width: 60, flexShrink: 0, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                background: isImpWin ? '#aa2233' : '#225599',
+                borderRight: '2px solid rgba(0,0,0,0.22)', fontSize: 22,
+              }}>🚪</div>
+              <div style={{
+                flex: 1, display: 'flex',
+                alignItems: 'center', justifyContent: 'center',
+                background: isImpWin ? '#cc2244' : '#2266cc',
+                backgroundImage: 'repeating-linear-gradient(-55deg, transparent 0px, transparent 12px, rgba(255,255,255,0.08) 12px, rgba(255,255,255,0.08) 22px)',
+                fontFamily: "'Fredoka One', sans-serif",
+                fontSize: 20, color: 'white',
+                textShadow: '0 2px 5px rgba(0,0,0,0.5)',
+                letterSpacing: '0.08em',
+              }}>
+                В ЛОББИ
+              </div>
+            </button>
           </div>
-          <div style={{
-            fontSize: 42, fontWeight: 900, fontFamily: 'sans-serif',
-            letterSpacing: '0.05em', textTransform: 'uppercase',
-            color: voteResult.winner === 'impostors' ? '#ff3344' : '#44aaff',
-            textShadow: voteResult.winner === 'impostors'
-              ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
-              : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
-          }}>
-            {voteResult.winner === 'impostors' ? '☠ Предатели победили' : '✦ Экипаж победил'}
-          </div>
-          <button
-            onClick={() => window.location.reload()}
-            style={{
-              marginTop: 28, padding: '10px 22px', borderRadius: 8,
-              background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.85)',
-              border: '1px solid rgba(255,255,255,0.25)', fontFamily: 'sans-serif',
-              fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer',
-            }}
-          >
-            В лобби
-          </button>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Dead / ghost-mode banner (Phase 5) ────────────────────────────── */}
       {loaded && amIDead && (
@@ -1442,51 +1553,76 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── Role reveal overlay (Phase 4) ─────────────────────────────────── */}
-      {showReveal && myRole && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 50,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: myRole === 'impostor'
-            ? 'rgba(44, 0, 0, 0.92)'
-            : 'rgba(0, 16, 48, 0.92)',
-          animation: isMockReveal ? 'none' : 'rrFade 3.2s ease forwards',
-          pointerEvents: 'none',
-        }}>
-          <div style={{ textAlign: 'center', animation: isMockReveal ? 'none' : 'rrScale 3.2s ease forwards' }}>
+      {/* ── Role reveal overlay (Phase 4) — Among Gas styled ────────────────── */}
+      {showReveal && myRole && (() => {
+        const isImp  = myRole === 'impostor';
+        const accent = isImp ? '#ff3344' : '#4dcdff';
+        const outline = '-4px -4px 0 #000,4px -4px 0 #000,-4px 4px 0 #000,4px 4px 0 #000,-4px 0 0 #000,4px 0 0 #000,0 -4px 0 #000,0 4px 0 #000';
+        const glow    = isImp
+          ? ',0 0 40px rgba(255,50,50,0.8),0 0 80px rgba(255,50,50,0.3)'
+          : ',0 0 40px rgba(60,180,255,0.8),0 0 80px rgba(60,180,255,0.3)';
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 50,
+            display: 'flex', flexDirection: 'column',
+            alignItems: 'center', justifyContent: 'center',
+            background: isImp
+              ? 'radial-gradient(ellipse at 50% 40%, #5a0000 0%, #1a0000 60%, #000 100%)'
+              : 'radial-gradient(ellipse at 50% 40%, #001850 0%, #000d28 60%, #000 100%)',
+            animation: isMockReveal ? 'none' : 'rrFade 3.2s ease forwards',
+            pointerEvents: 'none',
+          }}>
             <div style={{
-              fontSize: 12, color: 'rgba(255,255,255,0.5)',
-              fontFamily: 'sans-serif', letterSpacing: '0.3em',
-              textTransform: 'uppercase', marginBottom: 16,
+              textAlign: 'center', padding: '0 32px',
+              animation: isMockReveal ? 'none' : 'rrScale 3.2s ease forwards',
             }}>
-              Ваша роль
-            </div>
-            <div style={{
-              fontSize: 50, fontWeight: 900, fontFamily: 'sans-serif',
-              letterSpacing: '0.06em', textTransform: 'uppercase',
-              color: myRole === 'impostor' ? '#ff3344' : '#44aaff',
-              textShadow: myRole === 'impostor'
-                ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
-                : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
-            }}>
-              {myRole === 'impostor' ? '☠ Предатель' : '✦ Экипажник'}
-            </div>
-            {myRole === 'impostor' && impostorSlots.filter(s => s !== mySlot).length > 0 && (
-              <div style={{
-                marginTop: 20, color: 'rgba(255,130,130,0.8)', fontSize: 13,
-                fontFamily: 'sans-serif', letterSpacing: '0.04em',
+              {/* ВАША РОЛЬ label */}
+              <p style={{
+                fontFamily: "'Fredoka One', sans-serif",
+                fontSize: 12, color: 'rgba(255,255,255,0.4)',
+                letterSpacing: '0.35em', textTransform: 'uppercase',
+                marginBottom: 28,
               }}>
-                {impostorSlots.filter(s => s !== mySlot).length > 1 ? 'Сообщники' : 'Сообщник'}:{' '}
-                {impostorSlots
-                  .filter(s => s !== mySlot)
-                  .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)
-                  .join(', ')}
+                Ваша роль
+              </p>
+
+              {/* Large character sprite */}
+              <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
+                <CharSpriteUI
+                  color={isImp ? 'maroon' : 'teal'}
+                  pose={isImp ? 'mask' : 'idle'}
+                  size={170}
+                />
               </div>
-            )}
+
+              {/* Role name */}
+              <div style={{
+                fontFamily: "'Fredoka One', sans-serif",
+                fontSize: 56, color: accent, letterSpacing: '0.04em',
+                textShadow: outline + glow,
+                marginBottom: 20,
+              }}>
+                {isImp ? 'ПРЕДАТЕЛЬ' : 'ЭКИПАЖНИК'}
+              </div>
+
+              {/* Fellow impostors */}
+              {isImp && impostorSlots.filter(s => s !== mySlot).length > 0 && (
+                <div style={{
+                  fontFamily: "'Fredoka One', sans-serif",
+                  fontSize: 16, color: 'rgba(255,150,150,0.85)',
+                  letterSpacing: '0.06em',
+                }}>
+                  {impostorSlots.filter(s => s !== mySlot).length > 1 ? 'Сообщники' : 'Сообщник'}:{' '}
+                  {impostorSlots
+                    .filter(s => s !== mySlot)
+                    .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)
+                    .join(', ')}
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
