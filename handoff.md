@@ -1445,3 +1445,33 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - All three workflows running and verified. Lobby screens verified via `?mock=lobby-empty` and `?mock=lobby-host`.
+
+---
+
+## Session — Portrait Among Us-style menu redesign
+
+**Goal:** Pixel-perfect Among Us main-menu style adapted for portrait mobile.
+
+### What was done
+- Downloaded reference assets from `github.com/AI0702/Among-Us-clone` into `artifacts/telegram-game/public/au-assets/` (title.png, freeplay.png, kill_icon.png, etc. — available for future use)
+- Full rewrite of `src/pages/lobby.css`:
+  - `.lobby-bg`: dark teal `#1A3330` + subtle diagonal texture
+  - `.au-btn`: flexbox button with `.au-btn-icon` (darker teal, 74px left zone) + `.au-btn-label` (bright teal #3FCFC0, repeating-linear-gradient -55° diagonal stripes, Fredoka One) + thick 3D bottom shadow `0 7px 0 #17857A`
+  - `.au-btn-green` variant for start-game action
+  - `.au-btn-join`: compact teal button for code entry
+  - `.au-btn-ghost`: small muted button for secondary actions
+  - `.au-panel`: semi-transparent dark panel container with thick dark border
+  - `.au-input`: sunken code input (inset box-shadow)
+  - `.au-stepper`: round +/− buttons
+  - Removed `.ag-btn*` classes (replaced entirely)
+- Full rewrite of `src/pages/Lobby.tsx`:
+  - Portrait layout: title centered top, subtitle + chars row below, au-panel below that
+  - Three main teal buttons: СОЗДАТЬ КОМНАТУ, СОЛО vs БОТЫ, ВОЙТИ С КОДОМ
+  - Bot stepper always visible between СОЛО and ВОЙТИ buttons
+  - ВОЙТИ button expands code-input form below it on tap
+  - In-room view: room code card, player list, green "Начать игру" au-btn
+  - All states verified via screenshot at 390×844 (iPhone viewport)
+
+**Left off / next steps**
+- Style the role-reveal and game-over overlays to match this new visual identity (Task #3)
+- Russify task minigames (Task #2)

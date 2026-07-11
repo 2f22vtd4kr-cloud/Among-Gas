@@ -1,110 +1,298 @@
-/* ─── Among Gas UI Styles ─────────────────────────────────────────────────── */
+/* ─── Among Gas — Among Us-accurate portrait-mobile menu ──────────────────── */
 
-/* Background */
+@import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+
+/* ─── Page background ────────────────────────────────────────────────────── */
 .lobby-bg {
-  background: radial-gradient(ellipse at 50% 30%, #1c2a4a 0%, #0d0d1a 60%);
+  background-color: #1A3330;
+  background-image:
+    repeating-linear-gradient(
+      -45deg,
+      transparent 0px, transparent 28px,
+      rgba(0,0,0,0.04) 28px, rgba(0,0,0,0.04) 56px
+    );
+  min-height: 100dvh;
 }
 
-/* ─── Among Gas title text ───────────────────────────────────────────────── */
+/* ─── Title ──────────────────────────────────────────────────────────────── */
 .ag-title {
   font-family: 'Fredoka One', 'Impact', 'Arial Black', sans-serif;
+  font-size: clamp(2.4rem, 9.5vw, 3.2rem);
+  white-space: nowrap;
   font-weight: 900;
-  font-size: clamp(2.4rem, 10vw, 3.6rem);
-  color: #fff;
+  color: #ffffff;
   line-height: 1;
+  letter-spacing: 0.03em;
+  user-select: none;
+  /* Thick black outline in all directions — Among Us logo style */
   text-shadow:
-    -3px -3px 0 #07091a,
-     3px -3px 0 #07091a,
-    -3px  3px 0 #07091a,
-     3px  3px 0 #07091a,
-     0   -3px 0 #07091a,
-     0    3px 0 #07091a,
-    -3px  0   0 #07091a,
-     3px  0   0 #07091a,
-    0 4px 12px rgba(80, 200, 255, 0.18);
-  letter-spacing: 0.02em;
+    -4px -4px 0 #091917,
+     4px -4px 0 #091917,
+    -4px  4px 0 #091917,
+     4px  4px 0 #091917,
+    -4px  0   0 #091917,
+     4px  0   0 #091917,
+     0   -4px 0 #091917,
+     0    4px 0 #091917,
+    -3px -3px 0 #091917,
+     3px -3px 0 #091917,
+    -3px  3px 0 #091917,
+     3px  3px 0 #091917,
+     0 6px 24px rgba(0,0,0,0.6);
+}
+
+/* ─── Menu panel ─────────────────────────────────────────────────────────── */
+.au-panel {
+  background: rgba(0,0,0,0.22);
+  border: 2.5px solid rgba(0,0,0,0.5);
+  border-radius: 12px;
+  padding: 12px;
+  width: 100%;
+}
+
+/* ─── PRIMARY teal menu button (PLAY / СОЗДАТЬ / СОЛО) ───────────────────── */
+.au-btn {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  min-height: 64px;
+  border-radius: 8px;
+  border: 2.5px solid rgba(0,0,0,0.45);
+  /* 3-D bottom edge — the signature Among Us look */
+  box-shadow: 0 7px 0 #17857A, inset 0 1px 0 rgba(255,255,255,0.2);
+  overflow: hidden;
+  cursor: pointer;
+  outline: none;
+  padding: 0;
+  background: none;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
+  -webkit-tap-highlight-color: transparent;
   user-select: none;
 }
 
-/* ─── Buttons (Among Us 3-D pill style) ─────────────────────────────────── */
-.ag-btn {
-  display: block;
-  width: 100%;
-  padding: 14px 24px;
-  border-radius: 40px;
-  font-family: 'Fredoka One', 'Impact', 'Arial Black', sans-serif;
+.au-btn:active:not(:disabled) {
+  transform: translateY(6px);
+  box-shadow: 0 1px 0 #17857A, inset 0 1px 0 rgba(255,255,255,0.2);
+}
+
+.au-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Left icon zone — slightly darker teal */
+.au-btn-icon {
+  width: 74px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #28B8A8;
+  border-right: 2px solid rgba(0,0,0,0.2);
+  padding: 4px;
+}
+
+/* Right label zone — bright teal + diagonal highlight stripes */
+.au-btn-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #3FCFC0;
+  background-image: repeating-linear-gradient(
+    -55deg,
+    transparent 0px,
+    transparent 12px,
+    rgba(255,255,255,0.09) 12px,
+    rgba(255,255,255,0.09) 22px
+  );
+  font-family: 'Fredoka One', 'Arial Black', sans-serif;
+  font-size: 19px;
+  color: white;
+  text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  letter-spacing: 0.07em;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+/* ─── Compact teal button (ВОЙТИ) ────────────────────────────────────────── */
+.au-btn-join {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 20px;
+  min-height: 52px;
+  border-radius: 8px;
+  border: 2.5px solid rgba(0,0,0,0.45);
+  box-shadow: 0 6px 0 #17857A, inset 0 1px 0 rgba(255,255,255,0.2);
+  background: #3FCFC0;
+  font-family: 'Fredoka One', sans-serif;
   font-size: 18px;
-  letter-spacing: 0.04em;
-  color: #fff;
+  color: white;
+  text-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  letter-spacing: 0.08em;
   cursor: pointer;
-  border: none;
   outline: none;
-  user-select: none;
-  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.45), 0 2px 12px rgba(0,0,0,0.3);
-  transition: transform 0.06s ease, box-shadow 0.06s ease;
+  transition: transform 0.08s ease, box-shadow 0.08s ease;
   -webkit-tap-highlight-color: transparent;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+  user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
-.ag-btn:active:not(:disabled) {
-  transform: translateY(4px);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0,0,0,0.2);
+
+.au-btn-join:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 1px 0 #17857A;
 }
-.ag-btn:disabled {
+
+.au-btn-join:disabled {
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.ag-btn-green {
-  background: linear-gradient(180deg, #55c158 0%, #3e9942 100%);
-}
-.ag-btn-green:hover:not(:active):not(:disabled) {
-  background: linear-gradient(180deg, #5fd462 0%, #46a84a 100%);
+/* ─── Green variant (НАЧАТЬ / СОЗДАТЬ when in room) ──────────────────────── */
+.au-btn-green { box-shadow: 0 7px 0 #1A6F20, inset 0 1px 0 rgba(255,255,255,0.2); }
+.au-btn-green .au-btn-icon  { background: #2E9E35; border-right-color: rgba(0,0,0,0.2); }
+.au-btn-green .au-btn-label { background: #42C14B; }
+.au-btn-green:active:not(:disabled) { box-shadow: 0 1px 0 #1A6F20, inset 0 1px 0 rgba(255,255,255,0.2); }
+
+/* ─── Small ghost button (КРЕДИТЫ / DEV TEST) ────────────────────────────── */
+.au-btn-ghost {
+  display: block;
+  background: rgba(0,0,0,0.22);
+  border: 2px solid rgba(0,0,0,0.3);
+  box-shadow: 0 3px 0 rgba(0,0,0,0.35);
+  border-radius: 6px;
+  padding: 7px 22px;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 13px;
+  color: rgba(255,255,255,0.5);
+  letter-spacing: 0.1em;
+  cursor: pointer;
+  outline: none;
+  transition: transform 0.08s, box-shadow 0.08s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
 }
 
-.ag-btn-blue {
-  background: linear-gradient(180deg, #4f72d4 0%, #3658b8 100%);
-}
-.ag-btn-blue:hover:not(:active):not(:disabled) {
-  background: linear-gradient(180deg, #587ee0 0%, #3d61c8 100%);
+.au-btn-ghost:active {
+  transform: translateY(2px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.35);
 }
 
-/* ─── Stepper buttons (+/-) ──────────────────────────────────────────────── */
-.ag-stepper {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
-  border: none;
-  color: #fff;
+/* ─── Room code input ────────────────────────────────────────────────────── */
+.au-input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0,0,0,0.32);
+  border: 2.5px solid rgba(0,0,0,0.5);
+  box-shadow: inset 0 3px 8px rgba(0,0,0,0.35), 0 1px 0 rgba(255,255,255,0.05);
+  border-radius: 8px;
+  padding: 14px 10px;
+  color: white;
+  font-family: 'Fredoka One', monospace;
   font-size: 20px;
+  letter-spacing: 0.28em;
+  text-align: center;
+  text-transform: uppercase;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: border-color 0.15s;
+}
+
+.au-input::placeholder {
+  color: rgba(255,255,255,0.22);
+  letter-spacing: 0.1em;
+  font-size: 13px;
+}
+
+.au-input:focus {
+  border-color: rgba(63,207,192,0.55);
+}
+
+/* ─── Stepper (+/−) ──────────────────────────────────────────────────────── */
+.au-stepper {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+  border: 2px solid rgba(0,0,0,0.3);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.35);
+  color: white;
+  font-size: 22px;
   font-weight: 900;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  user-select: none;
-  transition: background 0.1s, transform 0.06s;
   outline: none;
+  transition: background 0.1s, transform 0.08s, box-shadow 0.08s;
   -webkit-tap-highlight-color: transparent;
-}
-.ag-stepper:active {
-  transform: scale(0.88);
-  background: rgba(255, 255, 255, 0.22);
+  line-height: 1;
 }
 
-/* ─── Gas particle animation ─────────────────────────────────────────────── */
+.au-stepper:active {
+  transform: scale(0.88) translateY(3px);
+  box-shadow: 0 1px 0 rgba(0,0,0,0.35);
+  background: rgba(255,255,255,0.2);
+}
+
+/* ─── Separator ──────────────────────────────────────────────────────────── */
+.au-sep {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'Fredoka One', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: rgba(255,255,255,0.22);
+}
+
+.au-sep::before,
+.au-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: rgba(255,255,255,0.09);
+}
+
+/* ─── Gas particle ───────────────────────────────────────────────────────── */
 @keyframes gasFloat {
-  0%   { transform: translateY(0) translateX(0) scale(1);    opacity: var(--p-opacity); }
-  33%  { transform: translateY(-30vh) translateX(6px) scale(1.15); }
-  66%  { transform: translateY(-55vh) translateX(-4px) scale(0.9); }
-  100% { transform: translateY(-85vh) translateX(2px) scale(0.7); opacity: 0; }
+  0%   { transform: translateY(0) scale(1);       opacity: var(--p-opacity); }
+  50%  { transform: translateY(-44vh) translateX(7px)  scale(1.1); }
+  100% { transform: translateY(-90vh) translateX(-5px) scale(0.65); opacity: 0; }
 }
 
 .gas-particle {
   position: absolute;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(100, 230, 120, 0.55), rgba(40, 160, 60, 0.15));
+  background: radial-gradient(circle, rgba(100,230,120,0.5), rgba(40,160,60,0.12));
   animation: gasFloat var(--p-duration) ease-in infinite;
   animation-delay: var(--p-delay);
   pointer-events: none;
   bottom: -10px;
+}
+
+/* ─── Spinner ────────────────────────────────────────────────────────────── */
+@keyframes au-spin { to { transform: rotate(360deg); } }
+.au-spinner {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 3px solid rgba(63,207,192,0.18);
+  border-top-color: #3FCFC0;
+  animation: au-spin 0.8s linear infinite;
+}
+
+/* ─── Player row ─────────────────────────────────────────────────────────── */
+.au-player-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.07);
 }
