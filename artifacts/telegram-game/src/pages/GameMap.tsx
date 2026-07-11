@@ -53,6 +53,26 @@ import TaskMinigame from '../components/TaskMinigame';
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
 
+// ── Russian translations ───────────────────────────────────────────────────
+const TASK_NAME_RU: Record<string, string> = {
+  'Fix Wiring':             'Починить проводку',
+  'Download Data':          'Скачать данные',
+  'Calibrate Distributor':  'Настроить распределитель',
+  'Empty Garbage':          'Вынести мусор',
+  'Clean Filters':          'Почистить фильтры',
+};
+const SABOTAGE_NAME_RU: Record<string, string> = {
+  'Lights':   'Свет',
+  'O₂':       'O₂',
+  'Reactor':  'Реактор',
+};
+function taskRu(name: string | undefined): string {
+  return (name && TASK_NAME_RU[name]) || name || 'Задание';
+}
+function sabotageRu(name: string | undefined): string {
+  return (name && SABOTAGE_NAME_RU[name]) || name || 'Система';
+}
+
 // ── Camera ────────────────────────────────────────────────────────────────────
 const ZOOM = 0.7;
 const MAX_RENDER_DPR = 1 / ZOOM;
@@ -1053,7 +1073,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(60,140,255,0.35)',
             }}
           >
-            ⚙ {TASK_DEFS[nearestTask.taskId]?.name ?? 'Task'}
+            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name)}
           </button>
         </div>
       )}
@@ -1084,7 +1104,7 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Kill'}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Убить'}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
@@ -1101,7 +1121,7 @@ export default function GameMap() {
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}
             >
-              🛑 Report
+              🛑 Доложить
             </button>
           )}
         </div>
@@ -1127,7 +1147,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : '⚡ Sabotage'}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : '⚡ Саботаж'}
           </button>
         </div>
       )}
@@ -1149,7 +1169,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(255,60,60,0.35)',
             }}
           >
-            🔧 Repair {sabotageDef?.name ?? ''}
+            🔧 Починить {sabotageRu(sabotageDef?.name)}
           </button>
         </div>
       )}
@@ -1164,9 +1184,9 @@ export default function GameMap() {
           letterSpacing: '0.03em', borderRadius: 8,
           border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
         }}>
-          ⚠ {sabotageDef.name} sabotaged — {Math.ceil(sabotageRemainingMs / 1000)}s
+          ⚠ {sabotageRu(sabotageDef.name)} саботирован — {Math.ceil(sabotageRemainingMs / 1000)}с
           {sabotageDef.pads.length > 1 && (
-            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} fixed)</span>
+            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} починено)</span>
           )}
         </div>
       )}
@@ -1186,7 +1206,7 @@ export default function GameMap() {
             fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
             letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Choose a system to sabotage
+            Выберите систему саботажа
           </div>
           {Object.values(SABOTAGE_DEFS).map(def => (
             <button
@@ -1212,7 +1232,7 @@ export default function GameMap() {
               fontFamily: 'sans-serif', fontSize: 12, cursor: 'pointer',
             }}
           >
-            Cancel
+            Отмена
           </button>
         </div>
       )}
@@ -1230,7 +1250,7 @@ export default function GameMap() {
               textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(6px)',
             }}
           >
-            🚨 Emergency
+            🚨 Тревога
           </button>
         </div>
       )}
@@ -1246,8 +1266,8 @@ export default function GameMap() {
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
           {voteResult.ejectedSlot === NO_TARGET
-            ? '🗳️ No one was ejected'
-            : `🗳️ ${playerName(voteResult.ejectedSlot)} was ejected`}
+            ? '🗳️ Никто не исключён'
+            : `🗳️ ${playerName(voteResult.ejectedSlot)} исключён`}
         </div>
       )}
 
@@ -1265,12 +1285,12 @@ export default function GameMap() {
               fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
               letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
             }}>
-              {meeting.bodySlot === NO_TARGET ? 'Emergency Meeting' : 'Body Reported'}
+              {meeting.bodySlot === NO_TARGET ? 'Экстренное собрание' : 'Найдено тело'}
             </div>
             <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
               {meeting.bodySlot === NO_TARGET
-                ? `${playerName(meeting.reporterSlot)} called an emergency meeting`
-                : `${playerName(meeting.reporterSlot)} found ${playerName(meeting.bodySlot)}'s body`}
+                ? `${playerName(meeting.reporterSlot)} вызвал экстренное собрание`
+                : `${playerName(meeting.reporterSlot)} нашёл тело ${playerName(meeting.bodySlot)}`}
             </div>
             <div style={{
               marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
@@ -1282,7 +1302,7 @@ export default function GameMap() {
               fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
               textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
             }}>
-              {inDiscussion ? 'Discussion' : 'Cast your vote'}
+              {inDiscussion ? 'Обсуждение' : 'Голосование'}
             </div>
           </div>
 
@@ -1290,13 +1310,13 @@ export default function GameMap() {
             <div style={{
               color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
             }}>
-              👻 You are dead — spectating
+              👻 Вы мертвы — наблюдаете
             </div>
           )}
 
           {inDiscussion && !amIDead && (
             <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: 'sans-serif' }}>
-              Voting opens once discussion ends
+              Голосование начнётся после обсуждения
             </div>
           )}
 
@@ -1317,7 +1337,7 @@ export default function GameMap() {
                       cursor: hasVoted ? 'default' : 'pointer',
                     }}
                   >
-                    {p.slot === mySlot ? `${p.username} (you)` : p.username}
+                    {p.slot === mySlot ? `${p.username} (вы)` : p.username}
                   </button>
                 ))}
               <button
@@ -1331,11 +1351,11 @@ export default function GameMap() {
                   cursor: hasVoted ? 'default' : 'pointer',
                 }}
               >
-                Skip Vote
+                Пропустить
               </button>
               {hasVoted && (
                 <div style={{ textAlign: 'center', color: 'rgba(150,220,150,0.85)', fontSize: 12, marginTop: 2 }}>
-                  Vote cast — waiting for others…
+                  Голос отдан — ждём других…
                 </div>
               )}
             </div>
@@ -1382,7 +1402,7 @@ export default function GameMap() {
             fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
             letterSpacing: '0.3em', textTransform: 'uppercase', marginBottom: 14,
           }}>
-            Game Over
+            Конец игры
           </div>
           <div style={{
             fontSize: 42, fontWeight: 900, fontFamily: 'sans-serif',
@@ -1392,7 +1412,7 @@ export default function GameMap() {
               ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
               : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
           }}>
-            {voteResult.winner === 'impostors' ? '☠ Impostors Win' : '✦ Crewmates Win'}
+            {voteResult.winner === 'impostors' ? '☠ Предатели победили' : '✦ Экипаж победил'}
           </div>
           <button
             onClick={() => window.location.reload()}
@@ -1403,7 +1423,7 @@ export default function GameMap() {
               fontSize: 13, fontWeight: 600, letterSpacing: '0.04em', cursor: 'pointer',
             }}
           >
-            Back to Lobby
+            В лобби
           </button>
         </div>
       )}
@@ -1418,7 +1438,7 @@ export default function GameMap() {
           letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
-          👻 You are dead — ghost mode
+          👻 Вы мертвы — режим призрака
         </div>
       )}
 
@@ -1440,7 +1460,7 @@ export default function GameMap() {
               fontFamily: 'sans-serif', letterSpacing: '0.3em',
               textTransform: 'uppercase', marginBottom: 16,
             }}>
-              You are
+              Ваша роль
             </div>
             <div style={{
               fontSize: 50, fontWeight: 900, fontFamily: 'sans-serif',
@@ -1450,14 +1470,14 @@ export default function GameMap() {
                 ? '0 0 30px rgba(255,50,50,0.9), 0 0 70px rgba(255,50,50,0.4)'
                 : '0 0 30px rgba(60,160,255,0.9), 0 0 70px rgba(60,160,255,0.4)',
             }}>
-              {myRole === 'impostor' ? '☠ Impostor' : '✦ Crewmate'}
+              {myRole === 'impostor' ? '☠ Предатель' : '✦ Экипажник'}
             </div>
             {myRole === 'impostor' && impostorSlots.filter(s => s !== mySlot).length > 0 && (
               <div style={{
                 marginTop: 20, color: 'rgba(255,130,130,0.8)', fontSize: 13,
                 fontFamily: 'sans-serif', letterSpacing: '0.04em',
               }}>
-                Fellow impostor{impostorSlots.filter(s => s !== mySlot).length > 1 ? 's' : ''}:{' '}
+                {impostorSlots.filter(s => s !== mySlot).length > 1 ? 'Сообщники' : 'Сообщник'}:{' '}
                 {impostorSlots
                   .filter(s => s !== mySlot)
                   .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)

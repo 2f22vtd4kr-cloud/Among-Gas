@@ -1,0 +1,110 @@
+/* ─── Among Gas UI Styles ─────────────────────────────────────────────────── */
+
+/* Background */
+.lobby-bg {
+  background: radial-gradient(ellipse at 50% 30%, #1c2a4a 0%, #0d0d1a 60%);
+}
+
+/* ─── Among Gas title text ───────────────────────────────────────────────── */
+.ag-title {
+  font-family: 'Fredoka One', 'Impact', 'Arial Black', sans-serif;
+  font-weight: 900;
+  font-size: clamp(2.4rem, 10vw, 3.6rem);
+  color: #fff;
+  line-height: 1;
+  text-shadow:
+    -3px -3px 0 #07091a,
+     3px -3px 0 #07091a,
+    -3px  3px 0 #07091a,
+     3px  3px 0 #07091a,
+     0   -3px 0 #07091a,
+     0    3px 0 #07091a,
+    -3px  0   0 #07091a,
+     3px  0   0 #07091a,
+    0 4px 12px rgba(80, 200, 255, 0.18);
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+/* ─── Buttons (Among Us 3-D pill style) ─────────────────────────────────── */
+.ag-btn {
+  display: block;
+  width: 100%;
+  padding: 14px 24px;
+  border-radius: 40px;
+  font-family: 'Fredoka One', 'Impact', 'Arial Black', sans-serif;
+  font-size: 18px;
+  letter-spacing: 0.04em;
+  color: #fff;
+  cursor: pointer;
+  border: none;
+  outline: none;
+  user-select: none;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.45), 0 2px 12px rgba(0,0,0,0.3);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+  -webkit-tap-highlight-color: transparent;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.35);
+}
+.ag-btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45), 0 1px 4px rgba(0,0,0,0.2);
+}
+.ag-btn:disabled {
+  cursor: not-allowed;
+}
+
+.ag-btn-green {
+  background: linear-gradient(180deg, #55c158 0%, #3e9942 100%);
+}
+.ag-btn-green:hover:not(:active):not(:disabled) {
+  background: linear-gradient(180deg, #5fd462 0%, #46a84a 100%);
+}
+
+.ag-btn-blue {
+  background: linear-gradient(180deg, #4f72d4 0%, #3658b8 100%);
+}
+.ag-btn-blue:hover:not(:active):not(:disabled) {
+  background: linear-gradient(180deg, #587ee0 0%, #3d61c8 100%);
+}
+
+/* ─── Stepper buttons (+/-) ──────────────────────────────────────────────── */
+.ag-stepper {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 900;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  transition: background 0.1s, transform 0.06s;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.ag-stepper:active {
+  transform: scale(0.88);
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* ─── Gas particle animation ─────────────────────────────────────────────── */
+@keyframes gasFloat {
+  0%   { transform: translateY(0) translateX(0) scale(1);    opacity: var(--p-opacity); }
+  33%  { transform: translateY(-30vh) translateX(6px) scale(1.15); }
+  66%  { transform: translateY(-55vh) translateX(-4px) scale(0.9); }
+  100% { transform: translateY(-85vh) translateX(2px) scale(0.7); opacity: 0; }
+}
+
+.gas-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(100, 230, 120, 0.55), rgba(40, 160, 60, 0.15));
+  animation: gasFloat var(--p-duration) ease-in infinite;
+  animation-delay: var(--p-delay);
+  pointer-events: none;
+  bottom: -10px;
+}

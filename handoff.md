@@ -1407,3 +1407,41 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - None. All changes typecheck-clean, UI verified, code-reviewed.
+
+---
+
+## Session — Visual Redesign (Among Gas)
+
+**Session goal:** Re-import repair + full Among Gas visual redesign with Russian UI.
+
+### What was done
+
+**Re-import repair:**
+- Artifact registrations and workflows were dropped on import (known issue). Auto-fixed by platform on startup.
+- Ran `pnpm install`, restarted all three workflows.
+
+**Visual redesign (`artifacts/telegram-game`):**
+- `src/pages/Lobby.tsx` — full Among Gas / Among Us-style redesign:
+  - Dark navy background (`lobby-bg`) with animated floating green gas particle bubbles
+  - "Among Gas" title in Fredoka One (chunky, with 8-direction dark text-shadow outline — Among Us logo style)
+  - Balaclava character sprites (teal + maroon, idle pose, size 68) flanking the title
+  - Among Us 3D pill buttons (`.ag-btn-green`, `.ag-btn-blue`): `box-shadow: 0 5px 0 rgba(0,0,0,0.45)`, presses down on `:active`
+  - All UI text in Russian: Создать комнату, Играть соло, Войти, ХОСТ, (вы), Ждём игроков…, etc.
+  - Russian bot-count pluralization: 1 бот / 2–4 бота / 5+ ботов
+- `src/pages/lobby.css` — new CSS file: `.lobby-bg`, `.ag-btn`, `.ag-btn-green`, `.ag-btn-blue`, `.ag-stepper`, `@keyframes gasFloat`, `.gas-particle`
+- `index.html` — updated title to "Among Gas", added Fredoka One Google Font, Russian `lang="ru"`, Russian meta descriptions
+- `src/pages/GameMap.tsx` — full Russian in-game text pass:
+  - Translation maps `TASK_NAME_RU` and `SABOTAGE_NAME_RU` with helper functions `taskRu()` / `sabotageRu()`
+  - All HUD buttons: Убить, Доложить, Саботаж, Починить, Тревога, Отмена
+  - Meeting overlay: Экстренное собрание / Найдено тело, Обсуждение / Голосование, Пропустить, voting messages
+  - Game-over / role-reveal overlays: Конец игры, Предатели победили / Экипаж победил, В лобби, Ваша роль, Предатель / Экипажник, Сообщник
+  - Sabotage banner + repair button using `sabotageRu()` / `taskRu()`
+  - Ghost mode banner, ejection banner, spectating notice
+
+**Left off / next steps**
+- Visual polish: role-reveal and game-over screens would benefit from the same Fredoka One / Among Gas style treatment
+- Task minigame UI (TaskMinigame.tsx) is still in English — labels, buttons, instructions
+- Consider Russifying zone labels on the map canvas (collisionMap `ZONES[].label` strings)
+
+**State to restore**
+- All three workflows running and verified. Lobby screens verified via `?mock=lobby-empty` and `?mock=lobby-host`.
