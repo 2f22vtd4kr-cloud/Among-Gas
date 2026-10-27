@@ -21,7 +21,7 @@ import {
 } from './lobby.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
-import { isSabotageSystemId } from '@workspace/shared/sabotage';
+import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
 import {
   buildCollisionGrid,
@@ -284,6 +284,50 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         return;
       }
 
+      // ── 0x17: Vent actions (C→S) ─────────────────────────────────────────
+      // sub 0x01 enter [0x17, 0x01, ventId]
+      // sub 0x02 travel [0x17, 0x02, ventId]
+      // sub 0x03 exit [0x17, 0x03]
+      if (opcode === 0x17) {
+        if (raw.length < 2) return;
+        const sub = raw.readUInt8(1);
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const slot = lobby.userIdToSlot.get(tgUserId);
+        if (slot === undefined) return;
+
+        if ((sub === 0x01 || sub === 0x02) && raw.length === 3) {
+          const ventId = raw.readUInt8(2);
+          const accepted = sub === 0x01
+            ? lobbyManager.enterVent(lobby, slot, ventId)
+            : lobbyManager.travelVent(lobby, slot, ventId);
+          if (!accepted) logger.debug(`[WS] Rejected vent action sub=${sub} slot=${slot} vent=${ventId}`);
+          return;
+        }
+        if (sub === 0x03 && raw.length === 2) {
+          const accepted = lobbyManager.exitVent(lobby, slot);
+          if (!accepted) logger.debug(`[WS] Rejected vent exit for slot=${slot}`);
+        }
+        return;
+      }
+
+      // ── 0x19: Discussion chat (C→S) ───────────────────────────────────────
+      // [0x19, 0x01, utf8Length(UInt8), utf8Bytes...]; server relays [0x19,0x02,slot,len,text].
+      if (opcode === 0x19) {
+        if (raw.length < 3 || raw.readUInt8(1) !== 0x01) return;
+        const textLength = raw.readUInt8(2);
+        if (textLength === 0 || textLength > 200 || raw.length !== 3 + textLength) return;
+        const text = raw.subarray(3, 3 + textLength).toString('utf8');
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const slot = lobby.userIdToSlot.get(tgUserId);
+        if (slot === undefined) return;
+        lobbyManager.sendMeetingChat(lobby, slot, text);
+        return;
+      }
+
       // ── 0x15: RPC Event ───────────────────────────────────────────────────
       if (opcode === 0x15) {
         if (raw.length < 2) return;
@@ -323,6 +367,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           const triggered = lobbyManager.triggerSabotage(lobby, attackerSlot, systemId);
           if (triggered) {
             lobbyManager.broadcastSabotageStart(lobby, systemId, attackerSlot);
+            if (systemId === SABOTAGE_DOORS) lobbyManager.broadcastDoorLocks(lobby);
             logger.info(`[WS] Sabotage triggered in ${lobby.code}: system=${systemId} by slot=${attackerSlot}`);
           }
           return;
