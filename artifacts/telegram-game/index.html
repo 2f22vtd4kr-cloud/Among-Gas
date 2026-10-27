@@ -2,7 +2,7 @@
 <html lang="ru">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover" />
     <title>Among Gas</title>
     <meta name="description" content="Among Gas — мини-игра в Telegram" />
     <meta name="robots" content="index, follow" />
@@ -19,6 +19,8 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Telegram must define window.Telegram.WebApp before the app bootstraps. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
