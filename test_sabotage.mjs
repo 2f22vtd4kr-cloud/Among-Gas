@@ -13,6 +13,14 @@ function connect(id, username) {
     ws.on('message', (data) => {
       const buf = Buffer.from(data);
       state.msgs.push(buf);
+      // The auth ACK (0x01) only confirms the connection and initializes a
+      // temporary slot value. The authoritative lobby slot arrives later in
+      // [0x10, 0x05, slot] after create/join. Track that packet as well: the
+      // old test left every player's slot at 0 and falsely failed its own
+      // attacker-slot assertion despite a correct server broadcast.
+      if (buf[0] === 0x10 && buf[1] === 0x05 && buf.length >= 3) {
+        state.slot = buf.readUInt8(2);
+      }
       if (buf[0] === 0x01) {
         state.slot = buf.readUInt8(1);
         resolve(state);
