@@ -346,7 +346,130 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   void distance;
 }
 
-// 9. Emergency meetings are single-use per player per round.
+// 9. Living bots can navigate to far custom-map tasks instead of silently stalling at blocked waypoints.
+{
+  const spawn = {
+    x: Math.round(350 * MAP_W / 1040),
+    y: Math.round(150 * MAP_H / 580),
+  };
+  for (const taskId of [2, 10]) {
+    const task = TASK_DEFS.find(def => def.id === taskId)!;
+    const worker = makePlayer(0, 'crewmate', spawn.x, spawn.y);
+    worker.player.assignedTasks = [task.id];
+    const lobby = makeLobby([worker.player]);
+    lobby.totalTaskSteps = task.steps;
+    const manager = new LobbyManager();
+    const bot = new CrewmateBot();
+
+    for (let tick = 0; tick < 400 && lobby.phase !== 'GAMEOVER'; tick++) {
+      bot.roamingTick(lobby, worker.player, manager);
+    }
+    assert.equal(
+      lobby.phase,
+      'GAMEOVER',
+      `living bot must reach ${task.name} from spawn and complete all ${task.steps} step(s)`,
+    );
+    assert.equal(
+      Array.from({ length: task.steps }, (_, step) => lobby.completedTaskSteps.has(`0:${task.id}:${step}`)).every(Boolean),
+      true,
+      `all steps for ${task.name} must be recorded`,
+    );
+    manager.disposeLobby(lobby);
+  }
+}
+
+// 10. Emergency meetings are single-use per player per round.
+{
+  const host = makePlayer(0, 'crewmate', 100, 100);
+  const guest = makePlayer(1, 'crewmate', 130, 100);
+  const lobby = makeLobby([host.player, guest.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), true, 'first emergency call succeeds');
+  assert.equal(host.player.emergencyMeetingUsed, true);
+  assert.ok(host.packets.some(packet => packet[0] === 0x20 && packet[1] === 0x01));
+  const meeting = lobby.meeting!;
+  if (meeting.discussionTimer) clearTimeout(meeting.discussionTimer);
+  if (meeting.votingTimer) clearTimeout(meeting.votingTimer);
+  lobby.meeting = null;
+  lobby.phase = 'ROAMING';
+  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), false, 'second emergency call is rejected');
+  manager.disposeLobby(lobby);
+}
+
+// 11. Task steps are server-authoritative, ordered, assigned, in range and single-use.
+{
+  const task = TASK_DEFS[0]; // two-step Fix Wiring task
+  const player = makePlayer(0, 'crewmate', task.x, task.y);
+  player.player.assignedTasks = [task.id];
+  const lobby = makeLobby([player.player]);
+  lobby.totalTaskSteps = task.steps;
+  const manager = new LobbyManager();
+
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id + 1, 0), false,
+    'a task not assigned to the player must be rejected');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), false,
+    'a later step cannot be completed before the earlier step');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), true,
+    'the first assigned step succeeds in range');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), false,
+    'a completed step cannot be replayed');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), true,
+    'the second step succeeds after the first');
+  assert.equal(lobby.phase, 'GAMEOVER', 'completing all task steps ends the round for crew');
+  manager.disposeLobby(lobby);
+
+  const far = makePlayer(0, 'crewmate', 0, 0);
+  far.player.assignedTasks = [task.id];
+  const farLobby = makeLobby([far.player]);
+  farLobby.totalTaskSteps = task.steps;
+  const farManager = new LobbyManager();
+  assert.equal(farManager.applyTaskStep(farLobby, 0, task.id, 0), false,
+    'task completion outside the interaction range must be rejected');
+  farManager.disposeLobby(farLobby);
+}
+
+// 12. Sabotage trigger and repairs enforce roles, range, pad count and resolution.
+{
+  const pads = SABOTAGE_DEFS[SABOTAGE_O2].pads;
+  assert.equal(pads.length, 2, 'O2 sabotage has two independent repair pads');
+  const impostor = makePlayer(0, 'impostor', 100, 100);
+  const crewA = makePlayer(1, 'crewmate', pads[0].x, pads[0].y);
+  const crewB = makePlayer(2, 'crewmate', pads[1].x, pads[1].y);
+  const farCrew = makePlayer(3, 'crewmate', 0, 0);
+  const lobby = makeLobby([impostor.player, crewA.player, crewB.player, farCrew.player]);
+  const manager = new LobbyManager();
+
+  assert.equal(manager.triggerSabotage(lobby, 1, SABOTAGE_O2), false,
+    'crewmates cannot trigger sabotage');
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_O2), true,
+    'an impostor can trigger O2 sabotage');
+  assert.equal(manager.applyRepair(lobby, 3, SABOTAGE_O2, 0), 'rejected',
+    'repairing from outside the pad range is rejected');
+  assert.equal(manager.applyRepair(lobby, 0, SABOTAGE_O2, 0), 'rejected',
+    'impostors cannot repair sabotage');
+  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_O2, 0), 'progress',
+    'one O2 pad alone does not resolve critical sabotage');
+  assert.notEqual(lobby.sabotage, null);
+  assert.equal(manager.applyRepair(lobby, 2, SABOTAGE_O2, 1), 'fixed',
+    'a different pad repaired within the sync window resolves O2');
+  assert.equal(lobby.sabotage, null, 'resolved sabotage clears its authoritative state');
+
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), false,
+    'the shared sabotage cooldown prevents an immediate second sabotage');
+  lobby.sabotageCooldownMs = 0;
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), true,
+    'the impostor can trigger Lights after cooldown');
+  const lightPad = SABOTAGE_DEFS[SABOTAGE_LIGHTS].pads[0];
+  crewA.player.x = lightPad.x;
+  crewA.player.y = lightPad.y;
+  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_LIGHTS, 0), 'fixed',
+    'Lights is resolved by one valid repair');
+  assert.equal(lobby.sabotage, null);
+  manager.disposeLobby(lobby);
+}
+
+console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, sabotage repairs, chat, corpse drops, emergency meeting, kill)');
+
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const guest = makePlayer(1, 'crewmate', 130, 100);
