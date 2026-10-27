@@ -274,17 +274,17 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(ejected.player.alive, false, 'voted-out crewmate becomes a ghost');
   assert.equal(lobby.phase, 'ROAMING', 'game continues after non-terminal ejection');
   assert.equal(lobby.totalTaskSteps, task.steps, 'ejection does not remove unfinished ghost tasks');
-  assert.equal(manager.handleTaskStep(lobby, 1, task.id, 0), true, 'ejected crewmate can complete ghost task steps');
+  assert.equal(manager.applyTaskStep(lobby, 1, task.id, 0), true, 'ejected crewmate can complete ghost task steps');
   if (task.steps > 1) {
     for (let step = 1; step < task.steps; step++) {
-      assert.equal(manager.handleTaskStep(lobby, 1, task.id, step), true);
+      assert.equal(manager.applyTaskStep(lobby, 1, task.id, step), true);
     }
   }
   assert.equal(lobby.phase, 'GAMEOVER', 'ghost task completion can trigger the crew task-win condition');
   manager.disposeLobby(lobby);
 }
 
-// 6. Emergency meetings are single-use per player per round.
+// 7. Emergency meetings are single-use per player per round.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const guest = makePlayer(1, 'crewmate', 130, 100);
