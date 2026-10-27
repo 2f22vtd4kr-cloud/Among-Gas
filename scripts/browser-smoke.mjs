@@ -41,15 +41,15 @@ try {
   });
   const playerMarker = mapDialog.getByLabel('Ваше местоположение');
   const before = await playerMarker.evaluate(node => ({
-    left: (node as HTMLElement).style.left,
-    top: (node as HTMLElement).style.top,
+    left: node.style.left,
+    top: node.style.top,
   }));
   await page.keyboard.down('ArrowRight');
   await page.waitForTimeout(700);
   await page.keyboard.up('ArrowRight');
   const after = await playerMarker.evaluate(node => ({
-    left: (node as HTMLElement).style.left,
-    top: (node as HTMLElement).style.top,
+    left: node.style.left,
+    top: node.style.top,
   }));
   assert.deepEqual(after, before, 'the player must not move behind the open tactical map');
   await mapDialog.getByRole('button', { name: 'Закрыть карту' }).click();
