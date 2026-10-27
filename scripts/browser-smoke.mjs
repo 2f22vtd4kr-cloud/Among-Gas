@@ -72,7 +72,14 @@ try {
   ];
   for (const viewport of viewportCases) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
-    await page.waitForTimeout(100);
+    // GameMap intentionally debounces iOS/Telegram resize bursts by 150ms.
+    // Wait for its CSS canvas size to catch up instead of sampling mid-resize.
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('canvas');
+      return !!canvas &&
+        canvas.style.width === window.innerWidth + 'px' &&
+        canvas.style.height === window.innerHeight + 'px';
+    }, undefined, { timeout: 2_000 });
     const layout = await page.evaluate(() => {
       const canvas = document.querySelector('canvas');
       if (!canvas) throw new Error('game canvas disappeared after resize');
