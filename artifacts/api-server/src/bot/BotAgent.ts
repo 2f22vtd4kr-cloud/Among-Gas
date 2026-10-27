@@ -9,7 +9,7 @@
  */
 import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, type Grid } from '@workspace/shared/collisionMap';
 import { PLAYER_RADIUS, FEET_OFFSET_Y, MAP_W, MAP_H } from '@workspace/shared/coords';
-import { findPath, PathCache } from '@workspace/shared';
+import { PathCache } from '@workspace/shared';
 import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
