@@ -41,6 +41,14 @@ jobs:
       - name: Typecheck and build API/frontend
         run: pnpm run build
 
+      - name: Archive production Telegram Mini App build for deployment verification
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegram-game-static-build
+          path: artifacts/telegram-game/dist/public/
+          if-no-files-found: error
+          retention-days: 3
+
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
