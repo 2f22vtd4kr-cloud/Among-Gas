@@ -7,7 +7,7 @@
  *
  * Subclasses implement tick() and chooseVote().
  */
-import { buildCollisionGrid, canMoveTo } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, type Grid } from '@workspace/shared/collisionMap';
 import { PLAYER_RADIUS, FEET_OFFSET_Y, MAP_W, MAP_H } from '@workspace/shared/coords';
 import { findPath, PathCache } from '@workspace/shared';
 import type { Point } from '@workspace/shared';
@@ -19,6 +19,92 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
+
+/**
+ * Pathfinding uses grid cells, while live movement validates the character's
+ * actual collision radius. Trace a clearance-aware navigation grid so A*
+ * doesn't repeatedly send bots to cell-centres the real collision check
+ * rejects (the old failure mode left a bot stationary forever at a task).
+ */
+function buildNavigationGrid(collision: Grid): Grid {
+  const result = new Uint8Array(collision.length);
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const index = row * COLS + col;
+      if (collision[index] !== 0) {
+        result[index] = 1;
+        continue;
+      }
+      const x = (col + 0.5) * CELL_X;
+      const y = (row + 0.5) * CELL_Y;
+      result[index] = canMoveTo(collision, x, y, PLAYER_RADIUS) ? 0 : 1;
+    }
+  }
+  return result;
+}
+
+const navigationGrid = buildNavigationGrid(grid);
+
+/** Precompute the walkable component connected to the real spawn point. */
+function buildSpawnReachability(): Uint8Array {
+  const reachable = new Uint8Array(COLS * ROWS);
+  const startCol = Math.floor(SPAWN_X / CELL_X);
+  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / CELL_Y);
+  if (startCol < 0 || startCol >= COLS || startRow < 0 || startRow >= ROWS) return reachable;
+  const startIndex = startRow * COLS + startCol;
+  if (navigationGrid[startIndex] !== 0) return reachable;
+
+  const queue = [startIndex];
+  reachable[startIndex] = 1;
+  const directions: readonly [number, number, boolean][] = [
+    [0, -1, false], [0, 1, false], [-1, 0, false], [1, 0, false],
+    [-1, -1, true], [-1, 1, true], [1, -1, true], [1, 1, true],
+  ];
+  for (let head = 0; head < queue.length; head++) {
+    const index = queue[head];
+    const row = Math.floor(index / COLS);
+    const col = index - row * COLS;
+    for (const [dc, dr, diagonal] of directions) {
+      const nextCol = col + dc;
+      const nextRow = row + dr;
+      if (nextCol < 0 || nextCol >= COLS || nextRow < 0 || nextRow >= ROWS) continue;
+      const nextIndex = nextRow * COLS + nextCol;
+      if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
+      if (diagonal) {
+        if (navigationGrid[row * COLS + nextCol] !== 0 ||
+            navigationGrid[nextRow * COLS + col] !== 0) continue;
+      }
+      reachable[nextIndex] = 1;
+      queue.push(nextIndex);
+    }
+  }
+  return reachable;
+}
+
+const spawnReachability = buildSpawnReachability();
+
+function isSpawnReachable(feetX: number, feetY: number): boolean {
+  const col = Math.floor(feetX / CELL_X);
+  const row = Math.floor(feetY / CELL_Y);
+  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
+  return spawnReachability[row * COLS + col] === 1;
+}
+
+/** Ensure a candidate movement segment stays clear, not just its endpoint. */
+function canTraverse(from: Point, to: Point): boolean {
+  const distance = Math.hypot(to.x - from.x, to.y - from.y);
+  const samples = Math.max(1, Math.ceil(distance / 8));
+  for (let i = 1; i <= samples; i++) {
+    const t = i / samples;
+    if (!canMoveTo(
+      grid,
+      from.x + (to.x - from.x) * t,
+      from.y + (to.y - from.y) * t,
+      PLAYER_RADIUS,
+    )) return false;
+  }
+  return true;
+}
 
 /** Pixel distance per 200ms tick ≈ 400px/s — a comfortable walking pace. */
 export const BOT_SPEED_PX = 80;
@@ -98,31 +184,60 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const result = this.pathCache.find(grid, feetStart, feetGoal);
-    if (!result || result.waypoints.length === 0) return false;
+    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal);
+    const waypoint = result?.waypoints[0] ?? feetGoal;
+    const dx = waypoint.x - feetStart.x;
+    const dy = waypoint.y - feetStart.y;
+    const distance = Math.hypot(dx, dy);
+    const step = Math.min(BOT_SPEED_PX, distance);
+    const direct = distance > 0
+      ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
+      : feetGoal;
 
-    const wp = result.waypoints[0];
-    const dx = wp.x - feetStart.x;
-    const dy = wp.y - feetStart.y;
-    const dist = Math.hypot(dx, dy);
-
-    let nx: number;
-    let nyFeet: number;
-    if (dist <= BOT_SPEED_PX) {
-      nx = wp.x;
-      nyFeet = wp.y;
-    } else {
-      const t = BOT_SPEED_PX / dist;
-      nx = feetStart.x + dx * t;
-      nyFeet = feetStart.y + dy * t;
+    let next: Point | null = canTraverse(feetStart, direct) ? direct : null;
+    if (next === null) {
+      // A smoothed waypoint may still be unsafe near a thin wall or corner.
+      // Probe short, collision-safe detours rather than caching the rejected
+      // waypoint forever. The next tick will run A* from the new cell.
+      const baseAngle = Math.atan2(dyGoal, dxGoal);
+      const angleOffsets = [
+        0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
+        3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
+        5 * Math.PI / 8, -5 * Math.PI / 8, 3 * Math.PI / 4, -3 * Math.PI / 4,
+        7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
+      ];
+      const stepLengths = [
+        Math.min(BOT_SPEED_PX, Math.hypot(dxGoal, dyGoal)),
+        BOT_SPEED_PX * 0.75, BOT_SPEED_PX * 0.5, BOT_SPEED_PX * 0.25, 8,
+      ];
+      let bestScore = -Infinity;
+      for (const length of stepLengths) {
+        for (const offset of angleOffsets) {
+          const angle = baseAngle + offset;
+          const candidate = {
+            x: feetStart.x + Math.cos(angle) * length,
+            y: feetStart.y + Math.sin(angle) * length,
+          };
+          if (!canTraverse(feetStart, candidate)) continue;
+          const remaining = Math.hypot(feetGoal.x - candidate.x, feetGoal.y - candidate.y);
+          const progress = Math.hypot(feetGoal.x - feetStart.x, feetGoal.y - feetStart.y) - remaining;
+          // Prefer progress, with a small penalty for wide detours and tiny steps.
+          const score = progress - Math.abs(offset) * 2 - (BOT_SPEED_PX - length) * 0.05;
+          if (score > bestScore) {
+            bestScore = score;
+            next = candidate;
+          }
+        }
+        if (next !== null && bestScore > 0) break;
+      }
+      // A blocked path must not stay cached against the same start cell.
+      this.pathCache.clear();
     }
 
-    // Collision-validate the step in the same feet-space the path was found in.
-    if (canMoveTo(grid, nx, nyFeet, PLAYER_RADIUS)) {
-      self.x = nx;
-      self.y = nyFeet - FEET_OFFSET_Y;
+    if (next !== null) {
+      self.x = next.x;
+      self.y = next.y - FEET_OFFSET_Y;
     }
-
     return false;
   }
 
@@ -134,15 +249,18 @@ export abstract class BotAgent {
     this.pathCache.clear();
   }
 
-  /** Pick a random walkable pixel position on the map. */
+  /** Pick a random walkable position in the spawn-connected component. */
   protected randomWalkablePoint(): Point {
     for (let i = 0; i < 100; i++) {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
-      if (canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS)) return { x, y };
+      if (
+        canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS) &&
+        isSpawnReachable(x, y + FEET_OFFSET_Y)
+      ) return { x, y };
     }
-    // Fallback: map centre
-    return { x: MAP_W / 2, y: MAP_H / 2 };
+    // Spawn is verified walkable; it is safer than a potentially disconnected map centre.
+    return { x: SPAWN_X, y: SPAWN_Y };
   }
 
   /**
@@ -173,11 +291,7 @@ export abstract class BotAgent {
 
     const reachable = (p: Point): boolean =>
       canMoveTo(grid, p.x, p.y + FEET_OFFSET_Y, PLAYER_RADIUS) &&
-      findPath(
-        grid,
-        { x: SPAWN_X, y: SPAWN_Y + FEET_OFFSET_Y },
-        { x: p.x, y: p.y + FEET_OFFSET_Y },
-      ) !== null;
+      isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
 
     let result = target;
     if (!reachable(target)) {
