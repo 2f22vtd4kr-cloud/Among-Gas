@@ -80,7 +80,7 @@ export const SABOTAGE_INTERACTION_RANGE_PX = Math.round(55 * _sx);
 
 /** Countdown before impostors win outright if a sabotage is not fixed in time (GAME_SPEC.md §10). */
 /** Critical sabotage countdown: failing O₂/reactor gives impostors the win. */
-export const SABOTAGE_COUNTDOWN_MS = 30_000;
+export const SABOTAGE_COUNTDOWN_MS = 45_000;
 /** Non-critical systems self-clear if ignored. */
 export const SABOTAGE_SAFETY_MS = 60_000;
 /** Doors are a short temporary disruption, not an instant-win condition. */
