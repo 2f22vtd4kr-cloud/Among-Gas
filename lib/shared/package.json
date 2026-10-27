@@ -45,6 +45,12 @@
       "workspace": "./src/vents.ts",
       "import": "./src/vents.ts",
       "default": "./src/vents.ts"
+    },
+    "./adminTable": {
+      "types": "./dist/adminTable.d.ts",
+      "workspace": "./src/adminTable.ts",
+      "import": "./src/adminTable.ts",
+      "default": "./src/adminTable.ts"
     }
   }
 }
