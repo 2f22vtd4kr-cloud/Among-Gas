@@ -8,7 +8,8 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "simulate": "LOG_LEVEL=silent tsx src/sim/cli.ts"
+    "simulate": "LOG_LEVEL=silent tsx src/sim/cli.ts",
+    "test:gameplay": "tsx src/test_gameplay_invariants.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
