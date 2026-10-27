@@ -55,6 +55,27 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Verify live WebSocket lobby, role assignment, and sabotage authorization
+        run: |
+          set -euo pipefail
+          PORT=8080 NODE_ENV=development node --enable-source-maps artifacts/api-server/dist/index.mjs >/tmp/among-gas-api.log 2>&1 &
+          api_pid=$!
+          cleanup() {
+            kill "$api_pid" 2>/dev/null || true
+            wait "$api_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:8080/api/healthz" >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then cat /tmp/among-gas-api.log; exit 1; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:8080/api/healthz" >/dev/null || {
+            cat /tmp/among-gas-api.log
+            exit 1
+          }
+          node test_sabotage.mjs
+
       - name: Prepare Playwright for mobile browser smoke tests
         run: npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
 
