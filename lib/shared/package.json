@@ -4,12 +4,47 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./coords": "./src/coords.ts",
-    "./collisionMap": "./src/collisionMap.ts",
-    "./collisionData": "./src/collisionData.ts",
-    "./tasks": "./src/tasks.ts",
-    "./sabotage": "./src/sabotage.ts",
-    "./vents": "./src/vents.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "workspace": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    },
+    "./coords": {
+      "types": "./dist/coords.d.ts",
+      "workspace": "./src/coords.ts",
+      "import": "./src/coords.ts",
+      "default": "./src/coords.ts"
+    },
+    "./collisionMap": {
+      "types": "./dist/collisionMap.d.ts",
+      "workspace": "./src/collisionMap.ts",
+      "import": "./src/collisionMap.ts",
+      "default": "./src/collisionMap.ts"
+    },
+    "./collisionData": {
+      "types": "./dist/collisionData.d.ts",
+      "workspace": "./src/collisionData.ts",
+      "import": "./src/collisionData.ts",
+      "default": "./src/collisionData.ts"
+    },
+    "./tasks": {
+      "types": "./dist/tasks.d.ts",
+      "workspace": "./src/tasks.ts",
+      "import": "./src/tasks.ts",
+      "default": "./src/tasks.ts"
+    },
+    "./sabotage": {
+      "types": "./dist/sabotage.d.ts",
+      "workspace": "./src/sabotage.ts",
+      "import": "./src/sabotage.ts",
+      "default": "./src/sabotage.ts"
+    },
+    "./vents": {
+      "types": "./dist/vents.d.ts",
+      "workspace": "./src/vents.ts",
+      "import": "./src/vents.ts",
+      "default": "./src/vents.ts"
+    }
   }
 }
