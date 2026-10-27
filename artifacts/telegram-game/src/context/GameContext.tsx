@@ -131,6 +131,8 @@ export interface GameState {
   myVentId: number | null;
   /** Messages received during the current discussion phase. */
   meetingMessages: MeetingChatMessage[];
+  /** True after the server confirms this player's one emergency call this round. */
+  emergencyMeetingUsed: boolean;
 }
 
 export interface GameActions {
@@ -186,6 +188,7 @@ const DEFAULT_STATE: GameState = {
   sabotageCooldownMs: 0,
   myVentId: null,
   meetingMessages: [],
+  emergencyMeetingUsed: false,
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -814,6 +817,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           sabotageCooldownMs: 0,
           myVentId: null,
           meetingMessages: [],
+          emergencyMeetingUsed: false,
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
@@ -923,6 +927,14 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        return;
+      }
+
+      // ── 0x20: emergency-use confirmation, targeted to the caller ─────────
+      // [0x20, 0x01, playerSlot].
+      if (opcode === 0x20 && event.data.byteLength >= 3 &&
+          view.getUint8(1) === 0x01 && view.getUint8(2) === mySlotRef.current) {
+        setState(s => ({ ...s, emergencyMeetingUsed: true }));
         return;
       }
 
