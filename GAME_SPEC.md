@@ -1,7 +1,7 @@
 # Among Us Telegram Mini App — Master Technical Specification
 
 > **Single source of truth.** Every implementation session must read this file before writing code.
-> Last updated: 2026-07-10
+> Last updated: 2026-10-27
 >
 > **Context note:** This spec was written *after* a 2D map, sprite renderer, collision system, and local
 > player movement were already built. Those systems are in `artifacts/telegram-game/src/`. The
@@ -30,25 +30,35 @@
 
 ## 1. Current State of the Codebase
 
-### What is already built
+### Implemented in the canonical Among Gas repository
+
 | System | Location | Status |
 |---|---|---|
-| 2D map renderer (4956×2856px) | `artifacts/telegram-game/src/pages/GameMap.tsx` | ✅ Done |
-| Pixel-accurate collision map (RLE) | `artifacts/telegram-game/src/game/collisionData.ts` + `collisionMap.ts` | ✅ Done |
-| Local player movement (WASD + joystick) | `artifacts/telegram-game/src/game/player.ts` + `components/Joystick.tsx` | ✅ Done |
-| Sprite animation (9 poses, 3 characters) | `artifacts/telegram-game/src/game/characterSprites.ts` | ✅ Done |
-| Canvas shadow / blur rendering | `GameMap.tsx` | ✅ Done |
-| Collision editor (dev tool) | `artifacts/telegram-game/src/pages/CollisionEditor.tsx` | ✅ Done |
-| Express API server | `artifacts/api-server/src/` | ✅ Bare (healthz only) |
-| PostgreSQL + Drizzle ORM setup | `lib/db/` | ✅ Schema empty |
-| OpenAPI spec + codegen pipeline | `lib/api-spec/` | ✅ Healthz only |
+| Custom Among Gas map renderer (3224×1858px) | `artifacts/telegram-game/src/pages/GameMap.tsx` | ✅ Implemented; original map retained |
+| Collision grid and walkable-interaction checks | `lib/shared/src/collisionData.ts`, `collisionMap.ts` | ✅ Shared by client/server; geometry smoke tests |
+| Balaclava player models and animation | `artifacts/telegram-game/src/game/characterSprites.ts` | ✅ Retained; never replace with reference-clone models |
+| Desktop movement and mobile touch joystick | `GameMap.tsx`, `components/Joystick.tsx` | ✅ Implemented |
+| Telegram WebApp bootstrap and safe-area layout | `artifacts/telegram-game/index.html`, `src/main.tsx` | ✅ SDK loaded before React; viewport-fit=cover |
+| Production Telegram identity | `GameContext.tsx`, API WebSocket auth | ✅ Production rejects missing initData; development mock is non-production only |
+| Multiplayer lobbies, role assignment and authoritative movement | `artifacts/api-server/src/ws/` | ✅ WebSocket implementation; server validates interactions |
+| Solo mode with AI players | `GameContext.tsx`, `artifacts/api-server/src/bot/` | ✅ Solo lobby and bot behaviors are implemented |
+| Impostor kills, cooldown, ghost movement and win checks | `lobby.ts`, `GameMap.tsx` | ✅ Server-authoritative; 15-second default cooldown |
+| Persistent dropped corpses and body reporting | `lobby.ts`, `GameContext.tsx`, `GameMap.tsx` | ✅ Corpse position is separate from the moving ghost |
+| Meetings, emergency calls, chat and voting | `lobby.ts`, WebSocket protocol, `GameMap.tsx` | ✅ Includes one emergency call per player per round |
+| Tasks and interactive minigames | `lib/shared/src/tasks.ts`, `TaskMinigame.tsx` | ✅ 11 task definitions; every assigned task ID has a playable handler |
+| Vents | `lib/shared/src/vents.ts`, `lobby.ts`, `GameMap.tsx` | ✅ Six map-specific, connected vents; role/range/adjacency validated server-side |
+| Sabotage | `lib/shared/src/sabotage.ts`, `lobby.ts`, `GameMap.tsx` | ✅ Lights, O₂, Reactor, Comms and Doors; critical/non-critical timeouts differ |
+| Admin Table | `lib/shared/src/adminTable.ts`, `GameMap.tsx` | ✅ Custom-map interaction point and live room-count view |
+| Task mini-map | `GameMap.tsx` | ✅ Responsive overlay shows current position and outstanding assigned tasks |
+| Continuous verification | `.github/workflows/ci.yml`, `scripts/verify-map-mechanics.mjs`, server gameplay invariants and simulation harness | ✅ CI covers geometry, typecheck/build, server invariants and six headless multiplayer simulations |
 
-### What is NOT yet built
-- WebSocket server (no real-time at all)
-- Telegram SDK integration
-- Multiplayer: lobbies, player slots, delta sync
-- Roles, kill mechanics, tasks, sabotages
-- Vision / fog-of-war system
+### Release checks that still require a real deployment/device
+
+- A real Telegram WebView launch on iOS/Android has not been manually exercised from this environment. CI can verify the bundle and server protocol, but cannot prove behavior inside a live Telegram client.
+- Production launch requires HTTPS hosting and valid Telegram bot/auth secrets; credentials and deployed hosting were not changed by these source edits.
+- The latest CI run must be green after the newest UI and verifier changes before claiming the current tip is clean.
+
+The established `AmongGas` repository was used as a reference for mechanics and task behavior only. Its map and player art are not canonical for this project and must not replace Among Gas assets.
 
 ---
 
@@ -127,7 +137,7 @@ const x = view.getInt16(1, true); // true = little-endian
 ### Problem with the raw spec
 The original spec encodes coordinates as `Math.round(x * 100)` packed into Int16LE.
 Int16 range: –32,768 to +32,767.
-Our map is **4956×2856 pixels**. At ×100 scale: 495,600 — overflows Int16 catastrophically.
+Our map is **3224×1858 pixels**. At ×100 scale: 495,600 — overflows Int16 catastrophically.
 
 ### Solution: Normalize to 0–32000 range
 
@@ -145,14 +155,14 @@ pixelY = (wireY / 32000) * MAP_H
 ```
 
 - 32000 fits safely in Int16 (max 32767), leaving headroom.
-- Resolution: 4956 / 32000 ≈ 0.155 px/unit — sub-pixel precision, more than enough.
+- Resolution: 3224 / 32000 ≈ 0.155 px/unit — sub-pixel precision, more than enough.
 
 ### Constants (define once, import everywhere)
 ```typescript
 // lib/shared/coords.ts  (new shared package)
 export const WIRE_SCALE = 32000;
-export const MAP_W = 4956;
-export const MAP_H = 2856;
+export const MAP_W = 3224;
+export const MAP_H = 1858;
 
 export function toWire(px: number, mapDim: number): number {
   return Math.round((px / mapDim) * WIRE_SCALE);
@@ -405,13 +415,13 @@ function validateKill(attacker: Player, victim: Player, maxKillRangeWire: number
 }
 ```
 
-`maxKillRangeWire`: calibrate to ~1.5 map tiles. With wire scale 32000 and MAP_W 4956, one
+`maxKillRangeWire`: calibrate to ~1.5 map tiles. With wire scale 32000 and MAP_W 3224, one
 tile ≈ 10px ≈ 65 wire units. Kill range ≈ 1.5 tiles → 97 wire units.
 
 ### Kill cooldown
-- Default: 25 seconds.
+- Default: 15 seconds, matching the established AmongGas clone.
 - Tracked server-side (`killCooldownMs` decremented each server tick).
-- Host can configure before game start (15s / 25s / 45s).
+- Host-configurable cooldown options are not part of the current Among Gas settings UI.
 
 ### After kill broadcast
 All players in lobby receive `[0x15, 0x01, victimSlot]`.
@@ -437,7 +447,7 @@ All players in lobby receive `[0x15, 0x01, victimSlot]`.
 ### Sabotage state machine
 ```
 [Normal] ──► Impostor sends 0x15 sub 0x04 ──► [SABOTAGE ACTIVE]
-                                                     │ 30s countdown
+                                                     │ O₂/Reactor: 45s critical deadline
                                               ┌──────┴──────┐
                                          [Fixed]        [Countdown = 0]
                                               │                │
@@ -445,11 +455,13 @@ All players in lobby receive `[0x15, 0x01, victimSlot]`.
 ```
 
 ### Sabotage system IDs
-| ID | System | Fix condition |
+| ID | System | Fix / expiry behavior |
 |---|---|---|
-| `0x01` | Lights | Any crewmate interacts with electrical panel |
-| `0x02` | O₂ | Two crewmates interact with two separate pads |
-| `0x03` | Reactor | Two crewmates hold two separate pads simultaneously |
+| `0x01` | Lights | One crewmate repairs the electrical panel; timeout restores lights |
+| `0x02` | O₂ | Two distinct repair pads are fixed within the sync window; critical 45s deadline |
+| `0x03` | Reactor | Two distinct repair pads are fixed within the sync window; critical 45s deadline |
+| `0x04` | Comms | Interrupts task use; auto-restores after 60s if ignored |
+| `0x05` | Doors | Temporarily locks selected task consoles; auto-restores after 15s |
 
 **Meeting block:** When any sabotage is active, server rejects all 0x13 (report/emergency) frames.
 Players must fix the sabotage first.
@@ -592,7 +604,7 @@ This section documents issues in the source spec documents that are corrected in
 
 | # | Raw Spec Issue | Fix Applied |
 |---|---|---|
-| 1 | `x * 100` packed as Int16LE overflows for our 4956px map | Wire normalize to 0–32000 range (§4) |
+| 1 | `x * 100` packed as Int16LE overflows for our 3224px map | Wire normalize to 0–32000 range (§4) |
 | 2 | Standalone `WebSocketServer({ port: 8080 })` conflicts with Express on 8080 | Upgrade from same HTTP server via `{ server: httpServer }` option |
 | 3 | Opcode `0x01` (Handshake OK) reused inside CREATE lobby handler | Lobby responses use `0x10 sub 0x03/0x04`; `0x01` reserved for auth only |
 | 4 | `new DataView(data.buffer)` on Node.js Buffer has pooled memory bug | Server uses Buffer methods only (`readUint8`, `readInt16LE`); DataView on client only |
@@ -604,8 +616,8 @@ This section documents issues in the source spec documents that are corrected in
 | 10 | Spec's "HTML5 client.js" describes a blank canvas | Our existing React/Canvas engine replaces it; canvas layers formalized in §11 |
 | 11 | No spec for `EJECTION` → vision spec during meetings | Meeting block: camera zooms to table, movement disabled, voting UI shown |
 | 12 | `handleGameStart` stub — no actual role shuffle | Full role assignment with information asymmetry in §8 |
-| 13 | Spec assumes a static "body" prop placed on the map at the kill location | Not implemented (no dedicated body prop/asset); Report instead scans nearby dead players' last known slot within `REPORT_RANGE_PX` and reports that slot directly. Functionally equivalent (same 0x13 payload, same server validation) but there is no persistent visual corpse on the map — a dead player's own sprite becomes the reportable "body" until reported. |
-| 14 | Spec ties the Emergency button to a physical map prop (e.g. a table/button object) | Implemented as an always-available UI button for any alive player once `ROAMING`, with no map-position requirement. Server-side validation is unaffected (`bodySlot = NO_TARGET`); this only changes the client affordance, trading a map prop for simpler/faster access on mobile. |
+| 13 | Spec assumed no dedicated body asset was available | The server broadcasts a separate immutable corpse position (`0x21`); living players see the dropped body while the dead player's ghost moves independently. Reporting uses that stored corpse location. |
+| 14 | Spec ties the Emergency button to a physical map prop (e.g. a table/button object) | Implemented as a touch-friendly UI action available to living players while roaming, with one use per player per round enforced by the server. No exact physical button interaction is required. |
 | 15 | §3's opcode matrix has no S→C broadcast opcode for sabotage state (only the §10 RPC sub-codes `0x15` sub `0x04`/`0x05` cover the C→S trigger/repair requests) | Added opcode `0x16` "Sabotage Control" (S→C only): sub `0x01` Started `[0x16,0x01,systemId,attackerSlot]`, sub `0x02` Pad Fixed `[0x16,0x02,systemId,padId]`, sub `0x03` Fixed `[0x16,0x03,systemId]`. Same style of undocumented wire extension as opcode `0x1D` (Phase 7 task assignment, S→C only, also missing from §3 — noted here retroactively since it was never previously recorded). |
 | 16 | §10 describes O₂/Reactor as requiring two crewmates to "hold" two pads "simultaneously" | Repairs are discrete one-shot RPCs (`0x15` sub `0x05`), not a continuous hold, so there is no server concept of two clients holding at once. Implemented as: two *different* pads each fixed within a rolling `SABOTAGE_PAD_SYNC_WINDOW_MS` (10s) window of each other count as simultaneous. A lone crewmate repeatedly hitting the same pad never resolves it — a second crewmate on the other pad is still required. |
 | 17 | §10 says "Server broadcasts vision change to all clients via dedicated update" for the Lights effect | No separate vision-change opcode was added. The client already knows the active sabotage's `systemId` from the `0x16` sub `0x01` broadcast, so a crewmate client renders the fog-of-war locally whenever `systemId === SABOTAGE_LIGHTS`, with no extra packet. Functionally equivalent (same trigger, same crewmate-only effect) but saves a wire message. |
