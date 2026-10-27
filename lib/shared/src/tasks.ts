@@ -12,7 +12,10 @@ export type TaskZone =
   | 'tech_room_ne'
   | 'industrial'
   | 'gas_station'
-  | 'lobby';
+  | 'lobby'
+  | 'garage_nw'
+  | 'office_e'
+  | 'park';
 
 export interface TaskDef {
   readonly id: number;
@@ -34,11 +37,21 @@ const ref = (rx: number, ry: number) => ({ x: Math.round(rx * _sx), y: Math.roun
  * console for each task, referenced from the 1040×580 layout grid.
  */
 export const TASK_DEFS: readonly TaskDef[] = [
-  { id: 0, name: 'Fix Wiring',            zone: 'electrical',   steps: 2, ...ref(820, 510) },
-  { id: 1, name: 'Download Data',          zone: 'tech_room_ne', steps: 1, ...ref(760,  80) },
-  { id: 2, name: 'Calibrate Distributor',  zone: 'industrial',   steps: 2, ...ref(130, 280) },
-  { id: 3, name: 'Empty Garbage',          zone: 'gas_station',  steps: 1, ...ref(130, 455) },
-  { id: 4, name: 'Clean Filters',          zone: 'lobby',        steps: 2, ...ref(395, 185) },
+  // Existing Among Gas tasks, moved onto verified walkable points on the custom map.
+  { id: 0,  name: 'Fix Wiring',            zone: 'electrical',   steps: 2, ...ref(815, 479) },
+  { id: 1,  name: 'Download Data',          zone: 'tech_room_ne', steps: 1, ...ref(755,  89) },
+  { id: 2,  name: 'Calibrate Distributor',  zone: 'industrial',   steps: 2, ...ref(125, 279) },
+  { id: 3,  name: 'Empty Garbage',          zone: 'gas_station',  steps: 1, ...ref(125, 449) },
+  { id: 4,  name: 'Clean Filters',          zone: 'lobby',        steps: 2, ...ref(375, 189) },
+
+  // Base-game task types ported to Among Gas: custom-map locations, original
+  // balaclava characters and map artwork remain untouched.
+  { id: 5,  name: 'Stabilize Navigation',   zone: 'lobby',        steps: 1, ...ref(675, 179) },
+  { id: 6,  name: 'Reboot WiFi',            zone: 'office_e',     steps: 2, ...ref(915, 259) },
+  { id: 7,  name: 'Fuel Engine',            zone: 'garage_nw',    steps: 2, ...ref(175,  99) },
+  { id: 8,  name: 'Start Reactor',          zone: 'industrial',   steps: 1, ...ref(45,  209) },
+  { id: 9,  name: 'Align Engine',           zone: 'industrial',   steps: 2, ...ref(245, 239) },
+  { id: 10, name: 'Clear Asteroids',        zone: 'park',         steps: 1, ...ref(685, 439) },
 ] as const;
 
 export const TASK_COUNT = TASK_DEFS.length;
