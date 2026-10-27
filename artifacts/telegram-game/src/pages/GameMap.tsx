@@ -1556,11 +1556,13 @@ export default function GameMap() {
             </div>
           )}
 
-          {inDiscussion && !amIDead && (
+          {!amIDead && (
             <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
-                Голосование начнётся после обсуждения
-              </div>
+              {inDiscussion && (
+                <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
+                  Голосование начнётся после обсуждения
+                </div>
+              )}
               <div aria-live="polite" style={{
                 display: 'flex', flexDirection: 'column', gap: 5, padding: 10,
                 height: 150, overflowY: 'auto', borderRadius: 10,
