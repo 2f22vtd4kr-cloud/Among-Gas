@@ -32,12 +32,21 @@ import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@works
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
-  SABOTAGE_COUNTDOWN_MS,
   SABOTAGE_COOLDOWN_MS,
   SABOTAGE_PAD_SYNC_WINDOW_MS,
+  SABOTAGE_COMMS,
+  SABOTAGE_DOORS,
+  getSabotageTimeoutMs,
+  isCriticalSabotage,
   isSabotageSystemId,
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
+import {
+  VENT_DEFS,
+  VENT_INTERACTION_RANGE_PX,
+  canTravelVent,
+  findVent,
+} from '@workspace/shared/vents';
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -119,6 +128,10 @@ export interface LobbyPlayer {
   killCooldownMs: number;
   /** Task IDs assigned to this player at game start (empty for impostors). */
   assignedTasks: number[];
+  /** True while the impostor is hidden inside a vent. */
+  inVent?: boolean;
+  /** Current vent ID while inVent is true. */
+  ventId?: number;
   /** True for server-side synthetic bot slots (no real WS connection). */
   isBot?: true;
   /** Bot AI agent — present only when isBot is true. */
@@ -152,6 +165,8 @@ export interface SabotageState {
   systemId: SabotageSystemId;
   startedAtMs: number;
   padFixedAt: Map<number, number>;
+  /** Randomly selected task IDs affected by the Doors sabotage. */
+  lockedTaskIds: number[];
   timeoutTimer: ReturnType<typeof setTimeout>;
 }
 
@@ -385,6 +400,8 @@ export class LobbyManager {
 
   /** Optional sink for LobbyEvent — set only by the headless simulation runner. */
   private _eventListener: ((event: LobbyEvent) => void) | null = null;
+  /** Per-user rate limit for meeting chat, matching the base clone's 500ms cap. */
+  private _chatLastSentAt = new Map<number, number>();
 
   /** Install (or clear, with null) a listener for structured lifecycle events. */
   setEventListener(fn: ((event: LobbyEvent) => void) | null): void {
@@ -551,6 +568,100 @@ export class LobbyManager {
     return result;
   }
 
+  /** Enter a vent after validating role, range, phase and vent ID server-side. */
+  enterVent(lobby: Lobby, playerSlot: number, ventId: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+    const player = lobby.players.get(playerSlot);
+    const vent = findVent(ventId);
+    if (!player || !player.alive || player.role !== 'impostor' || player.inVent || !vent) return false;
+    const dx = player.x - vent.x;
+    const dy = player.y - vent.y;
+    if (dx * dx + dy * dy > VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX) return false;
+
+    player.inVent = true;
+    player.ventId = ventId;
+    player.x = vent.x;
+    player.y = vent.y;
+    player.lastBroadcastWireX = toWire(vent.x, MAP_W);
+    player.lastBroadcastWireY = toWire(vent.y, MAP_H);
+    this._broadcastVentState(lobby, 0x01, playerSlot, ventId);
+    return true;
+  }
+
+  /** Travel only along explicitly connected vents. */
+  travelVent(lobby: Lobby, playerSlot: number, ventId: number): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+    const player = lobby.players.get(playerSlot);
+    const fromVentId = player?.ventId;
+    const vent = findVent(ventId);
+    if (!player || !player.alive || player.role !== 'impostor' || !player.inVent ||
+        fromVentId === undefined || !vent || !canTravelVent(fromVentId, ventId)) return false;
+
+    player.ventId = ventId;
+    player.x = vent.x;
+    player.y = vent.y;
+    player.lastBroadcastWireX = toWire(vent.x, MAP_W);
+    player.lastBroadcastWireY = toWire(vent.y, MAP_H);
+    this._broadcastVentState(lobby, 0x02, playerSlot, ventId);
+    return true;
+  }
+
+  /** Exit at the current vent; the following delta includes the visible position. */
+  exitVent(lobby: Lobby, playerSlot: number): boolean {
+    const player = lobby.players.get(playerSlot);
+    if (lobby.phase !== 'ROAMING' || !player || !player.alive ||
+        player.role !== 'impostor' || !player.inVent || player.ventId === undefined) return false;
+    const ventId = player.ventId;
+    player.inVent = false;
+    player.ventId = undefined;
+    player.lastBroadcastWireX = -100_000;
+    player.lastBroadcastWireY = -100_000;
+    this._broadcastVentState(lobby, 0x03, playerSlot, ventId);
+    return true;
+  }
+
+  private _broadcastVentState(lobby: Lobby, sub: 0x01 | 0x02 | 0x03, playerSlot: number, ventId: number): void {
+    const packet = Buffer.from([0x18, sub, playerSlot, ventId]);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
+    }
+  }
+
+  /** Broadcast the two task consoles temporarily disabled by the Doors sabotage. */
+  broadcastDoorLocks(lobby: Lobby): void {
+    const taskIds = lobby.sabotage?.systemId === SABOTAGE_DOORS ? lobby.sabotage.lockedTaskIds : [];
+    const packet = Buffer.from([0x16, 0x04, taskIds.length, ...taskIds]);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
+    }
+  }
+
+  /** Send short discussion-only chat to living players; ghosts are excluded. */
+  sendMeetingChat(lobby: Lobby, playerSlot: number, rawText: string): boolean {
+    if (lobby.phase !== 'MEETING' || !lobby.meeting || lobby.meeting.votingOpen) return false;
+    const sender = lobby.players.get(playerSlot);
+    if (!sender || !sender.alive) return false;
+    const now = Date.now();
+    if (now - (this._chatLastSentAt.get(sender.tgUserId) ?? 0) < 500) return false;
+    const text = String(rawText ?? '').replace(/[\\u0000-\\u001F\\u007F]/g, '').trim();
+    if (!text) return false;
+    const payload = Buffer.from(text, 'utf8').subarray(0, 200);
+    const safeText = payload.toString('utf8').trim();
+    if (!safeText) return false;
+    const body = Buffer.from(safeText, 'utf8');
+    this._chatLastSentAt.set(sender.tgUserId, now);
+    const packet = Buffer.alloc(4 + body.length);
+    packet[0] = 0x19;
+    packet[1] = 0x02; // message broadcast
+    packet[2] = playerSlot;
+    packet[3] = body.length;
+    body.copy(packet, 4);
+    for (const player of lobby.players.values()) {
+      if (player.alive && player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
+    }
+    return true;
+  }
+
   // ── Create ───────────────────────────────────────────────────────────────
 
   createLobby(tgUserId: number, username: string, ws: WebSocket): Lobby {
@@ -679,6 +790,7 @@ export class LobbyManager {
     const departing = lobby.players.get(slot);
 
     this.userToLobbyMap.delete(tgUserId);
+    this._chatLastSentAt.delete(tgUserId);
     lobby.players.delete(slot);
     lobby.userIdToSlot.delete(tgUserId);
 
@@ -781,6 +893,8 @@ export class LobbyManager {
     shuffled.forEach((p, i) => {
       p.role = i < impostorCount ? 'impostor' : 'crewmate';
       p.alive = true;
+      p.inVent = false;
+      p.ventId = undefined;
       // Cooldown starts ready (0) at game start — GAME_SPEC.md §9's 25s cooldown
       // applies only *after* a kill, not before the first one.
       p.killCooldownMs = 0;
@@ -855,8 +969,8 @@ export class LobbyManager {
     const victim = lobby.players.get(victimSlot);
     if (!attacker || !victim) return false;
 
-    if (!attacker.alive || attacker.role !== 'impostor') return false;
-    if (!victim.alive || victim.role === 'impostor') return false; // no team kill
+    if (!attacker.alive || attacker.role !== 'impostor' || attacker.inVent) return false;
+    if (!victim.alive || victim.role === 'impostor' || victim.inVent) return false; // no team kill
     if (attacker.killCooldownMs > 0) return false;
 
     const dx = attacker.x - victim.x;
@@ -954,13 +1068,24 @@ export class LobbyManager {
     if (!isSabotageSystemId(systemId)) return false;
 
     const attacker = lobby.players.get(attackerSlot);
-    if (!attacker || !attacker.alive || attacker.role !== 'impostor') return false;
+    if (!attacker || !attacker.alive || attacker.role !== 'impostor' || attacker.inVent) return false;
+
+    const lockedTaskIds = systemId === SABOTAGE_DOORS
+      ? [...TASK_DEFS]
+          .sort(() => Math.random() - 0.5)
+          .slice(0, Math.min(2, TASK_DEFS.length))
+          .map(task => task.id)
+      : [];
 
     lobby.sabotage = {
       systemId,
       startedAtMs: Date.now(),
       padFixedAt: new Map(),
-      timeoutTimer: setTimeout(() => this._sabotageTimeout(lobby), SABOTAGE_COUNTDOWN_MS),
+      lockedTaskIds,
+      timeoutTimer: setTimeout(
+        () => this._sabotageTimeout(lobby),
+        getSabotageTimeoutMs(systemId),
+      ),
     };
     lobby.sabotageCooldownMs = SABOTAGE_COOLDOWN_MS;
 
@@ -994,7 +1119,7 @@ export class LobbyManager {
     if (!sabotage || sabotage.systemId !== systemId) return 'rejected';
 
     const player = lobby.players.get(playerSlot);
-    if (!player || !player.alive || player.role !== 'crewmate') return 'rejected';
+    if (!player || !player.alive || player.role !== 'crewmate' || player.inVent) return 'rejected';
 
     const def = SABOTAGE_DEFS[sabotage.systemId];
     const pad = def.pads[padId];
@@ -1056,11 +1181,20 @@ export class LobbyManager {
     if (!lobby.sabotage || lobby.phase !== 'ROAMING') return;
     const systemId = lobby.sabotage.systemId;
     lobby.sabotage = null;
-    lobby.phase = 'GAMEOVER';
-    this._broadcastVoteResult(lobby, NO_TARGET, 2); // impostors win
+
+    // Lights/Comms and Doors are temporary disruptions and auto-clear.
+    // Only critical O₂/Reactor sabotage wins the round if the crew fails to fix it.
+    this.broadcastSabotageFixed(lobby, systemId);
     this._emit({ type: 'sabotageResolved', code: lobby.code, systemId, fixed: false, atMs: Date.now() });
-    this._emit({ type: 'gameOver', code: lobby.code, winFlag: 2, atMs: Date.now() });
-    logger.info(`[Lobby] Sabotage timed out in ${lobby.code} — impostors win`);
+
+    if (isCriticalSabotage(systemId)) {
+      lobby.phase = 'GAMEOVER';
+      this._broadcastVoteResult(lobby, NO_TARGET, 2); // impostors win
+      this._emit({ type: 'gameOver', code: lobby.code, winFlag: 2, atMs: Date.now() });
+      logger.info(`[Lobby] Critical sabotage timed out in ${lobby.code} — impostors win`);
+    } else {
+      logger.info(`[Lobby] Non-critical sabotage expired in ${lobby.code} — system restored`);
+    }
   }
 
   // ── Tasks (Phase 7) ──────────────────────────────────────────────────────────
@@ -1080,7 +1214,9 @@ export class LobbyManager {
     if (lobby.phase !== 'ROAMING') return false;
 
     const player = lobby.players.get(playerSlot);
-    if (!player || !player.alive || player.role !== 'crewmate') return false;
+    if (!player || !player.alive || player.role !== 'crewmate' || player.inVent) return false;
+    if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
+    if (lobby.sabotage?.systemId === SABOTAGE_DOORS && lobby.sabotage.lockedTaskIds.includes(taskId)) return false;
     if (!player.assignedTasks.includes(taskId)) return false;
 
     const def = TASK_DEFS.find(t => t.id === taskId);
@@ -1137,7 +1273,7 @@ export class LobbyManager {
     if (lobby.sabotage !== null) return false;
 
     const reporter = lobby.players.get(reporterSlot);
-    if (!reporter || !reporter.alive) return false;
+    if (!reporter || !reporter.alive || reporter.inVent) return false;
 
     if (bodySlot !== NO_TARGET) {
       const body = lobby.players.get(bodySlot);
@@ -1377,6 +1513,8 @@ export class LobbyManager {
     const moving: Array<{ slot: number; wireX: number; wireY: number }> = [];
 
     for (const player of lobby.players.values()) {
+      // Vent occupants are hidden from all other players until they exit.
+      if (player.inVent) continue;
       const wireX = toWire(player.x, MAP_W);
       const wireY = toWire(player.y, MAP_H);
       const dx = wireX - player.lastBroadcastWireX;
