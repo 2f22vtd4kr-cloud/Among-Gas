@@ -120,6 +120,9 @@ async function main(): Promise<void> {
     },
     onGameResult: (result) => {
       console.log(JSON.stringify({ type: 'gameResult', ...result }));
+      if (result.timeoutState) {
+        console.error(`[simulate] Timeout state for ${result.code}: ${JSON.stringify(result.timeoutState)}`);
+      }
       if (result.winner === 'timeout') {
         console.error(`[simulate] Diagnostic trace for timed-out game ${result.code} (last 40 events):`);
         for (const event of (recentEvents.get(result.code) ?? []).slice(-40)) console.error(event);

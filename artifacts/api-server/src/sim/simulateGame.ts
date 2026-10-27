@@ -21,6 +21,7 @@ import { LobbyManager, type Lobby, type LobbyEvent } from '../ws/lobby.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
+import { TASK_DEFS } from '@workspace/shared/tasks';
 import type { SimGameResult, SimWinner } from './types.js';
 
 export interface SimBatchOptions {
@@ -89,6 +90,31 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         settled = true;
         clearTimeout(timeoutHandle);
         perGameHandlers.delete(lobby.code);
+        const timeoutState = winner === 'timeout' ? {
+          phase: lobby.phase,
+          sabotage: lobby.sabotage ? {
+            systemId: lobby.sabotage.systemId,
+            lockedTaskIds: [...lobby.sabotage.lockedTaskIds],
+            fixedPads: [...lobby.sabotage.padFixedAt.keys()],
+          } : null,
+          completedTaskSteps: lobby.completedTaskSteps.size,
+          totalTaskSteps: lobby.totalTaskSteps,
+          players: Array.from(lobby.players.values()).map(player => ({
+            slot: player.slot,
+            role: player.role,
+            alive: player.alive,
+            x: Math.round(player.x),
+            y: Math.round(player.y),
+            inVent: player.inVent,
+            unfinishedTasks: player.assignedTasks.flatMap(taskId => {
+              const task = TASK_DEFS.find(def => def.id === taskId);
+              if (!task) return [];
+              const remainingSteps = Array.from({ length: task.steps }, (_, step) => step)
+                .filter(step => !lobby.completedTaskSteps.has(`${player.slot}:${taskId}:${step}`));
+              return remainingSteps.length > 0 ? [{ taskId, name: task.name, remainingSteps }] : [];
+            }),
+          })),
+        } : undefined;
         // Also clears any still-pending meeting/sabotage setTimeout so a late
         // callback can't fire after the lobby is gone or misattribute an
         // event to a different game if this code is ever reused.
@@ -99,6 +125,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           gameIndex, code: lobby.code, botCount: bots, impostorCount,
           winner, durationMs: Date.now() - startedAt, kills, meetings,
           tasksCompleted: lobby.completedTaskSteps.size, totalTaskSteps: lobby.totalTaskSteps,
+          ...(timeoutState ? { timeoutState } : {}),
         };
         results.push(result);
         opts.onGameResult?.(result);
