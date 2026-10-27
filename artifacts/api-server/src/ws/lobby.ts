@@ -655,9 +655,9 @@ export class LobbyManager {
     }
   }
 
-  /** Send short discussion-only chat to living players; ghosts are excluded. */
+  /** Send meeting chat during discussion or voting; dead players are excluded. */
   sendMeetingChat(lobby: Lobby, playerSlot: number, rawText: string): boolean {
-    if (lobby.phase !== 'MEETING' || !lobby.meeting || lobby.meeting.votingOpen) return false;
+    if (lobby.phase !== 'MEETING' || !lobby.meeting) return false;
     const sender = lobby.players.get(playerSlot);
     if (!sender || !sender.alive) return false;
     const now = Date.now();
@@ -1321,6 +1321,19 @@ export class LobbyManager {
       if (reporter.ws.readyState === /* OPEN */ 1) {
         reporter.ws.send(Buffer.from([0x20, 0x01, reporterSlot]));
       }
+    }
+
+    // A called meeting forcibly releases any impostor hiding in a vent.
+    // Clear server state before broadcasting the meeting, so the client closes
+    // its vent selector and the player's sprite remains visible during voting.
+    for (const player of lobby.players.values()) {
+      if (!player.inVent || player.ventId === undefined) continue;
+      const ventId = player.ventId;
+      player.inVent = false;
+      player.ventId = undefined;
+      player.lastBroadcastWireX = -100_000;
+      player.lastBroadcastWireY = -100_000;
+      this._broadcastVentState(lobby, 0x03, player.slot, ventId);
     }
 
     const meeting: MeetingState = {
