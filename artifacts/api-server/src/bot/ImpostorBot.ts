@@ -20,7 +20,7 @@
 import { BotAgent, grid } from './BotAgent.js';
 import { KILL_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DEFS, SABOTAGE_DOORS, type SabotageSystemId } from '@workspace/shared/sabotage';
-import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from '@workspace/shared/vents';
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, type VentDef } from '@workspace/shared/vents';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
@@ -357,7 +357,7 @@ export class ImpostorBot extends BotAgent {
       const current = VENT_DEFS.find(v => v.id === self.ventId);
       const exits = current?.connections
         .map(id => VENT_DEFS.find(v => v.id === id))
-        .filter((v): v is NonNullable<typeof v> => v !== undefined) ?? [];
+        .filter((v): v is VentDef => v !== undefined) ?? [];
       if (exits.length > 0) {
         const destination = exits[Math.floor(Math.random() * exits.length)];
         manager.travelVent(lobby, self.slot, destination.id);
