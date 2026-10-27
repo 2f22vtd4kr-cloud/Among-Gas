@@ -54,7 +54,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildVisionSegments, computeVisibilityPolygon } from '../game/visibility';
+import { computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 
@@ -728,9 +728,6 @@ export default function GameMap() {
     if (!ctx) return;
 
     const grid = buildCollisionGrid();
-    // Precompute merged collision boundaries once. The per-frame visibility
-    // polygon casts only against nearby wall edges, not every blocked cell.
-    const visionSegments = buildVisionSegments(grid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -1263,7 +1260,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, visionSegments);
+        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, grid);
 
         ctx.save();
         ctx.globalCompositeOperation = 'source-over';
