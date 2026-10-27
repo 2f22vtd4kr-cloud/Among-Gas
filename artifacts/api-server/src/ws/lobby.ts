@@ -648,7 +648,8 @@ export class LobbyManager {
 
   /** Broadcast the two task consoles temporarily disabled by the Doors sabotage. */
   broadcastDoorLocks(lobby: Lobby): void {
-    const taskIds = lobby.sabotage?.systemId === SABOTAGE_DOORS ? lobby.sabotage.lockedTaskIds : [];
+    const activeSabotage = lobby.sabotage;
+    const taskIds = activeSabotage?.systemId === SABOTAGE_DOORS ? activeSabotage.lockedTaskIds : [];
     const packet = Buffer.from([0x16, 0x04, SABOTAGE_DOORS, taskIds.length, ...taskIds]);
     for (const player of lobby.players.values()) {
       if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
@@ -1250,7 +1251,8 @@ export class LobbyManager {
     const player = lobby.players.get(playerSlot);
     if (!player || !player.alive || player.role !== 'crewmate' || player.inVent) return false;
     if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
-    if (lobby.sabotage?.systemId === SABOTAGE_DOORS && lobby.sabotage.lockedTaskIds.includes(taskId)) return false;
+    const activeSabotage = lobby.sabotage;
+    if (activeSabotage?.systemId === SABOTAGE_DOORS && activeSabotage.lockedTaskIds.includes(taskId)) return false;
     if (!player.assignedTasks.includes(taskId)) return false;
 
     const def = TASK_DEFS.find(t => t.id === taskId);
