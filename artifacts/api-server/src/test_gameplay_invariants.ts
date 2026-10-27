@@ -364,4 +364,76 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpse drops, emergency meeting, kill)');
+// 10. Task steps are server-authoritative, ordered, assigned, in range and single-use.
+{
+  const task = TASK_DEFS[0]; // two-step Fix Wiring task
+  const player = makePlayer(0, 'crewmate', task.x, task.y);
+  player.player.assignedTasks = [task.id];
+  const lobby = makeLobby([player.player]);
+  lobby.totalTaskSteps = task.steps;
+  const manager = new LobbyManager();
+
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id + 1, 0), false,
+    'a task not assigned to the player must be rejected');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), false,
+    'a later step cannot be completed before the earlier step');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), true,
+    'the first assigned step succeeds in range');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), false,
+    'a completed step cannot be replayed');
+  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), true,
+    'the second step succeeds after the first');
+  assert.equal(lobby.phase, 'GAMEOVER', 'completing all task steps ends the round for crew');
+  manager.disposeLobby(lobby);
+
+  const far = makePlayer(0, 'crewmate', 0, 0);
+  far.player.assignedTasks = [task.id];
+  const farLobby = makeLobby([far.player]);
+  farLobby.totalTaskSteps = task.steps;
+  const farManager = new LobbyManager();
+  assert.equal(farManager.applyTaskStep(farLobby, 0, task.id, 0), false,
+    'task completion outside the interaction range must be rejected');
+  farManager.disposeLobby(farLobby);
+}
+
+// 11. Sabotage trigger and repairs enforce roles, range, pad count and resolution.
+{
+  const pads = SABOTAGE_DEFS[SABOTAGE_O2].pads;
+  assert.equal(pads.length, 2, 'O2 sabotage has two independent repair pads');
+  const impostor = makePlayer(0, 'impostor', 100, 100);
+  const crewA = makePlayer(1, 'crewmate', pads[0].x, pads[0].y);
+  const crewB = makePlayer(2, 'crewmate', pads[1].x, pads[1].y);
+  const farCrew = makePlayer(3, 'crewmate', 0, 0);
+  const lobby = makeLobby([impostor.player, crewA.player, crewB.player, farCrew.player]);
+  const manager = new LobbyManager();
+
+  assert.equal(manager.triggerSabotage(lobby, 1, SABOTAGE_O2), false,
+    'crewmates cannot trigger sabotage');
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_O2), true,
+    'an impostor can trigger O2 sabotage');
+  assert.equal(manager.applyRepair(lobby, 3, SABOTAGE_O2, 0), 'rejected',
+    'repairing from outside the pad range is rejected');
+  assert.equal(manager.applyRepair(lobby, 0, SABOTAGE_O2, 0), 'rejected',
+    'impostors cannot repair sabotage');
+  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_O2, 0), 'progress',
+    'one O2 pad alone does not resolve critical sabotage');
+  assert.notEqual(lobby.sabotage, null);
+  assert.equal(manager.applyRepair(lobby, 2, SABOTAGE_O2, 1), 'fixed',
+    'a different pad repaired within the sync window resolves O2');
+  assert.equal(lobby.sabotage, null, 'resolved sabotage clears its authoritative state');
+
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), false,
+    'the shared sabotage cooldown prevents an immediate second sabotage');
+  lobby.sabotageCooldownMs = 0;
+  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), true,
+    'the impostor can trigger Lights after cooldown');
+  const lightPad = SABOTAGE_DEFS[SABOTAGE_LIGHTS].pads[0];
+  crewA.player.x = lightPad.x;
+  crewA.player.y = lightPad.y;
+  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_LIGHTS, 0), 'fixed',
+    'Lights is resolved by one valid repair');
+  assert.equal(lobby.sabotage, null);
+  manager.disposeLobby(lobby);
+}
+
+console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, sabotage repairs, chat, corpse drops, emergency meeting, kill)');
