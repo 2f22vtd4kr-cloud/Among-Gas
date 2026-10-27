@@ -11,7 +11,7 @@
  *   Random vote among alive players, or skip. No real information, so
  *   crewmate bots choose uniformly at random.
  */
-import { BotAgent, grid } from './BotAgent.js';
+import { BotAgent, BOT_SPEED_PX } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
@@ -29,6 +29,8 @@ export class CrewmateBot extends BotAgent {
   private _targetPadId: number | null = null;
   /** Ticks spent dwelling at current task console. */
   private _dwellTicks = 0;
+  /** Separate dwell counter for ghost tasks, which bypass walls and door locks. */
+  private _ghostDwellTicks = 0;
   /** Wander target (used when all tasks are complete). */
   private _wanderTarget: Point | null = null;
 
@@ -64,8 +66,8 @@ export class CrewmateBot extends BotAgent {
     // Ghosts work only on tasks: no body reports, sabotage repairs, or votes.
     // Communications sabotage still blocks task progress in the base game.
     if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return;
-    const taskId = this._pickTask(lobby, self);
-    if (taskId !== null) this._handleTask(lobby, self, manager, taskId);
+    const taskId = this._pickGhostTask(lobby, self);
+    if (taskId !== null) this._handleGhostTask(lobby, self, manager, taskId);
   }
 
   override chooseVote(lobby: Lobby, self: LobbyPlayer): number {
@@ -159,6 +161,54 @@ export class CrewmateBot extends BotAgent {
 
     this._targetTaskId = null;
     return null;
+  }
+
+  /** Ghosts retain their tasks and can pass through walls/closed doors. */
+  private _pickGhostTask(lobby: Lobby, self: LobbyPlayer): number | null {
+    if (this._targetTaskId !== null && this._nextStep(lobby, self, this._targetTaskId) !== null) {
+      return this._targetTaskId;
+    }
+    for (const taskId of self.assignedTasks) {
+      if (this._nextStep(lobby, self, taskId) !== null) {
+        if (this._targetTaskId !== taskId) {
+          this._targetTaskId = taskId;
+          this._ghostDwellTicks = 0;
+        }
+        return taskId;
+      }
+    }
+    this._targetTaskId = null;
+    this._ghostDwellTicks = 0;
+    return null;
+  }
+
+  /** Ghost movement ignores collision/pathfinding, matching base-game wall phasing. */
+  private _handleGhostTask(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    taskId: number,
+  ): void {
+    const def = TASK_DEFS.find(task => task.id === taskId);
+    if (!def) return;
+
+    const dx = def.x - self.x;
+    const dy = def.y - self.y;
+    const distance = Math.hypot(dx, dy);
+    const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 5);
+    if (distance > interactionDistance) {
+      const travel = Math.min(BOT_SPEED_PX * 1.5, distance - interactionDistance);
+      self.x += (dx / distance) * travel;
+      self.y += (dy / distance) * travel;
+      this._ghostDwellTicks = 0;
+      return;
+    }
+
+    this._ghostDwellTicks++;
+    if (this._ghostDwellTicks < TASK_DWELL_TICKS) return;
+    this._ghostDwellTicks = 0;
+    const step = this._nextStep(lobby, self, taskId);
+    if (step !== null) manager.applyTaskStep(lobby, self.slot, taskId, step);
   }
 
   /** Returns the next step index to complete for taskId, or null if all done. */
