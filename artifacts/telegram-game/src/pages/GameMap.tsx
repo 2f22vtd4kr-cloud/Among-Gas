@@ -246,6 +246,8 @@ export default function GameMap() {
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
   const [showAdminTable, setShowAdminTable] = useState(false);
   const [, setAdminTableTick] = useState(0);
+  const [showMiniMap, setShowMiniMap] = useState(false);
+  const [miniMapTick, setMiniMapTick] = useState(0);
   const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
     if (!amIImpostor || sabotage !== null) setShowSabotagePanel(false);
@@ -457,6 +459,18 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
   }, [myRole, amIDead, myVentId, meeting, voteResult?.winner]);
+
+  useEffect(() => {
+    if (!showMiniMap) return;
+    const timer = window.setInterval(() => setMiniMapTick(tick => tick + 1), 250);
+    return () => window.clearInterval(timer);
+  }, [showMiniMap]);
+
+  useEffect(() => {
+    if (meeting !== null || activeTaskId !== null || amIDead || myVentId !== null || voteResult?.winner) {
+      setShowMiniMap(false);
+    }
+  }, [meeting, activeTaskId, amIDead, myVentId, voteResult?.winner]);
 
   useEffect(() => {
     if (!showAdminTable) return;
@@ -1240,6 +1254,94 @@ export default function GameMap() {
           opacity: loaded ? 1 : 0,
         }}
       />
+
+      {/* Mini-map toggle — top-left and safe-area aware for Telegram mobile. */}
+      {loaded && myRole !== null && meeting === null && (
+        <div style={{
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
+        }}>
+          <button
+            onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
+            aria-expanded={showMiniMap}
+            style={{
+              padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
+              background: showMiniMap ? 'rgba(24,95,103,0.96)' : 'rgba(10,22,34,0.92)',
+              border: '1px solid rgba(105,205,220,0.65)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
+              fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
+              touchAction: 'manipulation',
+            }}
+          >
+            {showMiniMap ? '✕ ЗАКРЫТЬ КАРТУ' : '🗺 КАРТА'}
+          </button>
+        </div>
+      )}
+
+      {showMiniMap && loaded && myRole !== null && meeting === null && (
+        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label="Карта Among Gas"
+          onClick={() => setShowMiniMap(false)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 75,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 'max(12px, env(safe-area-inset-top, 12px)) 12px max(12px, env(safe-area-inset-bottom, 12px))',
+            background: 'rgba(2,8,15,0.94)', backdropFilter: 'blur(6px)', color: '#e4f5ff', fontFamily: 'sans-serif',
+          }}>
+          <div onClick={event => event.stopPropagation()} style={{
+            width: 'min(96vw, 900px)', maxHeight: '100%', overflowY: 'auto',
+            borderRadius: 14, padding: 12, background: 'linear-gradient(155deg, rgba(18,42,55,0.98), rgba(5,14,25,0.99))',
+            border: '1px solid rgba(100,210,230,0.55)', boxShadow: '0 16px 60px rgba(0,0,0,0.55)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 9 }}>
+              <div>
+                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>КАРТА ОБЪЕКТА</div>
+                <div style={{ marginTop: 3, fontSize: 11, color: 'rgba(190,225,235,0.68)' }}>
+                  {myRole === 'crewmate' ? 'Ваши незавершённые задания отмечены жёлтым' : 'Обзор карты'}
+                </div>
+              </div>
+              <button onClick={() => setShowMiniMap(false)} aria-label="Закрыть карту" style={{
+                width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
+                background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
+              }}>×</button>
+            </div>
+            <div style={{
+              position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
+              overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
+            }}>
+              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt="Карта Among Gas" draggable={false}
+                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
+              {myRole === 'crewmate' && myTasks.filter(task => {
+                const def = TASK_DEFS.find(item => item.id === task.taskId);
+                return def !== undefined && task.completedSteps < def.steps;
+              }).map(task => {
+                const def = TASK_DEFS.find(item => item.id === task.taskId)!;
+                return <span key={task.taskId} title={def.name} style={{
+                  position: 'absolute', left: `${def.x / MAP_W * 100}%`, top: `${def.y / MAP_H * 100}%`,
+                  transform: 'translate(-50%,-50%)', display: 'grid', placeItems: 'center',
+                  width: 'clamp(13px, 2.8vw, 22px)', height: 'clamp(13px, 2.8vw, 22px)',
+                  borderRadius: '50%', background: '#f1c40f', border: '1px solid #fff5b4',
+                  color: '#493900', fontSize: 'clamp(10px, 1.7vw, 15px)', fontWeight: 950,
+                  boxShadow: '0 0 8px rgba(255,211,48,0.72)',
+                }}>!</span>;
+              })}
+              {myVentId === null && (
+                <span title="Вы здесь" aria-label="Ваше местоположение" style={{
+                  position: 'absolute', left: `${playerStateRef.current.x / MAP_W * 100}%`, top: `${playerStateRef.current.y / MAP_H * 100}%`,
+                  transform: 'translate(-50%,-50%)', width: 'clamp(12px, 2.6vw, 19px)', height: 'clamp(12px, 2.6vw, 19px)',
+                  borderRadius: '50%', background: '#45e6bc', border: '2px solid #fff',
+                  boxShadow: '0 0 0 4px rgba(69,230,188,0.25), 0 0 8px #000',
+                }} />
+              )}
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, padding: '8px 2px 0', fontSize: 11, color: 'rgba(220,239,242,0.7)' }}>
+              <span>● Ваше местоположение</span>
+              <span>! Незавершённое задание</span>
+              <span>{myTasks.filter(task => {
+                const def = TASK_DEFS.find(item => item.id === task.taskId);
+                return def !== undefined && task.completedSteps < def.steps;
+              }).length} заданий осталось</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loaded && <Joystick keysRef={keysRef} />}
 
