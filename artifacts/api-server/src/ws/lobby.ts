@@ -129,6 +129,9 @@ export interface LobbyPlayer {
   killCooldownMs: number;
   /** Task IDs assigned to this player at game start (empty for impostors). */
   assignedTasks: number[];
+  /** Immutable map position dropped at death; separate from the ghost's live position. */
+  corpseX?: number;
+  corpseY?: number;
   /** True while the impostor is hidden inside a vent. */
   inVent?: boolean;
   /** Current vent ID while inVent is true. */
@@ -294,6 +297,20 @@ export function buildRoleRevealPacket(role: 0 | 1, impostorSlots: number[] = [])
  */
 export function buildKillPacket(victimSlot: number, attackerSlot: number): Buffer {
   return Buffer.from([0x15, 0x01, victimSlot, attackerSlot]);
+}
+
+/**
+ * 0x21 — immutable corpse drop position.
+ * Layout: [0x21, victimSlot, wireX(UInt16LE), wireY(UInt16LE)].
+ * The dead player's ghost can move freely; the corpse stays at the kill position.
+ */
+export function buildCorpsePacket(victimSlot: number, x: number, y: number): Buffer {
+  const packet = Buffer.alloc(6);
+  packet.writeUInt8(0x21, 0);
+  packet.writeUInt8(victimSlot, 1);
+  packet.writeUInt16LE(Math.max(0, Math.min(32000, toWire(x, MAP_W))), 2);
+  packet.writeUInt16LE(Math.max(0, Math.min(32000, toWire(y, MAP_H))), 4);
+  return packet;
 }
 
 /**
@@ -542,6 +559,7 @@ export class LobbyManager {
     if (!applied) return false;
     this._emit({ type: 'kill', code: lobby.code, attackerSlot, victimSlot, atMs: Date.now() });
     this.broadcastKill(lobby, victimSlot, attackerSlot);
+    this.broadcastCorpse(lobby, victimSlot);
     this.checkWinAfterKill(lobby);
     // Dropping the victim's incomplete steps (attemptKill) can itself push
     // completedTaskSteps.size to totalTaskSteps — re-check tasks too, but
@@ -979,6 +997,9 @@ export class LobbyManager {
     const dy = attacker.y - victim.y;
     if (dx * dx + dy * dy > KILL_RANGE_PX * KILL_RANGE_PX) return false;
 
+    victim.corpseX = victim.x;
+    victim.corpseY = victim.y;
+    victim.bodyReported = false;
     victim.alive = false;
     attacker.killCooldownMs = KILL_COOLDOWN_MS;
     this._removeIncompleteTaskSteps(lobby, victim);
@@ -1025,6 +1046,17 @@ export class LobbyManager {
       if (player.ws.readyState === /* OPEN */ 1) {
         player.ws.send(packet);
       }
+    }
+  }
+
+  broadcastCorpse(lobby: Lobby, victimSlot: number): void {
+    const victim = lobby.players.get(victimSlot);
+    if (!victim) return;
+    const x = victim.corpseX ?? victim.x;
+    const y = victim.corpseY ?? victim.y;
+    const packet = buildCorpsePacket(victimSlot, x, y);
+    for (const player of lobby.players.values()) {
+      if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
     }
   }
 
