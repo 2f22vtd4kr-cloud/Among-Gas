@@ -1409,7 +1409,7 @@ export default function GameMap() {
 
               <div style={{
                 position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
-                maxHeight: '56dvh', borderRadius: 10, overflow: 'hidden',
+                borderRadius: 10, overflow: 'hidden',
                 border: '1px solid rgba(120,200,220,0.45)', background: '#13212a',
               }}>
                 <img
