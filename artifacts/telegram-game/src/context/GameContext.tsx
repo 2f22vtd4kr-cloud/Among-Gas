@@ -365,6 +365,16 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
+  // Browser smoke test: this task console is reachable from PLAYER_SPAWN.
+  'task-interaction': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      myTasks: [{ taskId: 4, completedSteps: 0 }],
+      globalTaskProgress: 0,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 6 — a dead body is nearby, report prompt should appear.
   // Positioned relative to PLAYER_SPAWN (not MAP_W/2, unlike MOCK_REMOTE_POSITIONS
   // above) since the local player's real physics position starts at spawn, and
