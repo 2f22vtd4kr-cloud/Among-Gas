@@ -11,7 +11,8 @@
  *   --concurrency  Games running at once (default min(25, games))
  *   --timeoutMs    Per-game safety timeout in ms (default 120000)
  *   --quiet        Suppress per-event NDJSON lines (still prints per-game results + summary)
- *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout
+ *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout (unless --maxTimeouts is set)
+ *   --maxTimeouts   Maximum tolerated safety timeouts (default: all, or 0 with --failOnTimeout)
  *
  * Output: NDJSON to stdout — one line per lifecycle event, one line per
  * finished game (`type":"gameResult"`), and one final `"type":"summary"`
@@ -93,6 +94,10 @@ async function main(): Promise<void> {
   const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 120_000, { min: 1000 });
   const quiet = args.quiet === 'true';
   const failOnTimeout = args.failOnTimeout === 'true';
+  const maxTimeouts = args.maxTimeouts !== undefined
+    ? requirePositiveInt(args.maxTimeouts, 'maxTimeouts', 0, { min: 0, max: games })
+    : failOnTimeout ? 0 : games;
+  const recentEvents = new Map<string, string[]>();
 
   console.error(
     `[simulate] ${games} game(s), ${bots} bots/game` +
@@ -103,8 +108,24 @@ async function main(): Promise<void> {
   const startedAt = Date.now();
   const results = await runSimulationBatch({
     games, bots, impostors, concurrency, timeoutMs,
-    onEvent: (event) => { if (!quiet) console.log(JSON.stringify(event)); },
-    onGameResult: (result) => console.log(JSON.stringify({ type: 'gameResult', ...result })),
+    onEvent: (event) => {
+      const code = event.code;
+      if (code) {
+        const history = recentEvents.get(code) ?? [];
+        history.push(JSON.stringify(event));
+        if (history.length > 80) history.shift();
+        recentEvents.set(code, history);
+      }
+      if (!quiet) console.log(JSON.stringify(event));
+    },
+    onGameResult: (result) => {
+      console.log(JSON.stringify({ type: 'gameResult', ...result }));
+      if (result.winner === 'timeout') {
+        console.error(`[simulate] Diagnostic trace for timed-out game ${result.code} (last 40 events):`);
+        for (const event of (recentEvents.get(result.code) ?? []).slice(-40)) console.error(event);
+      }
+      recentEvents.delete(result.code);
+    },
   });
 
   const summary = summarize(results, Date.now() - startedAt);
@@ -115,8 +136,10 @@ async function main(): Promise<void> {
   console.error(`Crewmate win rate: ${pct(summary.crewWins, summary.games - summary.timeouts)}   Impostor win rate: ${pct(summary.impostorWins, summary.games - summary.timeouts)}`);
   console.error(`Avg game length:   ${fmtDuration(summary.avgDurationMs)}   Avg tasks completed: ${summary.avgTasksCompleted}   Avg kills/game: ${summary.avgKills}   Avg meetings/game: ${summary.avgMeetings}`);
   if (summary.timeouts > 0) {
-    console.error(`⚠️  ${summary.timeouts} game(s) hit the --timeoutMs safety timeout without reaching GAMEOVER`);
-    if (failOnTimeout) process.exitCode = 1;
+    console.error(`⚠️  ${summary.timeouts} game(s) hit the --timeoutMs safety timeout without reaching GAMEOVER (allowed: ${maxTimeouts})`);
+  }
+  if (summary.timeouts > maxTimeouts) {
+    process.exitCode = 1;
   }
 }
 
