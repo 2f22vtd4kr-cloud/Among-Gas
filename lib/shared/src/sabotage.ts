@@ -51,22 +51,22 @@ export const SABOTAGE_DEFS: Record<SabotageSystemId, SabotageDef> = {
   [SABOTAGE_LIGHTS]: {
     id: SABOTAGE_LIGHTS,
     name: 'Lights',
-    pads: [ref(800, 500)], // electrical zone
+    pads: [ref(795, 489)], // electrical zone, collision-checked walkable cell
   },
   [SABOTAGE_O2]: {
     id: SABOTAGE_O2,
     name: 'O₂',
-    pads: [ref(60, 430), ref(240, 460)], // gas_station zone, two separate pads
+    pads: [ref(105, 459), ref(235, 459)], // gas_station zone, two reachable, separate pads
   },
   [SABOTAGE_REACTOR]: {
     id: SABOTAGE_REACTOR,
     name: 'Reactor',
-    pads: [ref(50, 210), ref(230, 300)], // industrial zone, two separate pads
+    pads: [ref(45, 209), ref(225, 289)], // industrial zone, two reachable, separate pads
   },
   [SABOTAGE_COMMS]: {
     id: SABOTAGE_COMMS,
     name: 'Comms',
-    pads: [ref(830, 320)], // walkable office zone on the Among Gas map
+    pads: [ref(825, 319)], // walkable office zone on the Among Gas map
   },
   [SABOTAGE_DOORS]: {
     id: SABOTAGE_DOORS,
