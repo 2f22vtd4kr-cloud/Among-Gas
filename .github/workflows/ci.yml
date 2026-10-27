@@ -50,5 +50,22 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Install Chromium for mobile browser smoke tests
+        run: |
+          npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
+          /tmp/among-gas-playwright/node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Start Telegram Mini App and play a mobile UI smoke test
+        env:
+          PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
+        run: |
+          nohup pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
+          node scripts/browser-smoke.mjs
+
       - name: Run headless multiplayer gameplay simulations
         run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 120000 --quiet --maxTimeouts 2
