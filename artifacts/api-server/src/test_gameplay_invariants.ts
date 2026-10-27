@@ -242,6 +242,16 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(lobby.meeting?.bodySlot, 1, 'meeting must reference the corpse owner even after the ghost moves away');
   assert.equal(ghost.player.bodyReported, true, 'reported corpse is marked to prevent repeated meetings');
   manager.disposeLobby(lobby);
+
+  const ejectedReporter = makePlayer(3, 'crewmate', 510, 510);
+  const ejectedGhost = makePlayer(4, 'crewmate', 500, 500);
+  const livingImpostor = makePlayer(5, 'impostor', 700, 700);
+  ejectedGhost.player.alive = false;
+  const ejectionLobby = makeLobby([ejectedReporter.player, ejectedGhost.player, livingImpostor.player]);
+  const ejectionManager = new LobbyManager();
+  new CrewmateBot().roamingTick(ejectionLobby, ejectedReporter.player, ejectionManager);
+  assert.equal(ejectionLobby.phase, 'ROAMING', 'an ejected ghost without a corpse must not trigger a fake report');
+  ejectionManager.disposeLobby(ejectionLobby);
 }
 
 // 6. Kills drop a body at the death location, rather than following the ghost.
