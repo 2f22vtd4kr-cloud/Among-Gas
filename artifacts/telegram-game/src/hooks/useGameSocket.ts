@@ -3,6 +3,11 @@ import { useEffect, useRef } from 'react';
 // ─── URL helpers ────────────────────────────────────────────────────────────
 
 function getWsUrl(): string {
+  // A Vercel/static frontend may be hosted separately from the long-lived
+  // WebSocket server. Configure VITE_WS_URL to the full wss://host/api/ws
+  // endpoint there; same-origin remains the zero-config local/self-hosted path.
+  const configured = import.meta.env.VITE_WS_URL?.trim();
+  if (configured) return configured;
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${window.location.host}/api/ws`;
 }
