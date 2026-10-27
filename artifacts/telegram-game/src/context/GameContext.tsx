@@ -443,7 +443,7 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [],
-      sabotage: { systemId: SABOTAGE_LIGHTS, startedAtMs: Date.now(), fixedPads: [] },
+      sabotage: { systemId: SABOTAGE_LIGHTS, startedAtMs: Date.now(), fixedPads: [], lockedTaskIds: [] },
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
@@ -452,7 +452,7 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [],
-      sabotage: { systemId: 0x02, startedAtMs: Date.now(), fixedPads: [0] },
+      sabotage: { systemId: 0x02, startedAtMs: Date.now(), fixedPads: [0], lockedTaskIds: [] },
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
