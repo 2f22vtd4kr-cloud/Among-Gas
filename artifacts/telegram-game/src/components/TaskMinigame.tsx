@@ -279,58 +279,78 @@ function CalibrateGame({ stepIndex, onComplete }: { stepIndex: number; onComplet
 // ── Empty Garbage ─────────────────────────────────────────────────────────────
 // Press and hold for 2 seconds.
 
-const HOLD_MS = 2000;
+// ── Empty Garbage ─────────────────────────────────────────────────────────────
+// Drag the lever down to pull six pieces into the chute, matching the clone's
+// drag mechanic while keeping the touch target large enough for Telegram.
 
 function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
-  const [progress, setProgress] = useState(0);
-  const [holding, setHolding] = useState(false);
-  const startRef = useRef<number | null>(null);
+  const [lever, setLever] = useState(12);
+  const [dragging, setDragging] = useState(false);
+  const [cleared, setCleared] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
   const doneRef = useRef(false);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
 
-  useEffect(() => {
-    if (!holding) { setProgress(0); startRef.current = null; return; }
-    startRef.current = performance.now();
-    const id = setInterval(() => {
-      if (!startRef.current) return;
-      const p = Math.min(100, ((performance.now() - startRef.current) / HOLD_MS) * 100);
-      setProgress(p);
-      if (p >= 100 && !doneRef.current) { doneRef.current = true; onComplete(); }
-    }, 40);
-    return () => clearInterval(id);
-  }, [holding, onComplete]);
-
-  const r = 44;
-  const circ = 2 * Math.PI * r;
+  const moveLever = (clientY: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = Math.max(8, Math.min(92, ((clientY - rect.top) / rect.height) * 100));
+    const removed = Math.min(6, Math.max(0, Math.floor(((next - 8) / 84) * 6)));
+    setLever(next);
+    setCleared(removed);
+    if (removed === 6 && !doneRef.current) {
+      doneRef.current = true;
+      setTimeout(() => completeRef.current(), 350);
+    }
+  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '20px 0' }}>
-      <div style={{ position: 'relative', width: 112, height: 112 }}>
-        <svg width={112} height={112} style={{ position: 'absolute', inset: 0 }}>
-          <circle cx={56} cy={56} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={8} />
-          <circle cx={56} cy={56} r={r} fill="none"
-            stroke="rgba(46,204,113,0.9)" strokeWidth={8}
-            strokeDasharray={`${(progress / 100) * circ} ${circ}`}
-            strokeLinecap="round" transform="rotate(-90 56 56)" />
-        </svg>
-        <button
-          onPointerDown={() => setHolding(true)}
-          onPointerUp={() => setHolding(false)}
-          onPointerLeave={() => setHolding(false)}
-          style={{
-            position: 'absolute', inset: 14, borderRadius: '50%',
-            background: holding ? 'rgba(46,204,113,0.3)' : 'rgba(70,70,70,0.6)',
-            border: `2px solid ${holding ? 'rgba(46,204,113,0.5)' : 'rgba(255,255,255,0.12)'}`,
-            cursor: 'pointer', fontSize: 26,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'background 0.1s, border 0.1s',
-            touchAction: 'none',
-          }}
-          aria-label="Press and hold to empty garbage"
-        >
-          🗑
-        </button>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '10px 0' }}>
+      <div style={{ width: 'min(290px,82vw)', height: 235, position: 'relative', borderRadius: 12,
+        overflow: 'hidden', background: 'linear-gradient(180deg,#1a2631,#0b1119)',
+        border: '1px solid rgba(220,170,70,0.32)' }}>
+        <div style={{ position: 'absolute', inset: '12% 20% 9%', border: '3px solid #4f5b68',
+          borderRadius: '14px 14px 30px 30px', background: 'linear-gradient(180deg,#252f39,#0a1016)' }} />
+        <div style={{ position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)',
+          fontSize: 10, fontWeight: 900, letterSpacing: '0.22em', color: '#e1ad47' }}>CHUTE</div>
+        <div style={{ position: 'absolute', left: '27%', right: '27%', top: '16%', bottom: '18%',
+          display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', gap: 7 }}>
+          {Array.from({ length: 6 }, (_, i) => i).map(i => !(i < cleared) && (
+            <div key={i} style={{ width: 28, height: 26, display: 'grid', placeItems: 'center',
+              borderRadius: 6, background: ['#80644d','#596b77','#8b795a','#53656e','#84745f','#4c5964'][i],
+              border: '1px solid rgba(255,255,255,0.12)', boxShadow: 'inset -3px -3px 0 rgba(0,0,0,0.2)' }}>▰</div>
+          ))}
+        </div>
+        <div ref={trackRef} style={{ position: 'absolute', right: '8%', top: '10%', bottom: '10%', width: 12,
+          borderRadius: 8, background: '#101720', border: '1px solid #687684' }}>
+          <button
+            onPointerDown={e => {
+              e.preventDefault();
+              e.currentTarget.setPointerCapture(e.pointerId);
+              setDragging(true);
+              moveLever(e.clientY);
+            }}
+            onPointerMove={e => { if (dragging) moveLever(e.clientY); }}
+            onPointerUp={() => setDragging(false)}
+            onPointerCancel={() => setDragging(false)}
+            onLostPointerCapture={() => setDragging(false)}
+            aria-label="Drag garbage lever down"
+            style={{ position: 'absolute', left: '50%', top: `${(lever - 8) / 84 * 100}%`,
+              transform: 'translate(-50%,-50%)', width: 48, height: 34, borderRadius: 8,
+              background: dragging ? '#e5b34e' : '#986a2d', border: '2px solid #f3d18b',
+              boxShadow: '0 3px 0 #412c15', touchAction: 'none', cursor: 'grab', color: '#fff', fontWeight: 950 }}>
+            ↕
+          </button>
+        </div>
+        <div style={{ position: 'absolute', left: '7%', top: '9%', color: '#7eecb4', fontSize: 9, fontWeight: 900 }}>UP</div>
+        <div style={{ position: 'absolute', left: '7%', bottom: '9%', color: '#ffbf68', fontSize: 9, fontWeight: 900 }}>DOWN</div>
       </div>
-      <p style={helpStyle}>{holding ? 'Hold...' : 'Press and hold'}</p>
+      <div style={{ color: '#e8f0ff', fontSize: 13, fontWeight: 800 }}>{cleared}/6 pieces cleared</div>
+      <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
+        <div style={{ height: '100%', width: `${cleared / 6 * 100}%`, background: '#68d9a0', transition: 'width 80ms linear' }} />
+      </div>
+      <p style={helpStyle}>{dragging ? 'Pull the lever all the way down…' : 'Touch the lever and drag it down to empty the chute'}</p>
     </div>
   );
 }
@@ -377,6 +397,196 @@ function FiltersGame({ stepIndex, onComplete }: { stepIndex: number; onComplete:
         ))}
       </div>
       <p style={helpStyle}>{dirty.size} filter{dirty.size !== 1 ? 's' : ''} remaining</p>
+    </div>
+  );
+}
+
+// ── Stabilize Navigation ──────────────────────────────────────────────────────
+// Drag the marker onto the target and keep it there for 2.5 seconds.
+
+function StabilizeNavigationGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const target = { x: 72, y: 32 };
+  const [marker, setMarker] = useState({ x: 22, y: 68 });
+  const [dragging, setDragging] = useState(false);
+  const [stableMs, setStableMs] = useState(0);
+  const areaRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef(marker);
+  const doneRef = useRef(false);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
+
+  const moveMarker = (clientX: number, clientY: number) => {
+    const rect = areaRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = {
+      x: Math.max(5, Math.min(95, ((clientX - rect.left) / rect.width) * 100)),
+      y: Math.max(8, Math.min(92, ((clientY - rect.top) / rect.height) * 100)),
+    };
+    markerRef.current = next;
+    setMarker(next);
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const distance = Math.hypot(markerRef.current.x - target.x, markerRef.current.y - target.y);
+      setStableMs(previous => {
+        const next = distance < 7 ? Math.min(2500, previous + 50) : 0;
+        if (next >= 2500 && !doneRef.current) {
+          doneRef.current = true;
+          setTimeout(() => completeRef.current(), 300);
+        }
+        return next;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '10px 0' }}>
+      <div style={{ width: 'min(300px,82vw)', height: 205, position: 'relative', borderRadius: 12,
+        overflow: 'hidden', background: 'radial-gradient(ellipse at center,#172e42,#080e18)',
+        border: '1px solid rgba(90,160,220,0.45)', touchAction: 'none' }} ref={areaRef}>
+        {Array.from({ length: 28 }, (_, i) => (
+          <span key={i} style={{ position: 'absolute', left: `${(i * 37 + 11) % 97}%`,
+            top: `${(i * 29 + 17) % 91}%`, width: 2, height: 2, borderRadius: '50%',
+            background: 'rgba(170,210,255,0.35)' }} />
+        ))}
+        <div style={{ position: 'absolute', left: `${target.x}%`, top: `${target.y}%`,
+          transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
+          border: '2px solid #ff6b42', boxShadow: '0 0 0 7px rgba(255,100,50,0.12)',
+          display: 'grid', placeItems: 'center', color: '#ff9b79', fontSize: 24 }}>⌖</div>
+        <button
+          onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); moveMarker(e.clientX,e.clientY); }}
+          onPointerMove={e => { if (dragging) moveMarker(e.clientX,e.clientY); }}
+          onPointerUp={() => setDragging(false)}
+          onPointerCancel={() => setDragging(false)}
+          onLostPointerCapture={() => setDragging(false)}
+          aria-label="Drag navigation marker to target"
+          style={{ position: 'absolute', left: `${marker.x}%`, top: `${marker.y}%`,
+            transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
+            border: '2px solid #d7fffb', background: dragging ? '#00cdbb' : '#078e89',
+            color: '#fff', fontSize: 20, fontWeight: 950, boxShadow: '0 0 18px rgba(0,220,200,0.5)',
+            touchAction: 'none', cursor: 'grab' }}>●</button>
+      </div>
+      <div style={{ width: 'min(280px,80vw)', height: 8, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
+        <div style={{ width: `${stableMs / 2500 * 100}%`, height: '100%', background: '#42ddb6', transition: 'width 50ms linear' }} />
+      </div>
+      <p style={helpStyle}>{stableMs > 0 ? `Stabilizing… ${(2.5 - stableMs / 1000).toFixed(1)}s` : 'Drag the green marker onto the orange target and hold for 2.5s'}</p>
+    </div>
+  );
+}
+
+// ── Reboot WiFi ───────────────────────────────────────────────────────────────
+// Drag the power lever from OFF at the bottom up to ON.
+
+function RebootWifiGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const [lever, setLever] = useState(88);
+  const [dragging, setDragging] = useState(false);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const doneRef = useRef(false);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
+
+  const move = (clientY: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = Math.max(4, Math.min(96, ((clientY - rect.top) / rect.height) * 100));
+    setLever(next);
+    if (next <= 7 && !doneRef.current) {
+      doneRef.current = true;
+      setTimeout(() => completeRef.current(), 350);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '10px 0' }}>
+      <div style={{ width: 'min(285px,80vw)', height: 285, position: 'relative', borderRadius: 14,
+        overflow: 'hidden', border: '1px solid rgba(80,210,255,0.35)',
+        background: 'linear-gradient(145deg,#172a37,#08111a)' }}>
+        <div style={{ padding: '16px 12px 0', textAlign: 'center', color: '#63dfff', fontWeight: 950, letterSpacing: '0.1em' }}>REBOOT THE WIFI</div>
+        <div ref={trackRef} style={{ position: 'absolute', top: 57, bottom: 30, left: '50%', transform: 'translateX(-50%)',
+          width: 22, borderRadius: 9, background: '#090f17', border: '1px solid #50616d' }}>
+          <div style={{ position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)', color: '#52e6a5', fontSize: 10, fontWeight: 950 }}>ON</div>
+          <div style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', color: '#ff7676', fontSize: 10, fontWeight: 950 }}>OFF</div>
+          <button
+            onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); move(e.clientY); }}
+            onPointerMove={e => { if (dragging) move(e.clientY); }}
+            onPointerUp={() => setDragging(false)}
+            onPointerCancel={() => setDragging(false)}
+            onLostPointerCapture={() => setDragging(false)}
+            aria-label="Drag WiFi lever up to ON"
+            style={{ position: 'absolute', left: '50%', top: `${lever}%`, transform: 'translate(-50%,-50%)',
+              width: 83, height: 44, borderRadius: 9, border: '2px solid #b5f5ff',
+              background: dragging ? '#21a9d0' : '#117da4', color: '#fff', fontSize: 20, fontWeight: 950,
+              boxShadow: '0 4px 0 #063a51', touchAction: 'none', cursor: 'grab' }}>↕</button>
+        </div>
+      </div>
+      <p style={helpStyle}>{lever <= 7 ? '✓ WiFi rebooted' : 'Drag the blue lever all the way up to ON'}</p>
+    </div>
+  );
+}
+
+// ── Align Engine ──────────────────────────────────────────────────────────────
+// Drag the engine lever into the target zone and keep it aligned for 1.5s.
+
+function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const target = 67;
+  const [slider, setSlider] = useState(18);
+  const [dragging, setDragging] = useState(false);
+  const [stableMs, setStableMs] = useState(0);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const sliderRef = useRef(slider);
+  const doneRef = useRef(false);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
+
+  const move = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const next = Math.max(5, Math.min(95, ((clientX - rect.left) / rect.width) * 100));
+    sliderRef.current = next;
+    setSlider(next);
+  };
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStableMs(previous => {
+        const next = Math.abs(sliderRef.current - target) <= 5 ? Math.min(1500, previous + 50) : 0;
+        if (next >= 1500 && !doneRef.current) {
+          doneRef.current = true;
+          setTimeout(() => completeRef.current(), 300);
+        }
+        return next;
+      });
+    }, 50);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 19, padding: '18px 0' }}>
+      <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#68e7a4', fontWeight: 900 }}>ALIGN ENGINE OUTPUT</div>
+      <div ref={trackRef} style={{ position: 'relative', width: 'min(300px,82vw)', height: 52, borderRadius: 12,
+        background: 'linear-gradient(180deg,#283a40,#111c24)', border: '1px solid rgba(100,220,160,0.35)', touchAction: 'none' }}>
+        <div style={{ position: 'absolute', left: '5%', right: '5%', top: '50%', height: 8,
+          transform: 'translateY(-50%)', borderRadius: 8, background: '#070e12' }} />
+        <div style={{ position: 'absolute', left: `${target}%`, top: 0, bottom: 0, width: 3,
+          background: '#61f59e', boxShadow: '0 0 14px #61f59e' }} />
+        <button
+          onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); move(e.clientX); }}
+          onPointerMove={e => { if (dragging) move(e.clientX); }}
+          onPointerUp={() => setDragging(false)}
+          onPointerCancel={() => setDragging(false)}
+          onLostPointerCapture={() => setDragging(false)}
+          aria-label="Drag engine alignment lever to target"
+          style={{ position: 'absolute', left: `${slider}%`, top: '50%', transform: 'translate(-50%,-50%)',
+            width: 42, height: 44, borderRadius: 8, border: '2px solid #d7ffe6',
+            background: dragging ? '#3ecb7e' : '#248b55', color: '#fff', fontWeight: 950,
+            boxShadow: '0 3px 0 #0b3e24', touchAction: 'none' }}>↔</button>
+      </div>
+      <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
+        <div style={{ width: `${stableMs / 1500 * 100}%`, height: '100%', background: '#56dd91', transition: 'width 50ms linear' }} />
+      </div>
+      <p style={helpStyle}>{stableMs ? `Aligned… ${(1.5 - stableMs / 1000).toFixed(1)}s` : 'Drag into the green target and keep it there for 1.5s'}</p>
     </div>
   );
 }
