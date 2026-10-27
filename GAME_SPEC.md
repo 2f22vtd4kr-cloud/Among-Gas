@@ -91,7 +91,7 @@ library's `{ server: httpServer }` option handles this upgrade path correctly.
 
 ### Transport rules
 - Binary only: `socket.binaryType = 'arraybuffer'` on client; `Buffer` on server.
-- No application-level ACKs (TCP guarantees delivery and ordering).
+No blanket application ACKs; authoritative gameplay transitions use explicit state/event packets.
 - All multi-byte integers: **Little-Endian**.
 - No raw UDP. Telegram WebView has no `dgram` access.
 
@@ -99,18 +99,25 @@ library's `{ server: httpServer }` option handles this upgrade path correctly.
 
 | Opcode | Name | Direction | Size | Payload |
 |---|---|---|---|---|
-| `0x00` | Handshake Fail | S→C | 1 byte | None. Server closes socket immediately. |
-| `0x01` | Handshake OK | S→C | 2 bytes | Byte 1: assigned player slot (0–14). |
-| `0x10` | Lobby Control | Both | Variable | Byte 1: sub-action (see §6). |
-| `0x11` | Move Intent | C→S | 5 bytes | Bytes 1–2: X (NormInt16LE). Bytes 3–4: Y (NormInt16LE). |
-| `0x12` | Game Start | C→S | 1 byte | Host only. Triggers role shuffle. |
-| `0x13` | Report / Emergency | C→S | 2 bytes | Byte 1: body slot ID (0xFF = emergency button). |
-| `0x14` | Vote | C→S | 2 bytes | Byte 1: target slot ID (0xFF = skip). |
-| `0x15` | RPC Event | Both | Variable | Byte 1: sub-opcode (see §10). |
-| `0x1A` | Role Reveal | S→C | 2 bytes | Byte 1: role (0=crewmate, 1=impostor). Impostor also gets teammate list (see §8). |
-| `0x1B` | Meeting Start | S→C | 3 bytes | Byte 1: reporter slot. Byte 2: body slot (0xFF = emergency). |
-| `0x1C` | Vote Result / Eject | S→C | 3 bytes | Byte 1: ejected slot. Byte 2: win flag. |
-| `0xFF` | Delta Sync | S→C | Variable | Byte 1: count of moving players. Sub-blocks: slot(1) + X(2) + Y(2). |
+| `0x00` | S→C | Handshake/auth failure |
+| `0x01` | S→C | Handshake accepted; room/player identity follows current protocol |
+| `0x10` | C→S / S→C | Lobby control: create, join, or create-and-start solo room |
+| `0x11` | C→S | Movement intent; server validates movement and collision |
+| `0x12` | C→S | Host-only start game request |
+| `0x13` | C→S | Report body or request emergency meeting |
+| `0x14` | C→S | Cast meeting vote |
+| `0x15` | Both | RPC/gameplay event: kill, task step/progress, sabotage trigger/repair |
+| `0x16` | S→C | Sabotage state: started, repair-pad fixed, resolved, Doors task-lock list |
+| `0x17` | C→S | Vent action: enter (`sub=1`), travel (`sub=2`), exit (`sub=3`) |
+| `0x18` | S→C | Vent state broadcast: enter, travel, or exit for a player slot |
+| `0x19` | Both | Meeting chat: client submit (`sub=1`), server broadcast (`sub=2`) |
+| `0x1A` | S→C | Role reveal and round start information |
+| `0x1B` | S→C | Meeting started |
+| `0x1C` | S→C | Vote result / ejection / round result |
+| `0x1D` | S→C | Assigned task IDs for this player |
+| `0x20` | S→C | Emergency button use confirmed for that player and round |
+| `0x21` | S→C | Immutable corpse position (`victimSlot`, `wireX`, `wireY`) |
+| `0xFF` | S→C | Position/state delta for players currently visible outside vents |
 
 ### Server-side: Buffer only, no DataView
 ```typescript
@@ -416,7 +423,7 @@ function validateKill(attacker: Player, victim: Player, maxKillRangeWire: number
 ```
 
 `maxKillRangeWire`: calibrate to ~1.5 map tiles. With wire scale 32000 and MAP_W 3224, one
-tile ≈ 10px ≈ 65 wire units. Kill range ≈ 1.5 tiles → 97 wire units.
+With 32000 wire units across MAP_W=3224, 10px is approximately 99 wire units; authoritative interactions are checked in decoded map pixels.
 
 ### Kill cooldown
 - Default: 15 seconds, matching the established AmongGas clone.
@@ -426,7 +433,7 @@ tile ≈ 10px ≈ 65 wire units. Kill range ≈ 1.5 tiles → 97 wire units.
 ### After kill broadcast
 All players in lobby receive `[0x15, 0x01, victimSlot]`.
 - Client: victim's sprite switches to "ghost" (dead body asset on map).
-- Victim themselves enters ghost mode: can walk through walls, cannot interact, cannot vote
+- Victim themselves enters ghost mode: can walk through walls, can complete assigned tasks, cannot vote
   (can see chat during meetings).
 - Impostor kill cooldown resets.
 
@@ -439,7 +446,7 @@ All players in lobby receive `[0x15, 0x01, victimSlot]`.
 | Sub | Name | Sender | Payload | Server Validation |
 |---|---|---|---|---|
 | `0x01` | Kill | Impostor | Byte 2: victim slot | Alive impostor + cooldown + distance |
-| `0x02` | Vent toggle | Impostor | Byte 2: vent ID | Proximity + vent exists on map |
+| `0x02` | Reserved (vents use top-level opcode 0x17)| Impostor | Byte 2: vent ID | Proximity + vent exists on map |
 | `0x03` | Task step | Crewmate | Byte 2: task ID. Byte 3: step index | Player assigned this task + correct step order |
 | `0x04` | Sabotage | Impostor | Byte 2: system ID | Global sabotage cooldown |
 | `0x05` | Repair | Crewmate | Byte 2: system ID. Byte 3: pad (0/1) | Proximity to repair console |
