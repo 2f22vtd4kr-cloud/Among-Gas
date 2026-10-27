@@ -20,6 +20,7 @@
 import { LobbyManager, type Lobby, type LobbyEvent } from '../ws/lobby.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
+import { getSabotageTimeoutMs, isCriticalSabotage } from '@workspace/shared/sabotage';
 import type { SimGameResult, SimWinner } from './types.js';
 
 export interface SimBatchOptions {
@@ -31,7 +32,7 @@ export interface SimBatchOptions {
   impostors?: number;
   /** How many games run concurrently at once. Default 25. */
   concurrency?: number;
-  /** Safety timeout per game (ms). A game stuck past this is recorded as 'timeout'. Default 300000. */
+  /** Safety watchdog per game (ms). A game with no terminal resolution past this is recorded as 'timeout'. Active critical sabotage gets time to resolve. Default 300000. */
   timeoutMs?: number;
   /** Called for every structured lifecycle event across every in-flight game. */
   onEvent?: (event: LobbyEvent) => void;
@@ -80,7 +81,8 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       let meetings = 0;
       let settled = false;
 
-      const timeoutHandle: ReturnType<typeof setTimeout> = setTimeout(() => finish('timeout'), timeoutMs);
+      let deadlineAt = startedAt + timeoutMs;
+      let timeoutHandle: ReturnType<typeof setTimeout> = setTimeout(() => finish('timeout'), timeoutMs);
 
       function finish(winner: SimWinner): void {
         if (settled) return;
@@ -109,6 +111,19 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       }
 
       perGameHandlers.set(lobby.code, (event) => {
+        // A critical O₂/reactor sabotage is a live, terminal game mechanic with
+        // its own 45s countdown. If it starts just before the simulator's safety
+        // watchdog, give that real game timer (plus scheduling grace) time to
+        // produce GAMEOVER rather than misclassifying a valid match as stalled.
+        if (event.type === 'sabotageStart' && isCriticalSabotage(event.systemId)) {
+          const requiredResolutionMs = getSabotageTimeoutMs(event.systemId) + 5_000;
+          const remainingWatchdogMs = deadlineAt - Date.now();
+          if (remainingWatchdogMs < requiredResolutionMs) {
+            clearTimeout(timeoutHandle);
+            deadlineAt = Date.now() + requiredResolutionMs;
+            timeoutHandle = setTimeout(() => finish('timeout'), requiredResolutionMs);
+          }
+        }
         opts.onEvent?.(event);
         if (event.type === 'kill') kills++;
         else if (event.type === 'meetingStart') meetings++;
