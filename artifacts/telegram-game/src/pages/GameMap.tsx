@@ -194,16 +194,7 @@ export default function GameMap() {
   useEffect(() => { mySlotRef.current = mySlot; }, [mySlot]);
 
   const myVentRef = useRef<number | null>(myVentId);
-  useEffect(() => {
-    myVentRef.current = myVentId;
-    // Snap local prediction to the canonical vent coordinate before freezing.
-    if (myVentId !== null) {
-      const vent = findVent(myVentId);
-      if (vent) playerStateRef.current = { ...playerStateRef.current, x: vent.x, y: vent.y };
-    }
-    keysRef.current.clear();
-    pendingSentRef.current.length = 0;
-  }, [myVentId]);
+  useEffect(() => { myVentRef.current = myVentId; }, [myVentId]);
 
   const usernamesRef = useRef<Map<number, string>>(new Map());
   useEffect(() => {
@@ -610,6 +601,15 @@ export default function GameMap() {
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const playerStateRef = useRef(createInitialPlayerState());
+
+  useEffect(() => {
+    if (myVentId !== null) {
+      const vent = findVent(myVentId);
+      if (vent) playerStateRef.current = { ...playerStateRef.current, x: vent.x, y: vent.y };
+    }
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [myVentId]);
 
   useEffect(() => {
     if (!loaded || !spriteLoaded) return;
