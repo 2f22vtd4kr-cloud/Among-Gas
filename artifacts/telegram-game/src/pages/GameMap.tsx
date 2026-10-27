@@ -64,6 +64,12 @@ const TASK_NAME_RU: Record<string, string> = {
   'Calibrate Distributor':  'Настроить распределитель',
   'Empty Garbage':          'Вынести мусор',
   'Clean Filters':          'Почистить фильтры',
+  'Stabilize Navigation':  'Стабилизировать навигацию',
+  'Reboot WiFi':           'Перезапустить связь',
+  'Fuel Engine':           'Заправить двигатель',
+  'Start Reactor':         'Запустить реактор',
+  'Align Engine':          'Выровнять двигатель',
+  'Clear Asteroids':       'Уничтожить астероиды',
 };
 const SABOTAGE_NAME_RU: Record<string, string> = {
   'Lights':   'Свет',
