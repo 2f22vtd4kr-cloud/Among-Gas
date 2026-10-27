@@ -1008,19 +1008,9 @@ export class LobbyManager {
   }
 
   /**
-   * When a crewmate dies, drop their still-incomplete assigned task steps
-   * from `totalTaskSteps` (GAME_SPEC.md §10 task bar is a ratio over *all*
-   * steps ever assigned — but a dead crewmate can never submit another step,
-   * per §9 "cannot interact"). Without this, any crewmate who dies with
-   * unfinished tasks makes `completedTaskSteps.size === totalTaskSteps`
-   * permanently unreachable, so the crew can only ever win by ejection or a
-   * kill-parity wipe — never by tasks — for the rest of the game. In
-   * practice this stalled a meaningful share of simulated games all the way
-   * to the safety timeout (no meeting ever called, no parity-ending kill,
-   * sabotage not resolved in time) because the one win condition that should
-   * have been reachable (finish remaining tasks) was silently impossible.
-   * Matches standard Among Us behaviour: a dead player's unfinished tasks
-   * are removed from the shared task bar, not stuck on it forever.
+   * Remove unfinished task steps only when a crewmate permanently leaves the
+   * lobby. Death and ejection turn crewmates into ghosts who retain their tasks,
+   * can complete them, and still contribute to the crew task-win condition.
    */
   private _removeIncompleteTaskSteps(lobby: Lobby, victim: LobbyPlayer): void {
     if (victim.role !== 'crewmate' || victim.assignedTasks.length === 0) return;
