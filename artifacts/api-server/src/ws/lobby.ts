@@ -1003,7 +1003,7 @@ export class LobbyManager {
     victim.bodyReported = false;
     victim.alive = false;
     attacker.killCooldownMs = KILL_COOLDOWN_MS;
-    this._removeIncompleteTaskSteps(lobby, victim);
+    // Ghost crewmates retain assigned tasks and may finish them after death.
     return true;
   }
 
@@ -1241,7 +1241,7 @@ export class LobbyManager {
    *
    * Validation rules:
    *   - Lobby must be ROAMING
-   *   - Player must be alive crewmate with this task assigned
+   *   - Player must be a crewmate (living or ghost) with this task assigned
    *   - stepIndex must be the next pending step (all prior steps done)
    *   - Step must not already be completed
    */
@@ -1249,7 +1249,8 @@ export class LobbyManager {
     if (lobby.phase !== 'ROAMING') return false;
 
     const player = lobby.players.get(playerSlot);
-    if (!player || !player.alive || player.role !== 'crewmate' || player.inVent) return false;
+    // Crewmate ghosts can still complete their assigned tasks, just like the base game.
+    if (!player || player.role !== 'crewmate' || player.inVent) return false;
     const activeSabotage = lobby.sabotage;
     if (activeSabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
     if (activeSabotage?.systemId === SABOTAGE_DOORS && activeSabotage.lockedTaskIds.includes(taskId)) return false;
@@ -1457,7 +1458,7 @@ export class LobbyManager {
         // submit their remaining task steps, so drop them from the shared
         // denominator or the task-win condition becomes unreachable for the
         // rest of the game.
-        this._removeIncompleteTaskSteps(lobby, ejected);
+        // Ejected crewmates retain tasks as ghosts; only disconnected players' work is removed.
       }
     }
 
