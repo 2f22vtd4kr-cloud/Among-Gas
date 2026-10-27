@@ -177,7 +177,7 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs, myVentId, meetingMessages,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed,
   } = useGameState();
   const {
     sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
@@ -399,29 +399,6 @@ export default function GameMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amIDead, meeting, myRole, sabotage]);
 
-  // Nearest vent is recomputed at low frequency; the server still checks range.
-  const [nearestVentId, setNearestVentId] = useState<number | null>(null);
-  useEffect(() => {
-    if (!amIImpostor || amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
-      setNearestVentId(null);
-      return;
-    }
-    const id = setInterval(() => {
-      const myPos = playerStateRef.current;
-      if (!myPos) return;
-      let best: number | null = null;
-      let bestDistSq = VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX;
-      for (const vent of VENT_DEFS) {
-        const dx = vent.x - myPos.x;
-        const dy = vent.y - myPos.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = vent.id; bestDistSq = distSq; }
-      }
-      setNearestVentId(best);
-    }, 150);
-    return () => clearInterval(id);
-  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
-
   // ── Role reveal overlay ───────────────────────────────────────────────────
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
   // (both the React state AND the CSS fade animation, which otherwise finishes
@@ -601,6 +578,30 @@ export default function GameMap() {
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const playerStateRef = useRef(createInitialPlayerState());
+
+  // Nearest vent is recomputed at low frequency; the server still checks range.
+  const [nearestVentId, setNearestVentId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!amIImpostor || amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
+      setNearestVentId(null);
+      return;
+    }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      if (!myPos) return;
+      let best: number | null = null;
+      let bestDistSq = VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX;
+      for (const vent of VENT_DEFS) {
+        const dx = vent.x - myPos.x;
+        const dy = vent.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) { best = vent.id; bestDistSq = distSq; }
+      }
+      setNearestVentId(best);
+    }, 150);
+    return () => clearInterval(id);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
+
 
   useEffect(() => {
     if (myVentId !== null) {
@@ -1440,16 +1441,19 @@ export default function GameMap() {
       {loaded && !amIDead && meeting === null && sabotage === null && (
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
-            onClick={() => { haptic.tap(); callEmergencyMeeting(); }}
+            disabled={emergencyMeetingUsed}
+            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); callEmergencyMeeting(); } }}
             style={{
               padding: '8px 14px', borderRadius: 8,
-              background: 'rgba(160,40,20,0.85)', color: '#ffe4d0',
+              background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
+              color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
               border: '1px solid rgba(255,120,80,0.4)', fontFamily: 'sans-serif',
               fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
-              textTransform: 'uppercase', cursor: 'pointer', backdropFilter: 'blur(6px)',
+              textTransform: 'uppercase', cursor: emergencyMeetingUsed ? 'default' : 'pointer',
+              backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            🚨 Тревога
+            {emergencyMeetingUsed ? '✓ Тревога использована' : '🚨 Тревога'}
           </button>
         </div>
       )}
