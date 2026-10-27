@@ -339,9 +339,9 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       myRole: 'impostor', impostorSlots: [0], killCooldownMs: 0,
     },
     remotePlayers: [
-      { slot: 1, x: MAP_W / 2 + 20, y: MAP_H / 2 + 6 }, // in kill range
-      { slot: 2, x: MAP_W / 2 - 90, y: MAP_H / 2 + 60 },
-      { slot: 3, x: MAP_W / 2 + 30, y: MAP_H / 2 + 140 },
+      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // in kill range of the real spawn position
+      { slot: 2, x: PLAYER_SPAWN.x - 90, y: PLAYER_SPAWN.y + 60 },
+      { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],
   },
   // Phase 5 — ghost mode: this client has been killed, sees the "You are dead" state.
@@ -383,9 +383,10 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }],
     },
     remotePlayers: [
-      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // in report range
+      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // ghost may move; body remains at this position
       { slot: 2, x: PLAYER_SPAWN.x - 90, y: PLAYER_SPAWN.y + 60 },
       { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],

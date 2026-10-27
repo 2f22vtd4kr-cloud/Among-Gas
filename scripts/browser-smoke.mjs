@@ -64,6 +64,48 @@ try {
   const secondStepDirty = page.getByRole('button', { name: /Dirty filter/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
   await page.getByRole('button', { name: 'Close' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
+  await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const killButton = page.getByRole('button', { name: /Убить/ });
+  await killButton.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForFunction(() => [...document.querySelectorAll('button')].some(
+    button => button.textContent?.includes('Убить') && !button.disabled,
+  ), undefined, { timeout: 5_000 });
+  assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
+
+  // Dropped bodies are distinct from the ghost's moving sprite and remain reportable.
+  await page.goto(`${origin}/?mock=report-ready`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const reportButton = page.getByRole('button', { name: /Доложить/ });
+  await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+
+  // Meeting discussion and voting both keep the chat available; voting adds ballot controls.
+  await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
+  await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
+
+  await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Голосование', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Пропустить' }).waitFor({ state: 'visible' });
+
+  // All five sabotage choices render in the impostor panel.
+  await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: /Саботаж/ }).click();
+  await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
+  for (const system of ['Lights', 'O₂', 'Reactor', 'Comms', 'Doors']) {
+    await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
+  }
+  await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+
+  // Return to the normal task fixture so viewport assertions test the playable HUD.
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 10_000 });
+
   // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
   const viewportCases = [
     { width: 320, height: 568, label: 'small portrait' },
@@ -110,6 +152,10 @@ try {
       'tactical map opens and closes',
       'tactical map freezes movement',
       'two-step Clean Filters task completes and resets correctly',
+      'in-range impostor kill action is enabled',
+      'dropped corpse remains reportable independently of the ghost',
+      'meeting chat is available in discussion and voting with vote controls',
+      'all five sabotage choices render in the impostor panel',
       'responsive layout at 320×568, 844×390, and 1365×768',
       'no uncaught browser page errors',
     ],
