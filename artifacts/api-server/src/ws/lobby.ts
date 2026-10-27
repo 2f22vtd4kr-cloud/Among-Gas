@@ -644,7 +644,7 @@ export class LobbyManager {
     if (!sender || !sender.alive) return false;
     const now = Date.now();
     if (now - (this._chatLastSentAt.get(sender.tgUserId) ?? 0) < 500) return false;
-    const text = String(rawText ?? '').replace(/[\\u0000-\\u001F\\u007F]/g, '').trim();
+    const text = String(rawText ?? '').replace(/[\u0000-\u001F\u007F]/g, '').trim();
     if (!text) return false;
     const payload = Buffer.from(text, 'utf8').subarray(0, 200);
     const safeText = payload.toString('utf8').trim();
