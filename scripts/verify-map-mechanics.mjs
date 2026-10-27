@@ -15,6 +15,7 @@ const collisionMap = read('lib/shared/src/collisionMap.ts');
 const coords = read('lib/shared/src/coords.ts');
 const taskSource = read('lib/shared/src/tasks.ts');
 const ventSource = read('lib/shared/src/vents.ts');
+const adminTableSource = read('lib/shared/src/adminTable.ts');
 const sabotageSource = read('lib/shared/src/sabotage.ts');
 const minigameSource = read('artifacts/telegram-game/src/components/TaskMinigame.tsx');
 const indexHtml = read('artifacts/telegram-game/index.html');
@@ -153,6 +154,16 @@ for (const [i, pad] of saboPads.entries()) {
   assert.ok(closestReachable(pad.x, pad.y) <= saboRange,
     `Sabotage repair pad ${i} is outside a reachable interaction radius`);
 }
+const adminBlock = adminTableSource.match(/export const ADMIN_TABLE_DEFS[\\s\\S]*?=\\s*\\[([\\s\\S]*?)\\]\\s*as const;/)?.[1];
+assert.ok(adminBlock, 'Could not parse ADMIN_TABLE_DEFS');
+const adminTables = parseRefPoints(adminBlock);
+assert.equal(adminTables.length, 1, 'Expected one custom-map Admin Table console');
+const adminRange = Math.round(55 * mapW / 1040);
+for (const [i, consoleDef] of adminTables.entries()) {
+  assert.ok(canPlayerMoveTo(consoleDef.x, consoleDef.y), `Admin Table console ${i} is not walkable`);
+  assert.ok(closestReachable(consoleDef.x, consoleDef.y) <= adminRange,
+    `Admin Table console ${i} is outside a reachable interaction radius`);
+}
 assert.match(sabotageSource, /SABOTAGE_COUNTDOWN_MS\s*=\s*45_000/, 'Critical sabotage must use the base-game 45-second window');
 assert.match(coords, /KILL_COOLDOWN_MS\s*=\s*15_000/, 'Kill cooldown must match the established base-game clone');
 const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
@@ -168,6 +179,7 @@ console.log(JSON.stringify({
   reachableCells: reachableNodes.length,
   taskCount: tasks.length,
   ventCount: vents.length,
+  adminTableCount: adminTables.length,
   sabotageRepairPads: saboPads.length,
   telegramBootstrap: 'present',
 }, null, 2));
