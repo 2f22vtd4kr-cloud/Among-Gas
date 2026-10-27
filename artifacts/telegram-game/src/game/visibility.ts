@@ -78,14 +78,20 @@ export function computeVisibilityPolygon(
         }
       } else if (maxX < maxY) {
         col += stepX;
-        hitDistance = maxX;
+        const boundaryDistance = maxX;
         maxX += deltaX;
-        if (isBlocked(grid, col, row)) break;
+        if (isBlocked(grid, col, row)) {
+          hitDistance = boundaryDistance;
+          break;
+        }
       } else {
         row += stepY;
-        hitDistance = maxY;
+        const boundaryDistance = maxY;
         maxY += deltaY;
-        if (isBlocked(grid, col, row)) break;
+        if (isBlocked(grid, col, row)) {
+          hitDistance = boundaryDistance;
+          break;
+        }
       }
     }
 
