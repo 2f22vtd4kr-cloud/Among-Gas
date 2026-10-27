@@ -105,7 +105,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
             alive: player.alive,
             x: Math.round(player.x),
             y: Math.round(player.y),
-            inVent: player.inVent,
+            inVent: player.inVent === true,
             unfinishedTasks: player.assignedTasks.flatMap(taskId => {
               const task = TASK_DEFS.find(def => def.id === taskId);
               if (!task) return [];
