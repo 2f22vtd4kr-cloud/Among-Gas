@@ -248,6 +248,13 @@ export default function GameMap() {
   const [, setAdminTableTick] = useState(0);
   const [showMiniMap, setShowMiniMap] = useState(false);
   const [miniMapTick, setMiniMapTick] = useState(0);
+  const miniMapOpenRef = useRef(false);
+  useEffect(() => {
+    miniMapOpenRef.current = showMiniMap;
+    // Prevent the keyboard and joystick from moving the player behind the modal.
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [showMiniMap]);
   const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
     if (!amIImpostor || sabotage !== null) setShowSabotagePanel(false);
@@ -759,7 +766,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null || adminTableOpenRef.current
+      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
