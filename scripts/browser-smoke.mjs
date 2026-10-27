@@ -64,6 +64,35 @@ try {
   const secondStepDirty = page.getByRole('button', { name: /Dirty filter/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
   await page.getByRole('button', { name: 'Close' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
+  const viewportCases = [
+    { width: 320, height: 568, label: 'small portrait' },
+    { width: 844, height: 390, label: 'landscape phone' },
+    { width: 1365, height: 768, label: 'desktop' },
+  ];
+  for (const viewport of viewportCases) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await page.waitForTimeout(100);
+    const layout = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas');
+      if (!canvas) throw new Error('game canvas disappeared after resize');
+      const rect = canvas.getBoundingClientRect();
+      return {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        documentWidth: document.documentElement.scrollWidth,
+        canvas: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height },
+      };
+    });
+    assert.ok(layout.documentWidth <= layout.viewportWidth + 1,
+      `${viewport.label}: horizontal page overflow (${layout.documentWidth}px > ${layout.viewportWidth}px)`);
+    assert.ok(layout.canvas.width > 0 && layout.canvas.height > 0,
+      `${viewport.label}: game canvas has no visible area`);
+    assert.ok(layout.canvas.left >= -1 && layout.canvas.right <= layout.viewportWidth + 1,
+      `${viewport.label}: game canvas exceeds horizontal viewport bounds`);
+    assert.ok(layout.canvas.top >= -1 && layout.canvas.bottom <= layout.viewportHeight + 1,
+      `${viewport.label}: game canvas exceeds vertical viewport bounds`);
+  }
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({
@@ -74,6 +103,7 @@ try {
       'tactical map opens and closes',
       'tactical map freezes movement',
       'two-step Clean Filters task completes and resets correctly',
+      'responsive layout at 320×568, 844×390, and 1365×768',
       'no uncaught browser page errors',
     ],
   }, null, 2));
