@@ -251,6 +251,39 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
+// 6. Ejected crewmates retain ghost tasks and can still win via the shared task bar.
+{
+  const task = TASK_DEFS[0];
+  const impostor = makePlayer(0, 'impostor', task.x, task.y);
+  const ejected = makePlayer(1, 'crewmate', task.x, task.y);
+  const crewA = makePlayer(2, 'crewmate', task.x, task.y);
+  const crewB = makePlayer(3, 'crewmate', task.x, task.y);
+  ejected.player.assignedTasks = [task.id];
+  const lobby = makeLobby([impostor.player, ejected.player, crewA.player, crewB.player]);
+  lobby.totalTaskSteps = task.steps;
+  lobby.phase = 'MEETING';
+  lobby.meeting = {
+    reporterSlot: 2, bodySlot: NO_TARGET, votes: new Map(), votingOpen: true,
+    discussionTimer: null, votingTimer: null,
+  };
+  const manager = new LobbyManager();
+  assert.equal(manager.castVote(lobby, 0, 1), true);
+  assert.equal(manager.castVote(lobby, 1, NO_TARGET), true);
+  assert.equal(manager.castVote(lobby, 2, 1), true);
+  assert.equal(manager.castVote(lobby, 3, 1), true, 'last vote tallies the meeting');
+  assert.equal(ejected.player.alive, false, 'voted-out crewmate becomes a ghost');
+  assert.equal(lobby.phase, 'ROAMING', 'game continues after non-terminal ejection');
+  assert.equal(lobby.totalTaskSteps, task.steps, 'ejection does not remove unfinished ghost tasks');
+  assert.equal(manager.handleTaskStep(lobby, 1, task.id, 0), true, 'ejected crewmate can complete ghost task steps');
+  if (task.steps > 1) {
+    for (let step = 1; step < task.steps; step++) {
+      assert.equal(manager.handleTaskStep(lobby, 1, task.id, step), true);
+    }
+  }
+  assert.equal(lobby.phase, 'GAMEOVER', 'ghost task completion can trigger the crew task-win condition');
+  manager.disposeLobby(lobby);
+}
+
 // 6. Emergency meetings are single-use per player per round.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
