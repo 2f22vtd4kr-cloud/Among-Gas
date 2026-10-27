@@ -250,7 +250,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
         const player = lobby.players.get(slot);
-        if (!player) return;
+        if (!player || player.inVent) return;
 
         // Decode wire-space coordinates (Int16LE, 0–32000)
         const wireX = raw.readInt16LE(1);
