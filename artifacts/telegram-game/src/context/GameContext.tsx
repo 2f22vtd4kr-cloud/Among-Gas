@@ -20,7 +20,7 @@ import {
 import {
   SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
 } from '@workspace/shared/sabotage';
-import { VENT_DEFS, findVent } from '@workspace/shared/vents';
+import { findVent } from '@workspace/shared/vents';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
 
@@ -910,10 +910,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // Doors sabotage sends the affected task IDs after the start packet:
         // [0x16, 0x04, count, taskId...].
         if (sub === 0x04 && event.data.byteLength >= 3) {
-          const count = view.getUint8(2);
+          const count = view.getUint8(3);
           const lockedTaskIds: number[] = [];
-          for (let i = 0; i < count && 3 + i < event.data.byteLength; i++) {
-            lockedTaskIds.push(view.getUint8(3 + i));
+          for (let i = 0; i < count && 4 + i < event.data.byteLength; i++) {
+            lockedTaskIds.push(view.getUint8(4 + i));
           }
           setState(s => (
             !s.sabotage || s.sabotage.systemId !== systemId
@@ -935,11 +935,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         const vent = findVent(ventId);
         if (!vent || (sub !== 0x01 && sub !== 0x02 && sub !== 0x03)) return;
         const inVent = sub !== 0x03;
-        remotePlayersRef.current.set(slot, {
-          slot, x: vent.x, y: vent.y, inVent,
-        });
         if (slot === mySlotRef.current) {
+          remotePlayersRef.current.delete(slot);
           setState(s => ({ ...s, myVentId: inVent ? ventId : null }));
+        } else {
+          remotePlayersRef.current.set(slot, { slot, x: vent.x, y: vent.y, inVent });
         }
         return;
       }
@@ -1012,6 +1012,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(s => ({
           ...s,
           meeting: null,
+          myVentId: null,
           deadSlots: ejectedSlot !== NO_TARGET && !s.deadSlots.includes(ejectedSlot)
             ? [...s.deadSlots, ejectedSlot]
             : s.deadSlots,
