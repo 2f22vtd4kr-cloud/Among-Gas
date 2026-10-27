@@ -64,3 +64,6 @@ export type { SabotageSystemId, SabotagePad, SabotageDef } from './sabotage.js';
 
 export { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent, canTravelVent } from './vents.js';
 export type { VentDef } from './vents.js';
+
+export { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from './adminTable.js';
+export type { AdminTableDef } from './adminTable.js';
