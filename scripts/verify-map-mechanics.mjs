@@ -18,6 +18,8 @@ const ventSource = read('lib/shared/src/vents.ts');
 const adminTableSource = read('lib/shared/src/adminTable.ts');
 const sabotageSource = read('lib/shared/src/sabotage.ts');
 const minigameSource = read('artifacts/telegram-game/src/components/TaskMinigame.tsx');
+const gameMapSource = read('artifacts/telegram-game/src/pages/GameMap.tsx');
+const visibilitySource = read('artifacts/telegram-game/src/game/visibility.ts');
 const indexHtml = read('artifacts/telegram-game/index.html');
 const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
 const lobbySource = read('artifacts/api-server/src/ws/lobby.ts');
@@ -174,6 +176,12 @@ for (const [i, consoleDef] of adminTables.entries()) {
 }
 assert.match(sabotageSource, /SABOTAGE_COUNTDOWN_MS\s*=\s*45_000/, 'Critical sabotage must use the base-game 45-second window');
 assert.match(coords, /KILL_COOLDOWN_MS\s*=\s*15_000/, 'Kill cooldown must match the established base-game clone');
+assert.match(sabotageSource, /NORMAL_VISION_RADIUS_PX\s*=\s*Math\.round\(260 \* _sx\)/, 'Normal crewmate vision must be defined in map pixels');
+assert.match(sabotageSource, /IMPOSTOR_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* 1\.4\)/, 'Impostors must have longer base-game vision');
+assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* LIGHTS_VISION_SCALE\)/, 'Lights sabotage must reduce crew vision');
+assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, grid\)/, 'GameMap must apply the shared collision grid to local visibility');
+assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
+assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
 const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
 assert.deepEqual(minigameIds, [...Array(tasks.length).keys()], 'Every assigned task needs a playable minigame');
 assert.match(indexHtml, /telegram-web-app\.js/, 'Telegram WebApp SDK must load before React bootstraps');
@@ -189,5 +197,6 @@ console.log(JSON.stringify({
   ventCount: vents.length,
   adminTableCount: adminTables.length,
   sabotageRepairPads: saboPads.length,
+  visionRayCount: 720,
   telegramBootstrap: 'present',
 }, null, 2));
