@@ -5,7 +5,7 @@ const modulePath = process.env.PLAYWRIGHT_MODULE;
 if (!modulePath) throw new Error('PLAYWRIGHT_MODULE must point to the installed Playwright ESM entry');
 const { chromium } = await import(pathToFileURL(modulePath).href);
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
-const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--no-sandbox'] });
 const failures = [];
 try {
   const page = await browser.newPage({

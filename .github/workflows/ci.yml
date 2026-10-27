@@ -50,10 +50,8 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
-      - name: Install Chromium for mobile browser smoke tests
-        run: |
-          npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
-          /tmp/among-gas-playwright/node_modules/.bin/playwright install --with-deps chromium
+      - name: Prepare Playwright for mobile browser smoke tests
+        run: npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
 
       - name: Start Telegram Mini App and play a mobile UI smoke test
         env:
