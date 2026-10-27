@@ -44,11 +44,14 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
-  SABOTAGE_COUNTDOWN_MS,
   SABOTAGE_LIGHTS,
+  SABOTAGE_COMMS,
+  SABOTAGE_DOORS,
+  getSabotageTimeoutMs,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
 import TaskMinigame from '../components/TaskMinigame';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -66,6 +69,8 @@ const SABOTAGE_NAME_RU: Record<string, string> = {
   'Lights':   'Свет',
   'O₂':       'O₂',
   'Reactor':  'Реактор',
+  'Comms':    'Связь',
+  'Doors':    'Двери',
 };
 function taskRu(name: string | undefined): string {
   return (name && TASK_NAME_RU[name]) || name || 'Задание';
@@ -172,11 +177,12 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages,
   } = useGameState();
   const {
     sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
     triggerSabotage, repairSabotage,
+    enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
 
   const playerName = useCallback(
@@ -186,6 +192,18 @@ export default function GameMap() {
 
   const mySlotRef = useRef<number | null>(mySlot);
   useEffect(() => { mySlotRef.current = mySlot; }, [mySlot]);
+
+  const myVentRef = useRef<number | null>(myVentId);
+  useEffect(() => {
+    myVentRef.current = myVentId;
+    // Snap local prediction to the canonical vent coordinate before freezing.
+    if (myVentId !== null) {
+      const vent = findVent(myVentId);
+      if (vent) playerStateRef.current = { ...playerStateRef.current, x: vent.x, y: vent.y };
+    }
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [myVentId]);
 
   const usernamesRef = useRef<Map<number, string>>(new Map());
   useEffect(() => {
@@ -216,6 +234,7 @@ export default function GameMap() {
   useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
 
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
+  const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
     if (!amIImpostor || sabotage !== null) setShowSabotagePanel(false);
   }, [amIImpostor, sabotage]);
@@ -256,7 +275,7 @@ export default function GameMap() {
   }, [sabotage]);
 
   const sabotageRemainingMs = sabotage
-    ? Math.max(0, SABOTAGE_COUNTDOWN_MS - (sabotageNow - sabotage.startedAtMs))
+    ? Math.max(0, getSabotageTimeoutMs(sabotage.systemId as SabotageSystemId) - (sabotageNow - sabotage.startedAtMs))
     : 0;
   const sabotageDef = sabotage ? SABOTAGE_DEFS[sabotage.systemId as SabotageSystemId] : null;
 
@@ -278,6 +297,7 @@ export default function GameMap() {
       let best: number | null = null;
       let bestDistSq = REPORT_RANGE_PX * REPORT_RANGE_PX;
       for (const rp of remotePlayersRef.current.values()) {
+        if (rp.inVent) continue;
         if (!deadSlotsRef.current.has(rp.slot)) continue;
         const dx = rp.x - myPos.x;
         const dy = rp.y - myPos.y;
@@ -328,6 +348,7 @@ export default function GameMap() {
       let best: number | null = null;
       let bestDistSq = KILL_RANGE_PX * KILL_RANGE_PX;
       for (const rp of remotePlayersRef.current.values()) {
+        if (rp.inVent) continue;
         if (impostorSetRef.current.has(rp.slot)) continue; // no team kill
         if (deadSlotsRef.current.has(rp.slot)) continue;
         const dx = rp.x - myPos.x;
@@ -354,11 +375,15 @@ export default function GameMap() {
   // Auto-close the task panel whenever the game enters a state where task
   // interaction is invalid: meeting in progress, player dead, or game over.
   useEffect(() => {
-    if (meeting !== null || amIDead || voteResult?.winner) setActiveTaskId(null);
-  }, [meeting, amIDead, voteResult?.winner]);
+    const activeTaskLocked = activeTaskId !== null &&
+      (sabotage?.systemId === SABOTAGE_COMMS ||
+       (sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(activeTaskId)));
+    if (meeting !== null || amIDead || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
+  }, [meeting, amIDead, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
-    if (amIDead || meeting !== null || myRole !== 'crewmate') { setNearestTask(null); return; }
+    if (amIDead || meeting !== null || myRole !== 'crewmate' ||
+        sabotage?.systemId === SABOTAGE_COMMS) { setNearestTask(null); return; }
     const id = setInterval(() => {
       const myPos = playerStateRef.current;
       if (!myPos) return;
@@ -367,6 +392,8 @@ export default function GameMap() {
       for (const t of myTasksRef.current) {
         const def = TASK_DEFS[t.taskId];
         if (!def || t.completedSteps >= def.steps) continue;
+        if (sabotageRef.current?.systemId === SABOTAGE_DOORS &&
+            sabotageRef.current.lockedTaskIds.includes(t.taskId)) continue;
         const dx = def.x - myPos.x;
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
@@ -379,7 +406,30 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting, myRole]);
+  }, [amIDead, meeting, myRole, sabotage]);
+
+  // Nearest vent is recomputed at low frequency; the server still checks range.
+  const [nearestVentId, setNearestVentId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!amIImpostor || amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
+      setNearestVentId(null);
+      return;
+    }
+    const id = setInterval(() => {
+      const myPos = playerStateRef.current;
+      if (!myPos) return;
+      let best: number | null = null;
+      let bestDistSq = VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX;
+      for (const vent of VENT_DEFS) {
+        const dx = vent.x - myPos.x;
+        const dy = vent.y - myPos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) { best = vent.id; bestDistSq = distSq; }
+      }
+      setNearestVentId(best);
+    }, 150);
+    return () => clearInterval(id);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
 
   // ── Role reveal overlay ───────────────────────────────────────────────────
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
@@ -629,7 +679,9 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current ? EMPTY_KEYS : keysRef.current;
+      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null
+        ? EMPTY_KEYS
+        : keysRef.current;
       playerStateRef.current = stepPlayer(
         grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
@@ -729,12 +781,14 @@ export default function GameMap() {
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
       {
         const snap = myTasksRef.current;
-        if (snap.length > 0 && !meetingActiveRef.current) {
+        if (snap.length > 0 && !meetingActiveRef.current && sabotageRef.current?.systemId !== SABOTAGE_COMMS) {
           ctx.textAlign = 'center';
           for (const t of snap) {
             const def = TASK_DEFS[t.taskId];
             if (!def) continue;
             const done = t.completedSteps >= def.steps;
+            const locked = sabotageRef.current?.systemId === SABOTAGE_DOORS &&
+              sabotageRef.current.lockedTaskIds.includes(t.taskId);
             const tx = Math.round((def.x - srcX) * scale);
             const ty = Math.round((def.y - srcY) * scale);
             if (tx < -60 || tx > cw + 60 || ty < -60 || ty > ch + 60) continue;
@@ -742,29 +796,29 @@ export default function GameMap() {
             // Glow ring
             ctx.beginPath();
             ctx.arc(tx, ty, markerR + 3, 0, Math.PI * 2);
-            ctx.fillStyle = done ? 'rgba(50,180,50,0.2)' : 'rgba(255,220,40,0.18)';
+            ctx.fillStyle = locked ? 'rgba(255,40,40,0.25)' : done ? 'rgba(50,180,50,0.2)' : 'rgba(255,220,40,0.18)';
             ctx.fill();
             // Marker circle
             ctx.beginPath();
             ctx.arc(tx, ty, markerR, 0, Math.PI * 2);
-            ctx.fillStyle = done ? 'rgba(50,180,50,0.85)' : 'rgba(255,210,30,0.9)';
+            ctx.fillStyle = locked ? 'rgba(150,35,40,0.95)' : done ? 'rgba(50,180,50,0.85)' : 'rgba(255,210,30,0.9)';
             ctx.fill();
             ctx.strokeStyle = done ? 'rgba(30,140,30,0.9)' : 'rgba(180,140,0,0.9)';
             ctx.lineWidth = Math.round(1.5 * dpr);
             ctx.stroke();
             // Icon
-            ctx.fillStyle = done ? '#0d3b0d' : '#3b2a00';
+            ctx.fillStyle = locked ? '#ffffff' : done ? '#0d3b0d' : '#3b2a00';
             ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
             ctx.textBaseline = 'middle';
-            ctx.fillText(done ? '✓' : '!', tx, ty);
+            ctx.fillText(locked ? '×' : done ? '✓' : '!', tx, ty);
             // Label
             ctx.textBaseline = 'top';
             ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
             ctx.strokeText(def.name, tx, ty + markerR + 3);
-            ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(def.name, tx, ty + markerR + 3);
+            ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
+            ctx.fillText(locked ? `🔒 ${def.name}` : def.name, tx, ty + markerR + 3);
           }
           ctx.textAlign = 'left';
         }
@@ -812,6 +866,35 @@ export default function GameMap() {
         }
       }
 
+      // ── 2.8 Vent markers ──────────────────────────────────────────────────
+      // Positions are in Among Gas's own collision-checked map coordinate space.
+      ctx.save();
+      ctx.textAlign = 'center';
+      VENT_DEFS.forEach(vent => {
+        const vx = Math.round((vent.x - srcX) * scale);
+        const vy = Math.round((vent.y - srcY) * scale);
+        if (vx < -32 || vx > cw + 32 || vy < -32 || vy > ch + 32) return;
+        const radius = Math.max(5, Math.round(10 * dpr));
+        ctx.beginPath();
+        ctx.arc(vx, vy, radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.56)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(vx, vy, radius, radius * 0.62, 0, 0, Math.PI * 2);
+        ctx.fillStyle = '#34454e';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeStyle = 'rgba(170,220,230,0.9)';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(vx - radius * 0.65, vy + radius * 0.08);
+        ctx.lineTo(vx + radius * 0.65, vy + radius * 0.08);
+        ctx.strokeStyle = 'rgba(10,20,26,0.95)';
+        ctx.lineWidth = Math.max(2, dpr * 2);
+        ctx.stroke();
+      });
+      ctx.restore();
+
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
@@ -830,6 +913,8 @@ export default function GameMap() {
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
 
         for (const rp of remotePlayers.values()) {
+          // Vent occupants must disappear completely until they exit.
+          if (rp.inVent) continue;
           // Update per-slot animation state from position deltas
           let anim = remoteAnims.get(rp.slot);
           if (!anim) {
@@ -1111,6 +1196,65 @@ export default function GameMap() {
         </div>
       )}
 
+      {/* ── Vent interaction (living impostors only) ───────────────────────── */}
+      {loaded && !amIDead && amIImpostor && myVentId === null && nearestVentId !== null && meeting === null && (
+        <div style={{ position: 'fixed', bottom: 220, right: 24, zIndex: 28 }}>
+          <button
+            onClick={() => { haptic.tap(); enterVent(nearestVentId); }}
+            style={{
+              padding: '11px 16px', borderRadius: 12,
+              background: 'linear-gradient(180deg, #394b54, #17272e)',
+              color: '#e3fbff', border: '2px solid rgba(170,220,230,0.75)',
+              boxShadow: '0 4px 0 #071015, 0 0 18px rgba(50,180,200,0.25)',
+              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
+              cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            🕳️ ВЛЕЗТЬ В ЛЮК
+          </button>
+        </div>
+      )}
+
+      {/* Vent selection covers the viewport and freezes movement while hidden. */}
+      {myVentId !== null && (() => {
+        const vent = findVent(myVentId);
+        if (!vent) return null;
+        return (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 85,
+            display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
+            gap: 12, padding: 24, background: 'rgba(4,10,15,0.96)',
+            color: '#e3fbff', fontFamily: 'sans-serif',
+          }}>
+            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>СИСТЕМА ЛЮКОВ</div>
+            <div style={{ fontSize: 26, fontWeight: 900, textAlign: 'center' }}>{vent.name}</div>
+            <div style={{ width: 'min(360px, 100%)', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
+              {vent.connections.map(id => {
+                const nextVent = findVent(id);
+                if (!nextVent) return null;
+                return (
+                  <button key={id} onClick={() => { haptic.tap(); travelVent(id); }} style={{
+                    width: '100%', padding: '15px 18px', borderRadius: 10,
+                    color: '#e3fbff', background: '#193842',
+                    border: '1px solid rgba(130,220,230,0.6)', fontWeight: 800, fontSize: 15,
+                    touchAction: 'manipulation',
+                  }}>
+                    → {nextVent.name}
+                  </button>
+                );
+              })}
+            </div>
+            <button onClick={() => { haptic.tap(); exitVent(); }} style={{
+              width: 'min(360px, 100%)', padding: '14px 18px', borderRadius: 10,
+              color: '#fff', background: '#8b2430', border: '1px solid #ff7785',
+              fontWeight: 900, fontSize: 15, touchAction: 'manipulation',
+            }}>
+              ВЫЛЕЗТИ ИЗ ЛЮКА
+            </button>
+          </div>
+        );
+      })()}
+
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && !amIDead && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
@@ -1370,8 +1514,51 @@ export default function GameMap() {
           )}
 
           {inDiscussion && !amIDead && (
-            <div style={{ color: 'rgba(255,255,255,0.4)', fontSize: 12, fontFamily: 'sans-serif' }}>
-              Голосование начнётся после обсуждения
+            <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
+                Голосование начнётся после обсуждения
+              </div>
+              <div aria-live="polite" style={{
+                display: 'flex', flexDirection: 'column', gap: 5, padding: 10,
+                height: 150, overflowY: 'auto', borderRadius: 10,
+                background: 'rgba(25,35,48,0.88)', border: '1px solid rgba(120,160,200,0.2)',
+                textAlign: 'left',
+              }}>
+                {meetingMessages.length === 0 && (
+                  <div style={{ fontSize: 12, opacity: 0.4, textAlign: 'center', margin: 'auto' }}>Чат обсуждения</div>
+                )}
+                {meetingMessages.map((message, i) => (
+                  <div key={`${message.receivedAt}-${message.slot}-${i}`} style={{
+                    fontSize: 13, lineHeight: 1.35, overflowWrap: 'anywhere', color: '#e6f2ff',
+                  }}>
+                    <strong style={{ color: message.slot === mySlot ? '#70dfc1' : '#ffd166' }}>{playerName(message.slot)}:</strong> {message.text}
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={e => {
+                e.preventDefault();
+                if (!chatDraft.trim()) return;
+                sendMeetingChat(chatDraft);
+                setChatDraft('');
+              }} style={{ display: 'flex', gap: 8 }}>
+                <input
+                  aria-label="Сообщение в обсуждении"
+                  value={chatDraft}
+                  onChange={e => setChatDraft(e.target.value)}
+                  maxLength={200}
+                  placeholder="Написать сообщение…"
+                  style={{
+                    flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 9,
+                    color: '#fff', background: '#172230', border: '1px solid rgba(130,180,220,0.35)',
+                    fontSize: 14, outline: 'none',
+                  }}
+                />
+                <button type="submit" disabled={!chatDraft.trim()} style={{
+                  padding: '0 16px', borderRadius: 9, color: '#071015', background: '#70dfc1',
+                  border: 0, fontWeight: 900, opacity: chatDraft.trim() ? 1 : 0.4,
+                  touchAction: 'manipulation',
+                }}>➤</button>
+              </form>
             </div>
           )}
 
