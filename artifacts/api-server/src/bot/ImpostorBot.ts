@@ -19,7 +19,8 @@
  */
 import { BotAgent, grid } from './BotAgent.js';
 import { KILL_RANGE_PX } from '@workspace/shared/collisionMap';
-import { SABOTAGE_DEFS, SABOTAGE_O2, type SabotageSystemId } from '@workspace/shared/sabotage';
+import { SABOTAGE_DEFS, SABOTAGE_DOORS, type SabotageSystemId } from '@workspace/shared/sabotage';
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from '@workspace/shared/vents';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
@@ -74,7 +75,32 @@ export class ImpostorBot extends BotAgent {
   /** Countdown ticks until the next sabotage attempt. */
   private _sabotageCountdown = Math.floor(Math.random() * SABOTAGE_INTERVAL_TICKS);
 
+  /** Use a vent once after a kill, during cooldown, then exit in a connected room. */
+  private _ventMode: 'idle' | 'approaching' | 'inside' = 'idle';
+  private _ventTargetId: number | null = null;
+  private _ventApproachGoal: Point | null = null;
+  private _ventApproachTicks = 0;
+  private _ventTicksRemaining = 0;
+  private _ventTravelled = false;
+  private _ventAttemptedThisCooldown = true;
+
   override roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    // A meeting can forcibly eject a bot from its vent. Discard that old plan.
+    if (this._ventMode === 'inside' && !self.inVent) {
+      this._resetVentPlan();
+      this._ventAttemptedThisCooldown = true;
+    }
+    if (self.inVent) {
+      this._tickInsideVent(lobby, self, manager);
+      return;
+    }
+
+    // The 15-second kill cooldown is the natural window for a short vent trip.
+    if (this._state === 'COOLDOWN' && self.killCooldownMs > 0 &&
+        !this._ventAttemptedThisCooldown && this._approachAndEnterVent(lobby, self, manager)) {
+      return;
+    }
+
     // Decrement sabotage countdown and fire if ready
     this._sabotageCountdown--;
     if (this._sabotageCountdown <= 0) {
@@ -200,6 +226,8 @@ export class ImpostorBot extends BotAgent {
       if (applied) {
         this._state = 'COOLDOWN';
         this._huntTargetSlot = null;
+        this._ventAttemptedThisCooldown = false;
+        this._resetVentPlan();
         this.clearPath();
       }
     }
@@ -263,6 +291,98 @@ export class ImpostorBot extends BotAgent {
     const triggered = manager.triggerSabotage(lobby, self.slot, systemId);
     if (triggered) {
       manager.broadcastSabotageStart(lobby, systemId, self.slot);
+      if (systemId === SABOTAGE_DOORS) manager.broadcastDoorLocks(lobby);
     }
+  }
+
+  /** Find a vent during kill cooldown and approach it using the shared collision/pathfinding. */
+  private _approachAndEnterVent(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): boolean {
+    if (this._ventMode === 'idle') {
+      const nearest = [...VENT_DEFS].sort((a, b) =>
+        Math.hypot(a.x - self.x, a.y - self.y) - Math.hypot(b.x - self.x, b.y - self.y),
+      )[0];
+      if (!nearest) {
+        this._ventAttemptedThisCooldown = true;
+        return false;
+      }
+      this._ventTargetId = nearest.id;
+      this._ventApproachGoal = this.nearestApproachPoint(
+        { x: nearest.x, y: nearest.y },
+        VENT_INTERACTION_RANGE_PX - 30,
+      );
+      this._ventApproachTicks = 0;
+      this._ventMode = 'approaching';
+      this.clearPath();
+    }
+
+    if (this._ventMode !== 'approaching' || this._ventTargetId === null || !this._ventApproachGoal) {
+      return false;
+    }
+
+    const vent = VENT_DEFS.find(v => v.id === this._ventTargetId);
+    if (!vent) {
+      this._finishVentAttempt();
+      return false;
+    }
+
+    this._ventApproachTicks++;
+    const arrived = this.navigateTo(self, this._ventApproachGoal);
+    if (arrived) {
+      if (manager.enterVent(lobby, self.slot, vent.id)) {
+        this._ventMode = 'inside';
+        this._ventTicksRemaining = 6 + Math.floor(Math.random() * 6);
+        this._ventTravelled = false;
+        return true;
+      }
+      this._finishVentAttempt();
+      return false;
+    }
+    if (this._ventApproachTicks >= 25) {
+      // Do not sacrifice the rest of the impostor's turn to an unreachable vent.
+      this._finishVentAttempt();
+      return false;
+    }
+    return true;
+  }
+
+  /** Stay hidden briefly, travel to a connected vent once, then exit. */
+  private _tickInsideVent(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    if (lobby.phase !== 'ROAMING' || !self.inVent) {
+      this._finishVentAttempt();
+      return;
+    }
+
+    this._ventTicksRemaining--;
+    if (!this._ventTravelled && this._ventTicksRemaining <= 4) {
+      const current = VENT_DEFS.find(v => v.id === self.ventId);
+      const exits = current?.connections
+        .map(id => VENT_DEFS.find(v => v.id === id))
+        .filter((v): v is NonNullable<typeof v> => v !== undefined) ?? [];
+      if (exits.length > 0) {
+        const destination = exits[Math.floor(Math.random() * exits.length)];
+        manager.travelVent(lobby, self.slot, destination.id);
+      }
+      this._ventTravelled = true;
+    }
+
+    if (this._ventTicksRemaining <= 0) {
+      manager.exitVent(lobby, self.slot);
+      this._finishVentAttempt();
+    }
+  }
+
+  private _finishVentAttempt(): void {
+    this._ventAttemptedThisCooldown = true;
+    this._resetVentPlan();
+    this.clearPath();
+  }
+
+  private _resetVentPlan(): void {
+    this._ventMode = 'idle';
+    this._ventTargetId = null;
+    this._ventApproachGoal = null;
+    this._ventApproachTicks = 0;
+    this._ventTicksRemaining = 0;
+    this._ventTravelled = false;
   }
 }
