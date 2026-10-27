@@ -438,14 +438,27 @@ const REACTOR_COLORS = ['#f0bd4b', '#48b9e8', '#c16be6', '#65d88b'];
 
 function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
   const [showSequence, setShowSequence] = useState(true);
+  const [currentLight, setCurrentLight] = useState<number | null>(REACTOR_SEQUENCE[0]);
   const [input, setInput] = useState<number[]>([]);
   const [error, setError] = useState(false);
   const completeRef = useRef(false);
 
   useEffect(() => {
     if (!showSequence) return;
-    const id = setTimeout(() => { setShowSequence(false); setError(false); }, 1400);
-    return () => clearTimeout(id);
+    let index = 0;
+    setCurrentLight(REACTOR_SEQUENCE[0]);
+    const interval = setInterval(() => {
+      index += 1;
+      if (index >= REACTOR_SEQUENCE.length) {
+        clearInterval(interval);
+        setCurrentLight(null);
+        setShowSequence(false);
+        setError(false);
+        return;
+      }
+      setCurrentLight(REACTOR_SEQUENCE[index]);
+    }, 350);
+    return () => clearInterval(interval);
   }, [showSequence]);
 
   const pressPad = (pad: number) => {
@@ -456,9 +469,9 @@ function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void
       setShowSequence(true);
       return;
     }
-    const next = [...input, pad];
-    setInput(next);
-    if (next.length === REACTOR_SEQUENCE.length && !completeRef.current) {
+    const nextInput = [...input, pad];
+    setInput(nextInput);
+    if (nextInput.length === REACTOR_SEQUENCE.length && !completeRef.current) {
       completeRef.current = true;
       setTimeout(onComplete, 300);
     }
@@ -471,7 +484,7 @@ function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 86px)', gap: 12 }}>
         {REACTOR_COLORS.map((color, i) => {
-          const lit = showSequence ? REACTOR_SEQUENCE[Math.min(REACTOR_SEQUENCE.length - 1, Math.floor((1400 - 1) / 350))] === i : false;
+          const lit = showSequence && currentLight === i;
           return (
             <button key={i} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
               style={{
