@@ -11,6 +11,7 @@
  *   --concurrency  Games running at once (default min(25, games))
  *   --timeoutMs    Per-game safety timeout in ms (default 120000)
  *   --quiet        Suppress per-event NDJSON lines (still prints per-game results + summary)
+ *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout
  *
  * Output: NDJSON to stdout — one line per lifecycle event, one line per
  * finished game (`type":"gameResult"`), and one final `"type":"summary"`
@@ -91,6 +92,7 @@ async function main(): Promise<void> {
   const concurrency = requirePositiveInt(args.concurrency, 'concurrency', Math.min(25, games));
   const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 120_000, { min: 1000 });
   const quiet = args.quiet === 'true';
+  const failOnTimeout = args.failOnTimeout === 'true';
 
   console.error(
     `[simulate] ${games} game(s), ${bots} bots/game` +
@@ -114,6 +116,7 @@ async function main(): Promise<void> {
   console.error(`Avg game length:   ${fmtDuration(summary.avgDurationMs)}   Avg tasks completed: ${summary.avgTasksCompleted}   Avg kills/game: ${summary.avgKills}   Avg meetings/game: ${summary.avgMeetings}`);
   if (summary.timeouts > 0) {
     console.error(`⚠️  ${summary.timeouts} game(s) hit the --timeoutMs safety timeout without reaching GAMEOVER`);
+    if (failOnTimeout) process.exitCode = 1;
   }
 }
 
