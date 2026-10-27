@@ -641,123 +641,165 @@ function FuelGame({ onComplete }: { stepIndex: number; onComplete: () => void })
 }
 
 // ── Start Reactor ──────────────────────────────────────────────────────────────
-// Memorise the illuminated sequence, then repeat it on the reactor pads.
+// Five-step memory sequence across six reactor pads, as in the established clone.
 
-const REACTOR_SEQUENCE = [2, 0, 3, 1];
-const REACTOR_COLORS = ['#f0bd4b', '#48b9e8', '#c16be6', '#65d88b'];
+const REACTOR_COLORS = ['#f05d65', '#edb84a', '#58c8f5', '#57d88d', '#b879ed', '#f47ec5'];
 
 function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const [sequence] = useState(() => Array.from({ length: 5 }, () => Math.floor(Math.random() * 6)));
   const [showSequence, setShowSequence] = useState(true);
-  const [currentLight, setCurrentLight] = useState<number | null>(REACTOR_SEQUENCE[0]);
+  const [currentLight, setCurrentLight] = useState<number | null>(sequence[0]);
   const [input, setInput] = useState<number[]>([]);
   const [error, setError] = useState(false);
   const completeRef = useRef(false);
+  const completeCb = useRef(onComplete);
+  useEffect(() => { completeCb.current = onComplete; }, [onComplete]);
 
   useEffect(() => {
     if (!showSequence) return;
     let index = 0;
-    setCurrentLight(REACTOR_SEQUENCE[0]);
+    setCurrentLight(sequence[0]);
     const interval = setInterval(() => {
       index += 1;
-      if (index >= REACTOR_SEQUENCE.length) {
+      if (index >= sequence.length) {
         clearInterval(interval);
         setCurrentLight(null);
         setShowSequence(false);
         setError(false);
         return;
       }
-      setCurrentLight(REACTOR_SEQUENCE[index]);
-    }, 350);
+      setCurrentLight(sequence[index]);
+    }, 700);
     return () => clearInterval(interval);
-  }, [showSequence]);
+  }, [showSequence, sequence]);
 
   const pressPad = (pad: number) => {
     if (showSequence || completeRef.current) return;
-    if (REACTOR_SEQUENCE[input.length] !== pad) {
+    if (sequence[input.length] !== pad) {
       setInput([]);
       setError(true);
       setShowSequence(true);
       return;
     }
-    const nextInput = [...input, pad];
-    setInput(nextInput);
-    if (nextInput.length === REACTOR_SEQUENCE.length && !completeRef.current) {
+    const next = [...input, pad];
+    setInput(next);
+    if (next.length === sequence.length && !completeRef.current) {
       completeRef.current = true;
-      setTimeout(onComplete, 300);
+      setTimeout(() => completeCb.current(), 300);
     }
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '16px 0' }}>
-      <div style={{ color: 'rgba(255,255,255,0.72)', textAlign: 'center', fontSize: 13 }}>
-        {showSequence ? 'Запомните последовательность' : error ? 'Ошибка — повторите последовательность' : 'Повторите сигнал на панели'}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '8px 0' }}>
+      <div style={{ color: 'rgba(255,255,255,0.78)', textAlign: 'center', fontSize: 13 }}>
+        {showSequence ? 'Запомните последовательность' : error ? 'Ошибка — последовательность повторится' : 'Повторите сигнал на панели'}
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 86px)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(64px, 1fr))', gap: 9, width: 'min(296px,82vw)' }}>
         {REACTOR_COLORS.map((color, i) => {
           const lit = showSequence && currentLight === i;
           return (
             <button key={i} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
               style={{
-                width: 86, height: 70, borderRadius: 12, border: `2px solid ${color}`,
-                background: lit ? color : `${color}35`,
-                boxShadow: lit ? `0 0 18px ${color}` : 'none',
-                color: '#fff', fontSize: 21, fontWeight: 900, touchAction: 'manipulation',
+                minWidth: 0, height: 66, borderRadius: 11, border: `2px solid ${color}`,
+                background: lit ? color : `${color}30`,
+                boxShadow: lit ? `0 0 20px ${color}` : 'inset 0 0 12px rgba(255,255,255,0.03)',
+                color: '#fff', fontSize: 22, fontWeight: 900, touchAction: 'manipulation',
               }}
               aria-label={`Reactor pad ${i + 1}`}
-            >{['▲', '●', '◆', '■'][i]}</button>
+            >{['▲', '●', '◆', '■', '✦', '⬟'][i]}</button>
           );
         })}
       </div>
-      <p style={helpStyle}>{showSequence ? 'Сигнал отображается 1,4 секунды' : `${input.length} из ${REACTOR_SEQUENCE.length}`}</p>
+      <p style={helpStyle}>{showSequence ? 'Watch five flashes, then repeat them in order' : `${input.length} of ${sequence.length}`}</p>
     </div>
   );
 }
 
 // ── Clear Asteroids ────────────────────────────────────────────────────────────
-// Tap every target in the field. Button hit areas stay large for touch devices.
+// Hold fire to clear 30 targets; pointer controls work on mobile and desktop.
 
 const ASTEROID_POSITIONS = [
-  { left: '10%', top: '14%', rotate: -12 },
-  { left: '57%', top: '10%', rotate: 18 },
-  { left: '35%', top: '38%', rotate: -24 },
-  { left: '75%', top: '43%', rotate: 12 },
-  { left: '15%', top: '66%', rotate: 26 },
-  { left: '53%', top: '72%', rotate: -8 },
+  { left: '9%', top: '14%', rotate: -12 },
+  { left: '28%', top: '9%', rotate: 16 },
+  { left: '58%', top: '14%', rotate: -21 },
+  { left: '81%', top: '25%', rotate: 25 },
+  { left: '42%', top: '32%', rotate: 10 },
+  { left: '14%', top: '49%', rotate: 24 },
+  { left: '66%', top: '51%', rotate: -8 },
+  { left: '32%', top: '65%', rotate: -18 },
+  { left: '84%', top: '73%', rotate: 14 },
+  { left: '57%', top: '79%', rotate: -24 },
 ] as const;
 
 function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
-  const [remaining, setRemaining] = useState(() => new Set(ASTEROID_POSITIONS.map((_, i) => i)));
-  const completedRef = useRef(false);
+  const [destroyed, setDestroyed] = useState(0);
+  const [firing, setFiring] = useState(false);
+  const doneRef = useRef(false);
+  const completeRef = useRef(onComplete);
+  useEffect(() => { completeRef.current = onComplete; }, [onComplete]);
 
-  const hit = (id: number) => {
-    if (!remaining.has(id) || completedRef.current) return;
-    const next = new Set(remaining);
-    next.delete(id);
-    setRemaining(next);
-    if (next.size === 0) {
-      completedRef.current = true;
-      setTimeout(onComplete, 300);
-    }
-  };
+  useEffect(() => {
+    if (!firing || doneRef.current) return;
+    const interval = setInterval(() => {
+      setDestroyed(previous => {
+        const next = Math.min(30, previous + 1);
+        if (next >= 30 && !doneRef.current) {
+          doneRef.current = true;
+          setTimeout(() => completeRef.current(), 350);
+          setFiring(false);
+        }
+        return next;
+      });
+    }, 300);
+    return () => clearInterval(interval);
+  }, [firing]);
 
+  const hiddenCount = Math.floor(destroyed / 3);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '12px 0' }}>
-      <div style={{ position: 'relative', width: 'min(300px,82vw)', height: 210, overflow: 'hidden', borderRadius: 12,
-        background: 'radial-gradient(ellipse at center,rgba(42,66,92,0.9),rgba(7,13,26,0.98))',
-        border: '1px solid rgba(120,180,220,0.25)' }}>
-        {ASTEROID_POSITIONS.map((p, i) => remaining.has(i) && (
-          <button key={i} onClick={() => hit(i)} aria-label={`Destroy asteroid ${i + 1}`}
-            style={{
-              position: 'absolute', left: p.left, top: p.top, width: 44, height: 44, padding: 0,
-              borderRadius: '38% 52% 43% 57%', transform: `rotate(${p.rotate}deg)`,
-              border: '1px solid rgba(230,240,255,0.3)', background: '#657b8d',
-              color: '#fff', fontSize: 23, boxShadow: 'inset -5px -6px 0 rgba(0,0,0,0.25)',
-              touchAction: 'manipulation',
-            }}>✦</button>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '8px 0' }}>
+      <div style={{ position: 'relative', width: 'min(300px,82vw)', height: 220, overflow: 'hidden', borderRadius: 12,
+        background: 'radial-gradient(ellipse at 50% 35%,#1a3555,#080d19 75%)',
+        border: '1px solid rgba(120,180,220,0.28)' }}>
+        {Array.from({ length: 36 }, (_, i) => (
+          <span key={i} style={{ position: 'absolute', left: `${(i * 31 + 7) % 99}%`, top: `${(i * 47 + 11) % 98}%`,
+            width: i % 4 === 0 ? 2 : 1, height: i % 4 === 0 ? 2 : 1, borderRadius: '50%',
+            background: 'rgba(220,240,255,0.7)' }} />
         ))}
-        {remaining.size === 0 && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#7af0a6', fontWeight: 900 }}>ОЧИЩЕНО ✓</div>}
+        {ASTEROID_POSITIONS.map((p, i) => i >= hiddenCount && (
+          <div key={i} style={{
+            position: 'absolute', left: p.left, top: p.top, width: 31, height: 29,
+            display: 'grid', placeItems: 'center', borderRadius: '37% 54% 44% 57%',
+            transform: `rotate(${p.rotate}deg)`, background: 'linear-gradient(135deg,#9caab8,#465566)',
+            border: '1px solid rgba(255,255,255,0.35)', color: '#d6e3ef', fontSize: 20,
+            boxShadow: 'inset -4px -5px 0 rgba(0,0,0,0.25)',
+          }}>✦</div>
+        ))}
+        {firing && <div style={{
+          position: 'absolute', left: 'calc(50% - 2px)', bottom: 36, width: 4, height: 60,
+          background: 'linear-gradient(180deg,rgba(130,255,255,0),#72fbff)',
+          filter: 'drop-shadow(0 0 5px #72fbff)',
+        }} />}
+        <div style={{ position: 'absolute', left: '50%', bottom: 5, transform: 'translateX(-50%)',
+          fontSize: 25, filter: 'drop-shadow(0 0 5px rgba(80,190,255,0.4))' }}>🚀</div>
+        <div style={{ position: 'absolute', left: 8, top: 8, padding: '4px 7px', borderRadius: 5,
+          background: 'rgba(0,0,0,0.6)', color: '#ffef93', fontFamily: 'monospace', fontSize: 12 }}>
+          TARGETS {destroyed}/30
+        </div>
       </div>
-      <p style={helpStyle}>Осталось целей: {remaining.size}. Нажмите на каждый астероид.</p>
+      <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
+        <div style={{ width: `${destroyed / 30 * 100}%`, height: '100%', background: 'linear-gradient(90deg,#54baff,#8fffd7)', transition: 'width 150ms linear' }} />
+      </div>
+      <button
+        onPointerDown={e => { e.preventDefault(); setFiring(true); }}
+        onPointerUp={() => setFiring(false)}
+        onPointerCancel={() => setFiring(false)}
+        onPointerLeave={() => setFiring(false)}
+        disabled={destroyed >= 30}
+        style={{ minWidth: 145, padding: '13px 24px', borderRadius: 11,
+          border: '2px solid rgba(130,230,255,0.65)', background: firing ? '#126e93' : '#123b58',
+          color: '#dffaff', fontSize: 13, fontWeight: 950, letterSpacing: '0.12em', touchAction: 'none' }}
+      >{firing ? 'FIRING…' : 'HOLD TO FIRE'}</button>
+      <p style={helpStyle}>{destroyed < 30 ? 'Hold the trigger to shoot down 30 asteroids' : '✓ Asteroids cleared'}</p>
     </div>
   );
 }
@@ -798,17 +840,17 @@ export default function TaskMinigame({ taskId, stepIndex, onComplete, onClose }:
         </div>
 
         {/* Minigame body */}
-        {taskId === 0 && <WiringGame      key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 1 && <DownloadGame    key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 2 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 3 && <GarbageGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 4 && <FiltersGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 5 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 6 && <DownloadGame    key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 7 && <FuelGame        key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 8 && <ReactorGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 9 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 10 && <AsteroidsGame  key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 0 && <WiringGame                 key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 1 && <DownloadGame               key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 2 && <CalibrateGame              key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 3 && <GarbageGame                key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 4 && <FiltersGame                key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 5 && <StabilizeNavigationGame    key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 6 && <RebootWifiGame             key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 7 && <FuelGame                   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 8 && <ReactorGame                key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 9 && <AlignEngineGame             key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 10 && <AsteroidsGame             key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
       </div>
     </div>
   );
