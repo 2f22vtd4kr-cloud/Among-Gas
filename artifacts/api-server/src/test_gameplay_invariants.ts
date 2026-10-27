@@ -233,10 +233,18 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const lobby = makeLobby([killer.player, victim.player]);
   const manager = new LobbyManager();
 
+  victim.player.assignedTasks = [0];
+  lobby.totalTaskSteps = TASK_DEFS.find(task => task.id === 0)!.steps;
   assert.equal(manager.applyKill(lobby, 0, 1), true, 'nearby impostor can kill crewmate');
   assert.equal(victim.player.alive, false);
   assert.equal(victim.player.corpseX, vent.x + 10);
   assert.equal(victim.player.corpseY, vent.y);
+  assert.equal(lobby.totalTaskSteps, TASK_DEFS.find(task => task.id === 0)!.steps, 'death must not remove unfinished ghost tasks');
+  // Ghost task completion remains proximity-checked and counts toward the team win.
+  victim.player.x = TASK_DEFS[0].x;
+  victim.player.y = TASK_DEFS[0].y;
+  assert.equal(manager.handleTaskStep(lobby, 1, 0, 0), true, 'dead crewmate may complete the first assigned step');
+  assert.equal(manager.handleTaskStep(lobby, 1, 0, 0), false, 'completed ghost task steps cannot be replayed');
   assert.ok(killer.packets.some(packet => packet[0] === 0x21 && packet[1] === 1), 'corpse location is broadcast');
   manager.disposeLobby(lobby);
 }
