@@ -183,7 +183,7 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions,
   } = useGameState();
   const {
     sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
@@ -218,6 +218,8 @@ export default function GameMap() {
   useEffect(() => {
     deadSlotsRef.current = new Set(deadSlots);
   }, [deadSlots]);
+  const corpsePositionsRef = useRef(corpsePositions);
+  useEffect(() => { corpsePositionsRef.current = corpsePositions; }, [corpsePositions]);
 
   const amIDead = mySlot !== null && deadSlots.includes(mySlot);
   const amIImpostor = myRole === 'impostor';
@@ -293,13 +295,11 @@ export default function GameMap() {
       if (!myPos) return;
       let best: number | null = null;
       let bestDistSq = REPORT_RANGE_PX * REPORT_RANGE_PX;
-      for (const rp of remotePlayersRef.current.values()) {
-        if (rp.inVent) continue;
-        if (!deadSlotsRef.current.has(rp.slot)) continue;
-        const dx = rp.x - myPos.x;
-        const dy = rp.y - myPos.y;
+      for (const body of corpsePositionsRef.current) {
+        const dx = body.x - myPos.x;
+        const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = rp.slot; bestDistSq = distSq; }
+        if (distSq <= bestDistSq) { best = body.slot; bestDistSq = distSq; }
       }
       setNearestBody(best);
     }, 150);
@@ -902,6 +902,36 @@ export default function GameMap() {
       });
       ctx.restore();
 
+      // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
+      const corpseMarkerSize = Math.max(6, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+      ctx.save();
+      for (const body of corpsePositionsRef.current) {
+        const bx = Math.round((body.x - srcX) * scale);
+        const by = Math.round((body.y - srcY) * scale);
+        if (bx < -40 || bx > cw + 40 || by < -40 || by > ch + 40) continue;
+        ctx.save();
+        ctx.translate(bx, by);
+        ctx.rotate(-0.28);
+        // Small, readable dropped-character silhouette in the custom game's palette.
+        ctx.beginPath();
+        ctx.ellipse(0, corpseMarkerSize * 0.2, corpseMarkerSize * 0.48, corpseMarkerSize * 0.18, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(92,12,23,0.72)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.roundRect(-corpseMarkerSize * 0.34, -corpseMarkerSize * 0.12, corpseMarkerSize * 0.68, corpseMarkerSize * 0.32, corpseMarkerSize * 0.12);
+        ctx.fillStyle = '#71363e';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeStyle = '#ffb2a8';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(corpseMarkerSize * 0.36, -corpseMarkerSize * 0.04, corpseMarkerSize * 0.13, 0, Math.PI * 2);
+        ctx.fillStyle = '#a0ccd2';
+        ctx.fill();
+        ctx.restore();
+      }
+      ctx.restore();
+
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
       const remotePlayers = remotePlayersRef.current;
@@ -919,9 +949,13 @@ export default function GameMap() {
         ctx.textAlign = 'center';
         ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
 
+        const viewerIsDead = deadSlotsRef.current.has(mySlotRef.current ?? -1);
         for (const rp of remotePlayers.values()) {
           // Vent occupants must disappear completely until they exit.
           if (rp.inVent) continue;
+          const rIsGhost = deadSlotsRef.current.has(rp.slot);
+          // Living players see the stationary body, not the dead player's moving ghost.
+          if (rIsGhost && !viewerIsDead) continue;
           // Update per-slot animation state from position deltas
           let anim = remoteAnims.get(rp.slot);
           if (!anim) {
@@ -939,7 +973,6 @@ export default function GameMap() {
           const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
           anim.animMs = rMoving ? anim.animMs + dtMs : 0;
           // Phase 5: dead players always render the static "ghost" pose.
-          const rIsGhost = deadSlotsRef.current.has(rp.slot);
           const rPose: CharacterPose = rIsGhost
             ? 'ghost'
             : rMoving
