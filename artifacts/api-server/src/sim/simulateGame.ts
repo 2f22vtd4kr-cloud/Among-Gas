@@ -83,6 +83,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       let settled = false;
 
       let deadlineAt = startedAt + timeoutMs;
+      let criticalSabotageExtensionUsed = false;
       let timeoutHandle: ReturnType<typeof setTimeout> = setTimeout(() => finish('timeout'), timeoutMs);
 
       function finish(winner: SimWinner): void {
@@ -142,12 +143,13 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         // its own 45s countdown. If it starts just before the simulator's safety
         // watchdog, give that real game timer (plus scheduling grace) time to
         // produce GAMEOVER rather than misclassifying a valid match as stalled.
-        if (event.type === 'sabotageStart' && isSabotageSystemId(event.systemId) && isCriticalSabotage(event.systemId)) {
+        if (event.type === 'sabotageStart' && isSabotageSystemId(event.systemId) && isCriticalSabotage(event.systemId) && !criticalSabotageExtensionUsed) {
           const requiredResolutionMs = getSabotageTimeoutMs(event.systemId) + 5_000;
           const remainingWatchdogMs = deadlineAt - Date.now();
           if (remainingWatchdogMs < requiredResolutionMs) {
             clearTimeout(timeoutHandle);
             deadlineAt = Date.now() + requiredResolutionMs;
+            criticalSabotageExtensionUsed = true;
             timeoutHandle = setTimeout(() => finish('timeout'), requiredResolutionMs);
           }
         }
