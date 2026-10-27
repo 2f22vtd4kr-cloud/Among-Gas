@@ -48,9 +48,10 @@
 | Tasks and interactive minigames | `lib/shared/src/tasks.ts`, `TaskMinigame.tsx` | ✅ 11 task definitions; every assigned task ID has a playable handler |
 | Vents | `lib/shared/src/vents.ts`, `lobby.ts`, `GameMap.tsx` | ✅ Six map-specific, connected vents; role/range/adjacency validated server-side |
 | Sabotage | `lib/shared/src/sabotage.ts`, `lobby.ts`, `GameMap.tsx` | ✅ Lights, O₂, Reactor, Comms and Doors; critical/non-critical timeouts differ |
+| Vision radii and wall occlusion | `artifacts/telegram-game/src/game/visibility.ts`, `GameMap.tsx`, `lib/shared/src/sabotage.ts` | ✅ Living crews and impostors have distinct sight radii; collision walls cast shadows; Lights shrinks crew vision; ghosts see freely |
 | Admin Table | `lib/shared/src/adminTable.ts`, `GameMap.tsx` | ✅ Custom-map interaction point and live room-count view |
 | Task mini-map | `GameMap.tsx` | ✅ Responsive overlay shows current position and outstanding assigned tasks |
-| Continuous verification | `.github/workflows/ci.yml`, `scripts/verify-map-mechanics.mjs`, server gameplay invariants and simulation harness | ✅ CI covers geometry, typecheck/build, server invariants and six headless multiplayer simulations |
+| Continuous verification | `.github/workflows/ci.yml`, `scripts/verify-map-mechanics.mjs`, `scripts/test-visibility.ts`, server gameplay invariants and simulation harness | ✅ CI covers geometry, typecheck/build, vision-ray geometry, a mobile Chromium interaction smoke test and 100 headless multiplayer games with zero tolerated timeouts |
 
 ### Release checks that still require a real deployment/device
 
@@ -494,7 +495,7 @@ layers rendered in order each frame:
 |---|---|---|
 | Layer 0 (Background) | Map image + tile grid | Already built in `GameMap.tsx` |
 | Layer 1 (Entities) | Remote player sprites, ghost sprites, dead bodies | New: render from server delta state |
-| Layer 2 (Lightmask) | Fog-of-war circle; filled black outside vision radius | New: raycasted or simple radial clip |
+| Layer 2 (Lightmask) | Role-specific vision with wall shadows and soft radial falloff | Implemented: 720 half-degree rays traverse the shared collision grid; Lights reduces crew vision; ghosts have unrestricted vision |
 | Layer 3 (UI) | Joystick, task screen, vote modal, kill button, sabotage alerts | Joystick done; rest are new React overlays |
 
 Layers 0 and 1 are drawn on the main canvas. The lightmask (Layer 2) uses canvas composite
@@ -594,7 +595,7 @@ Ordered by dependency. Each step is independently shippable and testable.
 ### Phase 8 — Sabotages & Vision ✅ (2026-07-10)
 1. Impostor sabotage panel. ✅
 2. Sabotage state machine server-side. ✅ — see §14 #15–#17 for implementation deviations.
-3. Lights: fog-of-war lightmask Layer 2 implementation. ✅ — rendered only while a Lights sabotage is active (not a permanent baseline mechanic).
+3. Base-game vision lightmask and wall occlusion. ✅ — living crewmates and impostors have different normal sight radii; collision-grid walls cast shadows; Lights reduces crewmate vision to 15% of normal, while ghosts have unrestricted vision.
 4. O₂ / Reactor: dual-pad fix UI. ✅ — pad markers on canvas + proximity-gated Repair button.
 
 ### Phase 9 — Polish & Telegram Integration ✅ (2026-07-10)
