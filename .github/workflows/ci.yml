@@ -9,12 +9,6 @@ on:
 permissions:
   contents: read
 
-# Keep only the newest main/PR verification in flight. Rapid fix commits should
-# not leave the actual current tip waiting behind obsolete queued runs.
-concurrency:
-  group: among-gas-ci-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
   verify:
     runs-on: ubuntu-latest
