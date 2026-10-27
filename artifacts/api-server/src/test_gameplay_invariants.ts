@@ -198,8 +198,9 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const ghost = makePlayer(1, 'crewmate', 120, 100);
+  const speaker = makePlayer(2, 'crewmate', 130, 100);
   ghost.player.alive = false;
-  const lobby = makeLobby([host.player, ghost.player]);
+  const lobby = makeLobby([host.player, ghost.player, speaker.player]);
   lobby.phase = 'MEETING';
   lobby.meeting = {
     reporterSlot: 0, bodySlot: NO_TARGET, votes: new Map(), votingOpen: false,
@@ -210,8 +211,9 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.sendMeetingChat(lobby, 0, 'too fast'), false, 'chat rate limit applies per sender');
   assert.equal(manager.sendMeetingChat(lobby, 1, 'ghost message'), false, 'dead players cannot chat');
   lobby.meeting.votingOpen = true;
-  assert.equal(manager.sendMeetingChat(lobby, 0, 'voting started'), false, 'chat closes when voting opens');
+  assert.equal(manager.sendMeetingChat(lobby, 2, 'voting started'), true, 'chat remains available during voting in the base game');
   assert.ok(host.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
+  assert.ok(speaker.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
   assert.equal(ghost.packets.filter(packet => packet[0] === 0x19).length, 0, 'ghost does not receive discussion chat');
   manager.disposeLobby(lobby);
 }
