@@ -42,7 +42,6 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import {
-  VENT_DEFS,
   VENT_INTERACTION_RANGE_PX,
   canTravelVent,
   findVent,
@@ -630,7 +629,7 @@ export class LobbyManager {
   /** Broadcast the two task consoles temporarily disabled by the Doors sabotage. */
   broadcastDoorLocks(lobby: Lobby): void {
     const taskIds = lobby.sabotage?.systemId === SABOTAGE_DOORS ? lobby.sabotage.lockedTaskIds : [];
-    const packet = Buffer.from([0x16, 0x04, taskIds.length, ...taskIds]);
+    const packet = Buffer.from([0x16, 0x04, SABOTAGE_DOORS, taskIds.length, ...taskIds]);
     for (const player of lobby.players.values()) {
       if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
     }
