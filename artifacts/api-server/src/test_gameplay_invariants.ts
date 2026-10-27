@@ -18,6 +18,7 @@ import {
   toWire,
 } from '@workspace/shared/coords';
 import { TASK_DEFS } from '@workspace/shared/tasks';
+import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import {
   VENT_DEFS,
   VENT_INTERACTION_RANGE_PX,
@@ -110,6 +111,12 @@ assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'ta
 for (const task of TASK_DEFS) {
   assert.ok(task.steps >= 1 && Number.isInteger(task.steps), task.name + ' has a valid step count');
   assertClientWalkable(task.x, task.y, 'task ' + task.name);
+}
+
+assert.equal(ADMIN_TABLE_DEFS.length, 1, 'expected one Admin Table console on the custom map');
+assert.ok(ADMIN_TABLE_INTERACTION_RANGE_PX > 0, 'Admin Table interaction range must be positive');
+for (const consoleDef of ADMIN_TABLE_DEFS) {
+  assertClientWalkable(consoleDef.x, consoleDef.y, 'Admin Table console ' + consoleDef.name);
 }
 
 assert.equal(VENT_DEFS.length, 6, 'expected six vents on the custom map');
