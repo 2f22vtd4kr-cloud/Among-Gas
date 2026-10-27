@@ -30,7 +30,7 @@ const cellY = mapH / rows;
 const spriteHeight = Math.round(36 * (mapW / 1652));
 const feetOffsetY = Math.round(spriteHeight * 0.25);
 const playerRadius = num(coords, 'PLAYER_RADIUS');
-const wireRunsMatch = collisionData.match(/export const RUNS(?::\\s*number\\[\\])?\\s*=\\s*\\[([\\s\\S]*?)\\]\\s*;/);
+const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 assert.ok(wireRunsMatch, 'Could not parse RLE collision grid');
 const runs = wireRunsMatch[1].split(',').map(s => Number(s.trim())).filter(Number.isFinite);
 const grid = new Uint8Array(cols * rows);
@@ -115,11 +115,11 @@ const closestReachable = (x, y) => {
   return best;
 };
 const fromRef = (x, y) => ({ x: Math.round(x * mapW / 1040), y: Math.round(y * mapH / 580) });
-const parseRefPoints = (block) => [...block.matchAll(/ref\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)/g)]
+const parseRefPoints = (block) => [...block.matchAll(/ref\(\s*(\d+)\s*,\s*(\d+)\s*\)/g)]
   .map(m => ({ refX: Number(m[1]), refY: Number(m[2]), ...fromRef(Number(m[1]), Number(m[2])) }));
-const taskBlock = taskSource.match(/export const TASK_DEFS[\\s\\S]*?=\\s*\\[([\\s\\S]*?)\\]\\s*as const;/)?.[1];
+const taskBlock = taskSource.match(/export const TASK_DEFS[\s\S]*?=\s*\[([\s\S]*?)\]\s*as const;/)?.[1];
 assert.ok(taskBlock, 'Could not parse TASK_DEFS');
-const tasks = [...taskBlock.matchAll(/\\{\\s*id:\\s*(\\d+)\\s*,\\s*name:\\s*'([^']+)'[\\s\\S]*?\\.\\.\\.ref\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)\\s*\\}/g)]
+const tasks = [...taskBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\s\S]*?\.\.\.ref\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\}/g)]
   .map(m => ({ id: Number(m[1]), name: m[2], ...fromRef(Number(m[3]), Number(m[4])) }));
 assert.equal(tasks.length, 11, 'Expected the five existing Among Gas tasks plus six ported base-game tasks');
 tasks.forEach((task, index) => assert.equal(task.id, index, `Task IDs must be contiguous; ${task.name} has id ${task.id}`));
@@ -128,9 +128,9 @@ for (const task of tasks) {
   const distance = closestReachable(task.x, task.y);
   assert.ok(distance <= taskRange, `Task ${task.id} (${task.name}) is ${Math.round(distance)}px from the reachable path; interaction limit is ${taskRange}px`);
 }
-const ventBlock = ventSource.match(/export const VENT_DEFS[\\s\\S]*?=\\s*\\[([\\s\\S]*?)\\]\\s*as const;/)?.[1];
+const ventBlock = ventSource.match(/export const VENT_DEFS[\s\S]*?=\s*\[([\s\S]*?)\]\s*as const;/)?.[1];
 assert.ok(ventBlock, 'Could not parse VENT_DEFS');
-const vents = [...ventBlock.matchAll(/\\{\\s*id:\\s*(\\d+)\\s*,\\s*name:\\s*'([^']+)'[\\s\\S]*?\\.\\.\\.ref\\(\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\)\\s*,\\s*connections:\\s*\\[([^\\]]*)\\]\\s*\\}/g)]
+const vents = [...ventBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\s\S]*?\.\.\.ref\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*,\s*connections:\s*\[([^\]]*)\]\s*\}/g)]
   .map(m => ({ id: Number(m[1]), name: m[2], ...fromRef(Number(m[3]), Number(m[4])), connections: m[5].split(',').map(s => Number(s.trim())).filter(Number.isFinite) }));
 assert.equal(vents.length, 6, 'Expected six custom-map vents');
 const ventIds = new Set(vents.map(v => v.id));
@@ -144,7 +144,7 @@ for (const vent of vents) {
     assert.ok(other.connections.includes(vent.id), `Vent connection ${vent.id} ↔ ${to} is not symmetric`);
   }
 }
-const saboPadBlock = sabotageSource.match(/export const SABOTAGE_DEFS[\\s\\S]*?(?=\\/\\*\\* Pixel radius)/)?.[0];
+const saboPadBlock = sabotageSource.match(/export const SABOTAGE_DEFS[\s\S]*?(?=\/\*\* Pixel radius)/)?.[0];
 assert.ok(saboPadBlock, 'Could not parse sabotage pads');
 const saboPads = parseRefPoints(saboPadBlock);
 assert.equal(saboPads.length, 6, 'Expected Lights, two O₂ pads, two Reactor pads and Comms repair consoles');
@@ -153,13 +153,13 @@ for (const [i, pad] of saboPads.entries()) {
   assert.ok(closestReachable(pad.x, pad.y) <= saboRange,
     `Sabotage repair pad ${i} is outside a reachable interaction radius`);
 }
-assert.match(sabotageSource, /SABOTAGE_COUNTDOWN_MS\\s*=\\s*45_000/, 'Critical sabotage must use the base-game 45-second window');
-assert.match(coords, /KILL_COOLDOWN_MS\\s*=\\s*15_000/, 'Kill cooldown must match the established base-game clone');
-const minigameIds = [...minigameSource.matchAll(/taskId === (\\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
+assert.match(sabotageSource, /SABOTAGE_COUNTDOWN_MS\s*=\s*45_000/, 'Critical sabotage must use the base-game 45-second window');
+assert.match(coords, /KILL_COOLDOWN_MS\s*=\s*15_000/, 'Kill cooldown must match the established base-game clone');
+const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
 assert.deepEqual(minigameIds, [...Array(tasks.length).keys()], 'Every assigned task needs a playable minigame');
-assert.match(indexHtml, /telegram-web-app\\.js/, 'Telegram WebApp SDK must load before React bootstraps');
+assert.match(indexHtml, /telegram-web-app\.js/, 'Telegram WebApp SDK must load before React bootstraps');
 assert.match(indexHtml, /viewport-fit=cover/, 'Viewport must account for mobile safe areas');
-assert.match(gameContext, /if \\(import\\.meta\\.env\\.PROD\\) return ''/, 'Production must not fabricate Telegram identities');
+assert.match(gameContext, /if \(import\.meta\.env\.PROD\) return ''/, 'Production must not fabricate Telegram identities');
 assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emergency meeting per player per round');
 
 console.log(JSON.stringify({
