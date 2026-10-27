@@ -125,9 +125,11 @@ const tasks = [...taskBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\
 assert.equal(tasks.length, 11, 'Expected the five existing Among Gas tasks plus six ported base-game tasks');
 tasks.forEach((task, index) => assert.equal(task.id, index, `Task IDs must be contiguous; ${task.name} has id ${task.id}`));
 const taskRange = Math.round(55 * mapW / 1040);
+const botTaskApproachRange = taskRange - 30; // CrewmateBot.nearestApproachPoint intentionally keeps a 30px margin.
 for (const task of tasks) {
   const distance = closestReachable(task.x, task.y);
-  assert.ok(distance <= taskRange, `Task ${task.id} (${task.name}) is ${Math.round(distance)}px from the reachable path; interaction limit is ${taskRange}px`);
+  assert.ok(distance <= botTaskApproachRange,
+    `Task ${task.id} (${task.name}) is ${Math.round(distance)}px from the reachable path; bot approach limit is ${botTaskApproachRange}px (player interaction limit ${taskRange}px)`);
 }
 const ventBlock = ventSource.match(/export const VENT_DEFS[\s\S]*?=\s*\[([\s\S]*?)\]\s*as const;/)?.[1];
 assert.ok(ventBlock, 'Could not parse VENT_DEFS');
@@ -150,9 +152,11 @@ assert.ok(saboPadBlock, 'Could not parse sabotage pads');
 const saboPads = parseRefPoints(saboPadBlock);
 assert.equal(saboPads.length, 6, 'Expected Lights, two O₂ pads, two Reactor pads and Comms repair consoles');
 const saboRange = Math.round(55 * mapW / 1040);
+const botSaboApproachRange = saboRange - 30; // CrewmateBot uses the same safety margin for repair consoles.
 for (const [i, pad] of saboPads.entries()) {
-  assert.ok(closestReachable(pad.x, pad.y) <= saboRange,
-    `Sabotage repair pad ${i} is outside a reachable interaction radius`);
+  const distance = closestReachable(pad.x, pad.y);
+  assert.ok(distance <= botSaboApproachRange,
+    `Sabotage repair pad ${i} is ${Math.round(distance)}px from the reachable path; bot approach limit is ${botSaboApproachRange}px`);
 }
 const adminTableStart = adminTableSource.indexOf('export const ADMIN_TABLE_DEFS');
 const adminTableEnd = adminTableSource.indexOf('] as const;', adminTableStart);
