@@ -12,6 +12,7 @@ const twa = (window as any).Telegram?.WebApp as
       ready(): void;
       expand(): void;
       themeParams?: Record<string, string>;
+      disableVerticalSwipes?: () => void;
     }
   | undefined;
 
@@ -19,6 +20,8 @@ if (twa) {
   // Tell Telegram the mini app is ready and request full-height viewport.
   twa.ready();
   twa.expand();
+  // Keep vertical swipes inside the game viewport instead of dismissing the mini app.
+  twa.disableVerticalSwipes?.();
 
   // Map Telegram theme tokens to CSS custom properties so the UI can respect
   // the user's system / Telegram colour scheme (dark vs light mode).
