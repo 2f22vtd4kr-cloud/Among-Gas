@@ -440,7 +440,12 @@ function getWsUrl(): string {
 
 function getInitData(): string {
   const twa = (window as any).Telegram?.WebApp;
-  if (twa?.initData) return twa.initData;
+  if (typeof twa?.initData === 'string' && twa.initData.length > 0) return twa.initData;
+
+  // Never send a fabricated identity to a production server. The JSON bypass
+  // is only for local/Replit development, where the server explicitly enables
+  // DEV_MODE and rejects it automatically in production.
+  if (import.meta.env.PROD) return '';
   return JSON.stringify({ id: (Date.now() % 90000) + 10000, username: 'DevPlayer' });
 }
 
@@ -636,7 +641,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     socketRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(new TextEncoder().encode(getInitData()));
+      const initData = getInitData();
+      if (!initData) {
+        setState(s => ({
+          ...s,
+          phase: 'error',
+          errorMessage: 'Откройте Among Gas через Telegram, чтобы войти в игру.',
+        }));
+        ws.close(1008, 'Telegram Mini App initData required');
+        return;
+      }
+      ws.send(new TextEncoder().encode(initData));
     };
 
     ws.onmessage = (event: MessageEvent<ArrayBuffer>) => {
