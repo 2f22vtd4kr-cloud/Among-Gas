@@ -1250,8 +1250,8 @@ export class LobbyManager {
 
     const player = lobby.players.get(playerSlot);
     if (!player || !player.alive || player.role !== 'crewmate' || player.inVent) return false;
-    if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
     const activeSabotage = lobby.sabotage;
+    if (activeSabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
     if (activeSabotage?.systemId === SABOTAGE_DOORS && activeSabotage.lockedTaskIds.includes(taskId)) return false;
     if (!player.assignedTasks.includes(taskId)) return false;
 
