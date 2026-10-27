@@ -10,14 +10,19 @@ import { MAP_W, MAP_H } from './collisionMap.js';
 export const SABOTAGE_LIGHTS = 0x01 as const;
 export const SABOTAGE_O2 = 0x02 as const;
 export const SABOTAGE_REACTOR = 0x03 as const;
+export const SABOTAGE_COMMS = 0x04 as const;
+export const SABOTAGE_DOORS = 0x05 as const;
 
 export type SabotageSystemId =
   | typeof SABOTAGE_LIGHTS
   | typeof SABOTAGE_O2
-  | typeof SABOTAGE_REACTOR;
+  | typeof SABOTAGE_REACTOR
+  | typeof SABOTAGE_COMMS
+  | typeof SABOTAGE_DOORS;
 
 export function isSabotageSystemId(n: number): n is SabotageSystemId {
-  return n === SABOTAGE_LIGHTS || n === SABOTAGE_O2 || n === SABOTAGE_REACTOR;
+  return n === SABOTAGE_LIGHTS || n === SABOTAGE_O2 || n === SABOTAGE_REACTOR ||
+    n === SABOTAGE_COMMS || n === SABOTAGE_DOORS;
 }
 
 export interface SabotagePad {
@@ -58,13 +63,40 @@ export const SABOTAGE_DEFS: Record<SabotageSystemId, SabotageDef> = {
     name: 'Reactor',
     pads: [ref(50, 210), ref(230, 300)], // industrial zone, two separate pads
   },
+  [SABOTAGE_COMMS]: {
+    id: SABOTAGE_COMMS,
+    name: 'Comms',
+    pads: [ref(830, 320)], // walkable office zone on the Among Gas map
+  },
+  [SABOTAGE_DOORS]: {
+    id: SABOTAGE_DOORS,
+    name: 'Doors',
+    pads: [], // doors auto-unlock; there is no manual repair console
+  },
 };
 
 /** Pixel radius within which a player can interact with a sabotage pad. */
 export const SABOTAGE_INTERACTION_RANGE_PX = Math.round(55 * _sx);
 
 /** Countdown before impostors win outright if a sabotage is not fixed in time (GAME_SPEC.md §10). */
+/** Critical sabotage countdown: failing O₂/reactor gives impostors the win. */
 export const SABOTAGE_COUNTDOWN_MS = 30_000;
+/** Non-critical systems self-clear if ignored. */
+export const SABOTAGE_SAFETY_MS = 60_000;
+/** Doors are a short temporary disruption, not an instant-win condition. */
+export const SABOTAGE_DOORS_MS = 15_000;
+
+/** Authoritative timeout for each sabotage kind. */
+export function getSabotageTimeoutMs(systemId: SabotageSystemId): number {
+  if (systemId === SABOTAGE_O2 || systemId === SABOTAGE_REACTOR) return SABOTAGE_COUNTDOWN_MS;
+  if (systemId === SABOTAGE_DOORS) return SABOTAGE_DOORS_MS;
+  return SABOTAGE_SAFETY_MS;
+}
+
+/** True only for critical systems whose unresolved timeout ends the round. */
+export function isCriticalSabotage(systemId: SabotageSystemId): boolean {
+  return systemId === SABOTAGE_O2 || systemId === SABOTAGE_REACTOR;
+}
 
 /** Global cooldown between sabotage triggers, shared across all impostors in a lobby (GAME_SPEC.md §10). */
 export const SABOTAGE_COOLDOWN_MS = 30_000;
