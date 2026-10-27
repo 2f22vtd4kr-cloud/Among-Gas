@@ -20,6 +20,7 @@ import {
 import {
   SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
 } from '@workspace/shared/sabotage';
+import { VENT_DEFS, findVent } from '@workspace/shared/vents';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
 
@@ -37,6 +38,14 @@ export interface RemotePlayer {
   x: number;
   /** Pixel Y (sprite centre). */
   y: number;
+  /** Hidden in a vent; the renderer must not draw this player until exit. */
+  inVent?: boolean;
+}
+
+export interface MeetingChatMessage {
+  slot: number;
+  text: string;
+  receivedAt: number;
 }
 
 export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
@@ -85,6 +94,8 @@ export interface SabotageInfo {
   systemId: number;
   startedAtMs: number;
   fixedPads: number[];
+  /** Task IDs temporarily locked by the Doors sabotage. */
+  lockedTaskIds: number[];
 }
 
 export interface GameState {
@@ -116,6 +127,10 @@ export interface GameState {
   sabotage: SabotageInfo | null;
   /** Impostor-only sabotage cooldown countdown, ms. 0 = ready to sabotage. Client-side display estimate. */
   sabotageCooldownMs: number;
+  /** Local player's vent ID, or null while visible on the map. */
+  myVentId: number | null;
+  /** Messages received during the current discussion phase. */
+  meetingMessages: MeetingChatMessage[];
 }
 
 export interface GameActions {
@@ -145,6 +160,10 @@ export interface GameActions {
   triggerSabotage: (systemId: number) => void;
   /** Send a 0x15 sub 0x05 Repair RPC (crewmate only; server re-validates proximity). */
   repairSabotage: (systemId: number, padId: number) => void;
+  enterVent: (ventId: number) => void;
+  travelVent: (ventId: number) => void;
+  exitVent: () => void;
+  sendMeetingChat: (text: string) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -165,6 +184,8 @@ const DEFAULT_STATE: GameState = {
   globalTaskProgress: 0,
   sabotage: null,
   sabotageCooldownMs: 0,
+  myVentId: null,
+  meetingMessages: [],
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -184,6 +205,10 @@ const GameActionsCtx = createContext<GameActions>({
   completeTaskStep: () => {},
   triggerSabotage: () => {},
   repairSabotage: () => {},
+  enterVent: () => {},
+  travelVent: () => {},
+  exitVent: () => {},
+  sendMeetingChat: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -519,7 +544,8 @@ function applyDeltaPacket(
     } else {
       const x = fromWire(wireX, MAP_W);
       const y = fromWire(wireY, MAP_H);
-      remotePlayersMap.set(slot, { slot, x, y });
+      const previous = remotePlayersMap.get(slot);
+      remotePlayersMap.set(slot, { slot, x, y, inVent: previous?.inVent ?? false });
     }
   }
 }
@@ -622,6 +648,36 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const repairSabotage = useCallback((systemId: number, padId: number) => {
     send([0x15, 0x05, systemId, padId]);
+  }, [send]);
+
+  const enterVent = useCallback((ventId: number) => {
+    send([0x17, 0x01, ventId]);
+  }, [send]);
+
+  const travelVent = useCallback((ventId: number) => {
+    send([0x17, 0x02, ventId]);
+  }, [send]);
+
+  const exitVent = useCallback(() => {
+    send([0x17, 0x03]);
+  }, [send]);
+
+  const sendMeetingChat = useCallback((text: string) => {
+    const encoder = new TextEncoder();
+    const trimmed = text.trim();
+    let safe = '';
+    for (const char of trimmed) {
+      if (encoder.encode(safe + char).byteLength > 200) break;
+      safe += char;
+    }
+    const bytes = encoder.encode(safe);
+    if (!bytes.byteLength) return;
+    const packet = new Uint8Array(3 + bytes.byteLength);
+    packet[0] = 0x19;
+    packet[1] = 0x01;
+    packet[2] = bytes.byteLength;
+    packet.set(bytes, 3);
+    send(packet);
   }, [send]);
 
   useEffect(() => {
@@ -756,6 +812,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           globalTaskProgress: 0,
           sabotage: null,
           sabotageCooldownMs: 0,
+          myVentId: null,
+          meetingMessages: [],
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
         return;
@@ -824,7 +882,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           haptic.warning();
           setState(s => ({
             ...s,
-            sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [] },
+            sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [], lockedTaskIds: [] },
             // Only the triggering client resets its own cooldown UI.
             sabotageCooldownMs: attackerSlot === mySlotRef.current
               ? SABOTAGE_COOLDOWN_MS
@@ -849,6 +907,54 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // Doors sabotage sends the affected task IDs after the start packet:
+        // [0x16, 0x04, count, taskId...].
+        if (sub === 0x04 && event.data.byteLength >= 3) {
+          const count = view.getUint8(2);
+          const lockedTaskIds: number[] = [];
+          for (let i = 0; i < count && 3 + i < event.data.byteLength; i++) {
+            lockedTaskIds.push(view.getUint8(3 + i));
+          }
+          setState(s => (
+            !s.sabotage || s.sabotage.systemId !== systemId
+              ? s
+              : { ...s, sabotage: { ...s.sabotage, lockedTaskIds } }
+          ));
+          return;
+        }
+
+        return;
+      }
+
+      // ── 0x18: vent state broadcast ──────────────────────────────────────
+      // [0x18, sub, playerSlot, ventId]; sub 1 enter, 2 travel, 3 exit.
+      if (opcode === 0x18 && event.data.byteLength >= 4) {
+        const sub = view.getUint8(1);
+        const slot = view.getUint8(2);
+        const ventId = view.getUint8(3);
+        const vent = findVent(ventId);
+        if (!vent || (sub !== 0x01 && sub !== 0x02 && sub !== 0x03)) return;
+        const inVent = sub !== 0x03;
+        remotePlayersRef.current.set(slot, {
+          slot, x: vent.x, y: vent.y, inVent,
+        });
+        if (slot === mySlotRef.current) {
+          setState(s => ({ ...s, myVentId: inVent ? ventId : null }));
+        }
+        return;
+      }
+
+      // ── 0x19: meeting chat broadcast ────────────────────────────────────
+      // [0x19, 0x02, senderSlot, utf8Length, utf8Bytes...].
+      if (opcode === 0x19 && event.data.byteLength >= 4 && view.getUint8(1) === 0x02) {
+        const slot = view.getUint8(2);
+        const length = view.getUint8(3);
+        if (length === 0 || event.data.byteLength !== 4 + length) return;
+        const text = new TextDecoder().decode(new Uint8Array(event.data, 4, length));
+        setState(s => ({
+          ...s,
+          meetingMessages: [...s.meetingMessages, { slot, text, receivedAt: Date.now() }].slice(-60),
+        }));
         return;
       }
 
@@ -883,6 +989,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
             hasVoted: false,
             voteResult: null,
+            meetingMessages: [],
           };
         });
         return;
@@ -957,6 +1064,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     createRoom, createSolo, joinRoom, startGame, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
     completeTaskStep, triggerSabotage, repairSabotage,
+    enterVent, travelVent, exitVent, sendMeetingChat,
   };
 
   return (
