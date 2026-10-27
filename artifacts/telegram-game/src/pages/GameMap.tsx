@@ -248,6 +248,8 @@ export default function GameMap() {
   const [, setAdminTableTick] = useState(0);
   const [showMiniMap, setShowMiniMap] = useState(false);
   const [miniMapTick, setMiniMapTick] = useState(0);
+  const [showTaskList, setShowTaskList] = useState(false);
+  const [trackedTaskId, setTrackedTaskId] = useState<number | null>(null);
   const miniMapOpenRef = useRef(false);
   useEffect(() => {
     miniMapOpenRef.current = showMiniMap;
@@ -385,11 +387,26 @@ export default function GameMap() {
   // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
   const myTasksRef = useRef(myTasks);
   useEffect(() => { myTasksRef.current = myTasks; }, [myTasks]);
+  const trackedTaskIdRef = useRef<number | null>(trackedTaskId);
+  useEffect(() => { trackedTaskIdRef.current = trackedTaskId; }, [trackedTaskId]);
 
   /** Closest in-range incomplete task (null when nothing is nearby). */
   const [nearestTask, setNearestTask] = useState<{ taskId: number; stepIndex: number } | null>(null);
   /** Which task minigame is currently open (null = none). */
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (trackedTaskId !== null && !myTasks.some(task => {
+      const def = TASK_DEFS.find(item => item.id === task.taskId);
+      return task.taskId === trackedTaskId && def !== undefined && task.completedSteps < def.steps;
+    })) setTrackedTaskId(null);
+  }, [trackedTaskId, myTasks]);
+
+  useEffect(() => {
+    if (myRole !== 'crewmate' || meeting !== null || activeTaskId !== null || voteResult?.winner) {
+      setShowTaskList(false);
+    }
+  }, [myRole, meeting, activeTaskId, voteResult?.winner]);
 
   // Auto-close the task panel whenever the game enters a state where task
   // interaction is invalid: meeting in progress, player dead, or game over.
@@ -907,6 +924,53 @@ export default function GameMap() {
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
             ctx.fillText(locked ? `🔒 ${def.name}` : def.name, tx, ty + markerR + 3);
           }
+          // Off-screen task compass: points towards the selected task (or the next
+          // unfinished one). Coordinates are clamped in canvas pixels, so it works
+          // in both portrait Telegram WebViews and wide desktop windows.
+          if (myRoleRef.current === 'crewmate') {
+            const candidates = snap.filter(task => {
+              const def = TASK_DEFS.find(item => item.id === task.taskId);
+              if (!def || task.completedSteps >= def.steps) return false;
+              return !(sabotageRef.current?.systemId === SABOTAGE_DOORS &&
+                sabotageRef.current.lockedTaskIds.includes(task.taskId));
+            });
+            const target = candidates.find(task => task.taskId === trackedTaskIdRef.current) ?? candidates[0];
+            const def = target ? TASK_DEFS.find(item => item.id === target.taskId) : undefined;
+            if (def && !meetingActiveRef.current) {
+              const tx = (def.x - srcX) * scale;
+              const ty = (def.y - srcY) * scale;
+              const margin = 30 * dpr;
+              const inView = tx >= margin && tx <= cw - margin && ty >= margin && ty <= ch - margin;
+              if (!inView) {
+                const centerX = cw / 2;
+                const centerY = ch / 2;
+                const dx = tx - centerX;
+                const dy = ty - centerY;
+                const factorX = Math.abs(dx) > 0.001 ? (centerX - margin) / Math.abs(dx) : Number.POSITIVE_INFINITY;
+                const factorY = Math.abs(dy) > 0.001 ? (centerY - margin) / Math.abs(dy) : Number.POSITIVE_INFINITY;
+                const factor = Math.min(factorX, factorY);
+                const ax = centerX + dx * factor;
+                const ay = centerY + dy * factor;
+                ctx.save();
+                ctx.translate(ax, ay);
+                ctx.rotate(Math.atan2(dy, dx));
+                ctx.beginPath();
+                ctx.moveTo(11 * dpr, 0);
+                ctx.lineTo(-7 * dpr, -7 * dpr);
+                ctx.lineTo(-4 * dpr, 0);
+                ctx.lineTo(-7 * dpr, 7 * dpr);
+                ctx.closePath();
+                ctx.fillStyle = target.taskId === trackedTaskIdRef.current
+                  ? 'rgba(112,223,193,0.98)'
+                  : 'rgba(255,220,70,0.95)';
+                ctx.strokeStyle = 'rgba(0,0,0,0.88)';
+                ctx.lineWidth = 2 * dpr;
+                ctx.stroke();
+                ctx.fill();
+                ctx.restore();
+              }
+            }
+          }
           ctx.textAlign = 'left';
         }
       }
@@ -1261,6 +1325,104 @@ export default function GameMap() {
           opacity: loaded ? 1 : 0,
         }}
       />
+
+      {/* Task list and selected-task tracking, adapted for small Telegram screens. */}
+      {loaded && myRole === 'crewmate' && meeting === null && (
+        <>
+          <div style={{
+            position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
+          }}>
+            <button
+              onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
+              aria-expanded={showTaskList}
+              style={{
+                padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
+                background: showTaskList ? 'rgba(106,79,18,0.96)' : 'rgba(10,22,34,0.92)',
+                border: '1px solid rgba(241,196,15,0.62)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
+                fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
+                touchAction: 'manipulation',
+              }}
+            >
+              {showTaskList ? '✕ ЗАКРЫТЬ ЗАДАНИЯ' : '☷ ЗАДАНИЯ'}
+            </button>
+          </div>
+
+          {showTaskList && (
+            <div role="region" aria-label="Список заданий" style={{
+              position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 106px)', left: 12,
+              width: 'min(330px, calc(100vw - 24px))', maxHeight: 'min(55vh, 420px)',
+              overflowY: 'auto', zIndex: 52, padding: 10, borderRadius: 12,
+              background: 'rgba(6,16,24,0.97)', border: '1px solid rgba(241,196,15,0.42)',
+              boxShadow: '0 12px 32px rgba(0,0,0,0.45)', color: '#e8f2f6',
+              fontFamily: 'sans-serif', backdropFilter: 'blur(10px)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px 2px 8px' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>ЗАДАНИЯ ЭКИПАЖА</div>
+                  <div style={{ marginTop: 3, color: 'rgba(220,239,242,0.58)', fontSize: 10 }}>
+                    {myTasks.filter(task => {
+                      const def = TASK_DEFS.find(item => item.id === task.taskId);
+                      return def && task.completedSteps >= def.steps;
+                    }).length} / {myTasks.length} выполнено
+                  </div>
+                </div>
+                <button onClick={() => setShowTaskList(false)} aria-label="Закрыть задания" style={{
+                  width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(220,240,240,0.18)',
+                  background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 19, touchAction: 'manipulation',
+                }}>×</button>
+              </div>
+
+              {sabotage?.systemId === SABOTAGE_COMMS ? (
+                <div style={{
+                  marginTop: 4, padding: 12, borderRadius: 8, background: 'rgba(155,48,39,0.18)',
+                  border: '1px solid rgba(255,90,80,0.26)', fontSize: 12, lineHeight: 1.4,
+                }}>
+                  <strong>Связь нарушена.</strong> Список заданий временно недоступен до восстановления связи.
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                  {myTasks.map(task => {
+                    const def = TASK_DEFS.find(item => item.id === task.taskId);
+                    if (!def) return null;
+                    const done = task.completedSteps >= def.steps;
+                    const locked = sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(task.taskId);
+                    const tracked = (trackedTaskId ?? myTasks.find(item => {
+                      const taskDef = TASK_DEFS.find(candidate => candidate.id === item.taskId);
+                      return taskDef && item.completedSteps < taskDef.steps &&
+                        !(sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(item.taskId));
+                    })?.taskId) === task.taskId;
+                    return (
+                      <button key={task.taskId} disabled={done || locked}
+                        onClick={() => { haptic.tap(); setTrackedTaskId(task.taskId); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
+                          padding: '8px 9px', borderRadius: 8, cursor: done || locked ? 'default' : 'pointer',
+                          color: done ? 'rgba(170,235,190,0.75)' : locked ? 'rgba(255,140,140,0.68)' : '#f3f6fb',
+                          background: tracked ? 'rgba(60,145,125,0.2)' : done ? 'rgba(40,100,60,0.08)' : 'rgba(255,255,255,0.035)',
+                          border: `1px solid ${tracked ? 'rgba(112,223,193,0.55)' : 'rgba(160,195,205,0.12)'}`,
+                          fontFamily: 'inherit', fontSize: 12, touchAction: 'manipulation',
+                        }}>
+                        <span style={{ width: 21, height: 21, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center',
+                          background: done ? 'rgba(57,170,100,0.22)' : locked ? 'rgba(170,45,45,0.22)' : 'rgba(241,196,15,0.16)',
+                          border: `1px solid ${done ? 'rgba(80,220,130,0.45)' : locked ? 'rgba(250,90,90,0.4)' : 'rgba(241,196,15,0.5)'}`,
+                          color: done ? '#7fe3a3' : locked ? '#ff9999' : '#f1c40f', fontWeight: 950,
+                        }}>{done ? '✓' : locked ? '×' : '!'}</span>
+                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name)}</span>
+                        <span style={{ color: 'rgba(220,239,242,0.6)', fontVariantNumeric: 'tabular-nums', fontSize: 10 }}>
+                          {Math.min(task.completedSteps, def.steps)} / {def.steps}
+                        </span>
+                      </button>
+                    );
+                  })}
+                  <div style={{ padding: '5px 3px 0', fontSize: 10, color: 'rgba(220,239,242,0.55)' }}>
+                    Выберите задание: компас укажет направление к цели.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
 
       {/* Mini-map toggle — top-left and safe-area aware for Telegram mobile. */}
       {loaded && myRole !== null && meeting === null && (
