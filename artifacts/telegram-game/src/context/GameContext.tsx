@@ -653,7 +653,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     // in a valid state. This prevents desync when a meeting races with completion.
     setState(s => {
       if (s.meeting !== null) return s; // meeting started concurrently; server will reject
-      if (mySlotRef.current !== null && s.deadSlots.includes(mySlotRef.current)) return s;
+      // Crewmate ghosts keep working on tasks; the server still validates
+      // assignment, proximity, step order, sabotage and role authoritatively.
+      if (s.myRole !== 'crewmate') return s;
       return {
         ...s,
         myTasks: s.myTasks.map(t =>
