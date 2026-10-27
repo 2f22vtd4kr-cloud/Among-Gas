@@ -1,0 +1,45 @@
+name: Among Gas build and gameplay smoke tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PORT: 5173
+      BASE_PATH: /
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify collision-map gameplay coordinates
+        run: node scripts/verify-map-mechanics.mjs
+
+      - name: Typecheck and build API/frontend
+        run: pnpm run build
+
+      - name: Run headless multiplayer gameplay simulations
+        run: pnpm --filter @workspace/api-server run simulate -- --games 6 --bots 6 --timeoutMs 45000 --quiet
