@@ -53,9 +53,9 @@ export const DELTA_THRESHOLD_SQ = 100;
 
 /**
  * Phase 5 — default impostor kill cooldown, in ms.
- * GAME_SPEC.md §9: default 25s; host-configurable range 15s/25s/45s is future work.
+ * Base-game parity: default 15s, matching the established AmongGas clone.
  */
-export const KILL_COOLDOWN_MS = 25_000;
+export const KILL_COOLDOWN_MS = 15_000;
 
 /**
  * Phase 6 — meeting timing, in ms (GAME_SPEC.md §6 DISCUSSION → VOTING).
