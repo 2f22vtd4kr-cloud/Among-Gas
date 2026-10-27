@@ -483,6 +483,11 @@ function getMockPreset(): MockPreset | null {
 }
 
 function getWsUrl(): string {
+  // The default keeps self-hosted/Replit deployments same-origin. Static hosts
+  // such as a separate Vercel frontend can point at the live game server with
+  // VITE_WS_URL, e.g. wss://game.example.com/api/ws.
+  const configured = import.meta.env.VITE_WS_URL?.trim();
+  if (configured) return configured;
   const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${proto}://${window.location.host}/api/ws`;
 }
