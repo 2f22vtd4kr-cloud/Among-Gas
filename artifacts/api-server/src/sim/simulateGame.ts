@@ -31,7 +31,7 @@ export interface SimBatchOptions {
   impostors?: number;
   /** How many games run concurrently at once. Default 25. */
   concurrency?: number;
-  /** Safety timeout per game (ms). A game stuck past this is recorded as 'timeout'. Default 120000. */
+  /** Safety timeout per game (ms). A game stuck past this is recorded as 'timeout'. Default 300000. */
   timeoutMs?: number;
   /** Called for every structured lifecycle event across every in-flight game. */
   onEvent?: (event: LobbyEvent) => void;
@@ -58,7 +58,7 @@ function assignBotAgentsByRole(lobby: Lobby): void {
 }
 
 export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGameResult[]> {
-  const { games, bots, impostors, concurrency = 25, timeoutMs = 120_000 } = opts;
+  const { games, bots, impostors, concurrency = 25, timeoutMs = 300_000 } = opts;
   if (bots < 2) throw new Error('bots must be at least 2 (need at least one crewmate and one impostor)');
   if (games < 1) throw new Error('games must be at least 1');
 

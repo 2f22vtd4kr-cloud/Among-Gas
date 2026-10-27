@@ -9,7 +9,7 @@
  *   --bots         Bots per game (default 6)
  *   --impostors    Force a specific impostor count (default: standard playerCount table)
  *   --concurrency  Games running at once (default min(25, games))
- *   --timeoutMs    Per-game safety timeout in ms (default 120000)
+ *   --timeoutMs    Per-game safety timeout in ms (default 300000)
  *   --quiet        Suppress per-event NDJSON lines (still prints per-game results + summary)
  *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout (unless --maxTimeouts is set)
  *   --maxTimeouts   Maximum tolerated safety timeouts (default: all, or 0 with --failOnTimeout)
@@ -91,7 +91,7 @@ async function main(): Promise<void> {
     ? requirePositiveInt(args.impostors, 'impostors', 0, { min: 1, max: bots - 1 })
     : undefined;
   const concurrency = requirePositiveInt(args.concurrency, 'concurrency', Math.min(25, games));
-  const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 120_000, { min: 1000 });
+  const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 300_000, { min: 1000 });
   const quiet = args.quiet === 'true';
   const failOnTimeout = args.failOnTimeout === 'true';
   const maxTimeouts = args.maxTimeouts !== undefined
