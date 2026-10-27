@@ -45,4 +45,4 @@ jobs:
         run: pnpm --filter @workspace/api-server run test:gameplay
 
       - name: Run headless multiplayer gameplay simulations
-        run: pnpm --filter @workspace/api-server run simulate -- --games 6 --bots 6 --timeoutMs 120000 --quiet --failOnTimeout true
+        run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 120000 --quiet --maxTimeouts 2
