@@ -52,6 +52,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
+import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -84,6 +85,16 @@ function taskRu(name: string | undefined): string {
 function sabotageRu(name: string | undefined): string {
   return (name && SABOTAGE_NAME_RU[name]) || name || 'Система';
 }
+
+const ADMIN_DOT_COLORS: Record<CharacterColor, string> = {
+  teal: '#31c6b4',
+  maroon: '#c44958',
+  navy: '#4679d4',
+  purple: '#9860d3',
+  brown: '#8c6755',
+  'dark-gray': '#5e6872',
+  magenta: '#c94eb6',
+};
 
 // ── Camera ────────────────────────────────────────────────────────────────────
 const ZOOM = 0.7;
@@ -233,6 +244,8 @@ export default function GameMap() {
   useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
 
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
+  const [showAdminTable, setShowAdminTable] = useState(false);
+  const [, setAdminTableTick] = useState(0);
   const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
     if (!amIImpostor || sabotage !== null) setShowSabotagePanel(false);
@@ -404,6 +417,46 @@ export default function GameMap() {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [amIDead, meeting, myRole, sabotage]);
+
+  // Living players may use the custom-map Admin Table when they stand at its console.
+  // The proximity check is only client-side UI; the table itself reads replicated player
+  // coordinates and never exposes roles or the hidden vent occupant.
+  const [nearestAdminTableId, setNearestAdminTableId] = useState<number | null>(null);
+  const adminTableOpenRef = useRef(false);
+  useEffect(() => {
+    adminTableOpenRef.current = showAdminTable;
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [showAdminTable]);
+
+  useEffect(() => {
+    if (myRole === null || amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
+      setNearestAdminTableId(null);
+      return;
+    }
+    const id = setInterval(() => {
+      const pos = playerStateRef.current;
+      let best: number | null = null;
+      let bestDistSq = ADMIN_TABLE_INTERACTION_RANGE_PX * ADMIN_TABLE_INTERACTION_RANGE_PX;
+      for (const consoleDef of ADMIN_TABLE_DEFS) {
+        const dx = consoleDef.x - pos.x;
+        const dy = consoleDef.y - pos.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq <= bestDistSq) {
+          best = consoleDef.id;
+          bestDistSq = distSq;
+        }
+      }
+      setNearestAdminTableId(best);
+    }, 150);
+    return () => clearInterval(id);
+  }, [myRole, amIDead, myVentId, meeting, voteResult?.winner]);
+
+  useEffect(() => {
+    if (!showAdminTable) return;
+    const timer = window.setInterval(() => setAdminTableTick(tick => tick + 1), 250);
+    return () => window.clearInterval(timer);
+  }, [showAdminTable]);
 
   // ── Role reveal overlay ───────────────────────────────────────────────────
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
@@ -686,7 +739,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null
+      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null || adminTableOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -929,6 +982,32 @@ export default function GameMap() {
         ctx.fillStyle = '#a0ccd2';
         ctx.fill();
         ctx.restore();
+      }
+      ctx.restore();
+
+      // ── 2.9 Admin Table console marker ────────────────────────────────────
+      ctx.save();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      for (const consoleDef of ADMIN_TABLE_DEFS) {
+        const ax = Math.round((consoleDef.x - srcX) * scale);
+        const ay = Math.round((consoleDef.y - srcY) * scale);
+        if (ax < -30 || ax > cw + 30 || ay < -30 || ay > ch + 30) continue;
+        const radius = Math.max(7, Math.round(12 * dpr));
+        ctx.beginPath();
+        ctx.arc(ax, ay, radius + 3, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(0,0,0,0.58)';
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(ax, ay, radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#193c4b';
+        ctx.fill();
+        ctx.lineWidth = Math.max(1, dpr);
+        ctx.strokeStyle = 'rgba(100,225,235,0.95)';
+        ctx.stroke();
+        ctx.fillStyle = '#e4ffff';
+        ctx.font = `900 ${Math.max(10, Math.round(13 * dpr))}px sans-serif`;
+        ctx.fillText('A', ax, ay + 0.5 * dpr);
       }
       ctx.restore();
 
@@ -1254,6 +1333,140 @@ export default function GameMap() {
           </button>
         </div>
       )}
+
+      {/* ── Admin Table action (living players at the custom-map console) ─── */}
+      {loaded && !amIDead && myRole !== null && myVentId === null && meeting === null &&
+        nearestAdminTableId !== null && (
+        <div style={{ position: 'fixed', bottom: 300, right: 24, zIndex: 28 }}>
+          <button
+            onClick={() => { haptic.tap(); setShowAdminTable(true); }}
+            style={{
+              padding: '11px 16px', borderRadius: 12,
+              background: 'linear-gradient(180deg, #23606d, #15323a)',
+              color: '#e4ffff', border: '2px solid rgba(105,225,235,0.8)',
+              boxShadow: '0 4px 0 #071015, 0 0 18px rgba(50,190,205,0.28)',
+              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
+              cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            ◉ ADMIN TABLE
+          </button>
+        </div>
+      )}
+
+      {/* Live room table from the original game, using Among Gas's own map asset. */}
+      {showAdminTable && myRole !== null && !amIDead && meeting === null && (() => {
+        const agents = players.flatMap(player => {
+          const isLocal = player.slot === mySlot;
+          const remote = isLocal ? undefined : remotePlayersRef.current.get(player.slot);
+          if (isLocal && myVentId !== null) return [];
+          if (!isLocal && (!remote || remote.inVent)) return [];
+          const position = isLocal ? playerStateRef.current : remote!;
+          const alive = !deadSlots.includes(player.slot);
+          return [{
+            slot: player.slot,
+            username: player.username,
+            x: position.x,
+            y: position.y,
+            alive,
+          }];
+        });
+        return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Admin Table"
+            onClick={() => setShowAdminTable(false)}
+            style={{
+              position: 'fixed', inset: 0, zIndex: 88,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              gap: 12, padding: 'max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom))',
+              background: 'rgba(2,8,15,0.94)', backdropFilter: 'blur(5px)',
+              color: '#e4f5ff', fontFamily: 'sans-serif', overflowY: 'auto',
+            }}
+          >
+            <div style={{
+              width: 'min(94vw, 920px)', maxHeight: '88dvh',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+              padding: '18px 14px 14px', borderRadius: 16,
+              background: 'linear-gradient(155deg, rgba(18,42,55,0.98), rgba(5,14,25,0.99))',
+              border: '1px solid rgba(100,210,230,0.55)',
+              boxShadow: '0 16px 60px rgba(0,0,0,0.55)',
+            }} onClick={e => e.stopPropagation()}>
+              <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 950, fontSize: 'clamp(19px, 4vw, 28px)', letterSpacing: '0.1em' }}>ADMIN TABLE</div>
+                  <div style={{ fontSize: 12, color: 'rgba(190,225,235,0.68)', marginTop: 3 }}>
+                    Live player locations · {agents.length} visible
+                  </div>
+                </div>
+                <button onClick={() => setShowAdminTable(false)} aria-label="Close Admin Table" style={{
+                  width: 42, height: 42, borderRadius: 12, border: '1px solid rgba(130,195,215,0.35)',
+                  background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 22, fontWeight: 800,
+                  touchAction: 'manipulation',
+                }}>×</button>
+              </div>
+
+              <div style={{
+                position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
+                maxHeight: '56dvh', borderRadius: 10, overflow: 'hidden',
+                border: '1px solid rgba(120,200,220,0.45)', background: '#13212a',
+              }}>
+                <img
+                  src={`${import.meta.env.BASE_URL}map-hires.png`}
+                  alt="Among Gas map"
+                  draggable={false}
+                  style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }}
+                />
+                {agents.map(agent => (
+                  <div
+                    key={agent.slot}
+                    title={agent.username}
+                    aria-label={`${agent.username}, ${agent.alive ? 'alive' : 'dead'}`}
+                    style={{
+                      position: 'absolute',
+                      left: `${Math.max(0, Math.min(100, agent.x / MAP_W * 100))}%`,
+                      top: `${Math.max(0, Math.min(100, agent.y / MAP_H * 100))}%`,
+                      transform: 'translate(-50%, -50%)',
+                      display: 'grid', placeItems: 'center',
+                      width: 'clamp(11px, 2.2vw, 19px)', height: 'clamp(11px, 2.2vw, 19px)',
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(255,255,255,0.95)',
+                      background: agent.alive ? ADMIN_DOT_COLORS[slotColor(agent.slot)] : '#7f858b',
+                      color: '#fff', fontWeight: 950, fontSize: 'clamp(9px, 1.4vw, 13px)',
+                      lineHeight: 1, boxShadow: '0 1px 5px rgba(0,0,0,0.65)',
+                      pointerEvents: 'auto',
+                    }}
+                  >
+                    {agent.alive ? '' : '×'}
+                  </div>
+                ))}
+              </div>
+              <div style={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', justifyContent: 'center' }}>
+                {agents.map(agent => (
+                  <div key={agent.slot} style={{
+                    display: 'flex', alignItems: 'center', gap: 6, padding: '5px 8px', borderRadius: 7,
+                    background: 'rgba(255,255,255,0.04)', color: agent.alive ? '#e4f5ff' : '#7f858b',
+                    fontSize: 11, maxWidth: '100%',
+                  }}>
+                    <span style={{
+                      display: 'inline-block', width: 9, height: 9, flexShrink: 0, borderRadius: '50%',
+                      background: agent.alive ? ADMIN_DOT_COLORS[slotColor(agent.slot)] : '#7f858b',
+                    }} />
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 'min(42vw, 200px)' }}>
+                      {agent.username}
+                    </span>
+                    {!agent.alive && <span>×</span>}
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: 'rgba(190,225,235,0.55)', textAlign: 'center' }}>
+                Hidden players inside vents do not appear. The table refreshes live.
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Vent selection covers the viewport and freezes movement while hidden. */}
       {myVentId !== null && (() => {
