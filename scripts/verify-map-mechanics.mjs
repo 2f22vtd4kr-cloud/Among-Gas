@@ -154,7 +154,7 @@ for (const [i, pad] of saboPads.entries()) {
   assert.ok(closestReachable(pad.x, pad.y) <= saboRange,
     `Sabotage repair pad ${i} is outside a reachable interaction radius`);
 }
-const adminBlock = adminTableSource.match(/export const ADMIN_TABLE_DEFS[\\s\\S]*?=\\s*\\[([\\s\\S]*?)\\]\\s*as const;/)?.[1];
+const adminBlock = adminTableSource.match(/export const ADMIN_TABLE_DEFS[\s\S]*?=\s*\[([\s\S]*?)\]\s*as const;/)?.[1];
 assert.ok(adminBlock, 'Could not parse ADMIN_TABLE_DEFS');
 const adminTables = parseRefPoints(adminBlock);
 assert.equal(adminTables.length, 1, 'Expected one custom-map Admin Table console');
