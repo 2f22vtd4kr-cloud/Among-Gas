@@ -430,6 +430,12 @@ export default function GameMap() {
   }, [showAdminTable]);
 
   useEffect(() => {
+    if (amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
+      setShowAdminTable(false);
+    }
+  }, [amIDead, myVentId, meeting, voteResult?.winner]);
+
+  useEffect(() => {
     if (myRole === null || amIDead || myVentId !== null || meeting !== null || voteResult?.winner) {
       setNearestAdminTableId(null);
       return;
