@@ -48,10 +48,13 @@ import {
   SABOTAGE_COMMS,
   SABOTAGE_DOORS,
   getSabotageTimeoutMs,
+  NORMAL_VISION_RADIUS_PX,
+  IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
+import { buildVisionSegments, computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 
@@ -725,6 +728,9 @@ export default function GameMap() {
     if (!ctx) return;
 
     const grid = buildCollisionGrid();
+    // Precompute merged collision boundaries once. The per-frame visibility
+    // polygon casts only against nearby wall edges, not every blocked cell.
+    const visionSegments = buildVisionSegments(grid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -1243,28 +1249,54 @@ export default function GameMap() {
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
-      // ── 5. Fog-of-war (Phase 8 — Lights sabotage, crewmate view only) ─────
-      // Impostor vision is unaffected (GAME_SPEC.md §10), so no fog is drawn
-      // on an impostor's own client. Rendered as a full black overlay with a
-      // radial-gradient "hole" cut around the local player via destination-out
-      // compositing, matching the shadow/blur conventions used elsewhere here.
-      const activeSabotage = sabotageRef.current;
-      if (activeSabotage && activeSabotage.systemId === SABOTAGE_LIGHTS && myRoleRef.current === 'crewmate') {
-        const visionR = Math.round(LIGHTS_CREWMATE_VISION_RADIUS_PX * scale);
+      // ── 5. Base-game vision + wall shadows ─────────────────────────────────
+      // Crewmates and impostors always see only their sight radius. Lights
+      // sharply reduces crewmate vision; impostor vision is unchanged. Ghosts
+      // can see the entire map and continue tasks, as in the base game.
+      const localRole = myRoleRef.current;
+      const isLocalGhost = deadSlotsRef.current.has(mySlotRef.current ?? -1);
+      if (!isLocalGhost && (localRole === 'crewmate' || localRole === 'impostor')) {
+        const activeSabotage = sabotageRef.current;
+        const visionRadius = localRole === 'impostor'
+          ? IMPOSTOR_VISION_RADIUS_PX
+          : activeSabotage?.systemId === SABOTAGE_LIGHTS
+            ? LIGHTS_CREWMATE_VISION_RADIUS_PX
+            : NORMAL_VISION_RADIUS_PX;
+        const visionR = visionRadius * scale;
+        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, visionSegments);
+
         ctx.save();
-        ctx.fillStyle = '#000000';
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(0,0,0,0.96)';
         ctx.fillRect(0, 0, cw, ch);
+
+        // The visibility polygon ends at either the sight-radius boundary or
+        // the first wall. Clipping a soft radial gradient to it makes open
+        // rooms fade naturally while solid obstacles cast opaque shadows.
         ctx.globalCompositeOperation = 'destination-out';
-        const grad = ctx.createRadialGradient(pCX, pCY, visionR * 0.35, pCX, pCY, visionR);
-        grad.addColorStop(0, 'rgba(0,0,0,1)');
-        grad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.arc(pCX, pCY, visionR, 0, Math.PI * 2);
-        ctx.fill();
+        for (let i = 0; i < visiblePolygon.length; i++) {
+          const point = visiblePolygon[i];
+          const x = (point.x - srcX) * scale;
+          const y = (point.y - srcY) * scale;
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        if (visiblePolygon.length > 2) {
+          ctx.closePath();
+          ctx.clip();
+          const grad = ctx.createRadialGradient(pCX, pCY, visionR * 0.55, pCX, pCY, visionR);
+          grad.addColorStop(0, 'rgba(0,0,0,1)');
+          grad.addColorStop(0.82, 'rgba(0,0,0,1)');
+          grad.addColorStop(1, 'rgba(0,0,0,0)');
+          ctx.fillStyle = grad;
+          ctx.beginPath();
+          ctx.arc(pCX, pCY, visionR, 0, Math.PI * 2);
+          ctx.fill();
+        }
         ctx.restore();
-        // iOS Safari fix: an explicit filter reset after restore() prevents
-        // the next frame's blur/shadow filters from striping (see memory).
+        // iOS Safari can retain filters across canvas state resets; keeping
+        // this explicit avoids radial-fog artefacts on the next frame.
         ctx.filter = 'none';
       }
 
