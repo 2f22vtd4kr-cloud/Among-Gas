@@ -48,6 +48,13 @@ export interface MeetingChatMessage {
   receivedAt: number;
 }
 
+/** Server-authoritative, immutable dropped body position (not the moving ghost). */
+export interface CorpsePosition {
+  slot: number;
+  x: number;
+  y: number;
+}
+
 export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
 
 export type PlayerRole = 'crewmate' | 'impostor';
@@ -133,6 +140,8 @@ export interface GameState {
   meetingMessages: MeetingChatMessage[];
   /** True after the server confirms this player's one emergency call this round. */
   emergencyMeetingUsed: boolean;
+  /** Bodies persist at the kill location while ghosts move independently. */
+  corpsePositions: CorpsePosition[];
 }
 
 export interface GameActions {
@@ -189,6 +198,7 @@ const DEFAULT_STATE: GameState = {
   myVentId: null,
   meetingMessages: [],
   emergencyMeetingUsed: false,
+  corpsePositions: [],
 };
 
 // ── Contexts ─────────────────────────────────────────────────────────────────
@@ -741,16 +751,17 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         if (sub === 0x03) {
           const parsed = parseRoomUpdate(view);
           if (!parsed) return;
+          const activeSlots = new Set(parsed.players.map(p => p.slot));
           setState(s => ({
             ...s,
             roomCode: parsed.roomCode,
             hostSlot: parsed.hostSlot,
             players: parsed.players,
             errorMessage: null,
+            corpsePositions: s.corpsePositions.filter(body => activeSlots.has(body.slot)),
           }));
           // Prune remote players that are no longer in the room.
           // This prevents departed players from rendering as ghost circles.
-          const activeSlots = new Set(parsed.players.map(p => p.slot));
           const mySlot = mySlotRef.current;
           for (const slot of remotePlayersRef.current.keys()) {
             if (!activeSlots.has(slot) || slot === mySlot) {
@@ -818,8 +829,25 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           myVentId: null,
           meetingMessages: [],
           emergencyMeetingUsed: false,
+          corpsePositions: [],
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
+        return;
+      }
+
+      // ── 0x21: immutable corpse drop ───────────────────────────────────────
+      // [0x21, victimSlot, wireX(UInt16LE), wireY(UInt16LE)].
+      if (opcode === 0x21 && event.data.byteLength === 6) {
+        const slot = view.getUint8(1);
+        const x = fromWire(view.getUint16(2, true), MAP_W);
+        const y = fromWire(view.getUint16(4, true), MAP_H);
+        setState(s => ({
+          ...s,
+          corpsePositions: [
+            ...s.corpsePositions.filter(body => body.slot !== slot),
+            { slot, x, y },
+          ],
+        }));
         return;
       }
 
@@ -1002,6 +1030,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             hasVoted: false,
             voteResult: null,
             meetingMessages: [],
+            corpsePositions: bodySlot === NO_TARGET
+              ? s.corpsePositions
+              : s.corpsePositions.filter(body => body.slot !== bodySlot),
           };
         });
         return;
@@ -1025,6 +1056,9 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           ...s,
           meeting: null,
           myVentId: null,
+          corpsePositions: ejectedSlot === NO_TARGET
+            ? s.corpsePositions
+            : s.corpsePositions.filter(body => body.slot !== ejectedSlot),
           deadSlots: ejectedSlot !== NO_TARGET && !s.deadSlots.includes(ejectedSlot)
             ? [...s.deadSlots, ejectedSlot]
             : s.deadSlots,
