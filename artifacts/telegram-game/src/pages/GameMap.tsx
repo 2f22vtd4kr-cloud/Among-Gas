@@ -408,14 +408,14 @@ export default function GameMap() {
     }
   }, [myRole, meeting, activeTaskId, voteResult?.winner]);
 
-  // Auto-close the task panel whenever the game enters a state where task
-  // interaction is invalid: meeting in progress, player dead, or game over.
+  // Close an in-progress minigame on death; ghosts can reopen the same
+  // assigned task afterward and continue contributing to the shared task bar.
   useEffect(() => {
     const activeTaskLocked = activeTaskId !== null &&
       (sabotage?.systemId === SABOTAGE_COMMS ||
        (sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(activeTaskId)));
-    if (meeting !== null || myRole !== 'crewmate' || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
-  }, [meeting, myRole, voteResult?.winner, sabotage, activeTaskId]);
+    if (meeting !== null || amIDead || myRole !== 'crewmate' || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
+  }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
     if (meeting !== null || myRole !== 'crewmate' ||
