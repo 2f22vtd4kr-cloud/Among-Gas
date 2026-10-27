@@ -227,7 +227,24 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 5. Kills drop a body at the death location, rather than following the ghost.
+// 5. Bot reporting follows the immutable corpse, not the ghost's later position.
+{
+  const reporter = makePlayer(0, 'crewmate', 110, 100);
+  const ghost = makePlayer(1, 'crewmate', 900, 900);
+  const impostor = makePlayer(2, 'impostor', 500, 500);
+  ghost.player.alive = false;
+  ghost.player.corpseX = 100;
+  ghost.player.corpseY = 100;
+  const lobby = makeLobby([reporter.player, ghost.player, impostor.player]);
+  const manager = new LobbyManager();
+  new CrewmateBot().roamingTick(lobby, reporter.player, manager);
+  assert.equal(lobby.phase, 'MEETING', 'reporter near the dropped corpse should call a meeting');
+  assert.equal(lobby.meeting?.bodySlot, 1, 'meeting must reference the corpse owner even after the ghost moves away');
+  assert.equal(ghost.player.bodyReported, true, 'reported corpse is marked to prevent repeated meetings');
+  manager.disposeLobby(lobby);
+}
+
+// 6. Kills drop a body at the death location, rather than following the ghost.
 {
   const vent = findVent(0)!;
   const killer = makePlayer(0, 'impostor', vent.x, vent.y);
@@ -253,7 +270,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 6. Ejected crewmates retain ghost tasks and can still win via the shared task bar.
+// 7. Ejected crewmates retain ghost tasks and can still win via the shared task bar.
 {
   const task = TASK_DEFS[0];
   const impostor = makePlayer(0, 'impostor', task.x, task.y);
@@ -286,7 +303,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 7. Ghost bots can phase through walls and still finish their remaining tasks.
+// 8. Ghost bots can phase through walls and still finish their remaining tasks.
 {
   const task = TASK_DEFS.find(def => def.id === 8)!;
   const ghost = makePlayer(0, 'crewmate', MAP_W - 100, MAP_H - 100);
@@ -319,7 +336,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   void distance;
 }
 
-// 8. Emergency meetings are single-use per player per round.
+// 9. Emergency meetings are single-use per player per round.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const guest = makePlayer(1, 'crewmate', 130, 100);

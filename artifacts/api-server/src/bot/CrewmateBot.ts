@@ -119,7 +119,10 @@ export class CrewmateBot extends BotAgent {
   private _nearbyDeadBody(lobby: Lobby, self: LobbyPlayer): number | null {
     for (const p of lobby.players.values()) {
       if (p.alive || p.bodyReported) continue;
-      const dSq = CrewmateBot.distSq(self.x, self.y, p.x, p.y);
+      // Report the immutable corpse location, never the moving ghost.
+      const bodyX = p.corpseX ?? p.x;
+      const bodyY = p.corpseY ?? p.y;
+      const dSq = CrewmateBot.distSq(self.x, self.y, bodyX, bodyY);
       if (dSq <= REPORT_RANGE_PX * REPORT_RANGE_PX) return p.slot;
     }
     return null;
