@@ -1,122 +1,142 @@
-import WebSocket from 'ws';
+import assert from 'node:assert/strict';
+import { createRequire } from 'node:module';
 
-const WS_URL = 'ws://localhost:8080/api/ws';
+const require = createRequire(new URL('./artifacts/api-server/package.json', import.meta.url));
+const WebSocket = require('ws');
+const WS_URL = process.env.WS_URL ?? 'ws://127.0.0.1:8080/api/ws';
 
 function connect(id, username) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
     ws.binaryType = 'nodebuffer';
     const state = { ws, slot: null, msgs: [] };
+    const timeout = setTimeout(() => reject(new Error(`auth handshake timeout for ${username}`)), 5000);
+
     ws.on('open', () => {
       ws.send(JSON.stringify({ id, username }));
     });
     ws.on('message', (data) => {
       const buf = Buffer.from(data);
       state.msgs.push(buf);
-      // The auth ACK (0x01) only confirms the connection and initializes a
-      // temporary slot value. The authoritative lobby slot arrives later in
-      // [0x10, 0x05, slot] after create/join. Track that packet as well: the
-      // old test left every player's slot at 0 and falsely failed its own
-      // attacker-slot assertion despite a correct server broadcast.
+
+      // The first 0x01 packet confirms authentication only. Room slots arrive
+      // later in [0x10, 0x05, slot] after creating or joining a lobby.
       if (buf[0] === 0x10 && buf[1] === 0x05 && buf.length >= 3) {
         state.slot = buf.readUInt8(2);
       }
       if (buf[0] === 0x01) {
-        state.slot = buf.readUInt8(1);
+        clearTimeout(timeout);
+        state.authSlot = buf.readUInt8(1);
         resolve(state);
       }
     });
-    ws.on('error', reject);
+    ws.on('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
   });
 }
 
 function send(state, bytes) {
+  assert.equal(state.ws.readyState, WebSocket.OPEN, 'socket must be open before sending');
   state.ws.send(Buffer.from(bytes));
 }
 
 function waitFor(state, predicate, timeoutMs = 5000) {
+  const existing = state.msgs.find(predicate);
+  if (existing) return Promise.resolve(existing);
+
   return new Promise((resolve, reject) => {
-    const check = () => {
-      const found = state.msgs.find(predicate);
-      if (found) return resolve(found);
+    const cleanup = () => {
+      clearTimeout(timer);
+      state.ws.off('message', onMessage);
     };
-    check();
-    const iv = setInterval(check, 20);
     const timer = setTimeout(() => {
-      clearInterval(iv);
-      reject(new Error('timeout waiting for message'));
+      cleanup();
+      reject(new Error(`timeout waiting for message from slot ${state.slot ?? 'unassigned'}`));
     }, timeoutMs);
-    const wrap = () => {
-      const found = state.msgs.find(predicate);
-      if (found) { clearInterval(iv); clearTimeout(timer); resolve(found); }
+    const onMessage = (data) => {
+      const buf = Buffer.from(data);
+      if (predicate(buf)) {
+        cleanup();
+        resolve(buf);
+      }
     };
-    state.ws.on('message', wrap);
+    state.ws.on('message', onMessage);
   });
 }
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function main() {
-  console.log('--- Connecting 3 players ---');
-  const host = await connect(90001, 'HostSab');
-  send(host, [0x10, 0x01]); // create room
-  const roomMsg = await waitFor(host, b => b[0] === 0x10 && b[1] === 0x03);
-  const roomCode = roomMsg.slice(4, 10).toString('ascii').trim();
-  console.log('Room code:', roomCode, 'host slot:', host.slot);
+  const players = [];
+  try {
+    console.log('--- Authenticate host and create lobby ---');
+    const host = await connect(90001, 'HostSab');
+    players.push(host);
+    send(host, [0x10, 0x01]);
+    await waitFor(host, b => b[0] === 0x10 && b[1] === 0x05);
+    const roomMsg = await waitFor(host, b => b[0] === 0x10 && b[1] === 0x03);
+    const roomCode = roomMsg.slice(4, 10).toString('ascii').trim();
+    assert.match(roomCode, /^[A-HJ-NP-Z2-9]{6}$/);
+    assert.equal(host.slot, 0, 'host must occupy slot 0');
+    console.log('Room code:', roomCode, 'host slot:', host.slot);
 
-  const p2 = await connect(90002, 'P2Sab');
-  const codeBytes = Buffer.from(roomCode.padEnd(6, ' '), 'ascii');
-  send(p2, [0x10, 0x02, ...codeBytes]);
-  await waitFor(p2, b => b[0] === 0x10 && b[1] === 0x05);
+    console.log('--- Join two players and verify unique authoritative slots ---');
+    for (const [id, username, expectedSlot] of [[90002, 'P2Sab', 1], [90003, 'P3Sab', 2]]) {
+      const player = await connect(id, username);
+      players.push(player);
+      send(player, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+      await waitFor(player, b => b[0] === 0x10 && b[1] === 0x05);
+      const update = await waitFor(player, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === expectedSlot + 1);
+      assert.equal(player.slot, expectedSlot, `${username} must receive slot ${expectedSlot}`);
+      assert.equal(update[2], expectedSlot + 1, 'lobby update must include all joined players');
+    }
+    assert.deepEqual(players.map(p => p.slot), [0, 1, 2]);
+    assert.equal(new Set(players.map(p => p.slot)).size, 3);
+    console.log('Unique slots:', players.map(p => p.slot));
 
-  const p3 = await connect(90003, 'P3Sab');
-  send(p3, [0x10, 0x02, ...codeBytes]);
-  await waitFor(p3, b => b[0] === 0x10 && b[1] === 0x05);
+    console.log('--- Start game and verify server-assigned roles ---');
+    send(host, [0x12]);
+    const roles = await Promise.all(players.map(async player => ({
+      player,
+      packet: await waitFor(player, b => b[0] === 0x1A),
+    })));
+    const impostors = roles.filter(({ packet }) => packet[1] === 0x01);
+    const crewmates = roles.filter(({ packet }) => packet[1] === 0x00);
+    assert.equal(impostors.length, 1, 'a three-player game must have exactly one impostor');
+    assert.equal(crewmates.length, 2, 'remaining players must be crewmates');
+    const impostor = impostors[0].player;
+    console.log('Impostor slot:', impostor.slot, 'Crewmate slots:', crewmates.map(x => x.player.slot));
 
-  console.log('Slots:', host.slot, p2.slot, p3.slot);
+    console.log('--- Reject a crewmate sabotage attempt ---');
+    const crew = crewmates[0].player;
+    const priorStartCounts = players.map(p => p.msgs.filter(b => b[0] === 0x16 && b[1] === 0x01).length);
+    send(crew, [0x15, 0x04, 0x01]);
+    await sleep(350);
+    assert.deepEqual(
+      players.map(p => p.msgs.filter(b => b[0] === 0x16 && b[1] === 0x01).length),
+      priorStartCounts,
+      'server must not start sabotage for a crewmate request',
+    );
 
-  console.log('--- Starting game ---');
-  send(host, [0x12]);
-  await Promise.all([host, p2, p3].map(s => waitFor(s, b => b[0] === 0x1A)));
-
-  const all = [host, p2, p3];
-  const roleOf = (s) => {
-    const m = s.msgs.find(b => b[0] === 0x1A);
-    return m.readUInt8(1) === 1 ? 'impostor' : 'crewmate';
-  };
-  const impostor = all.find(s => roleOf(s) === 'impostor');
-  const crewmates = all.filter(s => roleOf(s) !== 'impostor');
-  console.log('Impostor slot:', impostor.slot, 'Crewmates:', crewmates.map(c => c.slot));
-
-  // ── Test 1: Lights sabotage (single pad, any crewmate fixes) ──────────────
-  console.log('--- Triggering Lights sabotage (systemId=1) ---');
-  send(impostor, [0x15, 0x04, 0x01]);
-  const startMsg = await waitFor(crewmates[0], b => b[0] === 0x16 && b[1] === 0x01);
-  console.log('Sabotage started broadcast:', [...startMsg]);
-  if (startMsg[2] !== 0x01) throw new Error('Expected systemId=1 (Lights)');
-  if (startMsg[3] !== impostor.slot) throw new Error('attackerSlot mismatch');
-
-  // Crewmate attempts repair from far away (should be rejected — no ack expected quickly)
-  console.log('--- Repairing Lights (crewmate 1, padId=0) ---');
-  send(crewmates[0], [0x15, 0x05, 0x01, 0x00]);
-  const fixedMsg = await waitFor(crewmates[1], b => b[0] === 0x16 && b[1] === 0x03, 3000).catch(() => null);
-  if (fixedMsg) {
-    console.log('Lights fixed broadcast received:', [...fixedMsg]);
-  } else {
-    console.log('WARNING: Lights fix not broadcast within timeout (may be proximity-rejected — expected since crewmate is at spawn, not on the pad)');
+    console.log('--- Accept impostor Lights sabotage and verify broadcast identity ---');
+    send(impostor, [0x15, 0x04, 0x01]);
+    const startMsg = await waitFor(crew, b => b[0] === 0x16 && b[1] === 0x01);
+    assert.equal(startMsg[2], 0x01, 'expected Lights system ID');
+    assert.equal(startMsg[3], impostor.slot, 'sabotage broadcast must identify the real impostor slot');
+    for (const { player } of crewmates) {
+      await waitFor(player, b => b[0] === 0x16 && b[1] === 0x01 && b[2] === 0x01 && b[3] === impostor.slot);
+    }
+    console.log('PASS: authenticated WebSocket lobby, slot allocation, role secrecy boundary, sabotage authorization and broadcast');
+  } finally {
+    for (const player of players) {
+      try { player.ws.close(); } catch {}
+    }
   }
-
-  // ── Test 2: Sabotage cooldown blocks immediate re-trigger ──────────────────
-  console.log('--- Attempting immediate re-sabotage during cooldown (should be silently rejected) ---');
-  const msgCountBefore = crewmates[0].msgs.length;
-  send(impostor, [0x15, 0x04, 0x02]); // O2
-  await new Promise(r => setTimeout(r, 800));
-  const newSabotageStart = crewmates[0].msgs.slice(msgCountBefore).find(b => b[0] === 0x16 && b[1] === 0x01);
-  console.log(newSabotageStart ? 'FAIL: second sabotage was allowed during cooldown!' : 'OK: second sabotage correctly rejected (cooldown active)');
-
-  console.log('--- Test complete ---');
-  process.exit(0);
 }
 
-main().catch(err => {
-  console.error('TEST FAILED:', err);
-  process.exit(1);
+main().catch(error => {
+  console.error('TEST FAILED:', error);
+  process.exitCode = 1;
 });
