@@ -18,6 +18,8 @@ import {
   toWire,
 } from '@workspace/shared/coords';
 import { TASK_DEFS } from '@workspace/shared/tasks';
+import { BOT_SPEED_PX } from './bot/BotAgent.js';
+import { CrewmateBot } from './bot/CrewmateBot.js';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import {
   VENT_DEFS,
@@ -284,7 +286,40 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 7. Emergency meetings are single-use per player per round.
+// 7. Ghost bots can phase through walls and still finish their remaining tasks.
+{
+  const task = TASK_DEFS.find(def => def.id === 8)!;
+  const ghost = makePlayer(0, 'crewmate', MAP_W - 100, MAP_H - 100);
+  ghost.player.alive = false;
+  ghost.player.assignedTasks = [task.id];
+  const lobby = makeLobby([ghost.player]);
+  lobby.totalTaskSteps = task.steps;
+  const manager = new LobbyManager();
+  const bot = new CrewmateBot();
+
+  const beforeX = ghost.player.x;
+  const beforeY = ghost.player.y;
+  const dx = task.x - beforeX;
+  const dy = task.y - beforeY;
+  const distance = Math.hypot(dx, dy);
+  bot.ghostTick(lobby, ghost.player, manager);
+  const movedX = ghost.player.x - beforeX;
+  const movedY = ghost.player.y - beforeY;
+  assert.ok(Math.abs(Math.hypot(movedX, movedY) - BOT_SPEED_PX * 1.5) < 0.001,
+    'ghost movement must move directly toward the task rather than follow collision pathfinding');
+  assert.ok(movedX * dx > 0 && movedY * dy > 0, 'ghost movement must progress toward the task');
+
+  for (let tick = 0; tick < 100 && lobby.phase !== 'GAMEOVER'; tick++) {
+    bot.ghostTick(lobby, ghost.player, manager);
+  }
+  assert.equal(lobby.completedTaskSteps.has(`0:${task.id}:0`), true,
+    'ghost should complete its assigned task even when the straight route crosses walls');
+  assert.equal(lobby.phase, 'GAMEOVER', 'ghost task completion can win the crew game');
+  manager.disposeLobby(lobby);
+  void distance;
+}
+
+// 8. Emergency meetings are single-use per player per round.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const guest = makePlayer(1, 'crewmate', 130, 100);
