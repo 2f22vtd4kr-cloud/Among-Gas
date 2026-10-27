@@ -35,6 +35,12 @@ export abstract class BotAgent {
   abstract roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 
   /**
+   * Ghosts can still complete tasks, but cannot kill, report bodies, or repair
+   * sabotage. Subclasses opt in; the default intentionally does nothing.
+   */
+  ghostTick(_lobby: Lobby, _self: LobbyPlayer, _manager: LobbyManager): void {}
+
+  /**
    * Choose a vote target slot.  Called once per meeting, after votingOpen.
    * Return NO_TARGET (0xFF) to skip.
    */
@@ -43,7 +49,14 @@ export abstract class BotAgent {
   // ── Main dispatch ───────────────────────────────────────────────────────
 
   tick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
-    if (!self.alive) return;
+    if (!self.alive) {
+      // In the base game, dead crewmates become ghosts but keep doing tasks.
+      // Impostor ghosts have no assigned tasks and remain inert.
+      if (self.role === 'crewmate' && lobby.phase === 'ROAMING') {
+        this.ghostTick(lobby, self, manager);
+      }
+      return;
+    }
 
     if (lobby.phase === 'ROAMING') {
       this.roamingTick(lobby, self, manager);
