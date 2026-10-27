@@ -118,11 +118,11 @@ export class CrewmateBot extends BotAgent {
 
   private _nearbyDeadBody(lobby: Lobby, self: LobbyPlayer): number | null {
     for (const p of lobby.players.values()) {
-      if (p.alive || p.bodyReported) continue;
-      // Report the immutable corpse location, never the moving ghost.
-      const bodyX = p.corpseX ?? p.x;
-      const bodyY = p.corpseY ?? p.y;
-      const dSq = CrewmateBot.distSq(self.x, self.y, bodyX, bodyY);
+      // Ejection creates a ghost but no body. Only killed players with a
+      // stored corpse position are reportable, and the corpse never follows
+      // the moving ghost.
+      if (p.alive || p.bodyReported || p.corpseX === undefined || p.corpseY === undefined) continue;
+      const dSq = CrewmateBot.distSq(self.x, self.y, p.corpseX, p.corpseY);
       if (dSq <= REPORT_RANGE_PX * REPORT_RANGE_PX) return p.slot;
     }
     return null;
