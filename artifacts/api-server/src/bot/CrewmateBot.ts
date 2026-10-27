@@ -14,7 +14,7 @@
 import { BotAgent, grid } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
-import { SABOTAGE_DEFS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
+import { SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
 import { NO_TARGET } from '@workspace/shared/coords';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
@@ -34,11 +34,13 @@ export class CrewmateBot extends BotAgent {
 
   override roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
     // ── 1. Sabotage active ────────────────────────────────────────────────
-    if (lobby.sabotage !== null) {
+    if (lobby.sabotage !== null && lobby.sabotage.systemId !== SABOTAGE_DOORS) {
       this._handleSabotage(lobby, self, manager);
       return;
     }
-    this._targetPadId = null; // clear sabotage state when no sabotage
+    // Doors auto-unlock and have no repair pads. Keep working on unlocked tasks
+    // instead of idling until the 15-second disruption ends.
+    this._targetPadId = null;
 
     // ── 2. Report a nearby body ───────────────────────────────────────────
     const body = this._nearbyDeadBody(lobby, self);
@@ -118,16 +120,26 @@ export class CrewmateBot extends BotAgent {
   /** Returns the task ID to work on next, or null if all tasks are done. */
   private _pickTask(lobby: Lobby, self: LobbyPlayer): number | null {
     // Stick with current target if it still has steps remaining
+    const isDoorLocked = (taskId: number) =>
+      lobby.sabotage?.systemId === SABOTAGE_DOORS &&
+      lobby.sabotage.lockedTaskIds.includes(taskId);
+
+    if (this._targetTaskId !== null && isDoorLocked(this._targetTaskId)) {
+      this._targetTaskId = null;
+      this._dwellTicks = 0;
+      this.clearPath();
+    }
     if (
       this._targetTaskId !== null &&
-      this._nextStep(lobby, self, this._targetTaskId) !== null
+      this._nextStep(lobby, self, this._targetTaskId) !== null &&
+      !isDoorLocked(this._targetTaskId)
     ) {
       return this._targetTaskId;
     }
 
-    // Pick a new task (first one with remaining steps)
+    // Pick a new unlocked task (first one with remaining steps)
     for (const taskId of self.assignedTasks) {
-      if (this._nextStep(lobby, self, taskId) !== null) {
+      if (!isDoorLocked(taskId) && this._nextStep(lobby, self, taskId) !== null) {
         if (this._targetTaskId !== taskId) {
           this._targetTaskId = taskId;
           this._dwellTicks = 0;
