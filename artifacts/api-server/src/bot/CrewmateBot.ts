@@ -60,6 +60,14 @@ export class CrewmateBot extends BotAgent {
     this._wander(self);
   }
 
+  override ghostTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    // Ghosts work only on tasks: no body reports, sabotage repairs, or votes.
+    // Communications sabotage still blocks task progress in the base game.
+    if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return;
+    const taskId = this._pickTask(lobby, self);
+    if (taskId !== null) this._handleTask(lobby, self, manager, taskId);
+  }
+
   override chooseVote(lobby: Lobby, self: LobbyPlayer): number {
     const candidates = Array.from(lobby.players.values()).filter(
       p => p.alive && p.slot !== self.slot,
