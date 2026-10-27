@@ -123,6 +123,8 @@ export interface LobbyPlayer {
    * `alive` alone can't distinguish "never reported" from "already voted on".
    */
   bodyReported?: boolean;
+  /** Whether this player used their once-per-round emergency call. */
+  emergencyMeetingUsed?: boolean;
   /** Impostor-only kill cooldown, ms remaining. Decremented each delta tick. */
   killCooldownMs: number;
   /** Task IDs assigned to this player at game start (empty for impostors). */
@@ -894,6 +896,7 @@ export class LobbyManager {
       p.alive = true;
       p.inVent = false;
       p.ventId = undefined;
+      p.emergencyMeetingUsed = false;
       // Cooldown starts ready (0) at game start — GAME_SPEC.md §9's 25s cooldown
       // applies only *after* a kill, not before the first one.
       p.killCooldownMs = 0;
@@ -1279,6 +1282,13 @@ export class LobbyManager {
       if (!body || body.alive) return false; // must reference an actual dead body
       if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
       body.bodyReported = true;
+    } else {
+      // Match the base game's one emergency button use per player per round.
+      if (reporter.emergencyMeetingUsed) return false;
+      reporter.emergencyMeetingUsed = true;
+      if (reporter.ws.readyState === /* OPEN */ 1) {
+        reporter.ws.send(Buffer.from([0x20, 0x01, reporterSlot]));
+      }
     }
 
     const meeting: MeetingState = {
