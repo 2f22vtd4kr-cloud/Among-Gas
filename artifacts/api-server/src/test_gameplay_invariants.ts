@@ -230,7 +230,9 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const vent = findVent(0)!;
   const killer = makePlayer(0, 'impostor', vent.x, vent.y);
   const victim = makePlayer(1, 'crewmate', vent.x + 10, vent.y);
-  const lobby = makeLobby([killer.player, victim.player]);
+  const survivorA = makePlayer(2, 'crewmate', vent.x + 100, vent.y);
+  const survivorB = makePlayer(3, 'crewmate', vent.x + 150, vent.y);
+  const lobby = makeLobby([killer.player, victim.player, survivorA.player, survivorB.player]);
   const manager = new LobbyManager();
 
   victim.player.assignedTasks = [0];
