@@ -43,10 +43,16 @@ export {
   SABOTAGE_LIGHTS,
   SABOTAGE_O2,
   SABOTAGE_REACTOR,
+  SABOTAGE_COMMS,
+  SABOTAGE_DOORS,
   isSabotageSystemId,
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
   SABOTAGE_COUNTDOWN_MS,
+  SABOTAGE_SAFETY_MS,
+  SABOTAGE_DOORS_MS,
+  getSabotageTimeoutMs,
+  isCriticalSabotage,
   SABOTAGE_COOLDOWN_MS,
   SABOTAGE_PAD_SYNC_WINDOW_MS,
   NORMAL_VISION_RADIUS_PX,
@@ -55,3 +61,6 @@ export {
   OPCODE_SABOTAGE,
 } from './sabotage.js';
 export type { SabotageSystemId, SabotagePad, SabotageDef } from './sabotage.js';
+
+export { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent, canTravelVent } from './vents.js';
+export type { VentDef } from './vents.js';
