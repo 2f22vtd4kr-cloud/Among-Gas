@@ -397,11 +397,11 @@ export default function GameMap() {
     const activeTaskLocked = activeTaskId !== null &&
       (sabotage?.systemId === SABOTAGE_COMMS ||
        (sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(activeTaskId)));
-    if (meeting !== null || amIDead || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
-  }, [meeting, amIDead, voteResult?.winner, sabotage, activeTaskId]);
+    if (meeting !== null || myRole !== 'crewmate' || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
+  }, [meeting, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
-    if (amIDead || meeting !== null || myRole !== 'crewmate' ||
+    if (meeting !== null || myRole !== 'crewmate' ||
         sabotage?.systemId === SABOTAGE_COMMS) { setNearestTask(null); return; }
     const id = setInterval(() => {
       const myPos = playerStateRef.current;
@@ -425,7 +425,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting, myRole, sabotage]);
+  }, [meeting, myRole, sabotage]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1624,7 +1624,7 @@ export default function GameMap() {
       })()}
 
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
-      {loaded && !amIDead && meeting === null && activeTaskId === null && nearestTask !== null && (
+      {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
