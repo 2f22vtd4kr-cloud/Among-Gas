@@ -381,6 +381,164 @@ function FiltersGame({ stepIndex, onComplete }: { stepIndex: number; onComplete:
   );
 }
 
+// ── Fuel Engine ───────────────────────────────────────────────────────────────
+// Hold to transfer fuel. Progress is retained if the player briefly releases.
+
+function FuelGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [holding, setHolding] = useState(false);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (!holding || completedRef.current) return;
+    const id = setInterval(() => {
+      setProgress(current => {
+        const next = Math.min(100, current + 2.5);
+        if (next >= 100 && !completedRef.current) {
+          completedRef.current = true;
+          setTimeout(onComplete, 250);
+        }
+        return next;
+      });
+    }, 60);
+    return () => clearInterval(id);
+  }, [holding, onComplete]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '18px 0' }}>
+      <div style={{ fontSize: 42 }}>⛽</div>
+      <div style={{ width: 'min(280px,80vw)', height: 18, borderRadius: 9, background: 'rgba(0,0,0,0.4)', overflow: 'hidden' }}>
+        <div style={{ width: `${progress}%`, height: '100%', background: 'linear-gradient(90deg,#e6a23c,#56d98a)', transition: 'width 60ms linear' }} />
+      </div>
+      <div style={{ color: '#e8f0ff', fontFamily: 'monospace', fontSize: 13 }}>{Math.round(progress)}%</div>
+      <button
+        onPointerDown={e => { e.preventDefault(); setHolding(true); }}
+        onPointerUp={() => setHolding(false)}
+        onPointerCancel={() => setHolding(false)}
+        onPointerLeave={() => setHolding(false)}
+        style={{
+          width: 132, height: 64, borderRadius: 12,
+          border: '2px solid rgba(255,190,80,0.6)',
+          background: holding ? '#b66b16' : '#71440f',
+          color: '#fff3d7', fontSize: 14, fontWeight: 900, touchAction: 'none',
+        }}
+      >
+        {holding ? 'ЗАПРАВКА…' : 'ДЕРЖАТЬ'}
+      </button>
+      <p style={helpStyle}>Удерживайте кнопку, чтобы заправить двигатель</p>
+    </div>
+  );
+}
+
+// ── Start Reactor ──────────────────────────────────────────────────────────────
+// Memorise the illuminated sequence, then repeat it on the reactor pads.
+
+const REACTOR_SEQUENCE = [2, 0, 3, 1];
+const REACTOR_COLORS = ['#f0bd4b', '#48b9e8', '#c16be6', '#65d88b'];
+
+function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const [showSequence, setShowSequence] = useState(true);
+  const [input, setInput] = useState<number[]>([]);
+  const [error, setError] = useState(false);
+  const completeRef = useRef(false);
+
+  useEffect(() => {
+    if (!showSequence) return;
+    const id = setTimeout(() => { setShowSequence(false); setError(false); }, 1400);
+    return () => clearTimeout(id);
+  }, [showSequence]);
+
+  const pressPad = (pad: number) => {
+    if (showSequence || completeRef.current) return;
+    if (REACTOR_SEQUENCE[input.length] !== pad) {
+      setInput([]);
+      setError(true);
+      setShowSequence(true);
+      return;
+    }
+    const next = [...input, pad];
+    setInput(next);
+    if (next.length === REACTOR_SEQUENCE.length && !completeRef.current) {
+      completeRef.current = true;
+      setTimeout(onComplete, 300);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14, padding: '16px 0' }}>
+      <div style={{ color: 'rgba(255,255,255,0.72)', textAlign: 'center', fontSize: 13 }}>
+        {showSequence ? 'Запомните последовательность' : error ? 'Ошибка — повторите последовательность' : 'Повторите сигнал на панели'}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 86px)', gap: 12 }}>
+        {REACTOR_COLORS.map((color, i) => {
+          const lit = showSequence ? REACTOR_SEQUENCE[Math.min(REACTOR_SEQUENCE.length - 1, Math.floor((1400 - 1) / 350))] === i : false;
+          return (
+            <button key={i} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
+              style={{
+                width: 86, height: 70, borderRadius: 12, border: `2px solid ${color}`,
+                background: lit ? color : `${color}35`,
+                boxShadow: lit ? `0 0 18px ${color}` : 'none',
+                color: '#fff', fontSize: 21, fontWeight: 900, touchAction: 'manipulation',
+              }}
+              aria-label={`Reactor pad ${i + 1}`}
+            >{['▲', '●', '◆', '■'][i]}</button>
+          );
+        })}
+      </div>
+      <p style={helpStyle}>{showSequence ? 'Сигнал отображается 1,4 секунды' : `${input.length} из ${REACTOR_SEQUENCE.length}`}</p>
+    </div>
+  );
+}
+
+// ── Clear Asteroids ────────────────────────────────────────────────────────────
+// Tap every target in the field. Button hit areas stay large for touch devices.
+
+const ASTEROID_POSITIONS = [
+  { left: '10%', top: '14%', rotate: -12 },
+  { left: '57%', top: '10%', rotate: 18 },
+  { left: '35%', top: '38%', rotate: -24 },
+  { left: '75%', top: '43%', rotate: 12 },
+  { left: '15%', top: '66%', rotate: 26 },
+  { left: '53%', top: '72%', rotate: -8 },
+] as const;
+
+function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const [remaining, setRemaining] = useState(() => new Set(ASTEROID_POSITIONS.map((_, i) => i)));
+  const completedRef = useRef(false);
+
+  const hit = (id: number) => {
+    if (!remaining.has(id) || completedRef.current) return;
+    const next = new Set(remaining);
+    next.delete(id);
+    setRemaining(next);
+    if (next.size === 0) {
+      completedRef.current = true;
+      setTimeout(onComplete, 300);
+    }
+  };
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '12px 0' }}>
+      <div style={{ position: 'relative', width: 'min(300px,82vw)', height: 210, overflow: 'hidden', borderRadius: 12,
+        background: 'radial-gradient(ellipse at center,rgba(42,66,92,0.9),rgba(7,13,26,0.98))',
+        border: '1px solid rgba(120,180,220,0.25)' }}>
+        {ASTEROID_POSITIONS.map((p, i) => remaining.has(i) && (
+          <button key={i} onClick={() => hit(i)} aria-label={`Destroy asteroid ${i + 1}`}
+            style={{
+              position: 'absolute', left: p.left, top: p.top, width: 44, height: 44, padding: 0,
+              borderRadius: '38% 52% 43% 57%', transform: `rotate(${p.rotate}deg)`,
+              border: '1px solid rgba(230,240,255,0.3)', background: '#657b8d',
+              color: '#fff', fontSize: 23, boxShadow: 'inset -5px -6px 0 rgba(0,0,0,0.25)',
+              touchAction: 'manipulation',
+            }}>✦</button>
+        ))}
+        {remaining.size === 0 && <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', color: '#7af0a6', fontWeight: 900 }}>ОЧИЩЕНО ✓</div>}
+      </div>
+      <p style={helpStyle}>Осталось целей: {remaining.size}. Нажмите на каждый астероид.</p>
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function TaskMinigame({ taskId, stepIndex, onComplete, onClose }: Props) {
@@ -417,11 +575,17 @@ export default function TaskMinigame({ taskId, stepIndex, onComplete, onClose }:
         </div>
 
         {/* Minigame body */}
-        {taskId === 0 && <WiringGame      stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 1 && <DownloadGame    stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 2 && <CalibrateGame   stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 3 && <GarbageGame     stepIndex={stepIndex} onComplete={onComplete} />}
-        {taskId === 4 && <FiltersGame     stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 0 && <WiringGame      key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 1 && <DownloadGame    key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 2 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 3 && <GarbageGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 4 && <FiltersGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 5 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 6 && <DownloadGame    key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 7 && <FuelGame        key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 8 && <ReactorGame     key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 9 && <CalibrateGame   key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
+        {taskId === 10 && <AsteroidsGame  key={stepIndex} stepIndex={stepIndex} onComplete={onComplete} />}
       </div>
     </div>
   );
