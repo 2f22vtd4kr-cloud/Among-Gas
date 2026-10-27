@@ -111,13 +111,12 @@ export const SABOTAGE_COOLDOWN_MS = 30_000;
 export const SABOTAGE_PAD_SYNC_WINDOW_MS = 10_000;
 
 /**
- * Crewmate vision radius while a Lights sabotage is active — 15% of the
- * conceptual "normal" radius below (GAME_SPEC.md §10). Impostor vision is
- * unaffected by Lights, so no fog is rendered on an impostor's own client.
- * Fog-of-war is only ever rendered during an active Lights sabotage — normal
- * gameplay has full visibility, matching the rest of the game before Phase 8.
+ * Base-game sight radii, scaled to the canonical Among Gas map coordinate
+ * system. Vision is active throughout live play; Lights only reduces crew
+ * sight, while impostors retain their larger normal radius.
  */
 export const NORMAL_VISION_RADIUS_PX = Math.round(260 * _sx);
+export const IMPOSTOR_VISION_RADIUS_PX = Math.round(NORMAL_VISION_RADIUS_PX * 1.4);
 export const LIGHTS_VISION_SCALE = 0.15;
 export const LIGHTS_CREWMATE_VISION_RADIUS_PX = Math.round(NORMAL_VISION_RADIUS_PX * LIGHTS_VISION_SCALE);
 
