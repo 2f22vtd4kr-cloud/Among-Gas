@@ -19,6 +19,7 @@ import {
   CHARACTER_CELL_WIDTH,
   CHARACTER_CELL_HEIGHT,
   CHARACTER_COLORS,
+  CHARACTER_POSES,
   getCharacterFrameRect,
   type CharacterColor,
   type CharacterPose,
@@ -120,12 +121,7 @@ function slotColor(slot: number): CharacterColor {
 }
 
 // ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
-const _POSE_ROW: Record<string, number> = {
-  idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
-};
-const _SHEET_COLS = 7;
-const _SHEET_PX_W = CHARACTER_CELL_WIDTH * _SHEET_COLS;
+const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
 
 function CharSpriteUI({
@@ -133,59 +129,40 @@ function CharSpriteUI({
 }: {
   color: string; pose?: string; size?: number; flipped?: boolean;
 }) {
-  const colIdx = CHARACTER_COLORS.indexOf(color as CharacterColor);
-  const col = colIdx >= 0 ? colIdx : 0;
-  const row = _POSE_ROW[pose] ?? 0;
+  const safePose: CharacterPose = (CHARACTER_POSES as readonly string[]).includes(pose)
+    ? pose as CharacterPose
+    : 'idle';
+  const frame = getCharacterFrameRect(
+    CHARACTER_COLORS.includes(color as CharacterColor) ? color as CharacterColor : 'teal',
+    safePose,
+  );
   const scale = size / CHARACTER_CELL_WIDTH;
-  const bgW   = _SHEET_PX_W * scale;
-  const bgH   = _SHEET_PX_H * scale;
-  const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
-  const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
-  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * (pose === 'dead-body' ? 1 : 0.94));
+  const bgW = _SHEET_PX_W * scale;
+  const bgH = _SHEET_PX_H * scale;
+  const posX = -frame.x * scale;
+  const posY = -frame.y * scale;
+  const height = frame.height * scale;
 
-  // The authored corpse cell stores the suit/bone in its upper half and a
-  // detached helmet fragment near the bottom. Clip each region in a fixed
-  // window, then move the helmet image behind that window: transforming the
-  // clipped element itself also moves its clip boundary and can reopen a gap.
-  if (pose === 'dead-body') {
-    const imageStyle: React.CSSProperties = {
-      position: 'absolute', left: 0, top: 0, width: size, height,
-      backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
-      backgroundSize: `${bgW}px ${bgH}px`,
-      backgroundPosition: `${posX}px ${posY}px`,
-      backgroundRepeat: 'no-repeat', imageRendering: 'pixelated',
-    };
-    return (
-      <div style={{
-        position: 'relative', width: size, height, flexShrink: 0, overflow: 'hidden',
-        transform: flipped ? 'scaleX(-1)' : undefined,
-      }}>
-        <div
-          className="ag-corpse-suit-window"
-          style={{ position: 'absolute', left: 0, top: '8%', width: size, height: '55%', overflow: 'hidden', zIndex: 2 }}
-        >
-          <div style={imageStyle} />
-        </div>
-        <div
-          className="ag-corpse-head-window"
-          style={{ position: 'absolute', left: 0, top: '47%', width: size, height: '53%', overflow: 'hidden', zIndex: 1 }}
-        >
-          <div style={{ ...imageStyle, transform: 'translateY(-80%)' }} />
-        </div>
-      </div>
-    );
-  }
-
+  // Every pose uses its measured, isolated atlas window. The corpse is a single
+  // authored sprite (cut suit + exposed bone); do not splice in the adjacent
+  // sit-crouch row or erase pixels at guessed uniform row boundaries.
   return (
-    <div style={{
-      width: size, height, flexShrink: 0, overflow: 'hidden',
-      backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
-      backgroundSize: `${bgW}px ${bgH}px`,
-      backgroundPosition: `${posX}px ${posY}px`,
-      backgroundRepeat: 'no-repeat',
-      imageRendering: 'pixelated',
-      transform: flipped ? 'scaleX(-1)' : undefined,
-    }} />
+    <div
+      className="ag-character-sprite"
+      data-pose={safePose}
+      data-sprite-row={frame.row}
+      data-source-y={frame.y}
+      data-source-height={frame.height}
+      style={{
+        width: size, height, flexShrink: 0, overflow: 'hidden',
+        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+        backgroundSize: `${bgW}px ${bgH}px`,
+        backgroundPosition: `${posX}px ${posY}px`,
+        backgroundRepeat: 'no-repeat',
+        imageRendering: 'pixelated',
+        transform: flipped ? 'scaleX(-1)' : undefined,
+      }}
+    />
   );
 }
 
@@ -720,11 +697,8 @@ export default function GameMap() {
       const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
       const octx = oc.getContext('2d')!;
       octx.drawImage(img, 0, 0);
-      const cellH = img.naturalHeight / CHARACTER_SHEET_ROWS;
-      for (let row = 1; row < CHARACTER_SHEET_ROWS; row++) {
-        const boundary = Math.ceil(row * cellH);
-        octx.clearRect(0, boundary, img.naturalWidth, 5);
-      }
+      // Pose windows isolate rows at measured boundaries; never clear guessed
+      // uniform-height stripes here, because several authored sprites cross them.
       const id = octx.getImageData(0, 0, oc.width, oc.height);
       const px = id.data;
       for (let i = 0; i < px.length; i += 4) {
@@ -1121,39 +1095,24 @@ export default function GameMap() {
         const bx = Math.round((body.x - srcX) * scale);
         const by = Math.round((body.y - srcY) * scale);
         if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
-        // The corpse sprite is a horizontal pose, unlike the upright player
-        // cell. Give it its own landscape aspect ratio so the suit and exposed
-        // bone render as one readable body rather than a tiny clipped-looking
-        // upright-sized mark.
-        const corpseH = Math.max(12, Math.round(PLAYER_DISPLAY_HEIGHT * scale * 0.9));
-        const corpseW = Math.max(18, Math.round(corpseH * 1.65));
         const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
         const sx = Math.ceil(rect.x);
         const sy = Math.ceil(rect.y);
         const sw = Math.floor(rect.x + rect.width) - sx;
         const sh = Math.floor(rect.y + rect.height) - sy;
+        // Preserve the authored sprite's pixel aspect ratio. Its row window is
+        // shorter than the atlas average, so scale height with the source window
+        // instead of stretching a mixed corpse/crouch crop into a fake landscape.
+        const corpseW = Math.max(18, Math.round(PLAYER_DISPLAY_WIDTH * scale * 0.95));
+        const corpseH = Math.max(12, Math.round(
+          PLAYER_DISPLAY_HEIGHT * scale * (rect.height / CHARACTER_CELL_HEIGHT) * 0.95,
+        ));
+        const corpseX = bx - corpseW / 2;
+        const corpseY = by - corpseH / 2;
 
         ctx.save();
         ctx.imageSmoothingEnabled = false;
-        const corpseX = bx - corpseW / 2;
-        const corpseY = by - corpseH / 2;
-        const helmetSplitY = sy + Math.round(sh * 0.74);
-        // Draw the suit first, then raise the helmet crop enough to close most
-        // of the source gap without covering the suit's distinctive lower legs.
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.58);
-        ctx.clip();
-        ctx.drawImage(
-          sprite, sx, sy, sw, sh,
-          corpseX, corpseY + corpseH * 0.08, corpseW, corpseH,
-        );
-        ctx.restore();
-        ctx.drawImage(
-          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
-          corpseX, corpseY + corpseH * 0.43, corpseW, corpseH * 0.26,
-        );
-        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
         ctx.restore();
       }
       ctx.restore();
