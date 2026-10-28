@@ -1713,7 +1713,12 @@ export default function GameMap() {
         <SettingsButton
           label={en ? 'Settings' : 'Настройки'}
           onClick={() => setSettingsOpen(true)}
-          style={{ position: 'fixed', top: 72, right: 14, zIndex: 35 }}
+          style={{
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+            right: 'max(12px, env(safe-area-inset-right, 0px))',
+            zIndex: 35,
+          }}
         />
       )}
       <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
