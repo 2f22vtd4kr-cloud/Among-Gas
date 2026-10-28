@@ -310,6 +310,21 @@ try {
   assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation');
 
+  // Inspect the post-death ghost presentation as well as the transient kill sequence.
+  await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByText(/Вы мертвы — режим призрака/).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: join(visualQaDir, 'ghost-mode.png'), fullPage: true });
+
+  // Capture the low-vision Lights sabotage state to review contrast and the HUD.
+  await page.goto(`${origin}/?mock=sabotage-lights`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: join(visualQaDir, 'vision-lights.png'), fullPage: true });
+
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
