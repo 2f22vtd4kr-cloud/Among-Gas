@@ -71,7 +71,7 @@ Complications to handle:
 
 ## 5. Bot AI: crewmate behaviour
 
-A crewmate bot runs a simple priority-ordered decision loop, ticked every ~200 ms:
+A crewmate bot runs a simple priority-ordered decision loop, ticked every ~100 ms:
 
 ```
 1. SABOTAGE ACTIVE (O2 / Reactor) → navigate to nearest unoccupied repair pad → fix
@@ -130,7 +130,7 @@ Implemented inside `artifacts/api-server/src/sim/` (not `scripts/` as originally
 - `simulateGame.ts` — `runSimulationBatch(opts)`: creates one `LobbyManager`, spins up headless lobbies via `LobbyManager.createHeadlessLobby()` (zero players, no human host — a new method added for this purpose), fills them with bots via the existing `addBotPlayer`/`startGame`, and reuses every existing kill/task/meeting/sabotage code path unchanged.
 - `cli.ts` — parses `--games`, `--bots`, `--impostors`, `--concurrency`, `--timeoutMs`, `--quiet`; prints NDJSON events + per-game results + a final summary line to stdout, and a human-readable summary to stderr.
 - Event log: `LobbyManager` grew an optional `setEventListener(fn)` sink (a no-op when unset, so real multiplayer games are byte-for-byte unaffected) that emits a `LobbyEvent` at every kill, task step, meeting start, vote, meeting result, sabotage start/resolve, and game-over — the simulation listens on it instead of polling/diffing state, so events are exact rather than inferred.
-- **Speed strategy — batched concurrency, not clock-warp.** Games run genuinely concurrently (`--concurrency`, default 25) inside one `LobbyManager`, sharing its real 25 Hz delta / 5 Hz bot-tick loops unmodified. A batch of N games therefore finishes in roughly the wall-clock time of one game, not N×, without threading a scaled clock through every `Date.now()`/`setTimeout` call in the live timing code (meeting/sabotage countdowns, kill cooldowns) — those have a history of subtle bugs (see `.agents/memory/`) and stay completely untouched.
+- **Speed strategy — batched concurrency, not clock-warp.** Games run genuinely concurrently (`--concurrency`, default 25) inside one `LobbyManager`, sharing its real 25 Hz delta / 10 Hz bot-tick loops unmodified. A batch of N games therefore finishes in roughly the wall-clock time of one game, not N×, without threading a scaled clock through every `Date.now()`/`setTimeout` call in the live timing code (meeting/sabotage countdowns, kill cooldowns) — those have a history of subtle bugs (see `.agents/memory/`) and stay completely untouched.
 - Per-game safety timeout (`--timeoutMs`, default 120000ms) — a game that never reaches `GAMEOVER` is recorded as `"timeout"` rather than hanging the batch forever.
 
 Run it via `pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 5 --impostors 1`. Aggregate summary (also emitted as a machine-readable `{"type":"summary",...}` NDJSON line on stdout):
@@ -155,7 +155,7 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 - `CrewmateBot.ts` — priority loop: sabotage repair → body report → task → wander
 - `ImpostorBot.ts` — FAKING/HUNTING/COOLDOWN state machine + periodic sabotage
 - `IBotAgent` interface + `isBot`/`botAgent` on `LobbyPlayer` (NullWebSocket sentinel)
-- 5Hz `_botInterval` in `LobbyManager`; `addBotPlayer`, `applyKill`, `applyTaskStep`, `applyRepair` convenience methods
+- 10Hz `_botInterval` in `LobbyManager`; `addBotPlayer`, `applyKill`, `applyTaskStep`, `applyRepair` convenience methods
 - Bots appear as real slot entries; delta-sync broadcasts their positions automatically
 
 **Phase C — Single-player lobby flow**
@@ -173,7 +173,7 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 2. **Task-bar semantics follow the base game:** dead and ejected crewmates become ghosts, retain their assigned unfinished tasks, and can finish them through `BotAgent.ghostTick`. Their unfinished steps remain in `totalTaskSteps`; ghost task completion counts toward the crew win condition. The gameplay invariant suite explicitly covers both death and ejection. Do not reintroduce the old workaround that removed a ghost's remaining tasks from the denominator.
 3. **Permanent departures differ from deaths:** when a crewmate disconnects/leaves mid-game, `removePlayer` removes that departed player's unfinished steps from the denominator and rechecks win conditions. A player who remains in the game as a ghost must not be treated as a departure.
 4. **Simulation safety timeouts are not game timers.** A 100-game batch using a 180-second safety limit recorded two timeouts where a critical sabotage began just before the limit; the sabotage's real 45-second countdown had not yet elapsed. Those traces do not establish a stalled game. CI now allows 300 seconds per game while still requiring zero safety timeouts, giving legitimate late critical-sabotage resolution time without masking indefinite stalls.
-5. **Win-rate tuning is historical, not a correctness oracle.** Earlier measurements were made while task-bar handling was being changed and should not be treated as proof of current behavior. Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. Keep `SABOTAGE_INTERVAL_TICKS = 300`, `HUNT_ACQUIRE_THRESHOLD_PX = -150`, and `ISOLATION_THRESHOLD_PX = 300` as the current baseline unless repeatable measurements justify a change.
+5. **Win-rate tuning is historical, not a correctness oracle.** Earlier measurements were made while task-bar handling was being changed and should not be treated as proof of current behavior. Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. At 10Hz, keep `SABOTAGE_INTERVAL_TICKS = 600` to preserve the ~60s real-time interval, along with `HUNT_ACQUIRE_THRESHOLD_PX = -150` and `ISOLATION_THRESHOLD_PX = 300`, unless repeatable measurements justify a change.
 6. **Verified invariant:** kill, ejection, and permanent disconnect are distinct state transitions. Death/ejection preserve ghost tasks; a permanent disconnect removes unfinished tasks; each path must re-evaluate the applicable crew-task and impostor-parity win conditions.
 
 ---

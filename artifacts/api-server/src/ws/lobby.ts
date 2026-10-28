@@ -204,7 +204,7 @@ export const MAX_PLAYERS = 15;
  * BotAgent imports from lobby.ts; lobby.ts needs only this interface.
  */
 export interface IBotAgent {
-  /** Called every 200ms while the lobby is ROAMING or MEETING. */
+  /** Called every 100ms while the lobby is ROAMING or MEETING. */
   tick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 }
 
