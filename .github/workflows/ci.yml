@@ -55,6 +55,9 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Verify production Telegram HMAC authentication
+        run: pnpm --filter @workspace/api-server exec tsx src/test_auth.ts
+
       - name: Verify live WebSocket lobby, role assignment, and sabotage authorization
         run: |
           set -euo pipefail
