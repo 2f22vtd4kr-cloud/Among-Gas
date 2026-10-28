@@ -15,11 +15,12 @@ const failures = [];
 // Playing fixtures trigger the same 3.2-second role reveal as a real match.
 // Do not capture screenshots or judge gameplay controls through that overlay.
 async function waitForRoleRevealToFinish(page) {
+  await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
   const roleLabel = page.getByText(/^(ваша роль|your role)$/i);
   try {
-    await roleLabel.waitFor({ state: 'visible', timeout: 1_000 });
+    await roleLabel.waitFor({ state: 'visible', timeout: 5_000 });
   } catch {
-    // Some fixtures (e.g. lobby/error) have no role reveal.
+    // A fixture without a role (e.g. a terminal state) has no reveal to dismiss.
   }
   await roleLabel.waitFor({ state: 'hidden', timeout: 6_000 });
 }
