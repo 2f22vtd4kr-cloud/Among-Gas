@@ -330,9 +330,10 @@ try {
   const suitWindowBox = await corpseSuitWindow.boundingBox();
   const headWindowBox = await corpseHeadWindow.boundingBox();
   assert.ok(suitWindowBox && headWindowBox, 'kill-screen corpse layers must be measurable');
+  const suitHeadOverlap = suitWindowBox.y + suitWindowBox.height - headWindowBox.y;
   assert.ok(
-    headWindowBox.y < suitWindowBox.y + suitWindowBox.height,
-    'the helmet window must overlap the suit window so the corpse does not appear disconnected',
+    suitHeadOverlap >= 20,
+    `the helmet window must visibly overlap the suit window (found ${suitHeadOverlap.toFixed(1)} CSS px)`,
   );
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
