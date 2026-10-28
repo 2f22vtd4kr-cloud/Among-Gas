@@ -1366,7 +1366,7 @@ export default function GameMap() {
 
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
-  }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
+  }, [loaded, spriteLoaded, sendMove, remotePlayersRef, language]);
 
   return (
     <div
