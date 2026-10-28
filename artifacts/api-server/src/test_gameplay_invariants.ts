@@ -475,7 +475,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 12. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
+// 13. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
 {
   const vent = findVent(0)!;
   const playerA = makePlayer(0, 'impostor', vent.x, vent.y);
@@ -515,7 +515,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-// 13. Replacing a player session keeps the old lobby roster current and
+// 14. Replacing a player session keeps the old lobby roster current and
 // prevents an obsolete authenticated socket from acting as the same user.
 {
   const manager = new LobbyManager();
@@ -600,4 +600,4 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, sabotage repairs, chat, corpse drops, emergency meeting, kill)');
+console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown and kill)');
