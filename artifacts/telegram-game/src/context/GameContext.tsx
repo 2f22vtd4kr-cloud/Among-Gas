@@ -498,7 +498,9 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
 
 /** Returns the requested dev mock preset, or null if none/invalid/prod. */
 function getMockPreset(): MockPreset | null {
-  if (!import.meta.env.DEV) return null;
+  // Player-facing dev previews (e.g. Replit) must not be able to enter mock
+  // mid-game states through a query string. Tests opt in explicitly.
+  if (import.meta.env.VITE_ENABLE_GAME_MOCKS !== 'true') return null;
   const key = new URLSearchParams(window.location.search).get('mock');
   if (!key) return null;
   const preset = MOCK_PRESETS[key];
