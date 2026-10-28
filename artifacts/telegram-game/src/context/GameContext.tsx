@@ -80,6 +80,13 @@ export interface VoteResultInfo {
   winner: 'crewmates' | 'impostors' | null;
 }
 
+/** Authoritative kill event used to trigger the local attacker/victim animation once. */
+export interface KillEventInfo {
+  victimSlot: number;
+  attackerSlot: number | null;
+  occurredAtMs: number;
+}
+
 /**
  * A task assigned to this crewmate (Phase 7 — GAME_SPEC.md §10).
  * `completedSteps` is incremented optimistically on the client when the player
@@ -118,6 +125,8 @@ export interface GameState {
   impostorSlots: number[];
   /** Slots killed or ejected this game. Reset on role reveal. */
   deadSlots: number[];
+  /** Most recent authoritative kill broadcast, used for the short kill animation. */
+  lastKill: KillEventInfo | null;
   /** Impostor-only kill cooldown countdown, ms. 0 = ready to kill. Client-side display estimate. */
   killCooldownMs: number;
   /** Non-null while a meeting (discussion or voting) is in progress. */
@@ -187,6 +196,7 @@ const DEFAULT_STATE: GameState = {
   myRole: null,
   impostorSlots: [],
   deadSlots: [],
+  lastKill: null,
   killCooldownMs: 0,
   meeting: null,
   hasVoted: false,
@@ -836,6 +846,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         setState(s => ({
           ...s, phase: 'playing', myRole, impostorSlots,
           deadSlots: [],
+          lastKill: null,
           killCooldownMs: 0,
           meeting: null,
           hasVoted: false,
@@ -899,6 +910,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             return {
               ...s,
               deadSlots: [...s.deadSlots, victimSlot],
+              lastKill: { victimSlot, attackerSlot, occurredAtMs: Date.now() },
               killCooldownMs: attackerSlot === mySlotRef.current
                 ? KILL_COOLDOWN_MS
                 : s.killCooldownMs,
