@@ -224,7 +224,7 @@ export class ImpostorBot extends BotAgent {
     // Bots still navigate and animate during this grace window; only the kill
     // action is delayed, so single-player does not open directly into a report.
     const openingGraceElapsed = lobby.startedAtMs === undefined ||
-      Date.now() - lobby.startedAtMs >= 5000;
+      Date.now() - lobby.startedAtMs >= 8000;
 
     // Attempt kill if in range and the match opening grace period has elapsed.
     if (self.killCooldownMs === 0 && openingGraceElapsed) {
