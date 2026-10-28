@@ -148,7 +148,7 @@ try {
   const localPlayerSuitPixels = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return 0;
-    const cx = Math.floor(canvas.width / 2);
+    const cx = Math.floor(canvas.width / 2 + 40 * 0.7 * dpr);
     const cy = Math.floor(canvas.height / 2);
     const left = Math.max(0, cx - 34);
     const top = Math.max(0, cy - 34);
@@ -165,7 +165,7 @@ try {
   assert.ok(localPlayerSuitPixels > 20,
     `local balaclava player sprite must be visible in the rendered canvas (teal pixels=${localPlayerSuitPixels})`);
 
-  // The report-ready fixture places the corpse below the local player in the clear corridor.
+  // The report-ready fixture places the corpse diagonally from the player, clear of walls.
   // The real row-7 corpse asset includes an exposed ivory bone; ensure those
   // pixels are present in the *rendered game canvas*, not just in the asset file.
   const corpseBonePixels = await page.locator('canvas').evaluate(canvas => {
@@ -173,7 +173,7 @@ try {
     if (!context) return 0;
     const dpr = canvas.width / window.innerWidth;
     const cx = Math.floor(canvas.width / 2);
-    const cy = Math.floor(canvas.height / 2 + 65 * 0.7 * dpr - 14 * dpr);
+    const cy = Math.floor(canvas.height / 2 + 40 * 0.7 * dpr - 14 * dpr);
     const left = Math.max(0, cx - 15);
     const top = Math.max(0, cy - 20);
     const right = Math.min(canvas.width, cx + 16);
