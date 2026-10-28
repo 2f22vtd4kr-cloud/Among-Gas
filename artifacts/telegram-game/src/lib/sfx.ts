@@ -67,9 +67,46 @@ function load(key: string, url: string): void {
   }
 }
 
+function playCue(key: 'sabotage' | 'vent', volume: number): void {
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+  try {
+    const now = ctx.currentTime;
+    const oscillator = ctx.createOscillator();
+    const gain = ctx.createGain();
+    oscillator.type = key === 'sabotage' ? 'sawtooth' : 'triangle';
+    if (key === 'sabotage') {
+      oscillator.frequency.setValueAtTime(440, now);
+      oscillator.frequency.exponentialRampToValueAtTime(260, now + 0.22);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.012);
+      gain.gain.setValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
+      oscillator.stop(now + 0.31);
+    } else {
+      oscillator.frequency.setValueAtTime(170, now);
+      oscillator.frequency.exponentialRampToValueAtTime(52, now + 0.19);
+      gain.gain.setValueAtTime(0.0001, now);
+      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.08, volume * 0.07)), now + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
+      oscillator.stop(now + 0.23);
+    }
+    oscillator.connect(gain);
+    gain.connect(ctx.destination);
+    oscillator.start(now);
+  } catch {
+    // Audio is decorative; a browser/device audio failure must not affect gameplay.
+  }
+}
+
 export function sfx(key: string, volume = 1): void {
   if (key === 'footstep') {
     playFootstep(volume);
+    return;
+  }
+  if (key === 'sabotage' || key === 'vent') {
+    playCue(key, volume);
     return;
   }
   const src = cache.get(key);
