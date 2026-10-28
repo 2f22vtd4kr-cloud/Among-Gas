@@ -2197,7 +2197,7 @@ export default function GameMap() {
                 setChatDraft('');
               }} style={{ display: 'flex', gap: 8 }}>
                 <input
-                  aria-label="Сообщение в обсуждении"
+                  aria-label={en ? 'Meeting message' : 'Сообщение в обсуждении'}
                   value={chatDraft}
                   onChange={e => setChatDraft(e.target.value)}
                   maxLength={200}
