@@ -1875,7 +1875,7 @@ export default function GameMap() {
               cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
-            ◉ ADMIN TABLE
+            {en ? '◉ ADMIN TABLE' : '◉ ПЛАНШЕТ'}
           </button>
         </div>
       )}
