@@ -55,6 +55,7 @@ import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/share
 import { computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
+import { useLanguage } from '../lib/language';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -80,10 +81,12 @@ const SABOTAGE_NAME_RU: Record<string, string> = {
   'Comms':    'Связь',
   'Doors':    'Двери',
 };
-function taskRu(name: string | undefined): string {
+function taskRu(name: string | undefined, language: 'ru' | 'en'): string {
+  if (language === 'en') return name || 'Task';
   return (name && TASK_NAME_RU[name]) || name || 'Задание';
 }
-function sabotageRu(name: string | undefined): string {
+function sabotageRu(name: string | undefined, language: 'ru' | 'en'): string {
+  if (language === 'en') return name || 'System';
   return (name && SABOTAGE_NAME_RU[name]) || name || 'Система';
 }
 
@@ -179,6 +182,8 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
@@ -1463,12 +1468,12 @@ export default function GameMap() {
                 touchAction: 'manipulation',
               }}
             >
-              {showTaskList ? '✕ ЗАКРЫТЬ ЗАДАНИЯ' : '☷ ЗАДАНИЯ'}
+              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : (en ? '☷ TASKS' : '☷ ЗАДАНИЯ')}
             </button>
           </div>
 
           {showTaskList && (
-            <div role="region" aria-label="Список заданий" style={{
+            <div role="region" aria-label={en ? 'Task list' : 'Список заданий'} style={{
               position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 106px)', left: 12,
               width: 'min(330px, calc(100vw - 24px))', maxHeight: 'min(55vh, 420px)',
               overflowY: 'auto', zIndex: 52, padding: 10, borderRadius: 12,
@@ -1478,15 +1483,15 @@ export default function GameMap() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px 2px 8px' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>ЗАДАНИЯ ЭКИПАЖА</div>
+                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>{en ? 'CREW TASKS' : 'ЗАДАНИЯ ЭКИПАЖА'}</div>
                   <div style={{ marginTop: 3, color: 'rgba(220,239,242,0.58)', fontSize: 10 }}>
                     {myTasks.filter(task => {
                       const def = TASK_DEFS.find(item => item.id === task.taskId);
                       return def && task.completedSteps >= def.steps;
-                    }).length} / {myTasks.length} выполнено
+                    }).length} / {myTasks.length} {en ? 'completed' : 'выполнено'}
                   </div>
                 </div>
-                <button onClick={() => setShowTaskList(false)} aria-label="Закрыть задания" style={{
+                <button onClick={() => setShowTaskList(false)} aria-label={en ? 'Close tasks' : 'Закрыть задания'} style={{
                   width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(220,240,240,0.18)',
                   background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 19, touchAction: 'manipulation',
                 }}>×</button>
@@ -1497,7 +1502,7 @@ export default function GameMap() {
                   marginTop: 4, padding: 12, borderRadius: 8, background: 'rgba(155,48,39,0.18)',
                   border: '1px solid rgba(255,90,80,0.26)', fontSize: 12, lineHeight: 1.4,
                 }}>
-                  <strong>Связь нарушена.</strong> Список заданий временно недоступен до восстановления связи.
+                  <strong>{en ? 'Communications disrupted.' : 'Связь нарушена.'}</strong> {en ? 'The task list is unavailable until communications are restored.' : 'Список заданий временно недоступен до восстановления связи.'}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1527,7 +1532,7 @@ export default function GameMap() {
                           border: `1px solid ${done ? 'rgba(80,220,130,0.45)' : locked ? 'rgba(250,90,90,0.4)' : 'rgba(241,196,15,0.5)'}`,
                           color: done ? '#7fe3a3' : locked ? '#ff9999' : '#f1c40f', fontWeight: 950,
                         }}>{done ? '✓' : locked ? '×' : '!'}</span>
-                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name)}</span>
+                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name, language)}</span>
                         <span style={{ color: 'rgba(220,239,242,0.6)', fontVariantNumeric: 'tabular-nums', fontSize: 10 }}>
                           {Math.min(task.completedSteps, def.steps)} / {def.steps}
                         </span>
@@ -1535,7 +1540,7 @@ export default function GameMap() {
                     );
                   })}
                   <div style={{ padding: '5px 3px 0', fontSize: 10, color: 'rgba(220,239,242,0.55)' }}>
-                    Выберите задание: компас укажет направление к цели.
+                    {en ? 'Choose a task; the compass will point toward it.' : 'Выберите задание: компас укажет направление к цели.'}
                   </div>
                 </div>
               )}
@@ -1560,13 +1565,13 @@ export default function GameMap() {
               touchAction: 'manipulation',
             }}
           >
-            {showMiniMap ? '✕ ЗАКРЫТЬ КАРТУ' : '🗺 КАРТА'}
+            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : (en ? '🗺 MAP' : '🗺 КАРТА')}
           </button>
         </div>
       )}
 
       {showMiniMap && loaded && myRole !== null && meeting === null && (
-        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label="Карта Among Gas"
+        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
           onClick={() => setShowMiniMap(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 75,
@@ -1581,12 +1586,12 @@ export default function GameMap() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 9 }}>
               <div>
-                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>КАРТА ОБЪЕКТА</div>
+                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>{en ? 'FACILITY MAP' : 'КАРТА ОБЪЕКТА'}</div>
                 <div style={{ marginTop: 3, fontSize: 11, color: 'rgba(190,225,235,0.68)' }}>
-                  {myRole === 'crewmate' ? 'Ваши незавершённые задания отмечены жёлтым' : 'Обзор карты'}
+                  {myRole === 'crewmate' ? (en ? 'Your unfinished tasks are marked in yellow' : 'Ваши незавершённые задания отмечены жёлтым') : (en ? 'Map overview' : 'Обзор карты')}
                 </div>
               </div>
-              <button onClick={() => setShowMiniMap(false)} aria-label="Закрыть карту" style={{
+              <button onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
                 width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
                 background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
               }}>×</button>
@@ -1595,7 +1600,7 @@ export default function GameMap() {
               position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
               overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
             }}>
-              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt="Карта Among Gas" draggable={false}
+              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
               {myRole === 'crewmate' && myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
@@ -1612,7 +1617,7 @@ export default function GameMap() {
                 }}>!</span>;
               })}
               {myVentId === null && (
-                <span title="Вы здесь" aria-label="Ваше местоположение" style={{
+                <span title={en ? 'You are here' : 'Вы здесь'} aria-label={en ? 'Your location' : 'Ваше местоположение'} style={{
                   position: 'absolute', left: `${playerStateRef.current.x / MAP_W * 100}%`, top: `${playerStateRef.current.y / MAP_H * 100}%`,
                   transform: 'translate(-50%,-50%)', width: 'clamp(12px, 2.6vw, 19px)', height: 'clamp(12px, 2.6vw, 19px)',
                   borderRadius: '50%', background: '#45e6bc', border: '2px solid #fff',
@@ -1621,12 +1626,12 @@ export default function GameMap() {
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, padding: '8px 2px 0', fontSize: 11, color: 'rgba(220,239,242,0.7)' }}>
-              <span>● Ваше местоположение</span>
-              <span>! Незавершённое задание</span>
+              <span>● {en ? 'Your location' : 'Ваше местоположение'}</span>
+              <span>! {en ? 'Unfinished task' : 'Незавершённое задание'}</span>
               <span>{myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
                 return def !== undefined && task.completedSteps < def.steps;
-              }).length} заданий осталось</span>
+              }).length} {en ? 'tasks remaining' : 'заданий осталось'}</span>
             </div>
           </div>
         </div>
@@ -1703,7 +1708,7 @@ export default function GameMap() {
               cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
-            🕳️ ВЛЕЗТЬ В ЛЮК
+            🕳️ {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
           </button>
         </div>
       )}
@@ -1853,7 +1858,7 @@ export default function GameMap() {
             gap: 12, padding: 24, background: 'rgba(4,10,15,0.96)',
             color: '#e3fbff', fontFamily: 'sans-serif',
           }}>
-            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>СИСТЕМА ЛЮКОВ</div>
+            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>{en ? 'VENT SYSTEM' : 'СИСТЕМА ЛЮКОВ'}</div>
             <div style={{ fontSize: 26, fontWeight: 900, textAlign: 'center' }}>{vent.name}</div>
             <div style={{ width: 'min(360px, 100%)', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               {vent.connections.map(id => {
@@ -1876,7 +1881,7 @@ export default function GameMap() {
               color: '#fff', background: '#8b2430', border: '1px solid #ff7785',
               fontWeight: 900, fontSize: 15, touchAction: 'manipulation',
             }}>
-              ВЫЛЕЗТИ ИЗ ЛЮКА
+              {en ? 'EXIT VENT' : 'ВЫЛЕЗТИ ИЗ ЛЮКА'}
             </button>
           </div>
         );
@@ -1899,7 +1904,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(60,140,255,0.35)',
             }}
           >
-            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name)}
+            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
           </button>
         </div>
       )}
@@ -1930,7 +1935,7 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Убить'}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : (en ? '☠ Kill' : '☠ Убить')}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
@@ -1947,7 +1952,7 @@ export default function GameMap() {
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}
             >
-              🛑 Доложить
+              🛑 {en ? 'Report' : 'Доложить'}
             </button>
           )}
         </div>
@@ -1973,7 +1978,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : '⚡ Саботаж'}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (en ? '⚡ Sabotage' : '⚡ Саботаж')}
           </button>
         </div>
       )}
@@ -1995,7 +2000,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(255,60,60,0.35)',
             }}
           >
-            🔧 Починить {sabotageRu(sabotageDef?.name)}
+            🔧 {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
           </button>
         </div>
       )}
@@ -2010,9 +2015,9 @@ export default function GameMap() {
           letterSpacing: '0.03em', borderRadius: 8,
           border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
         }}>
-          ⚠ {sabotageRu(sabotageDef.name)} саботирован — {Math.ceil(sabotageRemainingMs / 1000)}с
+          ⚠ {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
           {sabotageDef.pads.length > 1 && (
-            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} починено)</span>
+            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} {en ? 'fixed' : 'починено'})</span>
           )}
         </div>
       )}
@@ -2032,7 +2037,7 @@ export default function GameMap() {
             fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
             letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Выберите систему саботажа
+            {en ? 'Choose a sabotage system' : 'Выберите систему саботажа'}
           </div>
           {Object.values(SABOTAGE_DEFS).map(def => (
             <button
@@ -2058,7 +2063,7 @@ export default function GameMap() {
               fontFamily: 'sans-serif', fontSize: 12, cursor: 'pointer',
             }}
           >
-            Отмена
+            {en ? 'Cancel' : 'Отмена'}
           </button>
         </div>
       )}
@@ -2079,7 +2084,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓ Тревога использована' : '🚨 Тревога'}
+            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : (en ? '🚨 Emergency' : '🚨 Тревога')}
           </button>
         </div>
       )}
@@ -2095,8 +2100,8 @@ export default function GameMap() {
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
           {voteResult.ejectedSlot === NO_TARGET
-            ? '🗳️ Никто не исключён'
-            : `🗳️ ${playerName(voteResult.ejectedSlot)} исключён`}
+            ? (en ? '🗳️ Nobody ejected' : '🗳️ Никто не исключён')
+            : `🗳️ ${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
         </div>
       )}
 
@@ -2114,12 +2119,12 @@ export default function GameMap() {
               fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
               letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
             }}>
-              {meeting.bodySlot === NO_TARGET ? 'Экстренное собрание' : 'Найдено тело'}
+              {meeting.bodySlot === NO_TARGET ? (en ? 'Emergency meeting' : 'Экстренное собрание') : (en ? 'Body reported' : 'Найдено тело')}
             </div>
             <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
               {meeting.bodySlot === NO_TARGET
-                ? `${playerName(meeting.reporterSlot)} вызвал экстренное собрание`
-                : `${playerName(meeting.reporterSlot)} нашёл тело ${playerName(meeting.bodySlot)}`}
+                ? `${playerName(meeting.reporterSlot)} ${en ? 'called an emergency meeting' : 'вызвал экстренное собрание'}`
+                : `${playerName(meeting.reporterSlot)} ${en ? 'reported' : 'нашёл тело'} ${playerName(meeting.bodySlot)}`}
             </div>
             <div style={{
               marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
@@ -2131,7 +2136,7 @@ export default function GameMap() {
               fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
               textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
             }}>
-              {inDiscussion ? 'Обсуждение' : 'Голосование'}
+              {inDiscussion ? (en ? 'Discussion' : 'Обсуждение') : (en ? 'Voting' : 'Голосование')}
             </div>
           </div>
 
@@ -2139,7 +2144,7 @@ export default function GameMap() {
             <div style={{
               color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
             }}>
-              👻 Вы мертвы — наблюдаете
+              👻 {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
             </div>
           )}
 
@@ -2147,7 +2152,7 @@ export default function GameMap() {
             <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {inDiscussion && (
                 <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
-                  Голосование начнётся после обсуждения
+                  {en ? 'Voting begins after discussion' : 'Голосование начнётся после обсуждения'}
                 </div>
               )}
               <div aria-live="polite" style={{
@@ -2157,7 +2162,7 @@ export default function GameMap() {
                 textAlign: 'left',
               }}>
                 {meetingMessages.length === 0 && (
-                  <div style={{ fontSize: 12, opacity: 0.4, textAlign: 'center', margin: 'auto' }}>Чат обсуждения</div>
+                  <div style={{ fontSize: 12, opacity: 0.4, textAlign: 'center', margin: 'auto' }}>{en ? 'Meeting chat' : 'Чат обсуждения'}</div>
                 )}
                 {meetingMessages.map((message, i) => (
                   <div key={`${message.receivedAt}-${message.slot}-${i}`} style={{
@@ -2178,7 +2183,7 @@ export default function GameMap() {
                   value={chatDraft}
                   onChange={e => setChatDraft(e.target.value)}
                   maxLength={200}
-                  placeholder="Написать сообщение…"
+                  placeholder={en ? 'Write a message…' : 'Написать сообщение…'}
                   style={{
                     flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 9,
                     color: '#fff', background: '#172230', border: '1px solid rgba(130,180,220,0.35)',
@@ -2211,7 +2216,7 @@ export default function GameMap() {
                       cursor: hasVoted ? 'default' : 'pointer',
                     }}
                   >
-                    {p.slot === mySlot ? `${p.username} (вы)` : p.username}
+                    {p.slot === mySlot ? `${p.username} (${en ? 'you' : 'вы'})` : p.username}
                   </button>
                 ))}
               <button
@@ -2225,11 +2230,11 @@ export default function GameMap() {
                   cursor: hasVoted ? 'default' : 'pointer',
                 }}
               >
-                Пропустить
+                {en ? 'Skip' : 'Пропустить'}
               </button>
               {hasVoted && (
                 <div style={{ textAlign: 'center', color: 'rgba(150,220,150,0.85)', fontSize: 12, marginTop: 2 }}>
-                  Голос отдан — ждём других…
+                  {en ? 'Vote cast — waiting for others…' : 'Голос отдан — ждём других…'}
                 </div>
               )}
             </div>
@@ -2288,7 +2293,7 @@ export default function GameMap() {
               fontSize: 12, color: 'rgba(255,255,255,0.38)',
               letterSpacing: '0.35em', textTransform: 'uppercase', marginBottom: 20,
             }}>
-              Конец игры
+              {en ? 'Game over' : 'Конец игры'}
             </p>
 
             {/* Character row */}
@@ -2312,7 +2317,7 @@ export default function GameMap() {
               textAlign: 'center', lineHeight: 1.1, marginBottom: 36,
               whiteSpace: 'pre-line',
             }}>
-              {isImpWin ? 'ПРЕДАТЕЛИ\nПОБЕДИЛИ' : 'ЭКИПАЖ\nПОБЕДИЛ'}
+              {isImpWin ? (en ? 'IMPOSTORS\nWIN' : 'ПРЕДАТЕЛИ\nПОБЕДИЛИ') : (en ? 'CREWMATES\nWIN' : 'ЭКИПАЖ\nПОБЕДИЛ')}
             </div>
 
             {/* В ЛОББИ button — Among Gas pill style */}
@@ -2351,7 +2356,7 @@ export default function GameMap() {
                 textShadow: '0 2px 5px rgba(0,0,0,0.5)',
                 letterSpacing: '0.08em',
               }}>
-                В ЛОББИ
+                {en ? 'TO LOBBY' : 'В ЛОББИ'}
               </div>
             </button>
           </div>
@@ -2368,7 +2373,7 @@ export default function GameMap() {
           letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
-          👻 Вы мертвы — режим призрака
+          👻 {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
         </div>
       )}
 
@@ -2402,7 +2407,7 @@ export default function GameMap() {
                 letterSpacing: '0.35em', textTransform: 'uppercase',
                 marginBottom: 28,
               }}>
-                Ваша роль
+                {en ? 'Your role' : 'Ваша роль'}
               </p>
 
               {/* Large character sprite */}
@@ -2421,7 +2426,7 @@ export default function GameMap() {
                 textShadow: outline + glow,
                 marginBottom: 20,
               }}>
-                {isImp ? 'ПРЕДАТЕЛЬ' : 'ЭКИПАЖНИК'}
+                {isImp ? (en ? 'IMPOSTOR' : 'ПРЕДАТЕЛЬ') : (en ? 'CREWMATE' : 'ЭКИПАЖНИК')}
               </div>
 
               {/* Fellow impostors */}
@@ -2431,7 +2436,7 @@ export default function GameMap() {
                   fontSize: 16, color: 'rgba(255,150,150,0.85)',
                   letterSpacing: '0.06em',
                 }}>
-                  {impostorSlots.filter(s => s !== mySlot).length > 1 ? 'Сообщники' : 'Сообщник'}:{' '}
+                  {impostorSlots.filter(s => s !== mySlot).length > 1 ? (en ? 'Teammates' : 'Сообщники') : (en ? 'Teammate' : 'Сообщник')}:{' '}
                   {impostorSlots
                     .filter(s => s !== mySlot)
                     .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)
