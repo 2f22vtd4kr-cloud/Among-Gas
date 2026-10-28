@@ -536,19 +536,27 @@ export default function GameMap() {
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
   // (both the React state AND the CSS fade animation, which otherwise finishes
   // and hides itself after 3.2s regardless of state) so it can be screenshotted.
-  const isMockReveal = import.meta.env.DEV
-    && new URLSearchParams(window.location.search).get('mock')?.startsWith('reveal-');
+  const mockQuery = new URLSearchParams(window.location.search);
+  const isMockReveal = import.meta.env.DEV && mockQuery.get('mock')?.startsWith('reveal-');
+  // Visual fixtures can skip the role overlay so screenshots of later events
+  // (e.g. a kill sequence) do not get obscured by an unrelated opening screen.
+  const skipMockReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+    && mockQuery.get('skipReveal') === 'true';
   const [showReveal, setShowReveal] = useState(false);
   useEffect(() => {
     if (!myRole) return;
     // Clear stale remote animation state so sprites animate fresh from spawns.
     remoteAnimMapRef.current.clear();
+    if (skipMockReveal) {
+      setShowReveal(false);
+      return;
+    }
     setShowReveal(true);
     sfx('roundStart', 0.75);
     if (isMockReveal) return;
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
-  }, [myRole, isMockReveal]);
+  }, [myRole, isMockReveal, skipMockReveal]);
 
   // ── Sound effects for game-over and meeting ───────────────────────────────
   useEffect(() => {
