@@ -4,6 +4,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { TASK_DEFS } from '@workspace/shared/tasks';
+import { useLanguage } from '../lib/language';
 
 interface Props {
   taskId: number;
@@ -595,6 +596,8 @@ function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => 
 // Hold to transfer fuel. Progress is retained if the player briefly releases.
 
 function FuelGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [progress, setProgress] = useState(0);
   const [holding, setHolding] = useState(false);
   const completedRef = useRef(false);
@@ -633,9 +636,9 @@ function FuelGame({ onComplete }: { stepIndex: number; onComplete: () => void })
           color: '#fff3d7', fontSize: 14, fontWeight: 900, touchAction: 'none',
         }}
       >
-        {holding ? 'ЗАПРАВКА…' : 'ДЕРЖАТЬ'}
+        {holding ? (en ? 'FUELING…' : 'ЗАПРАВКА…') : (en ? 'HOLD' : 'ДЕРЖАТЬ')}
       </button>
-      <p style={helpStyle}>Удерживайте кнопку, чтобы заправить двигатель</p>
+      <p style={helpStyle}>{en ? 'Hold the button to refuel the engine' : 'Удерживайте кнопку, чтобы заправить двигатель'}</p>
     </div>
   );
 }
@@ -646,6 +649,8 @@ function FuelGame({ onComplete }: { stepIndex: number; onComplete: () => void })
 const REACTOR_COLORS = ['#f05d65', '#edb84a', '#58c8f5', '#57d88d', '#b879ed', '#f47ec5'];
 
 function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [sequence] = useState(() => Array.from({ length: 5 }, () => Math.floor(Math.random() * 6)));
   const [showSequence, setShowSequence] = useState(true);
   const [currentLight, setCurrentLight] = useState<number | null>(sequence[0]);
@@ -692,7 +697,7 @@ function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '8px 0' }}>
       <div style={{ color: 'rgba(255,255,255,0.78)', textAlign: 'center', fontSize: 13 }}>
-        {showSequence ? 'Запомните последовательность' : error ? 'Ошибка — последовательность повторится' : 'Повторите сигнал на панели'}
+        {showSequence ? (en ? 'Memorize the sequence' : 'Запомните последовательность') : error ? (en ? 'Error — sequence will repeat' : 'Ошибка — последовательность повторится') : (en ? 'Repeat the panel sequence' : 'Повторите сигнал на панели')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(64px, 1fr))', gap: 9, width: 'min(296px,82vw)' }}>
         {REACTOR_COLORS.map((color, i) => {
@@ -748,6 +753,8 @@ function createAsteroid(id: number): AsteroidTarget {
 }
 
 function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const boardRef = useRef<HTMLDivElement>(null);
   const asteroidsRef = useRef<AsteroidTarget[]>(Array.from({ length: ASTEROID_ACTIVE }, (_, i) => createAsteroid(i + 1)));
   const bulletsRef = useRef<AsteroidBullet[]>([]);
@@ -923,7 +930,7 @@ function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => vo
       <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
         <div style={{ width: `${destroyed / ASTEROID_TARGET * 100}%`, height: '100%', background: 'linear-gradient(90deg,#54baff,#8fffd7)', transition: 'width 150ms linear' }} />
       </div>
-      <p style={helpStyle}>{destroyed < ASTEROID_TARGET ? (firing ? 'Огонь! Двигайте прицел, чтобы попасть' : 'Нажмите или удерживайте поле, чтобы стрелять по астероидам') : '✓ Астероиды уничтожены'}</p>
+      <p style={helpStyle}>{destroyed < ASTEROID_TARGET ? (firing ? (en ? 'Fire! Move the reticle to aim' : 'Огонь! Двигайте прицел, чтобы попасть') : (en ? 'Tap or hold the field to shoot asteroids' : 'Нажмите или удерживайте поле, чтобы стрелять по астероидам')) : (en ? '✓ Asteroids destroyed' : '✓ Астероиды уничтожены')}</p>
     </div>
   );
 }
