@@ -369,9 +369,11 @@ try {
     const context = canvas.getContext('2d');
     if (!context) return null;
     const cx = Math.floor(canvas.width / 2);
-    // The camera anchors the player at mid-screen; use a tall region around
-    // that anchor to include the full sprite on both DPR-1 and DPR-2 runners.
-    const cy = Math.floor(canvas.height * 0.54);
+    // The map camera places the player's feet around 42% of the canvas
+    // height (the lower area is reserved for mobile controls). Sample around
+    // the actual anchor rather than the viewport midpoint, or a tall phone
+    // screenshot can miss the ghost entirely and produce a false zero delta.
+    const cy = Math.floor(canvas.height * 0.42);
     const left = Math.max(0, cx - 80);
     const top = Math.max(0, cy - 120);
     const width = Math.min(160, canvas.width - left);
