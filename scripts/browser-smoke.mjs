@@ -172,7 +172,7 @@ try {
     const context = canvas.getContext('2d');
     if (!context) return 0;
     const dpr = canvas.width / window.innerWidth;
-    const cx = Math.floor(canvas.width / 2 + 20 * 0.7 * dpr);
+    const cx = Math.floor(canvas.width / 2 + 52 * 0.7 * dpr);
     const cy = Math.floor(canvas.height / 2 + 6 * 0.7 * dpr - 14 * dpr);
     const left = Math.max(0, cx - 15);
     const top = Math.max(0, cy - 20);
