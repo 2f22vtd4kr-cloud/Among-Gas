@@ -478,6 +478,19 @@ export class LobbyManager {
     return code ? (this.lobbies.get(code) ?? null) : null;
   }
 
+  /**
+   * Once a user is attached to a lobby, only that player's currently bound
+   * socket may send game actions. A replaced socket can have messages already
+   * queued while its close handshake is in flight, so close() alone is not an
+   * authorization boundary.
+   */
+  isCurrentSocket(tgUserId: number, ws: WebSocket): boolean {
+    const lobby = this.getLobbyForUser(tgUserId);
+    if (!lobby) return true; // authenticated connection not yet assigned to a room
+    const slot = lobby.userIdToSlot.get(tgUserId);
+    return slot !== undefined && lobby.players.get(slot)?.ws === ws;
+  }
+
   // ── Bot slot management ──────────────────────────────────────────────────
 
   /**
