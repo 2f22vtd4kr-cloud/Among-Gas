@@ -48,6 +48,13 @@ import {
   type Lobby,
   type LobbyPlayer,
 } from './ws/lobby.js';
+import {
+  buildMovementCorrectionPacket,
+  isMovementPathWalkable,
+  isWalkableMovementPoint,
+  validateMovementIntent,
+} from './ws/movement.js';
+import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
 const grid = buildCollisionGrid();
 
@@ -608,6 +615,71 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
   assert.equal(manager.getLobbyForUser(93001), lobby);
   manager.disposeLobby(lobby);
+}
+
+// 15. Client movement packets are constrained by elapsed time and swept collision.
+{
+  const vent = findVent(0)!;
+  const base = {
+    x: vent.x,
+    y: vent.y,
+    alive: true,
+    movementCreditPx: 0,
+    movementCreditUpdatedAtMs: 1_000,
+    lastMovementPacketAtMs: 1_000,
+  };
+
+  const teleport = validateMovementIntent(base, vent.x + 500, vent.y, 1_100, grid);
+  assert.equal(teleport.accepted, false, 'a forged long-distance movement target is rejected');
+  assert.equal(teleport.x, vent.x, 'a rejected teleport does not move the authoritative player');
+  assert.equal(teleport.sendCorrection, true, 'a rejected target asks the server to correct prediction');
+
+  const tooSoon = validateMovementIntent(base, vent.x + 1, vent.y, 1_005, grid);
+  assert.equal(tooSoon.rateLimited, true, 'high-frequency movement packet spam is rate limited');
+
+  const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
+  const legalStep = validateMovementIntent(base, vent.x + legalStepDistance, vent.y, 1_050, grid);
+  assert.equal(legalStep.accepted, true, 'a normal target within the elapsed movement budget is accepted');
+  assert.ok(legalStep.x > vent.x, 'an accepted movement intent advances authoritative position');
+
+  const ghostStep = validateMovementIntent(
+    { ...base, alive: false },
+    vent.x + legalStepDistance,
+    vent.y,
+    1_050,
+    grid,
+  );
+  assert.equal(ghostStep.accepted, true, 'ghost movement still works through the speed budget');
+
+  const correction = buildMovementCorrectionPacket(toWire(vent.x, MAP_W), toWire(vent.y, MAP_H));
+  assert.equal(correction.length, 5, 'movement correction has the expected five-byte frame');
+  assert.equal(correction.readUInt8(0), 0x22, 'movement correction uses its dedicated opcode');
+  assert.equal(correction.readUInt16LE(1), toWire(vent.x, MAP_W));
+  assert.equal(correction.readUInt16LE(3), toWire(vent.y, MAP_H));
+
+  // The actual map has wall segments with walkable endpoints. Find one at
+  // runtime so this regression remains tied to the canonical collision map.
+  let wallCrossing: [number, number, number, number] | undefined;
+  for (let y = 0; y <= MAP_H && !wallCrossing; y += 4) {
+    for (let x = 4; x <= MAP_W - 4; x += 4) {
+      if (!isWalkableMovementPoint(grid, x, y)) continue;
+      for (const dx of [40, 48, 56, 64, 72]) {
+        const tx = x + dx;
+        if (tx > MAP_W || !isWalkableMovementPoint(grid, tx, y)) continue;
+        if (!isMovementPathWalkable(grid, x, y, tx, y)) {
+          wallCrossing = [x, y, tx, y];
+          break;
+        }
+      }
+      if (wallCrossing) break;
+    }
+  }
+  assert.ok(wallCrossing, 'canonical collision map contains a short wall-crossing fixture');
+  assert.equal(
+    isMovementPathWalkable(grid, ...wallCrossing!),
+    false,
+    'swept path validation rejects walkable endpoints separated by a wall',
+  );
 }
 
 console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown and kill)');

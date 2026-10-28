@@ -136,6 +136,14 @@ export interface LobbyPlayer {
   inVent?: boolean;
   /** Current vent ID while inVent is true. */
   ventId?: number;
+  /** Movement-credit bucket: accepted pixel distance available from recent server time. */
+  movementCreditPx?: number;
+  /** Server time at which the movement-credit bucket was last refilled. */
+  movementCreditUpdatedAtMs?: number;
+  /** Server time of the last processed movement intent (packet flood guard). */
+  lastMovementPacketAtMs?: number;
+  /** Server time the last explicit position correction was sent. */
+  lastMovementCorrectionAtMs?: number;
   /** True for server-side synthetic bot slots (no real WS connection). */
   isBot?: true;
   /** Bot AI agent — present only when isBot is true. */
@@ -996,7 +1004,14 @@ export class LobbyManager {
       }
     }
 
-    lobby.startedAtMs = Date.now();
+    const startedAtMs = Date.now();
+    for (const player of players) {
+      player.movementCreditPx = 0;
+      player.movementCreditUpdatedAtMs = startedAtMs;
+      player.lastMovementPacketAtMs = startedAtMs;
+      player.lastMovementCorrectionAtMs = undefined;
+    }
+    lobby.startedAtMs = startedAtMs;
     lobby.phase = 'ROAMING';
     logger.info(
       `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +

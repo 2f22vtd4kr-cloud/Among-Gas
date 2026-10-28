@@ -23,15 +23,13 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
-import {
-  buildCollisionGrid,
-  canMoveTo,
-} from '@workspace/shared/collisionMap';
+import { buildCollisionGrid } from '@workspace/shared/collisionMap';
 import {
   fromWire,
+  toWire,
   MAP_W, MAP_H,
-  FEET_OFFSET_Y, PLAYER_RADIUS,
 } from '@workspace/shared/coords';
+import { buildMovementCorrectionPacket, validateMovementIntent } from './movement.js';
 
 interface AuthSocket extends WebSocket {
   isVerified: boolean;
@@ -272,25 +270,32 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         // Clamp to valid wire range
         if (wireX < 0 || wireX > 32000 || wireY < 0 || wireY > 32000) return;
 
-        // Convert to pixel space
+        // Convert to pixel space, then validate speed and the complete path.
+        // Checking only the final point lets a modified client teleport between
+        // walkable tiles or skip over a thin wall with one forged target.
         const pixelX = fromWire(wireX, MAP_W);
         const pixelY = fromWire(wireY, MAP_H);
+        const decision = validateMovementIntent(player, pixelX, pixelY, Date.now(), collisionGrid);
+        if (decision.rateLimited) return;
 
-        // Validate against collision grid (same geometry as client: feet-center).
-        // Phase 5: dead players are in ghost mode and walk through walls
-        // (GAME_SPEC.md §9), so collision is skipped once !player.alive.
-        const feetX = pixelX;
-        const feetY = pixelY + FEET_OFFSET_Y;
+        player.movementCreditPx = decision.movementCreditPx;
+        player.movementCreditUpdatedAtMs = decision.movementCreditUpdatedAtMs;
+        player.lastMovementPacketAtMs = decision.lastMovementPacketAtMs;
+        player.lastMovementCorrectionAtMs = decision.lastMovementCorrectionAtMs;
+        if (decision.accepted) {
+          player.x = decision.x;
+          player.y = decision.y;
+        }
 
-        if (!player.alive || canMoveTo(collisionGrid, feetX, feetY, PLAYER_RADIUS)) {
-          // Valid position — update server-side state
-          player.x = pixelX;
-          player.y = pixelY;
-        } else {
-          // Invalid (wall clip) — server will broadcast the last valid position
-          // on the next delta tick, which the client applies as a correction.
+        if (decision.sendCorrection && ws.readyState === ws.OPEN) {
+          ws.send(buildMovementCorrectionPacket(
+            toWire(player.x, MAP_W),
+            toWire(player.y, MAP_H),
+          ));
+        }
+        if (decision.corrected) {
           logger.debug(
-            `[WS] Rejected 0x11 from slot=${slot}: wireX=${wireX} wireY=${wireY} clips a wall`,
+            `[WS] Constrained movement from slot=${slot}: wireX=${wireX} wireY=${wireY} accepted=${decision.accepted}`,
           );
         }
 

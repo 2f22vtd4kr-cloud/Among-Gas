@@ -8,7 +8,13 @@
  * Subclasses implement tick() and chooseVote().
  */
 import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, type Grid } from '@workspace/shared/collisionMap';
-import { PLAYER_RADIUS, FEET_OFFSET_Y, MAP_W, MAP_H } from '@workspace/shared/coords';
+import {
+  PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
+  FEET_OFFSET_Y,
+  MAP_W,
+  MAP_H,
+} from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
 import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
@@ -19,6 +25,15 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
+
+/** Same three-point horizontal feet clearance used by human movement. */
+function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
+  return (
+    canMoveTo(collision, feetX, feetY, PLAYER_RADIUS) &&
+    canMoveTo(collision, feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+    canMoveTo(collision, feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
+  );
+}
 
 /**
  * Pathfinding uses grid cells, while live movement validates the character's
@@ -37,7 +52,7 @@ function buildNavigationGrid(collision: Grid): Grid {
       }
       const x = (col + 0.5) * CELL_X;
       const y = (row + 0.5) * CELL_Y;
-      result[index] = canMoveTo(collision, x, y, PLAYER_RADIUS) ? 0 : 1;
+      result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
     }
   }
   return result;
@@ -96,11 +111,10 @@ function canTraverse(from: Point, to: Point): boolean {
   const samples = Math.max(1, Math.ceil(distance / 8));
   for (let i = 1; i <= samples; i++) {
     const t = i / samples;
-    if (!canMoveTo(
+    if (!canMoveToPlayer(
       grid,
       from.x + (to.x - from.x) * t,
       from.y + (to.y - from.y) * t,
-      PLAYER_RADIUS,
     )) return false;
   }
   return true;
@@ -120,7 +134,7 @@ export abstract class BotAgent {
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
-  /** Called every 100ms while the lobby phase is ROAMING. */
+  /** Called every 200ms by LobbyManager's 5Hz bot tick while the lobby is ROAMING. */
   abstract roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 
   /**
@@ -258,7 +272,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS) &&
+        canMoveToPlayer(grid, x, y + FEET_OFFSET_Y) &&
         isSpawnReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
@@ -293,7 +307,7 @@ export abstract class BotAgent {
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      canMoveTo(grid, p.x, p.y + FEET_OFFSET_Y, PLAYER_RADIUS) &&
+      canMoveToPlayer(grid, p.x, p.y + FEET_OFFSET_Y) &&
       isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
 
     let result = target;

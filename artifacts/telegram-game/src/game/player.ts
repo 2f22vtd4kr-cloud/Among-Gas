@@ -7,25 +7,21 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { canMoveTo, MAP_W, MAP_H, type Grid } from './collisionMap';
+import {
+  FEET_OFFSET_Y,
+  PLAYER_HALF_WIDTH,
+  PLAYER_RADIUS,
+  PLAYER_SPEED_PX_PER_SEC,
+} from '@workspace/shared/coords';
 import type { CharacterPose } from './characterSprites';
 
-export const PLAYER_COLOR = 'teal' as const;
-// Scale from original 1040×580 canvas to the current MAP_W×MAP_H canvas.
-// Speed uses the geometric mean of the two axis scale factors.
-const _SCALE = Math.sqrt((MAP_W / 1040) * (MAP_H / 580));
-export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * _SCALE);
+export { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
-// Collision is checked at the character's feet (bottom-center of sprite),
-// not the sprite center. FEET_OFFSET_Y shifts the test point down to the
-// base of the sprite; PLAYER_RADIUS is intentionally tiny (just the feet).
-// PLAYER_HALF_WIDTH adds two extra side test points (left & right of feet
-// center) so the character can't clip into walls horizontally. It is wider
-// than PLAYER_RADIUS intentionally — the sprite is much wider than it is tall
-// at its base, and pure radius alone lets the sides pass through thin walls.
-const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
-export const FEET_OFFSET_Y     = Math.round(_SPRITE_H_MAP_PX * 0.25);
-export const PLAYER_RADIUS     = 4;
-export const PLAYER_HALF_WIDTH = 10; // extra left/right collision extension (px)
+export const PLAYER_COLOR = 'teal' as const;
+
+// Collision is checked at the character's feet (bottom-center of sprite).
+// Movement speed, feet offset, radius, and horizontal clearance are shared
+// with the server so client prediction and authoritative validation stay in sync.
 // 11 fps two-frame walk cycle: responsive at 200ms bot position updates without flicker.
 export const PLAYER_ANIM_INTERVAL_MS = 90;
 

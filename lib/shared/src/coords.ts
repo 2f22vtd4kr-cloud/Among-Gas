@@ -28,6 +28,15 @@ export const MAP_H = 1858;
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
 export const FEET_OFFSET_Y = Math.round(_SPRITE_H_MAP_PX * 0.25);
 export const PLAYER_RADIUS = 4;
+/** Wider horizontal feet clearance shared by client and authoritative movement. */
+export const PLAYER_HALF_WIDTH = 10;
+/**
+ * Authoritative player speed in the map's rendered pixel space. This keeps the
+ * physics step and server movement budget on the same scale as the original
+ * 1040×580 gameplay canvas.
+ */
+const MOVEMENT_SCALE = Math.sqrt((MAP_W / 1040) * (MAP_H / 580));
+export const PLAYER_SPEED_PX_PER_SEC = Math.round(130 * MOVEMENT_SCALE);
 
 /** Pixel → wire coordinate. */
 export function toWire(px: number, mapDim: number): number {

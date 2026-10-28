@@ -107,10 +107,25 @@ async function main() {
     assert.equal(impostors.length, 1, 'a three-player game must have exactly one impostor');
     assert.equal(crewmates.length, 2, 'remaining players must be crewmates');
     const impostor = impostors[0].player;
+    const crew = crewmates[0].player;
     console.log('Impostor slot:', impostor.slot, 'Crewmate slots:', crewmates.map(x => x.player.slot));
 
+    console.log('--- Reject a forged movement teleport and return an authoritative correction ---');
+    // Allow the server's 12ms packet interval guard to elapse after game start.
+    await sleep(25);
+    const forgedMove = Buffer.alloc(5);
+    forgedMove.writeUInt8(0x11, 0);
+    forgedMove.writeInt16LE(30_000, 1);
+    forgedMove.writeInt16LE(30_000, 3);
+    send(crew, forgedMove);
+    const correction = await waitFor(crew, b => b[0] === 0x22, 2_000);
+    assert.equal(correction.length, 5, 'movement correction must have a complete fixed-size frame');
+    assert.notEqual(correction.readUInt16LE(1), 30_000,
+      'the server must not echo the forged teleport x coordinate');
+    assert.notEqual(correction.readUInt16LE(3), 30_000,
+      'the server must not echo the forged teleport y coordinate');
+
     console.log('--- Reject a crewmate sabotage attempt ---');
-    const crew = crewmates[0].player;
     const priorStartCounts = players.map(p => p.msgs.filter(b => b[0] === 0x16 && b[1] === 0x01).length);
     send(crew, [0x15, 0x04, 0x01]);
     await sleep(350);
