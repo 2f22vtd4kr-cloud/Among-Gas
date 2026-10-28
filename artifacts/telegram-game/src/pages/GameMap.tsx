@@ -2117,7 +2117,7 @@ export default function GameMap() {
       {/* ── Sabotage active banner (Phase 8) ─────────────────────────────────── */}
       {loaded && sabotage && sabotageDef && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 40, textAlign: 'center',
           background: 'rgba(70,10,10,0.9)', color: '#ffe4e4',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
@@ -2207,7 +2207,7 @@ export default function GameMap() {
       {/* ── Ejection / no-ejection banner (Phase 6) ─────────────────────────── */}
       {voteResult && !voteResult.winner && !meeting && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 45,
           background: 'rgba(20,32,44,0.9)', color: '#e8f0ff',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
@@ -2482,7 +2482,7 @@ export default function GameMap() {
       {/* ── Dead / ghost-mode banner (Phase 5) ────────────────────────────── */}
       {loaded && amIDead && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 25,
           background: 'rgba(20,32,44,0.85)', color: '#a8c8e0',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 600,
