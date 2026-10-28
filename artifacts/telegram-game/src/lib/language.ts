@@ -28,7 +28,12 @@ export function useLanguage(): { language: AppLanguage; setLanguage: (language: 
   const [language, setCurrentLanguage] = useState<AppLanguage>(getLanguage);
 
   useEffect(() => {
-    const sync = () => setCurrentLanguage(getLanguage());
+    const sync = () => {
+      const next = getLanguage();
+      setCurrentLanguage(next);
+      document.documentElement.lang = next;
+    };
+    document.documentElement.lang = getLanguage();
     window.addEventListener(CHANGE_EVENT, sync);
     window.addEventListener('storage', sync);
     return () => {
