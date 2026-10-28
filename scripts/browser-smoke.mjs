@@ -335,6 +335,12 @@ try {
     suitHeadOverlap >= 20,
     `the helmet window must visibly overlap the suit window (found ${suitHeadOverlap.toFixed(1)} CSS px)`,
   );
+  const suitZIndex = Number(await corpseSuitWindow.evaluate(el => getComputedStyle(el).zIndex));
+  const headZIndex = Number(await corpseHeadWindow.evaluate(el => getComputedStyle(el).zIndex));
+  assert.ok(
+    suitZIndex > headZIndex,
+    'the suit must be painted over the helmet fragment so its lower-leg silhouette remains visible',
+  );
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
