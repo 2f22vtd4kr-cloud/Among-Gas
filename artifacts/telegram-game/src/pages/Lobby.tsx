@@ -97,6 +97,15 @@ function botLabel(n: number, language: AppLanguage) {
   return `${n} ботов`;
 }
 
+function translateLobbyError(message: string | null, en: boolean): string | null {
+  if (!message || !en) return message;
+  const translations: Record<string, string> = {
+    'Откройте Among Gas через Telegram, чтобы войти в игру.':
+      'Open Among Gas through Telegram to join the game.',
+  };
+  return translations[message] ?? message;
+}
+
 // ── Player row (in-room list) ─────────────────────────────────────────────────
 function PlayerRow({ slot, username, isHost, isMe, language }: {
   slot: number; username: string; isHost: boolean; isMe: boolean; language: AppLanguage;
@@ -221,7 +230,7 @@ export default function Lobby() {
         }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>☠</div>
           <div style={{ color: '#ff9090', fontSize: 16, marginBottom: 16 }}>
-            {state.errorMessage ?? (en ? 'Connection error' : 'Ошибка подключения')}
+            {translateLobbyError(state.errorMessage, en) ?? (en ? 'Connection error' : 'Ошибка подключения')}
           </div>
           <button
             onClick={() => window.location.reload()}
@@ -263,7 +272,7 @@ export default function Lobby() {
             fontFamily: "'Fredoka One', sans-serif", fontSize: 14,
             color: '#ff9090', textAlign: 'center', zIndex: 1, position: 'relative',
           }}>
-            {state.errorMessage}
+            {translateLobbyError(state.errorMessage, en)}
           </div>
         )}
 
@@ -397,7 +406,7 @@ export default function Lobby() {
           fontFamily: "'Fredoka One', sans-serif", fontSize: 14,
           color: '#ff9090', textAlign: 'center', zIndex: 1, position: 'relative',
         }}>
-          {state.errorMessage}
+          {translateLobbyError(state.errorMessage, en)}
         </div>
       )}
 
