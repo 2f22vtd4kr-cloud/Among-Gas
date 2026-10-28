@@ -89,6 +89,14 @@ try {
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
 
+  // At match start, the Kill button must be disabled until the initial cooldown expires.
+  await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const openingKillButton = page.getByRole('button', { name: /Перезарядка убийства/ });
+  await openingKillButton.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await openingKillButton.isEnabled(), false,
+    'the opening kill cooldown must disable the Kill action even when a target is in range');
+
   // Dropped bodies are distinct from the ghost's moving sprite and remain reportable.
   await page.goto(`${origin}/?mock=report-ready`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
