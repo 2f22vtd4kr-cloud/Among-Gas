@@ -1535,3 +1535,24 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - Remove the temporary `VITE_ENABLE_GAME_MOCKS=true` QA setting from the artifact manifest after screenshot-based testing.
 - Leave the game web and API workflows running.
+
+### 2026-10-28 — Mobile HUD and visibility contrast regression pass
+
+**Done**
+- Verified canonical `main` at `f75c34bb012106c64d20e462cd1ead8304f60a65` and PR #8's merged state. Downloaded and visually inspected the latest CI visual-QA artifact at mobile portrait, mobile HUD, desktop, lobby, settings, corpse/report, and kill-screen states.
+- Reproduced the mobile menu title/Settings overlap and in-game Emergency/Settings overlap in CI screenshots; also confirmed the exterior fog overlay made the map almost unreadably dark.
+- Created PR #9, `Improve mobile HUD spacing and vision contrast`, on `fix/portrait-hud-visibility-polish`. It moves Emergency clear of the 44px Settings target, moves the menu title below the top-right Settings target, reduces the fog overlay opacity while preserving the existing visibility polygon and wall/radius checks, and adds Playwright geometry assertions for the two overlaps.
+- Opened the latest source commit and workflow run for CI validation; the workflow has not yet been declared successful at this entry's creation.
+
+**Decisions & gotchas**
+- Do not disable vision occlusion or movement collision to improve visual contrast. The fog opacity change keeps the same radius and visibility polygon; walls remain authoritative occluders.
+- The Replit connector did not resolve the user-identified `https://replit.com/@ookkakxkow1093/Among-Gas` URL. Exact URL, username, and distinctive title searches returned no target app; the full editable-app list only returned two unrelated “Execute Attachments” projects. Do not inspect, modify, or publish those unrelated projects as a substitute.
+
+**Left off / next steps**
+- Wait for the latest PR #9 workflow to finish, confirm both new browser assertions pass, and inspect the newly generated screenshots before merging.
+- Continue with a separate evidence-based pass on corpse/kill-screen presentation, ghost animation, and grid-derived vision geometry; exercise the remaining gameplay paths after changes.
+- Resolve the user's exact Replit project identity/access through a valid app result before checking its source link or deployed commit. Do not claim live Replit verification or publish a deployment without appropriate access/authorization.
+
+**State to restore**
+- PR #9 branch: `fix/portrait-hud-visibility-polish`.
+- No deployment was published or altered. The exact user Replit project remains unverified.
