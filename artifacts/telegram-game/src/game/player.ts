@@ -26,7 +26,8 @@ const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
 export const FEET_OFFSET_Y     = Math.round(_SPRITE_H_MAP_PX * 0.25);
 export const PLAYER_RADIUS     = 4;
 export const PLAYER_HALF_WIDTH = 10; // extra left/right collision extension (px)
-export const PLAYER_ANIM_INTERVAL_MS = 140;
+// 11 fps two-frame walk cycle: responsive at 200ms bot position updates without flicker.
+export const PLAYER_ANIM_INTERVAL_MS = 90;
 
 // ── Wide collision helpers (client-only) ─────────────────────────────────────
 // Tests three feet points: left, center, right. This gives the character a

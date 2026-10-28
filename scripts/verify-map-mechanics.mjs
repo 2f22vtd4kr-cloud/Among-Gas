@@ -22,6 +22,7 @@ const gameMapSource = read('artifacts/telegram-game/src/pages/GameMap.tsx');
 const visibilitySource = read('artifacts/telegram-game/src/game/visibility.ts');
 const indexHtml = read('artifacts/telegram-game/index.html');
 const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
+const playerSource = read('artifacts/telegram-game/src/game/player.ts');
 const appSource = read('artifacts/telegram-game/src/App.tsx');
 const uiLobbySource = read('artifacts/telegram-game/src/pages/Lobby.tsx');
 const languageSource = read('artifacts/telegram-game/src/lib/language.ts');
@@ -184,6 +185,7 @@ assert.match(coords, /KILL_COOLDOWN_MS\s*=\s*15_000/, 'Kill cooldown must match 
 assert.match(sabotageSource, /NORMAL_VISION_RADIUS_PX\s*=\s*Math\.round\(260 \* _sx\)/, 'Normal crewmate vision must be defined in map pixels');
 assert.match(sabotageSource, /IMPOSTOR_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* 1\.4\)/, 'Impostors must have longer base-game vision');
 assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* LIGHTS_VISION_SCALE\)/, 'Lights sabotage must reduce crew vision');
+assert.match(playerSource, /PLAYER_ANIM_INTERVAL_MS = 90/, 'Walking animation must run at a responsive ~11 fps rather than the previous ~7 fps');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
