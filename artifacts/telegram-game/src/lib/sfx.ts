@@ -75,26 +75,28 @@ function playCue(key: 'sabotage' | 'vent', volume: number): void {
     const now = ctx.currentTime;
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
+    let duration = 0.23;
     oscillator.type = key === 'sabotage' ? 'sawtooth' : 'triangle';
     if (key === 'sabotage') {
+      duration = 0.31;
       oscillator.frequency.setValueAtTime(440, now);
       oscillator.frequency.exponentialRampToValueAtTime(260, now + 0.22);
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.012);
       gain.gain.setValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.12);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
-      oscillator.stop(now + 0.31);
     } else {
       oscillator.frequency.setValueAtTime(170, now);
       oscillator.frequency.exponentialRampToValueAtTime(52, now + 0.19);
       gain.gain.setValueAtTime(0.0001, now);
       gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.08, volume * 0.07)), now + 0.015);
       gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-      oscillator.stop(now + 0.23);
+      duration = 0.23;
     }
     oscillator.connect(gain);
     gain.connect(ctx.destination);
     oscillator.start(now);
+    oscillator.stop(now + duration);
   } catch {
     // Audio is decorative; a browser/device audio failure must not affect gameplay.
   }
@@ -127,3 +129,23 @@ load('meeting',         '/au-sounds/meeting.wav');
 load('taskComplete',    '/au-sounds/task_complete.wav');
 load('kill',            '/au-sounds/kill.wav');
 load('uiSelect',        '/au-sounds/ui_select.wav');
+load('menuMusic',       '/au-sounds/menu_music.mp3');
+
+const menuTrack = cache.get('menuMusic');
+if (menuTrack) {
+  menuTrack.loop = true;
+  menuTrack.volume = 0.18;
+}
+
+/** Start quiet menu music only after a user gesture, respecting browser autoplay rules. */
+export function startMenuMusic(): void {
+  const track = cache.get('menuMusic');
+  if (track && track.paused) track.play().catch(() => {});
+}
+
+export function stopMenuMusic(): void {
+  const track = cache.get('menuMusic');
+  if (!track) return;
+  track.pause();
+  track.currentTime = 0;
+}
