@@ -325,22 +325,18 @@ try {
     const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
     return body && Number.parseFloat(getComputedStyle(body).opacity) > 0.25;
   }, undefined, { timeout: 1_400 });
-  const corpseSuitWindow = page.locator('.ag-kill-victim-lower .ag-corpse-suit-window');
-  const corpseHeadWindow = page.locator('.ag-kill-victim-lower .ag-corpse-head-window');
-  const suitWindowBox = await corpseSuitWindow.boundingBox();
-  const headWindowBox = await corpseHeadWindow.boundingBox();
-  assert.ok(suitWindowBox && headWindowBox, 'kill-screen corpse layers must be measurable');
-  const suitHeadOverlap = suitWindowBox.y + suitWindowBox.height - headWindowBox.y;
-  assert.ok(
-    suitHeadOverlap >= 20,
-    `the helmet window must visibly overlap the suit window (found ${suitHeadOverlap.toFixed(1)} CSS px)`,
-  );
-  const suitZIndex = Number(await corpseSuitWindow.evaluate(el => getComputedStyle(el).zIndex));
-  const headZIndex = Number(await corpseHeadWindow.evaluate(el => getComputedStyle(el).zIndex));
-  assert.ok(
-    suitZIndex > headZIndex,
-    'the suit must be painted over the helmet fragment so its lower-leg silhouette remains visible',
-  );
+  const corpseSprite = page.locator('.ag-kill-victim-lower .ag-character-sprite');
+  await corpseSprite.waitFor({ state: 'visible' });
+  assert.equal(await corpseSprite.count(), 1,
+    'the corpse must render from one isolated atlas pose, not synthesized layers');
+  assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
+  assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
+    'the corpse source window must start before the entire authored row, without uniform-row clipping');
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '131',
+    'the corpse source window must end before sit-crouch art begins');
+  assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
+    'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
