@@ -114,6 +114,28 @@ try {
     'the task prompt must not overlap the movement joystick',
   );
 
+  // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
+  for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1365, height: 768 }]) {
+    await page.setViewportSize(size);
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('canvas');
+      return !!canvas && canvas.style.width === window.innerWidth + 'px' && canvas.style.height === window.innerHeight + 'px';
+    }, undefined, { timeout: 3_000 });
+    const prompt = await taskButton.boundingBox();
+    const stick = await movementJoystick.boundingBox();
+    assert.ok(prompt && stick, 'task prompt and joystick must remain measurable after resize');
+    assert.ok(
+      prompt.x + prompt.width <= stick.x || stick.x + stick.width <= prompt.x ||
+        prompt.y + prompt.height <= stick.y || stick.y + stick.height <= prompt.y,
+      `task prompt must not overlap joystick at ${size.width}×${size.height}`,
+    );
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas');
+    return !!canvas && canvas.style.width === window.innerWidth + 'px' && canvas.style.height === window.innerHeight + 'px';
+  }, undefined, { timeout: 3_000 });
+
   // The emergency action and Settings must have independent tap targets on mobile.
   const emergencyButton = page.getByRole('button', { name: /Тревога/ });
   const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
