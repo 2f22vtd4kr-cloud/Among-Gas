@@ -139,7 +139,7 @@ function CharSpriteUI({
   const bgH   = _SHEET_PX_H * scale;
   const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
   const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
-  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.82); // clip ground shadow
+  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.94); // trim only the bottommost ground-shadow pixels
 
   return (
     <div style={{

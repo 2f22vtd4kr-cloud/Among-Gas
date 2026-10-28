@@ -47,6 +47,15 @@ try {
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
+  const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 ? rect.height / rect.width : 0;
+    }),
+  );
+  assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
+  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.88,
+    `menu characters must not be vertically cropped (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
   await page.getByRole('button', { name: 'Switch to Russian' }).click();

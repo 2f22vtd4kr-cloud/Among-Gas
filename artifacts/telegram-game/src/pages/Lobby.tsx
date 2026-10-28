@@ -47,11 +47,11 @@ function CharSprite({
   const sheetH = SHEET_H * scale;
   const posX   = -(col * CELL_W * scale);
   const posY   = -(row * CELL_H * scale);
-  // 82% clips the elliptical ground shadow at the bottom of each sprite cell
-  const height = Math.round(CELL_H * scale * (clipBottom ? 0.82 : 1));
+  // Clip only the bottommost shadow pixels; an 82% crop cut off the character's feet
+  const height = Math.round(CELL_H * scale * (clipBottom ? 0.94 : 1));
 
   return (
-    <div style={{
+    <div className="au-menu-character-sprite" style={{
       width: size, height,
       backgroundImage: 'url(/sprites/characters.png?v=4)',
       backgroundSize: `${sheetW}px ${sheetH}px`,
