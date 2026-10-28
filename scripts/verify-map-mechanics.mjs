@@ -197,6 +197,7 @@ assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\/collision-edit
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
 assert.match(lobbySource, /p\.killCooldownMs = p\.role === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Impostors must start with the authoritative kill cooldown');
+assert.match(gameContext, /killCooldownMs: myRole === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Client Kill UI must mirror the initial impostor cooldown');
 assert.match(gameplayInvariantSource, /starts with the full authoritative kill cooldown/, 'Initial impostor cooldown must have a gameplay regression test');
 assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
 assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
