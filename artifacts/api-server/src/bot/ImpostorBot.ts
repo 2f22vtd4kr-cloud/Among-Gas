@@ -220,8 +220,14 @@ export class ImpostorBot extends BotAgent {
 
     this.navigateTo(self, { x: victim.x, y: victim.y });
 
-    // Attempt kill if in range
-    if (self.killCooldownMs === 0) {
+    // Let the player see the opening state and move before bots can kill.
+    // Bots still navigate and animate during this grace window; only the kill
+    // action is delayed, so single-player does not open directly into a report.
+    const openingGraceElapsed = lobby.startedAtMs === undefined ||
+      Date.now() - lobby.startedAtMs >= 5000;
+
+    // Attempt kill if in range and the match opening grace period has elapsed.
+    if (self.killCooldownMs === 0 && openingGraceElapsed) {
       const applied = manager.applyKill(lobby, self.slot, victim.slot);
       if (applied) {
         this._state = 'COOLDOWN';
