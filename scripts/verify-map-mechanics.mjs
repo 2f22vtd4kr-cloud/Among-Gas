@@ -190,7 +190,7 @@ assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round
 assert.match(playerSource, /PLAYER_ANIM_INTERVAL_MS = 90/, 'Walking animation must run at a responsive ~11 fps rather than the previous ~7 fps');
 assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must update at 10Hz rather than 5Hz');
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
-assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 2/, 'Task dwell time must remain 1s after moving bot AI to 10Hz');
+assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 10Hz tick rate');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');

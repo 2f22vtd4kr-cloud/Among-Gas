@@ -20,7 +20,7 @@ import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
-const TASK_DWELL_TICKS = 2; // 2 × 200ms = 400ms per task step
+const TASK_DWELL_TICKS = 5; // 5 × 200ms = 1s per task step
 
 export class CrewmateBot extends BotAgent {
   /** Current target task ID (null = none selected yet). */
