@@ -53,6 +53,7 @@ const helpStyle: React.CSSProperties = {
 
 const WIRE_COLORS = ['#e74c3c', '#f1c40f', '#2ecc71', '#3498db'];
 const WIRE_LABELS = ['Red', 'Yellow', 'Green', 'Blue'];
+const WIRE_LABELS_RU = ['Красный', 'Жёлтый', 'Зелёный', 'Синий'];
 // Right-column permutation per step (index → left-side color index)
 const WIRE_RIGHT: [number, number, number, number][] = [
   [2, 0, 3, 1], // step 0: Green, Red, Blue, Yellow
@@ -60,6 +61,7 @@ const WIRE_RIGHT: [number, number, number, number][] = [
 ];
 
 function WiringGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
   const [selectedLeft, setSelectedLeft] = useState<number | null>(null);
   const [connections, setConnections] = useState<Map<number, number>>(new Map());
   const rightOrder = WIRE_RIGHT[stepIndex % WIRE_RIGHT.length];
@@ -99,7 +101,7 @@ function WiringGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: 
               key={i}
               onClick={() => handleLeft(i)}
               disabled={connected}
-              aria-label={WIRE_LABELS[i]}
+              aria-label={(language === 'en' ? WIRE_LABELS : WIRE_LABELS_RU)[i]}
               style={{
                 width: 56, height: 40, borderRadius: 8,
                 background: connected ? 'rgba(60,60,60,0.5)' : color,
@@ -136,7 +138,7 @@ function WiringGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: 
               key={rightIdx}
               onClick={() => handleRight(rightIdx)}
               disabled={connected}
-              aria-label={WIRE_LABELS[colorIdx]}
+              aria-label={(language === 'en' ? WIRE_LABELS : WIRE_LABELS_RU)[colorIdx]}
               style={{
                 width: 56, height: 40, borderRadius: 8,
                 background: connected ? 'rgba(60,60,60,0.5)' : WIRE_COLORS[colorIdx],
@@ -157,6 +159,8 @@ function WiringGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: 
 // Press Download, then wait 3 seconds for the bar to fill.
 
 function DownloadGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [progress, setProgress] = useState(0);
   const [started, setStarted] = useState(false);
   const doneRef = useRef(false);
@@ -189,7 +193,7 @@ function DownloadGame({ onComplete }: { stepIndex: number; onComplete: () => voi
         }} />
       </div>
       <div style={{ color: 'rgba(255,255,255,0.65)', fontFamily: 'monospace', fontSize: 13 }}>
-        {progress >= 100 ? 'Complete!' : started ? `${Math.round(progress)}%` : 'Ready'}
+        {progress >= 100 ? (en ? 'Complete!' : 'Готово!') : started ? `${Math.round(progress)}%` : (en ? 'Ready' : 'Готово к запуску')}
       </div>
       {!started && (
         <button
@@ -201,7 +205,7 @@ function DownloadGame({ onComplete }: { stepIndex: number; onComplete: () => voi
             fontFamily: 'sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer',
           }}
         >
-          ⬇ Download
+          {en ? '⬇ Download' : '⬇ Скачать'}
         </button>
       )}
     </div>
@@ -218,6 +222,8 @@ const CALIBRATE_TARGETS = [
 const NEEDLE_DEG_PER_SEC = 110;
 
 function CalibrateGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [angle, setAngle] = useState(0);
   const [status, setStatus] = useState<'idle' | 'hit' | 'miss'>('idle');
   const angleRef = useRef(0);
@@ -272,7 +278,7 @@ function CalibrateGame({ stepIndex, onComplete }: { stepIndex: number; onComplet
       <button
         onClick={handleTap}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
-        aria-label="Tap when needle is in green zone"
+        aria-label={en ? 'Tap when needle is in green zone' : 'Нажмите, когда стрелка в зелёной зоне'}
       >
         <svg width={200} height={200} viewBox="0 0 200 200">
           <circle cx={CX} cy={CY} r={R} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={10} />
@@ -285,7 +291,7 @@ function CalibrateGame({ stepIndex, onComplete }: { stepIndex: number; onComplet
         </svg>
       </button>
       <p style={helpStyle}>
-        {status === 'hit' ? '✓ Calibrated!' : status === 'miss' ? 'Missed — try again' : 'Tap when needle hits the green arc'}
+        {status === 'hit' ? (en ? '✓ Calibrated!' : '✓ Настроено!') : status === 'miss' ? (en ? 'Missed — try again' : 'Промах — попробуйте ещё раз') : (en ? 'Tap when needle hits the green arc' : 'Нажмите, когда стрелка на зелёной дуге')}
       </p>
     </div>
   );
@@ -299,6 +305,8 @@ function CalibrateGame({ stepIndex, onComplete }: { stepIndex: number; onComplet
 // drag mechanic while keeping the touch target large enough for Telegram.
 
 function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [lever, setLever] = useState(12);
   const [dragging, setDragging] = useState(false);
   const [cleared, setCleared] = useState(0);
@@ -328,7 +336,7 @@ function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void
         <div style={{ position: 'absolute', inset: '12% 20% 9%', border: '3px solid #4f5b68',
           borderRadius: '14px 14px 30px 30px', background: 'linear-gradient(180deg,#252f39,#0a1016)' }} />
         <div style={{ position: 'absolute', left: '50%', bottom: 12, transform: 'translateX(-50%)',
-          fontSize: 10, fontWeight: 900, letterSpacing: '0.22em', color: '#e1ad47' }}>CHUTE</div>
+          fontSize: 10, fontWeight: 900, letterSpacing: '0.22em', color: '#e1ad47' }}>{en ? 'CHUTE' : 'СЛИВ'}</div>
         <div style={{ position: 'absolute', left: '27%', right: '27%', top: '16%', bottom: '18%',
           display: 'flex', flexWrap: 'wrap', alignContent: 'center', justifyContent: 'center', gap: 7 }}>
           {Array.from({ length: 6 }, (_, i) => i).map(i => !(i < cleared) && (
@@ -350,7 +358,7 @@ function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void
             onPointerUp={() => setDragging(false)}
             onPointerCancel={() => setDragging(false)}
             onLostPointerCapture={() => setDragging(false)}
-            aria-label="Drag garbage lever down"
+            aria-label={en ? 'Drag garbage lever down' : 'Потяните рычаг мусора вниз'}
             style={{ position: 'absolute', left: '50%', top: `${(lever - 8) / 84 * 100}%`,
               transform: 'translate(-50%,-50%)', width: 48, height: 34, borderRadius: 8,
               background: dragging ? '#e5b34e' : '#986a2d', border: '2px solid #f3d18b',
@@ -358,8 +366,8 @@ function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void
             ↕
           </button>
         </div>
-        <div style={{ position: 'absolute', left: '7%', top: '9%', color: '#7eecb4', fontSize: 9, fontWeight: 900 }}>UP</div>
-        <div style={{ position: 'absolute', left: '7%', bottom: '9%', color: '#ffbf68', fontSize: 9, fontWeight: 900 }}>DOWN</div>
+        <div style={{ position: 'absolute', left: '7%', top: '9%', color: '#7eecb4', fontSize: 9, fontWeight: 900 }}>{en ? 'UP' : 'ВВЕРХ'}</div>
+        <div style={{ position: 'absolute', left: '7%', bottom: '9%', color: '#ffbf68', fontSize: 9, fontWeight: 900 }}>{en ? 'DOWN' : 'ВНИЗ'}</div>
       </div>
       <div style={{ color: '#e8f0ff', fontSize: 13, fontWeight: 800 }}>{cleared}/6 pieces cleared</div>
       <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
@@ -379,6 +387,8 @@ const FILTER_DIRTY_SETS: number[][] = [
 ];
 
 function FiltersGame({ stepIndex, onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const initDirty = FILTER_DIRTY_SETS[stepIndex % FILTER_DIRTY_SETS.length];
   const [dirty, setDirty] = useState(() => new Set(initDirty));
 
@@ -405,13 +415,13 @@ function FiltersGame({ stepIndex, onComplete }: { stepIndex: number; onComplete:
               transition: 'all 0.12s',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
-            aria-label={dirty.has(i) ? 'Dirty filter — tap to clean' : 'Clean filter'}
+            aria-label={dirty.has(i) ? (en ? 'Dirty filter — tap to clean' : 'Грязный фильтр — нажмите, чтобы очистить') : (en ? 'Clean filter' : 'Чистый фильтр')}
           >
             {dirty.has(i) ? '🟫' : '✓'}
           </button>
         ))}
       </div>
-      <p style={helpStyle}>{dirty.size} filter{dirty.size !== 1 ? 's' : ''} remaining</p>
+      <p style={helpStyle}>{en ? `${dirty.size} filter${dirty.size !== 1 ? 's' : ''} remaining` : `Осталось фильтров: ${dirty.size}`}</p>
     </div>
   );
 }
@@ -420,6 +430,8 @@ function FiltersGame({ stepIndex, onComplete }: { stepIndex: number; onComplete:
 // Drag the marker onto the target and keep it there for 2.5 seconds.
 
 function StabilizeNavigationGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [target] = useState(() => ({ x: 28 + Math.random() * 48, y: 22 + Math.random() * 45 }));
   const [marker, setMarker] = useState({ x: 22, y: 68 });
   const [dragging, setDragging] = useState(false);
@@ -476,7 +488,7 @@ function StabilizeNavigationGame({ onComplete }: { stepIndex: number; onComplete
           onPointerUp={() => setDragging(false)}
           onPointerCancel={() => setDragging(false)}
           onLostPointerCapture={() => setDragging(false)}
-          aria-label="Drag navigation marker to target"
+          aria-label={en ? 'Drag navigation marker to target' : 'Перетащите маркер навигации к цели'}
           style={{ position: 'absolute', left: `${marker.x}%`, top: `${marker.y}%`,
             transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
             border: '2px solid #d7fffb', background: dragging ? '#00cdbb' : '#078e89',
@@ -486,7 +498,7 @@ function StabilizeNavigationGame({ onComplete }: { stepIndex: number; onComplete
       <div style={{ width: 'min(280px,80vw)', height: 8, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
         <div style={{ width: `${stableMs / 2500 * 100}%`, height: '100%', background: '#42ddb6', transition: 'width 50ms linear' }} />
       </div>
-      <p style={helpStyle}>{stableMs > 0 ? `Stabilizing… ${(2.5 - stableMs / 1000).toFixed(1)}s` : 'Drag the green marker onto the orange target and hold for 2.5s'}</p>
+      <p style={helpStyle}>{stableMs > 0 ? (en ? `Stabilizing… ${(2.5 - stableMs / 1000).toFixed(1)}s` : `Стабилизация… ${(2.5 - stableMs / 1000).toFixed(1)} с`) : (en ? 'Drag the green marker onto the orange target and hold for 2.5s' : 'Перетащите зелёный маркер на оранжевую цель и удерживайте 2,5 с')}</p>
     </div>
   );
 }
@@ -495,6 +507,8 @@ function StabilizeNavigationGame({ onComplete }: { stepIndex: number; onComplete
 // Drag the power lever from OFF at the bottom up to ON.
 
 function RebootWifiGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [lever, setLever] = useState(88);
   const [dragging, setDragging] = useState(false);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -518,25 +532,25 @@ function RebootWifiGame({ onComplete }: { stepIndex: number; onComplete: () => v
       <div style={{ width: 'min(285px,80vw)', height: 285, position: 'relative', borderRadius: 14,
         overflow: 'hidden', border: '1px solid rgba(80,210,255,0.35)',
         background: 'linear-gradient(145deg,#172a37,#08111a)' }}>
-        <div style={{ padding: '16px 12px 0', textAlign: 'center', color: '#63dfff', fontWeight: 950, letterSpacing: '0.1em' }}>REBOOT THE WIFI</div>
+        <div style={{ padding: '16px 12px 0', textAlign: 'center', color: '#63dfff', fontWeight: 950, letterSpacing: '0.1em' }}>{en ? 'REBOOT THE WIFI' : 'ПЕРЕЗАПУСК СВЯЗИ'}</div>
         <div ref={trackRef} style={{ position: 'absolute', top: 57, bottom: 30, left: '50%', transform: 'translateX(-50%)',
           width: 22, borderRadius: 9, background: '#090f17', border: '1px solid #50616d' }}>
-          <div style={{ position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)', color: '#52e6a5', fontSize: 10, fontWeight: 950 }}>ON</div>
-          <div style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', color: '#ff7676', fontSize: 10, fontWeight: 950 }}>OFF</div>
+          <div style={{ position: 'absolute', top: 4, left: '50%', transform: 'translateX(-50%)', color: '#52e6a5', fontSize: 10, fontWeight: 950 }}>{en ? 'ON' : 'ВКЛ'}</div>
+          <div style={{ position: 'absolute', bottom: 4, left: '50%', transform: 'translateX(-50%)', color: '#ff7676', fontSize: 10, fontWeight: 950 }}>{en ? 'OFF' : 'ВЫКЛ'}</div>
           <button
             onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); move(e.clientY); }}
             onPointerMove={e => { if (dragging) move(e.clientY); }}
             onPointerUp={() => setDragging(false)}
             onPointerCancel={() => setDragging(false)}
             onLostPointerCapture={() => setDragging(false)}
-            aria-label="Drag WiFi lever up to ON"
+            aria-label={en ? 'Drag WiFi lever up to ON' : 'Перетащите рычаг связи вверх до ВКЛ'}
             style={{ position: 'absolute', left: '50%', top: `${lever}%`, transform: 'translate(-50%,-50%)',
               width: 83, height: 44, borderRadius: 9, border: '2px solid #b5f5ff',
               background: dragging ? '#21a9d0' : '#117da4', color: '#fff', fontSize: 20, fontWeight: 950,
               boxShadow: '0 4px 0 #063a51', touchAction: 'none', cursor: 'grab' }}>↕</button>
         </div>
       </div>
-      <p style={helpStyle}>{lever <= 7 ? '✓ WiFi rebooted' : 'Drag the blue lever all the way up to ON'}</p>
+      <p style={helpStyle}>{lever <= 7 ? (en ? '✓ WiFi rebooted' : '✓ Связь восстановлена') : (en ? 'Drag the blue lever all the way up to ON' : 'Перетащите синий рычаг до упора вверх')}</p>
     </div>
   );
 }
@@ -545,6 +559,8 @@ function RebootWifiGame({ onComplete }: { stepIndex: number; onComplete: () => v
 // Drag the engine lever into the target zone and keep it aligned for 1.5s.
 
 function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => void }) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const [target] = useState(() => 22 + Math.random() * 56);
   const [slider, setSlider] = useState(18);
   const [dragging, setDragging] = useState(false);
@@ -579,7 +595,7 @@ function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => 
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 19, padding: '18px 0' }}>
-      <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#68e7a4', fontWeight: 900 }}>ALIGN ENGINE OUTPUT</div>
+      <div style={{ fontSize: 11, letterSpacing: '0.18em', color: '#68e7a4', fontWeight: 900 }}>{en ? 'ALIGN ENGINE OUTPUT' : 'НАСТРОЙКА ДВИГАТЕЛЯ'}</div>
       <div ref={trackRef} style={{ position: 'relative', width: 'min(300px,82vw)', height: 52, borderRadius: 12,
         background: 'linear-gradient(180deg,#283a40,#111c24)', border: '1px solid rgba(100,220,160,0.35)', touchAction: 'none' }}>
         <div style={{ position: 'absolute', left: '5%', right: '5%', top: '50%', height: 8,
@@ -592,7 +608,7 @@ function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => 
           onPointerUp={() => setDragging(false)}
           onPointerCancel={() => setDragging(false)}
           onLostPointerCapture={() => setDragging(false)}
-          aria-label="Drag engine alignment lever to target"
+          aria-label={en ? 'Drag engine alignment lever to target' : 'Перетащите рычаг выравнивания двигателя к цели'}
           style={{ position: 'absolute', left: `${slider}%`, top: '50%', transform: 'translate(-50%,-50%)',
             width: 42, height: 44, borderRadius: 8, border: '2px solid #d7ffe6',
             background: dragging ? '#3ecb7e' : '#248b55', color: '#fff', fontWeight: 950,
@@ -724,7 +740,7 @@ function ReactorGame({ onComplete }: { stepIndex: number; onComplete: () => void
                 boxShadow: lit ? `0 0 20px ${color}` : 'inset 0 0 12px rgba(255,255,255,0.03)',
                 color: '#fff', fontSize: 22, fontWeight: 900, touchAction: 'manipulation',
               }}
-              aria-label={`Reactor pad ${i + 1}`}
+              aria-label={en ? `Reactor pad ${i + 1}` : `Панель реактора ${i + 1}`}
             >{['▲', '●', '◆', '■', '✦', '⬟'][i]}</button>
           );
         })}
@@ -901,7 +917,7 @@ function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => vo
         onPointerCancel={() => { firingRef.current = false; setFiring(false); }}
         onLostPointerCapture={() => { firingRef.current = false; setFiring(false); }}
         role="application"
-        aria-label="Aim and shoot moving asteroids"
+        aria-label={en ? 'Aim and shoot moving asteroids' : 'Прицеливайтесь и стреляйте по астероидам'}
         style={{
           position: 'relative', width: 'min(300px,82vw)', height: 220, overflow: 'hidden', borderRadius: 12,
           background: 'radial-gradient(ellipse at 50% 35%,#1a3555,#080d19 75%)',
