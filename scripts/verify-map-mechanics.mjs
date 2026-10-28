@@ -196,8 +196,8 @@ assert.match(gameMapSource, /sfx\(meeting\.bodySlot === NO_TARGET \? 'meeting' :
 assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\/collision-editor"/, 'Collision editor route must be development-only');
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
-assert.match(impostorBotSource, /BOT_OPENING_GRACE_MS = 8_000/, 'AI impostor must respect the opening grace period');
-assert.match(gameplayInvariantSource, /must not kill during the opening grace period/, 'Opening grace must have a gameplay regression test');
+assert.match(lobbySource, /p\.killCooldownMs = p\.role === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Impostors must start with the authoritative kill cooldown');
+assert.match(gameplayInvariantSource, /starts with the full authoritative kill cooldown/, 'Initial impostor cooldown must have a gameplay regression test');
 assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
 assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
 const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
