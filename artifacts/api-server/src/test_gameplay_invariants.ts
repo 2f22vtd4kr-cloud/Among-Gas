@@ -20,6 +20,7 @@ import {
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import { BOT_SPEED_PX } from './bot/BotAgent.js';
 import { CrewmateBot } from './bot/CrewmateBot.js';
+import { ImpostorBot } from './bot/ImpostorBot.js';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import {
   VENT_DEFS,
@@ -556,6 +557,29 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_LIGHTS, 0), 'fixed',
     'Lights is resolved by one valid repair');
   assert.equal(lobby.sabotage, null);
+  manager.disposeLobby(lobby);
+}
+
+// 12. Solo match opening gives the human time to see the start state before an AI kill.
+{
+  const vent = findVent(0)!;
+  const impostor = makePlayer(0, 'impostor', vent.x, vent.y);
+  const crewmate = makePlayer(1, 'crewmate', vent.x + 10, vent.y);
+  const lobby = makeLobby([impostor.player, crewmate.player]);
+  lobby.startedAtMs = Date.now();
+  const manager = new LobbyManager();
+  const bot = new ImpostorBot();
+  // Avoid the unrelated randomized sabotage timer in this deterministic regression.
+  (bot as unknown as { _sabotageCountdown: number })._sabotageCountdown = 100;
+
+  bot.roamingTick(lobby, impostor.player, manager);
+  assert.equal(crewmate.player.alive, true,
+    'impostor bot must not kill during the opening grace period');
+
+  lobby.startedAtMs = Date.now() - 6000;
+  bot.roamingTick(lobby, impostor.player, manager);
+  assert.equal(crewmate.player.alive, false,
+    'impostor bot may kill normally once the opening grace period has elapsed');
   manager.disposeLobby(lobby);
 }
 
