@@ -949,7 +949,7 @@ function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => vo
           fontSize: 25, filter: 'drop-shadow(0 0 5px rgba(80,190,255,0.4))', pointerEvents: 'none' }}>🚀</div>
         <div style={{ position: 'absolute', left: 8, top: 8, padding: '4px 7px', borderRadius: 5,
           background: 'rgba(0,0,0,0.6)', color: '#ffef93', fontFamily: 'monospace', fontSize: 12, pointerEvents: 'none' }}>
-          TARGETS {destroyed}/{ASTEROID_TARGET}
+          {en ? 'TARGETS' : 'ЦЕЛИ'} {destroyed}/{ASTEROID_TARGET}
         </div>
         {firing && <div style={{
           position: 'absolute', left: 'calc(50% - 2px)', bottom: 36, width: 4, height: 20,
