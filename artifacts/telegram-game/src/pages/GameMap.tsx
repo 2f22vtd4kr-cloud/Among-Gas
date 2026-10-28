@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { haptic } from '../lib/haptics';
-import { sfx } from '../lib/sfx';
+import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
   MAP_W, MAP_H,
@@ -668,6 +668,7 @@ export default function GameMap() {
   useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
     const onDown  = (e: KeyboardEvent) => {
+      unlockSfx();
       const k = e.key.toLowerCase();
       if (!tracked.has(k)) return;
       e.preventDefault();
@@ -744,6 +745,7 @@ export default function GameMap() {
     let lastTs: number | null = null;
     /** Timestamp of the last 0x11 sent. */
     let lastMoveSentTs = 0;
+    let lastFootstepTs = 0;
     /** Wire-space position at last send (for delta filtering). */
     let lastSentWireX = -1;
     let lastSentWireY = -1;
@@ -801,6 +803,14 @@ export default function GameMap() {
         grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
+      if (
+        (pose === 'walk-1' || pose === 'walk-2') &&
+        !deadSlotsRef.current.has(mySlotRef.current ?? -1) &&
+        ts - lastFootstepTs >= 320
+      ) {
+        sfx('footstep', 0.42);
+        lastFootstepTs = ts;
+      }
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
@@ -1331,6 +1341,7 @@ export default function GameMap() {
 
   return (
     <div
+      onPointerDown={unlockSfx}
       style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
     >
       {killAnimation && (
