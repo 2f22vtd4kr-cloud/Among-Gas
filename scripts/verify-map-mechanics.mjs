@@ -25,6 +25,7 @@ const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
 const playerSource = read('artifacts/telegram-game/src/game/player.ts');
 const appSource = read('artifacts/telegram-game/src/App.tsx');
 const uiLobbySource = read('artifacts/telegram-game/src/pages/Lobby.tsx');
+const settingsDialogSource = read('artifacts/telegram-game/src/components/SettingsDialog.tsx');
 const languageSource = read('artifacts/telegram-game/src/lib/language.ts');
 const impostorBotSource = read('artifacts/api-server/src/bot/ImpostorBot.ts');
 const botAgentSource = read('artifacts/api-server/src/bot/BotAgent.ts');
@@ -203,7 +204,8 @@ assert.match(gameMapSource, /sfx\('taskComplete'/, 'Task completion must trigger
 assert.match(gameMapSource, /sfx\(meeting\.bodySlot === NO_TARGET \? 'meeting' : 'bodyReport'/, 'Body reports and emergency meetings must have distinct sound cues');
 assert.match(appSource, /VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="\/collision-editor"/, 'Collision editor route must require explicit opt-in even on dev preview servers');
 assert.match(gameMapSource, /VITE_ENABLE_DEV_TOOLS === 'true' && \(/, 'Collision editor link must require explicit opt-in even on dev preview servers');
-assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
+assert.match(settingsDialogSource, /setLanguage\(option\.value\)/, 'Language selector must live in Settings');
+assert.match(uiLobbySource, /onSettingsClick/, 'Lobby must expose the Settings entry point');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
 assert.match(gameContext, /VITE_ENABLE_GAME_MOCKS !== 'true'/, 'Mock mid-game fixtures must require explicit opt-in on development previews');
 assert.match(lobbySource, /p\.killCooldownMs = p\.role === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Impostors must start with the authoritative kill cooldown');
