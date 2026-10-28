@@ -1993,7 +1993,7 @@ export default function GameMap() {
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
           // Keep the action prompt opposite the movement control and clear of the player sprite.
-          position: 'fixed', bottom: 210,
+          position: 'fixed', bottom: 'clamp(150px, 22vh, 210px)',
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
