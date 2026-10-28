@@ -58,6 +58,8 @@ const SABOTAGE_INTERVAL_TICKS = 300;
 
 /** How many ticks to linger at a fake task console before moving on. */
 const FAKE_DWELL_TICKS = 3;
+/** Opening grace gives the human time to see the map before the first AI kill. */
+const BOT_OPENING_GRACE_MS = 8_000;
 
 /** Crewmate tasks the impostor pretends to work at (for faking cover). */
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
@@ -224,7 +226,7 @@ export class ImpostorBot extends BotAgent {
     // Bots still navigate and animate during this grace window; only the kill
     // action is delayed, so single-player does not open directly into a report.
     const openingGraceElapsed = lobby.startedAtMs === undefined ||
-      Date.now() - lobby.startedAtMs >= 8000;
+      Date.now() - lobby.startedAtMs >= BOT_OPENING_GRACE_MS;
 
     // Attempt kill if in range and the match opening grace period has elapsed.
     if (self.killCooldownMs === 0 && openingGraceElapsed) {
