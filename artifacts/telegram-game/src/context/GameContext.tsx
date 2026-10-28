@@ -858,13 +858,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         // Clear stale remote player data from the previous session
         remotePlayersRef.current.clear();
-        // Cooldown starts ready (0) at game start — the 25s cooldown applies
-        // only after a kill, not before the impostor's first one.
+        // Mirror the server's initial cooldown so the local Kill button is
+        // disabled until the authoritative opening cooldown expires.
         setState(s => ({
           ...s, phase: 'playing', myRole, impostorSlots,
           deadSlots: [],
           lastKill: null,
-          killCooldownMs: 0,
+          killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
           meeting: null,
           hasVoted: false,
           voteResult: null,
