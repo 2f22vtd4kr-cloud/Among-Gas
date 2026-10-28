@@ -197,6 +197,7 @@ assert.match(appSource, /VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="\/coll
 assert.match(gameMapSource, /VITE_ENABLE_DEV_TOOLS === 'true' && \(/, 'Collision editor link must require explicit opt-in even on dev preview servers');
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
+assert.match(gameContext, /VITE_ENABLE_GAME_MOCKS !== 'true'/, 'Mock mid-game fixtures must require explicit opt-in on development previews');
 assert.match(lobbySource, /p\.killCooldownMs = p\.role === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Impostors must start with the authoritative kill cooldown');
 assert.match(gameContext, /killCooldownMs: myRole === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Client Kill UI must mirror the initial impostor cooldown');
 assert.match(gameplayInvariantSource, /starts with the full authoritative kill cooldown/, 'Initial impostor cooldown must have a gameplay regression test');
