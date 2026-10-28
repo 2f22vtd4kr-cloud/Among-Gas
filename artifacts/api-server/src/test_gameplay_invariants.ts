@@ -560,26 +560,43 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   manager.disposeLobby(lobby);
 }
 
-// 12. Solo match opening gives the human time to see the start state before an AI kill.
+// 12. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
 {
   const vent = findVent(0)!;
-  const impostor = makePlayer(0, 'impostor', vent.x, vent.y);
-  const crewmate = makePlayer(1, 'crewmate', vent.x + 10, vent.y);
-  const lobby = makeLobby([impostor.player, crewmate.player]);
-  lobby.startedAtMs = Date.now();
+  const playerA = makePlayer(0, 'impostor', vent.x, vent.y);
+  const playerB = makePlayer(1, 'crewmate', vent.x + 10, vent.y);
+  const lobby = makeLobby([playerA.player, playerB.player]);
+  lobby.phase = 'WAITING';
   const manager = new LobbyManager();
+  manager.startGame(lobby, 1);
+
+  const impostor = [playerA.player, playerB.player].find(p => p.role === 'impostor')!;
+  const crewmate = [playerA.player, playerB.player].find(p => p.role === 'crewmate')!;
+  assert.equal(impostor.killCooldownMs, KILL_COOLDOWN_MS,
+    'the impostor starts with the full authoritative kill cooldown');
+  assert.equal(crewmate.killCooldownMs, 0,
+    'crewmates do not receive an impostor kill cooldown');
+
   const bot = new ImpostorBot();
   // Avoid the unrelated randomized sabotage timer in this deterministic regression.
   (bot as unknown as { _sabotageCountdown: number })._sabotageCountdown = 100;
+  impostor.x = vent.x;
+  impostor.y = vent.y;
+  crewmate.x = vent.x + 10;
+  crewmate.y = vent.y;
+  bot.roamingTick(lobby, impostor, manager);
+  assert.equal(crewmate.alive, true,
+    'an impostor bot cannot kill while its initial cooldown is active');
 
-  bot.roamingTick(lobby, impostor.player, manager);
-  assert.equal(crewmate.player.alive, true,
-    'impostor bot must not kill during the opening grace period');
-
-  lobby.startedAtMs = Date.now() - 9000;
-  bot.roamingTick(lobby, impostor.player, manager);
-  assert.equal(crewmate.player.alive, false,
-    'impostor bot may kill normally once the opening grace period has elapsed');
+  // Once the authoritative cooldown expires, the bot can hunt and kill normally.
+  impostor.killCooldownMs = 0;
+  impostor.x = vent.x;
+  impostor.y = vent.y;
+  crewmate.x = vent.x + 10;
+  crewmate.y = vent.y;
+  bot.roamingTick(lobby, impostor, manager);
+  assert.equal(crewmate.alive, false,
+    'the bot may kill normally after the initial cooldown expires');
   manager.disposeLobby(lobby);
 }
 
