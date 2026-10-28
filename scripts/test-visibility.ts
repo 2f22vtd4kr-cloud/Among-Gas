@@ -58,6 +58,17 @@ assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a visio
 // The actual custom map yields a complete visibility polygon with distinct
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
+const realShadowGrid = buildShadowGrid(realGrid);
+// Upper atrium bench components remain blocked for movement but do not cast
+// vision shadows. The statue component between them remains an occluder.
+const upperAtriumLeftBench = 9 * COLS + 48;
+const upperAtriumRightBench = 9 * COLS + 64;
+const upperAtriumStatue = 7 * COLS + 56;
+assert.equal(realGrid[upperAtriumLeftBench], 1, 'left atrium bench remains collidable');
+assert.equal(realShadowGrid[upperAtriumLeftBench], 0, 'left atrium bench does not cast a vision shadow');
+assert.equal(realGrid[upperAtriumRightBench], 1, 'right atrium bench remains collidable');
+assert.equal(realShadowGrid[upperAtriumRightBench], 0, 'right atrium bench does not cast a vision shadow');
+assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vision occluder');
 const realPolygon = computeVisibilityPolygon(
   350 * (MAP_W / 1040),
   150 * (MAP_H / 580),
