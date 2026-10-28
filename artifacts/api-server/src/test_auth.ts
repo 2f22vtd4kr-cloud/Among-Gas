@@ -5,6 +5,7 @@
  * Run with: pnpm --filter @workspace/api-server exec tsx src/test_auth.ts
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { createHmac } from 'node:crypto';
 
 const TEST_BOT_TOKEN = 'among-gas-auth-unit-test-token-only';
@@ -55,5 +56,31 @@ assert.equal(verifyTelegramAuth(malformedHash.toString()), null, 'malformed hash
 const missingHash = new URLSearchParams(valid);
 missingHash.delete('hash');
 assert.equal(verifyTelegramAuth(missingHash.toString()), null, 'missing hash must be rejected');
+
+// The deployment entry point must enforce production mode itself, not depend on
+// the host injecting NODE_ENV correctly. Deliberately pass development mode and
+// no token: `pnpm run start` must override it to production and fail closed.
+const startup = spawnSync('pnpm', ['run', 'start'], {
+  cwd: process.cwd(),
+  encoding: 'utf8',
+  timeout: 5_000,
+  env: {
+    ...process.env,
+    NODE_ENV: 'development',
+    TELEGRAM_BOT_TOKEN: '',
+    PORT: '39017',
+  },
+});
+assert.equal(
+  startup.error,
+  undefined,
+  `production startup should fail promptly, not keep a dev-auth server alive: ${startup.error?.message ?? ''}`,
+);
+assert.notEqual(startup.status, 0, 'production server must not start without a Telegram bot token');
+assert.match(
+  `${startup.stdout}\n${startup.stderr}`,
+  /TELEGRAM_BOT_TOKEN must be set/,
+  'deployment startup must hit the fail-closed production auth guard',
+);
 
 console.log('PASS: Telegram HMAC auth accepts valid fresh initData and rejects tampered, stale, future-dated, malformed, and missing-hash payloads.');
