@@ -354,6 +354,23 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],
   },
+  // Kill-screen visual QA fixtures: only the victim sees the full-screen kill animation.
+  'kill-animation-victim': {
+    state: {
+      phase: 'playing', mySlot: 1, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [0], deadSlots: [1],
+      lastKill: { victimSlot: 1, attackerSlot: 0, occurredAtMs: Date.now() },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  'kill-animation-attacker': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], deadSlots: [1],
+      lastKill: { victimSlot: 1, attackerSlot: 0, occurredAtMs: Date.now() },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 5 — ghost mode: this client has been killed, sees the "You are dead" state.
   ghost: {
     state: {
