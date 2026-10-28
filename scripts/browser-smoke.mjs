@@ -299,6 +299,10 @@ try {
       `${viewport.label}: game canvas exceeds horizontal viewport bounds`);
     assert.ok(layout.canvas.top >= -1 && layout.canvas.bottom <= layout.viewportHeight + 1,
       `${viewport.label}: game canvas exceeds vertical viewport bounds`);
+    await page.screenshot({
+      path: join(visualQaDir, `gameplay-${viewport.label.replaceAll(' ', '-')}.png`),
+      fullPage: true,
+    });
   }
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
