@@ -58,9 +58,6 @@ const SABOTAGE_INTERVAL_TICKS = 300;
 
 /** How many ticks to linger at a fake task console before moving on. */
 const FAKE_DWELL_TICKS = 3;
-/** Opening grace gives the human time to see the map before the first AI kill. */
-const BOT_OPENING_GRACE_MS = 8_000;
-
 /** Crewmate tasks the impostor pretends to work at (for faking cover). */
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
 
@@ -222,14 +219,9 @@ export class ImpostorBot extends BotAgent {
 
     this.navigateTo(self, { x: victim.x, y: victim.y });
 
-    // Let the player see the opening state and move before bots can kill.
-    // Bots still navigate and animate during this grace window; only the kill
-    // action is delayed, so single-player does not open directly into a report.
-    const openingGraceElapsed = lobby.startedAtMs === undefined ||
-      Date.now() - lobby.startedAtMs >= BOT_OPENING_GRACE_MS;
-
-    // Attempt kill if in range and the match opening grace period has elapsed.
-    if (self.killCooldownMs === 0 && openingGraceElapsed) {
+    // The authoritative initial kill cooldown is assigned at game start and
+    // decremented by the server. Bots use that same cooldown as human impostors.
+    if (self.killCooldownMs === 0) {
       const applied = manager.applyKill(lobby, self.slot, victim.slot);
       if (applied) {
         this._state = 'COOLDOWN';
