@@ -369,7 +369,7 @@ function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void
         <div style={{ position: 'absolute', left: '7%', top: '9%', color: '#7eecb4', fontSize: 9, fontWeight: 900 }}>{en ? 'UP' : 'ВВЕРХ'}</div>
         <div style={{ position: 'absolute', left: '7%', bottom: '9%', color: '#ffbf68', fontSize: 9, fontWeight: 900 }}>{en ? 'DOWN' : 'ВНИЗ'}</div>
       </div>
-      <div style={{ color: '#e8f0ff', fontSize: 13, fontWeight: 800 }}>{cleared}/6 pieces cleared</div>
+      <div style={{ color: '#e8f0ff', fontSize: 13, fontWeight: 800 }}>{en ? `${cleared}/6 pieces cleared` : `Убрано деталей: ${cleared}/6`}</div>
       <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${cleared / 6 * 100}%`, background: '#68d9a0', transition: 'width 80ms linear' }} />
       </div>
@@ -617,7 +617,7 @@ function AlignEngineGame({ onComplete }: { stepIndex: number; onComplete: () => 
       <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
         <div style={{ width: `${stableMs / 1500 * 100}%`, height: '100%', background: '#56dd91', transition: 'width 50ms linear' }} />
       </div>
-      <p style={helpStyle}>{stableMs ? `Aligned… ${(1.5 - stableMs / 1000).toFixed(1)}s` : 'Drag into the green target and keep it there for 1.5s'}</p>
+      <p style={helpStyle}>{stableMs ? (en ? `Aligned… ${(1.5 - stableMs / 1000).toFixed(1)}s` : `Совмещение… ${(1.5 - stableMs / 1000).toFixed(1)} с`) : (en ? 'Drag into the green target and keep it there for 1.5s' : 'Перетащите рычаг в зелёную зону и удерживайте 1,5 с')}</p>
     </div>
   );
 }
