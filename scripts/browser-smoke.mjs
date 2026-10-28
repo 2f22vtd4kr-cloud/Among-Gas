@@ -360,6 +360,41 @@ try {
       ghostBannerBox.y + ghostBannerBox.height <= taskListBox.y || taskListBox.y + taskListBox.height <= ghostBannerBox.y,
     'ghost banner must not overlap the task-list toggle',
   );
+  // A single ghost sprite row is available in the current atlas, so animation
+  // is expressed through time-based floating transforms rather than living walk
+  // frames. Sample the local player's canvas region twice to prevent regressions
+  // back to a static/translucent sticker.
+  const ghostCanvas = page.locator('canvas');
+  const readLocalGhostPixels = () => ghostCanvas.evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const cx = Math.floor(canvas.width / 2);
+    const cy = Math.floor(canvas.height / 2);
+    const left = Math.max(0, cx - 56);
+    const top = Math.max(0, cy - 72);
+    const width = Math.min(112, canvas.width - left);
+    const height = Math.min(144, canvas.height - top);
+    return [...context.getImageData(left, top, width, height).data];
+  });
+  const ghostFrameBefore = await readLocalGhostPixels();
+  await page.waitForTimeout(280);
+  const ghostFrameAfter = await readLocalGhostPixels();
+  assert.ok(
+    ghostFrameBefore && ghostFrameAfter && ghostFrameBefore.length === ghostFrameAfter.length,
+    'the ghost canvas region must be available for the animation regression check',
+  );
+  let changedGhostPixels = 0;
+  for (let i = 0; i < ghostFrameBefore.length; i += 4) {
+    const delta =
+      Math.abs(ghostFrameBefore[i] - ghostFrameAfter[i]) +
+      Math.abs(ghostFrameBefore[i + 1] - ghostFrameAfter[i + 1]) +
+      Math.abs(ghostFrameBefore[i + 2] - ghostFrameAfter[i + 2]);
+    if (delta >= 50) changedGhostPixels++;
+  }
+  assert.ok(
+    changedGhostPixels > 12,
+    `the local ghost must animate over time (changed pixels in its canvas region: ${changedGhostPixels})`,
+  );
   await page.waitForTimeout(450);
   await page.screenshot({ path: join(visualQaDir, 'ghost-mode.png'), fullPage: true });
 
