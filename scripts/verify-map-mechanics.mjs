@@ -187,7 +187,7 @@ assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
-assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \\[C\\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
+assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\/collision-editor"/, 'Collision editor route must be development-only');
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
