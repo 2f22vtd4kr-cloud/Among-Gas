@@ -559,6 +559,21 @@ export default function GameMap() {
     prevMeetingRef.current = meeting;
   }, [meeting]);
 
+  const prevSabotageIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const currentId = sabotage?.systemId ?? null;
+    if (currentId !== null && prevSabotageIdRef.current === null) sfx('sabotage', 0.55);
+    prevSabotageIdRef.current = currentId;
+  }, [sabotage?.systemId]);
+
+  const prevVentIdRef = useRef<number | null>(myVentId);
+  useEffect(() => {
+    if (myVentId !== prevVentIdRef.current && (myVentId !== null || prevVentIdRef.current !== null)) {
+      sfx('vent', 0.48);
+    }
+    prevVentIdRef.current = myVentId;
+  }, [myVentId]);
+
   // Inject role-reveal keyframes once (avoids a CSS file dependency)
   useEffect(() => {
     const style = document.createElement('style');
@@ -1940,7 +1955,7 @@ export default function GameMap() {
           )}
           {sabotage === null && nearestBody !== null && (
             <button
-              onClick={() => { haptic.tap(); reportBody(nearestBody); }}
+              onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); reportBody(nearestBody); }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
@@ -1989,7 +2004,7 @@ export default function GameMap() {
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
           <button
-            onClick={() => { haptic.tap(); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
+            onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
               background: 'rgba(200,50,50,0.9)', color: '#ffe8e8',
@@ -2042,7 +2057,7 @@ export default function GameMap() {
           {Object.values(SABOTAGE_DEFS).map(def => (
             <button
               key={def.id}
-              onClick={(e) => { e.stopPropagation(); haptic.tap(); triggerSabotage(def.id); setShowSabotagePanel(false); }}
+              onClick={(e) => { e.stopPropagation(); haptic.tap(); sfx('uiSelect', 0.3); triggerSabotage(def.id); setShowSabotagePanel(false); }}
               style={{
                 padding: '12px 32px', borderRadius: 10, minWidth: 180,
                 background: 'rgba(130,40,200,0.85)', color: '#f0e4ff',
@@ -2073,7 +2088,7 @@ export default function GameMap() {
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
             disabled={emergencyMeetingUsed}
-            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); callEmergencyMeeting(); } }}
+            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
             style={{
               padding: '8px 14px', borderRadius: 8,
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
@@ -2207,7 +2222,7 @@ export default function GameMap() {
                   <button
                     key={p.slot}
                     disabled={hasVoted}
-                    onClick={() => { haptic.tap(); castVote(p.slot); }}
+                    onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); castVote(p.slot); }}
                     style={{
                       padding: '10px 14px', borderRadius: 8, textAlign: 'left',
                       background: hasVoted ? 'rgba(30,40,55,0.6)' : 'rgba(30,40,55,0.9)',
@@ -2221,7 +2236,7 @@ export default function GameMap() {
                 ))}
               <button
                 disabled={hasVoted}
-                onClick={() => { haptic.tap(); castVote(NO_TARGET); }}
+                onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); castVote(NO_TARGET); }}
                 style={{
                   padding: '10px 14px', borderRadius: 8, textAlign: 'center', fontWeight: 700,
                   background: hasVoted ? 'rgba(60,60,60,0.4)' : 'rgba(60,60,60,0.75)',
@@ -2259,6 +2274,7 @@ export default function GameMap() {
             stepIndex={stepIndex}
             onComplete={() => {
               haptic.success();
+              sfx('taskComplete', 0.58);
               completeTaskStep(activeTaskId, stepIndex);
               // If this was the last step, close the panel
               if (stepIndex + 1 >= def.steps) setActiveTaskId(null);
