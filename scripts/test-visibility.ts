@@ -80,7 +80,7 @@ assert.equal(realShadowGrid[upperAtriumLeftBench], 0, 'left atrium bench does no
 assert.equal(realGrid[upperAtriumRightBench], 1, 'right atrium bench remains collidable');
 assert.equal(realShadowGrid[upperAtriumRightBench], 0, 'right atrium bench does not cast a vision shadow');
 assert.equal(realGrid[upperAtriumStatue], 1, 'central atrium furnishing remains collidable');
-assert.equal(realShadowGrid[upperAtriumStatue], 0, 'central atrium furnishing does not cast a hard shadow');
+assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vision occluder');
 assert.equal(realGrid[0], 1, 'map boundary remains blocked for movement');
 assert.equal(realShadowGrid[0], 1, 'architectural boundary remains a vision occluder');
 const realPolygon = computeVisibilityPolygon(
