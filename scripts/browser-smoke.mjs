@@ -236,6 +236,8 @@ try {
   // The victim gets the full-screen kill sequence; the attacker must not.
   await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
+  assert.equal(new URL(page.url()).searchParams.get('skipReveal'), 'true',
+    'the mock-only skipReveal switch must survive Lobby → GameMap navigation');
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
   await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });

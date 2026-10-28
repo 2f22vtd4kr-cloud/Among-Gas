@@ -185,7 +185,12 @@ export default function Lobby() {
   }, []);
 
   useEffect(() => {
-    if (state.phase === 'playing') navigate('/game');
+    if (state.phase !== 'playing') return;
+    // Test-only kill-screen fixtures need to carry this opt-in through the
+    // lobby's route change. Production builds never enable game mocks.
+    const skipReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      && new URLSearchParams(window.location.search).get('skipReveal') === 'true';
+    navigate(skipReveal ? '/game?skipReveal=true' : '/game');
   }, [state.phase, navigate]);
 
   const isInRoom = state.roomCode !== null;
