@@ -188,7 +188,7 @@ assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameM
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
-assert.match(gameMapSource, /sprite,\s*sx,\s*sy \+ splitY,\s*sw,\s*lowerHeight/, 'A corpse must render only the lower half of the balaclava sprite');
+assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
 assert.match(gameMapSource, /lastKill\.victimSlot !== mySlot/, 'Only the victim should receive the full-screen kill sequence');
 assert.match(gameMapSource, /sfx\('footstep'/, 'Local walking must trigger footsteps');
 assert.match(gameMapSource, /sfx\('taskComplete'/, 'Task completion must trigger its sound cue');
