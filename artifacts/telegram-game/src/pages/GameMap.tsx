@@ -837,7 +837,7 @@ export default function GameMap() {
       // anything we sent recently, the server actually fell back to an
       // older valid position (a real wall-clip rejection) — snap to it.
       if (correctionRef.current) {
-        const { wireX: cWireX, wireY: cWireY } = correctionRef.current;
+        const { wireX: cWireX, wireY: cWireY, force = false } = correctionRef.current;
         correctionRef.current = null;
 
         const pending = pendingSentRef.current;
@@ -845,13 +845,13 @@ export default function GameMap() {
           (p) => p.wireX === cWireX && p.wireY === cWireY,
         );
 
-        if (ackIndex !== -1) {
+        if (!force && ackIndex !== -1) {
           // Confirmed — everything up to and including this send is stale
           // history now; local prediction already accounts for it.
           pending.splice(0, ackIndex + 1);
         } else {
-          // Not something we sent recently — the server rejected our
-          // latest move(s) and is holding us at an earlier valid spot.
+          // Explicit server corrections (0x22) always win over local prediction,
+          // even if their position happens to match an older item in send history.
           playerStateRef.current = {
             ...playerStateRef.current,
             x: fromWire(cWireX, MAP_W),
