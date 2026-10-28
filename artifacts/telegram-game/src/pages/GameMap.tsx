@@ -162,13 +162,13 @@ function CharSpriteUI({
       }}>
         <div
           className="ag-corpse-suit-window"
-          style={{ position: 'absolute', left: 0, top: '8%', width: size, height: '55%', overflow: 'hidden' }}
+          style={{ position: 'absolute', left: 0, top: '8%', width: size, height: '55%', overflow: 'hidden', zIndex: 2 }}
         >
           <div style={imageStyle} />
         </div>
         <div
           className="ag-corpse-head-window"
-          style={{ position: 'absolute', left: 0, top: '47%', width: size, height: '53%', overflow: 'hidden' }}
+          style={{ position: 'absolute', left: 0, top: '47%', width: size, height: '53%', overflow: 'hidden', zIndex: 1 }}
         >
           <div style={{ ...imageStyle, transform: 'translateY(-80%)' }} />
         </div>
@@ -1138,8 +1138,13 @@ export default function GameMap() {
         const corpseX = bx - corpseW / 2;
         const corpseY = by - corpseH / 2;
         const helmetSplitY = sy + Math.round(sh * 0.74);
-        // Keep the suit and bone in the upper layer, then move the detached
-        // helmet fragment upward to close the exaggerated gap in the source cell.
+        // Draw the raised helmet fragment first, behind the torso. The two
+        // regions deliberately overlap so the torso's legs stay visible while
+        // the helmet fills the empty center gap instead of covering the suit.
+        ctx.drawImage(
+          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
+          corpseX, corpseY + corpseH * 0.36, corpseW, corpseH * 0.26,
+        );
         ctx.save();
         ctx.beginPath();
         ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.58);
@@ -1149,10 +1154,6 @@ export default function GameMap() {
           corpseX, corpseY + corpseH * 0.08, corpseW, corpseH,
         );
         ctx.restore();
-        ctx.drawImage(
-          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
-          corpseX, corpseY + corpseH * 0.36, corpseW, corpseH * 0.26,
-        );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
       }
