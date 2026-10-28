@@ -57,7 +57,7 @@ assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a visio
 
  // Collision and vision are separate contracts: the same small prop blocks
  // movement, but does not truncate the vision radius.
- const propVisionOriginX = CELL_X * 1.5;
+ const propVisionOriginX = CELL_X * 0.5;
  const propVisionOriginY = CELL_Y * 2.5;
  const collisionPropRay = computeVisibilityPolygon(propVisionOriginX, propVisionOriginY, CELL_X * 4, propGrid)[360];
  const visionPropRay = computeVisibilityPolygon(propVisionOriginX, propVisionOriginY, CELL_X * 4, shadowGrid)[360];
