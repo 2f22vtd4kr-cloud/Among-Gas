@@ -160,6 +160,22 @@ try {
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
 
+  // English must persist into actual gameplay, tasks, and meeting screens—not only the menu.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByRole('button', { name: /MAP/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: /Clean Filters/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Discussion', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('textbox', { name: 'Meeting message' }).waitFor({ state: 'visible' });
+  await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
+  await page.getByText('Voting', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'Skip' }).waitFor({ state: 'visible' });
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to Russian' }).click();
+
   // The victim gets the full-screen kill sequence; the attacker must not.
   await page.goto(`${origin}/?mock=kill-animation-victim`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
