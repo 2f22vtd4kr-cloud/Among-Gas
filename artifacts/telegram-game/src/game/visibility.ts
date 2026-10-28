@@ -102,18 +102,51 @@ export function computeVisibilityPolygon(
 }
 
 /**
- * Build an occlusion-only grid from movement collision. Tiny isolated props
- * (benches, small furniture, low fixtures) remain solid for movement but do
- * not cast hard vision shadows. Long connected wall runs and major structures
- * remain occluders. This intentionally never mutates the collision grid.
+ * Build a vision-only occlusion grid from collision data.
+ *
+ * The movement mask is intentionally more inclusive than the vision mask:
+ * furniture and other low props still block player movement, but small props
+ * do not cast hard, room-sized shadows. The map's upper atrium also has an
+ * explicit furniture carve-out because its benches/table sit inside a connected
+ * collision component; connected-component filtering alone cannot distinguish
+ * those pieces from the surrounding architecture.
+ *
+ * This function returns a new grid and never mutates the movement collision grid.
  */
+const MIN_OCCLUDER_COMPONENT_CELLS = 4;
+
+// Cell coordinates in the 104 × 58 red-line reference grid. These cells contain
+// low furniture in the open upper atrium, not the room's enclosing walls.
+const NON_OCCLUDING_REGIONS = [
+  { minCol: 47, maxCol: 50, minRow: 8, maxRow: 11 },
+  { minCol: 62, maxCol: 66, minRow: 8, maxRow: 11 },
+] as const;
+
+function isNonOccludingFurniture(index: number): boolean {
+  const row = Math.floor(index / COLS);
+  const col = index - row * COLS;
+  return NON_OCCLUDING_REGIONS.some(region =>
+    col >= region.minCol && col <= region.maxCol &&
+    row >= region.minRow && row <= region.maxRow
+  );
+}
+
 export function buildShadowGrid(collisionGrid: Grid): Grid {
+  if (collisionGrid.length !== COLS * ROWS) {
+    throw new RangeError(
+      `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`
+    );
+  }
+
   const shadowGrid = new Uint8Array(COLS * ROWS);
   const visited = new Uint8Array(COLS * ROWS);
-  const minOccluderCells = 10;
 
+  // Connected regions smaller than this are isolated props or details, not
+  // architectural partitions. Leave those solid in collision but transparent
+  // to visibility ray casting.
   for (let start = 0; start < collisionGrid.length; start++) {
     if (collisionGrid[start] !== 1 || visited[start]) continue;
+
     const component: number[] = [];
     const queue = [start];
     visited[start] = 1;
@@ -129,6 +162,7 @@ export function buildShadowGrid(collisionGrid: Grid): Grid {
         row > 0 ? index - COLS : -1,
         row + 1 < ROWS ? index + COLS : -1,
       ];
+
       for (const next of neighbors) {
         if (next < 0 || visited[next] || collisionGrid[next] !== 1) continue;
         visited[next] = 1;
@@ -136,20 +170,12 @@ export function buildShadowGrid(collisionGrid: Grid): Grid {
       }
     }
 
-    // The two small bench groups in the upper atrium are solid for movement,
-    // but are low furniture and must not cast hard vision shadows. Keep this
-    // map-specific exception separate from collision so players still cannot
-    // walk through them. The larger statue component between the benches remains
-    // an occluder.
-    const isUpperAtriumBench = component.length <= 12 && component.every(index => {
-      const row = Math.floor(index / COLS);
-      const col = index - row * COLS;
-      return row >= 7 && row <= 11 &&
-        ((col >= 46 && col <= 50) || (col >= 61 && col <= 65));
-    });
+    if (component.length < MIN_OCCLUDER_COMPONENT_CELLS) continue;
 
-    if (component.length >= minOccluderCells && !isUpperAtriumBench) {
-      for (const index of component) shadowGrid[index] = 1;
+    // Filter individual low-furniture cells even if a red outline connects them
+    // to a much larger wall component. Collision remains untouched.
+    for (const index of component) {
+      if (!isNonOccludingFurniture(index)) shadowGrid[index] = 1;
     }
   }
 
