@@ -918,9 +918,9 @@ export class LobbyManager {
       p.inVent = false;
       p.ventId = undefined;
       p.emergencyMeetingUsed = false;
-      // Cooldown starts ready (0) at game start — GAME_SPEC.md §9's 25s cooldown
-      // applies only *after* a kill, not before the first one.
-      p.killCooldownMs = 0;
+      // Match the real game's opening kill cooldown: impostors cannot kill
+      // immediately on spawn. Crewmates have no kill action or cooldown.
+      p.killCooldownMs = p.role === 'impostor' ? KILL_COOLDOWN_MS : 0;
     });
 
     const impostorSlots = shuffled
