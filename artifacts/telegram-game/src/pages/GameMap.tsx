@@ -155,15 +155,28 @@ function CharSpriteUI({
 // Remote positions arrive at 25Hz via 0xFF deltas; the rAF loop compares
 // against the previous frame to derive walk animation and facing direction.
 interface RemoteAnim {
+  /** Most recently received authoritative position. */
   x: number;
   y: number;
+  /** Interpolated screen position; bot updates arrive slower than human updates. */
+  renderX: number;
+  renderY: number;
+  fromX: number;
+  fromY: number;
+  targetX: number;
+  targetY: number;
+  segmentStartTs: number;
+  segmentDurationMs: number;
+  lastTargetTs: number;
   animMs: number;
   facingLeft: boolean;
   lastMovedTs: number;
 }
 
-/** A remote player is "moving" if its position changed within this window. */
-const REMOTE_MOVING_WINDOW_MS = 160;
+/** Keep the walk cycle alive across the server's 200ms bot tick interval. */
+const REMOTE_MOVING_WINDOW_MS = 260;
+const REMOTE_INTERPOLATION_MIN_MS = 40;
+const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1064,17 +1077,44 @@ export default function GameMap() {
           // Update per-slot animation state from position deltas
           let anim = remoteAnims.get(rp.slot);
           if (!anim) {
-            anim = { x: rp.x, y: rp.y, animMs: 0, facingLeft: false, lastMovedTs: -1e9 };
+            anim = {
+              x: rp.x, y: rp.y,
+              renderX: rp.x, renderY: rp.y,
+              fromX: rp.x, fromY: rp.y,
+              targetX: rp.x, targetY: rp.y,
+              segmentStartTs: ts, segmentDurationMs: REMOTE_INTERPOLATION_MIN_MS,
+              lastTargetTs: ts,
+              animMs: 0, facingLeft: false, lastMovedTs: -1e9,
+            };
             remoteAnims.set(rp.slot, anim);
           }
           const rdx = rp.x - anim.x;
           const rdy = rp.y - anim.y;
           if (rdx * rdx + rdy * rdy > 0.25) {
+            // Start the next interpolation segment from the current rendered
+            // position, not the previous network sample. This avoids visible
+            // jumps when synthetic bots update at 5Hz while humans update at 25Hz.
+            anim.fromX = anim.renderX;
+            anim.fromY = anim.renderY;
+            anim.targetX = rp.x;
+            anim.targetY = rp.y;
+            anim.segmentStartTs = ts;
+            anim.segmentDurationMs = Math.max(
+              REMOTE_INTERPOLATION_MIN_MS,
+              Math.min(REMOTE_INTERPOLATION_MAX_MS, ts - anim.lastTargetTs),
+            );
+            anim.lastTargetTs = ts;
             anim.lastMovedTs = ts;
             if (Math.abs(rdx) > 0.1) anim.facingLeft = rdx < 0;
           }
           anim.x = rp.x;
           anim.y = rp.y;
+          const segmentT = Math.max(0, Math.min(1,
+            (ts - anim.segmentStartTs) / anim.segmentDurationMs,
+          ));
+          const easedT = segmentT * segmentT * (3 - 2 * segmentT);
+          anim.renderX = anim.fromX + (anim.targetX - anim.fromX) * easedT;
+          anim.renderY = anim.fromY + (anim.targetY - anim.fromY) * easedT;
           const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
           anim.animMs = rMoving ? anim.animMs + dtMs : 0;
           // Phase 5: dead players always render the static "ghost" pose.
@@ -1086,8 +1126,8 @@ export default function GameMap() {
                 : 'walk-2'
               : 'idle';
 
-          const rpCX = Math.round((rp.x - srcX) * scale);
-          const rpCY = Math.round((rp.y - srcY) * scale);
+          const rpCX = Math.round((anim.renderX - srcX) * scale);
+          const rpCY = Math.round((anim.renderY - srcY) * scale);
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
