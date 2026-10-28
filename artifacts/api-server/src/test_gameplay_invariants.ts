@@ -61,11 +61,17 @@ function assertClientWalkable(x: number, y: number, label: string): void {
 
 function fakeSocket() {
   const packets: Buffer[] = [];
+  let closeCalls = 0;
   const ws = {
     readyState: 1,
     send(data: Uint8Array) { packets.push(Buffer.from(data)); },
+    close() { closeCalls++; this.readyState = 3; },
   };
-  return { ws: ws as unknown as LobbyPlayer['ws'], packets };
+  return {
+    ws: ws as unknown as LobbyPlayer['ws'],
+    packets,
+    get closeCalls() { return closeCalls; },
+  };
 }
 
 function makePlayer(
@@ -469,98 +475,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
-console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, sabotage repairs, chat, corpse drops, emergency meeting, kill)');
-
-{
-  const host = makePlayer(0, 'crewmate', 100, 100);
-  const guest = makePlayer(1, 'crewmate', 130, 100);
-  const lobby = makeLobby([host.player, guest.player]);
-  const manager = new LobbyManager();
-  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), true, 'first emergency call succeeds');
-  assert.equal(host.player.emergencyMeetingUsed, true);
-  assert.ok(host.packets.some(packet => packet[0] === 0x20 && packet[1] === 0x01));
-  const meeting = lobby.meeting!;
-  if (meeting.discussionTimer) clearTimeout(meeting.discussionTimer);
-  if (meeting.votingTimer) clearTimeout(meeting.votingTimer);
-  lobby.meeting = null;
-  lobby.phase = 'ROAMING';
-  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), false, 'second emergency call is rejected');
-  manager.disposeLobby(lobby);
-}
-
-// 10. Task steps are server-authoritative, ordered, assigned, in range and single-use.
-{
-  const task = TASK_DEFS[0]; // two-step Fix Wiring task
-  const player = makePlayer(0, 'crewmate', task.x, task.y);
-  player.player.assignedTasks = [task.id];
-  const lobby = makeLobby([player.player]);
-  lobby.totalTaskSteps = task.steps;
-  const manager = new LobbyManager();
-
-  assert.equal(manager.applyTaskStep(lobby, 0, task.id + 1, 0), false,
-    'a task not assigned to the player must be rejected');
-  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), false,
-    'a later step cannot be completed before the earlier step');
-  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), true,
-    'the first assigned step succeeds in range');
-  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 0), false,
-    'a completed step cannot be replayed');
-  assert.equal(manager.applyTaskStep(lobby, 0, task.id, 1), true,
-    'the second step succeeds after the first');
-  assert.equal(lobby.phase, 'GAMEOVER', 'completing all task steps ends the round for crew');
-  manager.disposeLobby(lobby);
-
-  const far = makePlayer(0, 'crewmate', 0, 0);
-  far.player.assignedTasks = [task.id];
-  const farLobby = makeLobby([far.player]);
-  farLobby.totalTaskSteps = task.steps;
-  const farManager = new LobbyManager();
-  assert.equal(farManager.applyTaskStep(farLobby, 0, task.id, 0), false,
-    'task completion outside the interaction range must be rejected');
-  farManager.disposeLobby(farLobby);
-}
-
-// 11. Sabotage trigger and repairs enforce roles, range, pad count and resolution.
-{
-  const pads = SABOTAGE_DEFS[SABOTAGE_O2].pads;
-  assert.equal(pads.length, 2, 'O2 sabotage has two independent repair pads');
-  const impostor = makePlayer(0, 'impostor', 100, 100);
-  const crewA = makePlayer(1, 'crewmate', pads[0].x, pads[0].y);
-  const crewB = makePlayer(2, 'crewmate', pads[1].x, pads[1].y);
-  const farCrew = makePlayer(3, 'crewmate', 0, 0);
-  const lobby = makeLobby([impostor.player, crewA.player, crewB.player, farCrew.player]);
-  const manager = new LobbyManager();
-
-  assert.equal(manager.triggerSabotage(lobby, 1, SABOTAGE_O2), false,
-    'crewmates cannot trigger sabotage');
-  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_O2), true,
-    'an impostor can trigger O2 sabotage');
-  assert.equal(manager.applyRepair(lobby, 3, SABOTAGE_O2, 0), 'rejected',
-    'repairing from outside the pad range is rejected');
-  assert.equal(manager.applyRepair(lobby, 0, SABOTAGE_O2, 0), 'rejected',
-    'impostors cannot repair sabotage');
-  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_O2, 0), 'progress',
-    'one O2 pad alone does not resolve critical sabotage');
-  assert.notEqual(lobby.sabotage, null);
-  assert.equal(manager.applyRepair(lobby, 2, SABOTAGE_O2, 1), 'fixed',
-    'a different pad repaired within the sync window resolves O2');
-  assert.equal(lobby.sabotage, null, 'resolved sabotage clears its authoritative state');
-
-  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), false,
-    'the shared sabotage cooldown prevents an immediate second sabotage');
-  lobby.sabotageCooldownMs = 0;
-  assert.equal(manager.triggerSabotage(lobby, 0, SABOTAGE_LIGHTS), true,
-    'the impostor can trigger Lights after cooldown');
-  const lightPad = SABOTAGE_DEFS[SABOTAGE_LIGHTS].pads[0];
-  crewA.player.x = lightPad.x;
-  crewA.player.y = lightPad.y;
-  assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_LIGHTS, 0), 'fixed',
-    'Lights is resolved by one valid repair');
-  assert.equal(lobby.sabotage, null);
-  manager.disposeLobby(lobby);
-}
-
-// 12. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
+// 13. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
 {
   const vent = findVent(0)!;
   const playerA = makePlayer(0, 'impostor', vent.x, vent.y);
@@ -600,4 +515,99 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   manager.disposeLobby(lobby);
 }
 
-console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, sabotage repairs, chat, corpse drops, emergency meeting, kill)');
+// 14. Replacing a player session keeps the old lobby roster current and
+// prevents an obsolete authenticated socket from acting as the same user.
+{
+  const manager = new LobbyManager();
+  const originalHostSocket = fakeSocket();
+  const originalLobby = manager.createLobby(91001, 'OriginalHost', originalHostSocket.ws);
+  const guestSocket = fakeSocket();
+  const joinedOriginal = manager.joinLobby(
+    originalLobby.code, 91002, 'Guest', guestSocket.ws,
+  );
+  assert.equal(joinedOriginal, originalLobby);
+  manager.broadcastRoomUpdate(originalLobby);
+  guestSocket.packets.length = 0;
+
+  const replacementHostSocket = fakeSocket();
+  const replacementLobby = manager.createLobby(
+    91001, 'ReplacementHost', replacementHostSocket.ws,
+  );
+
+  assert.equal(originalLobby.hostSlot, 1, 'moving a host migrates the old lobby host');
+  assert.ok(
+    guestSocket.packets.some(packet => packet[0] === 0x10 && packet[1] === 0x03),
+    'the old lobby receives a room update after host migration',
+  );
+  assert.equal(originalHostSocket.closeCalls, 1, 'the replaced host socket is closed');
+  assert.equal(manager.isCurrentSocket(91001, originalHostSocket.ws), false,
+    'the previous socket loses ownership immediately, before its close handshake completes');
+  assert.equal(manager.isCurrentSocket(91001, replacementHostSocket.ws), true,
+    'the new socket owns the replacement room');
+  assert.equal(
+    manager.removePlayer(91001, originalHostSocket.ws),
+    null,
+    'a delayed close from the replaced socket is ignored',
+  );
+  assert.equal(manager.getLobbyForUser(91001), replacementLobby);
+  assert.equal(replacementLobby.players.get(0)?.ws, replacementHostSocket.ws);
+  manager.disposeLobby(originalLobby);
+  manager.disposeLobby(replacementLobby);
+}
+
+// Moving a user by joining a different room must publish the old-room removal,
+// migrate its host, and close the previous WebSocket just like create-room does.
+{
+  const manager = new LobbyManager();
+  const oldHostSocket = fakeSocket();
+  const oldLobby = manager.createLobby(92001, 'MovingHost', oldHostSocket.ws);
+  const oldGuestSocket = fakeSocket();
+  assert.equal(
+    manager.joinLobby(oldLobby.code, 92002, 'OldGuest', oldGuestSocket.ws),
+    oldLobby,
+  );
+  const targetHostSocket = fakeSocket();
+  const targetLobby = manager.createLobby(92003, 'TargetHost', targetHostSocket.ws);
+  oldGuestSocket.packets.length = 0;
+
+  const movedSocket = fakeSocket();
+  assert.equal(
+    manager.joinLobby(targetLobby.code, 92001, 'MovingHost', movedSocket.ws),
+    targetLobby,
+  );
+  assert.equal(oldLobby.hostSlot, 1);
+  assert.ok(
+    oldGuestSocket.packets.some(packet => packet[0] === 0x10 && packet[1] === 0x03),
+    'the previous lobby receives a roster update when a member joins another room',
+  );
+  assert.equal(oldHostSocket.closeCalls, 1);
+  assert.equal(manager.isCurrentSocket(92001, oldHostSocket.ws), false,
+    'the old socket must not authorize queued actions after moving rooms');
+  assert.equal(manager.isCurrentSocket(92001, movedSocket.ws), true);
+  assert.equal(manager.getLobbyForUser(92001), targetLobby);
+  assert.equal(targetLobby.players.get(1)?.ws, movedSocket.ws);
+  assert.equal(manager.removePlayer(92001, oldHostSocket.ws), null);
+  manager.disposeLobby(oldLobby);
+  manager.disposeLobby(targetLobby);
+}
+
+// Reconnecting into the same waiting room replaces and closes the old socket;
+// its late close event must not remove the newly bound player.
+{
+  const manager = new LobbyManager();
+  const oldSocket = fakeSocket();
+  const lobby = manager.createLobby(93001, 'Reconnect', oldSocket.ws);
+  const newSocket = fakeSocket();
+  assert.equal(manager.joinLobby(lobby.code, 93001, 'Reconnect', newSocket.ws), lobby);
+  assert.equal(oldSocket.closeCalls, 1);
+  assert.equal(manager.isCurrentSocket(93001, oldSocket.ws), false,
+    'reconnecting into the same room invalidates the older socket immediately');
+  assert.equal(manager.isCurrentSocket(93001, newSocket.ws), true);
+  assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
+  assert.equal(manager.removePlayer(93001, oldSocket.ws), null);
+  assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
+  assert.equal(manager.getLobbyForUser(93001), lobby);
+  manager.disposeLobby(lobby);
+}
+
+console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown and kill)');
