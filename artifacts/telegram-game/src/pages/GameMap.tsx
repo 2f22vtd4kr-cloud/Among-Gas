@@ -1318,7 +1318,9 @@ export default function GameMap() {
         fogCtx.globalCompositeOperation = 'source-over';
         fogCtx.filter = 'none';
         fogCtx.clearRect(0, 0, cw, ch);
-        fogCtx.fillStyle = 'rgba(0,0,0,0.96)';
+        // Keep distant rooms dimly legible instead of flattening the map to near-black.
+        // The visibility polygon still strictly enforces radius and wall occlusion.
+        fogCtx.fillStyle = 'rgba(3,8,14,0.86)';
         fogCtx.fillRect(0, 0, cw, ch);
 
         // The visibility polygon ends at either the sight-radius boundary or
@@ -2167,7 +2169,13 @@ export default function GameMap() {
 
       {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
       {loaded && !amIDead && meeting === null && sabotage === null && (
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
+        <div style={{
+          position: 'fixed',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          // Reserve the Settings button's 44px hit area plus a 12px gap.
+          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
+          zIndex: 35,
+        }}>
           <button
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}

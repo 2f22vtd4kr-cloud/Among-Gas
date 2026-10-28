@@ -45,6 +45,18 @@ try {
 
   // Settings own both language and joystick placement; defaults must be right-handed.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  const menuTitle = page.getByRole('heading', { name: 'Among Gas' });
+  const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
+  await menuTitle.waitFor({ state: 'visible' });
+  await menuSettingsButton.waitFor({ state: 'visible' });
+  const menuTitleBox = await menuTitle.boundingBox();
+  const menuSettingsBox = await menuSettingsButton.boundingBox();
+  assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
+  assert.ok(
+    menuSettingsBox.y + menuSettingsBox.height <= menuTitleBox.y ||
+      menuTitleBox.y + menuTitleBox.height <= menuSettingsBox.y,
+    'the Settings button must not overlap the menu title on a mobile viewport',
+  );
   assert.equal(await page.getByRole('button', { name: /Switch to (English|Russian)/ }).count(), 0,
     'language controls must live inside Settings, not the title bar');
   await page.getByRole('button', { name: 'Настройки' }).click();
@@ -91,6 +103,22 @@ try {
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
+
+  // The emergency action and Settings must have independent tap targets on mobile.
+  const emergencyButton = page.getByRole('button', { name: /Тревога/ });
+  const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
+  await emergencyButton.waitFor({ state: 'visible' });
+  await gameplaySettingsButton.waitFor({ state: 'visible' });
+  const emergencyBox = await emergencyButton.boundingBox();
+  const gameplaySettingsBox = await gameplaySettingsButton.boundingBox();
+  assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
+  assert.ok(
+    emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
+      gameplaySettingsBox.x + gameplaySettingsBox.width <= emergencyBox.x ||
+      emergencyBox.y + emergencyBox.height <= gameplaySettingsBox.y ||
+      gameplaySettingsBox.y + gameplaySettingsBox.height <= emergencyBox.y,
+    'Emergency and Settings must not overlap on a mobile viewport',
+  );
 
   // Tactical map: rendered over the custom Among Gas map and safely dismissible.
   await page.getByRole('button', { name: /КАРТА/ }).click();
