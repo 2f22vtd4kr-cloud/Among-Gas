@@ -1,7 +1,7 @@
 /**
  * CrewmateBot — AI agent for crewmate-role bots.
  *
- * Priority loop (every 100ms while ROAMING):
+ * Priority loop (every 200ms while ROAMING):
  *   1. Sabotage active  → navigate to nearest repair pad → repair
  *   2. Dead body nearby → call meeting (report it)
  *   3. Incomplete task  → navigate to task console → complete steps
@@ -20,7 +20,7 @@ import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
-const TASK_DWELL_TICKS = 10; // 10 × 100ms = 1s per task step
+const TASK_DWELL_TICKS = 2; // 2 × 200ms = 400ms per task step
 
 export class CrewmateBot extends BotAgent {
   /** Current target task ID (null = none selected yet). */

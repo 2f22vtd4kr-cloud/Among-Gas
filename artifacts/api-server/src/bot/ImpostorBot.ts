@@ -45,7 +45,7 @@ const ISOLATION_THRESHOLD_PX = 300;
 const HUNT_ACQUIRE_THRESHOLD_PX = -150;
 
 /**
- * Sabotage trigger interval: ~60s = 600 × 100ms ticks.
+ * Sabotage trigger interval: ~60s = 300 × 200ms ticks.
  * (SINGLE_PLAY.md §9 Phase E tuning notes: this was raised to 450 in an
  * earlier pass of the same session, then reverted back to 300 after a
  * separate correctness fix — ejected crewmates also drop their incomplete
@@ -54,10 +54,10 @@ const HUNT_ACQUIRE_THRESHOLD_PX = -150;
  * back in the 55/45±10% target band; see SINGLE_PLAY.md for the full
  * measurement history before changing this again.)
  */
-const SABOTAGE_INTERVAL_TICKS = 600;
+const SABOTAGE_INTERVAL_TICKS = 300;
 
 /** How many ticks to linger at a fake task console before moving on. */
-const FAKE_DWELL_TICKS = 6;
+const FAKE_DWELL_TICKS = 3;
 /** Crewmate tasks the impostor pretends to work at (for faking cover). */
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
 
@@ -105,7 +105,7 @@ export class ImpostorBot extends BotAgent {
     if (this._sabotageCountdown <= 0) {
       this._trySabotage(lobby, self, manager);
       this._sabotageCountdown = SABOTAGE_INTERVAL_TICKS +
-        Math.floor(Math.random() * 120); // add 0–12s jitter at 10Hz
+        Math.floor(Math.random() * 60); // add 0–12s jitter at 5Hz
     }
 
     // Transition to HUNTING if cooldown is ready and we were FAKING/COOLDOWN
@@ -330,14 +330,14 @@ export class ImpostorBot extends BotAgent {
     if (arrived) {
       if (manager.enterVent(lobby, self.slot, vent.id)) {
         this._ventMode = 'inside';
-        this._ventTicksRemaining = 12 + Math.floor(Math.random() * 12);
+        this._ventTicksRemaining = 6 + Math.floor(Math.random() * 6);
         this._ventTravelled = false;
         return true;
       }
       this._finishVentAttempt();
       return false;
     }
-    if (this._ventApproachTicks >= 50) {
+    if (this._ventApproachTicks >= 25) {
       // Do not sacrifice the rest of the impostor's turn to an unreachable vent.
       this._finishVentAttempt();
       return false;

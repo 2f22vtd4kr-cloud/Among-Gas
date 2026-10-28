@@ -7,7 +7,7 @@
  *
  * Acceleration strategy: games run genuinely concurrently (`concurrency`
  * at a time) inside ONE LobbyManager, sharing its existing 25Hz delta /
- * 10Hz bot-tick loops. A batch of 50 games therefore finishes in roughly the
+ * 5Hz bot-tick loops. A batch of 50 games therefore finishes in roughly the
  * wall-clock time of ONE game, not 50× that — without touching any of the
  * live game's Date.now()/setTimeout-based timing internals (meeting
  * countdowns, sabotage countdowns, kill cooldowns), which stay byte-for-byte
