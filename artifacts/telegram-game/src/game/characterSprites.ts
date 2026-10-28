@@ -44,7 +44,7 @@ export const CHARACTER_POSES = [
   "ghost",
   "mask",
   "hold-item",
-  "sit-hug-knees",
+  "dead-body",       // row 7 — existing cut-body sprite with exposed bone
   "sit-crouch",     // row 8 — was missing; caused row bleed ghost artifact
 ] as const;
 export type CharacterPose = (typeof CHARACTER_POSES)[number];
