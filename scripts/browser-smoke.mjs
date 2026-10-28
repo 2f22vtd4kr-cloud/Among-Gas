@@ -158,13 +158,13 @@ try {
 
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
-  await page.getByText('Clean Filters', { exact: true }).waitFor({ state: 'visible' });
-  const dirtyFilter = page.getByRole('button', { name: /Dirty filter/ });
+  await page.getByText('Почистить фильтры', { exact: true }).waitFor({ state: 'visible' });
+  const dirtyFilter = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await dirtyFilter.first().click();
-  await page.getByText('Step 2 of 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
-  const secondStepDirty = page.getByRole('button', { name: /Dirty filter/ });
+  await page.getByText('Шаг 2 из 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
+  const secondStepDirty = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
-  await page.getByRole('button', { name: 'Close' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  await page.getByRole('button', { name: 'Закрыть' }).waitFor({ state: 'hidden', timeout: 5_000 });
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
   await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
@@ -254,7 +254,7 @@ try {
   await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('button', { name: /Саботаж/ }).click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
-  for (const system of ['Lights', 'O₂', 'Reactor', 'Comms', 'Doors']) {
+  for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
     await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
