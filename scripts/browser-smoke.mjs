@@ -1,15 +1,17 @@
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-
-const modulePath = process.env.PLAYWRIGHT_MODULE;
-if (!modulePath) throw new Error('PLAYWRIGHT_MODULE must point to the installed Playwright ESM entry');
-const { chromium } = await import(pathToFileURL(modulePath).href);
+import { chromium } from 'playwright-core';
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
 const visualQaDir = process.env.VISUAL_QA_DIR ?? '/tmp/among-gas-visual-qa';
 mkdirSync(visualQaDir, { recursive: true });
-const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--no-sandbox'] });
+const browser = await chromium.launch({
+  headless: true,
+  ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+    ? { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH }
+    : { channel: 'chrome' }),
+  args: ['--no-sandbox'],
+});
 const failures = [];
 
 // Playing fixtures trigger the same 3.2-second role reveal as a real match.
@@ -229,9 +231,11 @@ try {
   assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
     'no role-reveal title may remain visible over the kill animation');
   await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
-  // Capture the actual strike aftermath, not the initial frame before the sprites move.
-  await page.waitForTimeout(1_000);
-  await page.locator('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]').waitFor({ state: 'visible' });
+  // Capture the strike while the transient 1.65s scene is still mounted.
+  await page.waitForFunction(() => {
+    const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
+    return body && Number.parseFloat(getComputedStyle(body).opacity) > 0.25;
+  }, undefined, { timeout: 1_400 });
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });

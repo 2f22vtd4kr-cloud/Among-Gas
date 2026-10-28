@@ -1494,3 +1494,24 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary source changes or mock state; mock routes are enabled only by query parameters in development.
+
+### 2026-10-28 — Browser QA and bot baseline
+
+**Done**
+- Added a repeatable Playwright browser-smoke command using the installed Chromium binary; the test now captures the transient kill scene before it closes.
+- Ran the mobile browser suite at portrait, landscape-phone, and desktop sizes. Lobby language, task completion, map, kill/report, meetings, sabotage, and victim-only kill animation all passed.
+- Ran 100 bot matches with five bots and one impostor: zero timeouts, 69 crew wins, 31 impostor wins, averaging 11 task steps per completed match.
+- Reviewed the optional `AmongGas` repository. Its `LICENSE` releases the assets into the public domain; it includes colored dead-body art, directional ghost sprites, and the classic red-swipe kill frames.
+- Captured initial screenshots confirming the left-side joystick, static ghost, small corpse rendering, and hard-edged sight boundary.
+
+**Decisions & gotchas**
+- The kill overlay is transient, so screenshot tests must synchronize with the animation rather than wait after its final text appears.
+- Keep the test-only `VITE_ENABLE_GAME_MOCKS` setting out of commits and production configuration.
+
+**Left off / next steps**
+- Add a settings menu for language and joystick placement, default the joystick to the right, refine collision/shadow separation, and replace the corpse, kill, and ghost movement visuals.
+- Re-run browser smoke and bot simulations after gameplay geometry changes.
+
+**State to restore**
+- Remove the temporary `VITE_ENABLE_GAME_MOCKS=true` QA setting from the artifact manifest after screenshot-based testing.
+- Leave the game web and API workflows running.

@@ -6,10 +6,12 @@
   "scripts": {
     "hello": "tsx ./src/hello.ts",
     "test:pathfinding": "tsx ./src/testPathfinding.ts",
+    "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "playwright-core": "^1.64.1",
     "tsx": "catalog:"
   },
   "dependencies": {
