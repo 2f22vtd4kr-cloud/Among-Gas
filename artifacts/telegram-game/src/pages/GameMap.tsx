@@ -57,6 +57,7 @@ import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/s
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
+import { useGameSettings } from '../lib/gameSettings';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -184,6 +185,7 @@ const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
   const { language } = useLanguage();
+  const { joystickSide } = useGameSettings();
   const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
@@ -1988,8 +1990,11 @@ export default function GameMap() {
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
-          // Keep the action prompt in the HUD band, not on top of the player sprite.
-          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 82px)', left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+          // Keep the action prompt opposite the movement control and clear of the player sprite.
+          position: 'fixed', bottom: 210,
+          left: joystickSide === 'right' ? 16 : 'auto',
+          right: joystickSide === 'left' ? 16 : 'auto',
+          zIndex: 25,
         }}>
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
