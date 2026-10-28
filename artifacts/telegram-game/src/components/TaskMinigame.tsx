@@ -373,7 +373,7 @@ function GarbageGame({ onComplete }: { stepIndex: number; onComplete: () => void
       <div style={{ width: 'min(280px,80vw)', height: 7, borderRadius: 9, background: 'rgba(0,0,0,0.45)', overflow: 'hidden' }}>
         <div style={{ height: '100%', width: `${cleared / 6 * 100}%`, background: '#68d9a0', transition: 'width 80ms linear' }} />
       </div>
-      <p style={helpStyle}>{dragging ? 'Pull the lever all the way down…' : 'Touch the lever and drag it down to empty the chute'}</p>
+      <p style={helpStyle}>{dragging ? (en ? 'Pull the lever all the way down…' : 'Потяните рычаг до упора вниз…') : (en ? 'Touch the lever and drag it down to empty the chute' : 'Потяните рычаг вниз, чтобы опустошить жёлоб')}</p>
     </div>
   );
 }
