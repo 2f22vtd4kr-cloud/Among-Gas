@@ -109,7 +109,8 @@ function canTraverse(from: Point, to: Point): boolean {
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
 export const BOT_SPEED_PX = 80;
 /** Living bots tick at 10Hz, so use half the legacy 200ms step each tick. */
-export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
+// Match the human player's roughly 200px/s walk speed on the custom map.
+export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 4;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 const ARRIVAL_SQ = 25 * 25;
