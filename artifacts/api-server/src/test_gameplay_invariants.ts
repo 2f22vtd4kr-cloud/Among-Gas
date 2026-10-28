@@ -576,7 +576,7 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   assert.equal(crewmate.player.alive, true,
     'impostor bot must not kill during the opening grace period');
 
-  lobby.startedAtMs = Date.now() - 6000;
+  lobby.startedAtMs = Date.now() - 9000;
   bot.roamingTick(lobby, impostor.player, manager);
   assert.equal(crewmate.player.alive, false,
     'impostor bot may kill normally once the opening grace period has elapsed');
