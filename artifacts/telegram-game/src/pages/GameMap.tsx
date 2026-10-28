@@ -157,8 +157,8 @@ function CharSpriteUI({
         position: 'relative', width: size, height, flexShrink: 0, overflow: 'hidden',
         transform: flipped ? 'scaleX(-1)' : undefined,
       }}>
-        <div style={{ ...layerStyle, clipPath: 'inset(0 0 26% 0)', transform: 'translateY(8%)' }} />
-        <div style={{ ...layerStyle, clipPath: 'inset(74% 0 0 0)', transform: 'translateY(-8%)' }} />
+        <div style={{ ...layerStyle, clipPath: 'inset(0 0 34% 0)', transform: 'translateY(8%)' }} />
+        <div style={{ ...layerStyle, clipPath: 'inset(74% 0 0 0)', transform: 'translateY(-23%)' }} />
       </div>
     );
   }
@@ -1117,7 +1117,7 @@ export default function GameMap() {
         // helmet fragment upward to close the exaggerated gap in the source cell.
         ctx.save();
         ctx.beginPath();
-        ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.74);
+        ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.58);
         ctx.clip();
         ctx.drawImage(
           sprite, sx, sy, sw, sh,
@@ -1126,7 +1126,7 @@ export default function GameMap() {
         ctx.restore();
         ctx.drawImage(
           sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
-          corpseX, corpseY + corpseH * 0.66, corpseW, corpseH * 0.26,
+          corpseX, corpseY + corpseH * 0.48, corpseW, corpseH * 0.26,
         );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
