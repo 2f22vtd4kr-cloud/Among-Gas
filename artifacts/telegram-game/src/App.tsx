@@ -20,7 +20,7 @@ function GameRouter() {
   return (
     <Switch>
       {/* Collision editor is strictly development-only, never a player-facing route. */}
-      {import.meta.env.DEV && <Route path="/collision-editor" component={CollisionEditor} />}
+      {import.meta.env.VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="/collision-editor" component={CollisionEditor} />}
       {/* Game map only when actively playing */}
       <Route path="/game">
         {phase === 'playing' ? <GameMap /> : <Lobby />}
