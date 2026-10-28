@@ -177,6 +177,8 @@ export interface SabotageState {
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
+  /** Wall-clock start time used to prevent bots from instantly killing at spawn. */
+  startedAtMs?: number;
   /** slot → player */
   players: Map<number, LobbyPlayer>;
   /** tgUserId → slot (fast reverse lookup) */
@@ -954,6 +956,7 @@ export class LobbyManager {
       }
     }
 
+    lobby.startedAtMs = Date.now();
     lobby.phase = 'ROAMING';
     logger.info(
       `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +
