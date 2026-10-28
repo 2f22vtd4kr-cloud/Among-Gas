@@ -120,7 +120,7 @@ function slotColor(slot: number): CharacterColor {
 // ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
 const _POSE_ROW: Record<string, number> = {
   idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'sit-hug-knees': 7, 'sit-crouch': 8,
+  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
 };
 const _SHEET_COLS = 7;
 const _SHEET_PX_W = CHARACTER_CELL_WIDTH * _SHEET_COLS;
@@ -1052,70 +1052,29 @@ export default function GameMap() {
       ctx.restore();
 
       // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      // Among Gas's balaclava character art is retained, but only the lower half
-      // remains after a kill. The bone rises from the cut edge; it is not drawn
-      // over a complete standing character. This marker is visual only.
-      const corpseMarkerSize = Math.max(8, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+      // Use the dedicated row-7 Among Gas corpse sprite: it already contains
+      // the cut suit, exposed bone, wound and ground contact. Never synthesize
+      // a corpse by cropping an upright living character or drawing a fake bone.
       ctx.save();
       for (const body of corpsePositionsRef.current) {
         const bx = Math.round((body.x - srcX) * scale);
         const by = Math.round((body.y - srcY) * scale);
         if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
-        const corpseW = Math.max(8, Math.round(PLAYER_DISPLAY_WIDTH * scale));
-        const corpseH = corpseMarkerSize;
-        const rect = getCharacterFrameRect(slotColor(body.slot), 'idle');
+        const corpseW = Math.max(12, Math.round(PLAYER_DISPLAY_WIDTH * scale));
+        const corpseH = Math.max(12, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+        const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
         const sx = Math.ceil(rect.x);
         const sy = Math.ceil(rect.y);
         const sw = Math.floor(rect.x + rect.width) - sx;
         const sh = Math.floor(rect.y + rect.height) - sy;
-        const splitY = Math.floor(sh * 0.52);
-        const lowerHeight = Math.max(1, sh - splitY);
 
-        // The original sprite faces up. Rotate the lower half onto its side so
-        // the remaining legs extend from the cut point, with a subtle stain below.
         ctx.save();
-        ctx.translate(bx, by);
-        ctx.rotate(-Math.PI / 2 - 0.12);
-        ctx.beginPath();
-        ctx.ellipse(0, corpseH * 0.1, corpseW * 0.48, corpseH * 0.12, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(104, 18, 24, 0.42)';
-        ctx.fill();
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
-          sprite, sx, sy + splitY, sw, lowerHeight,
-          -corpseW / 2, 0, corpseW, corpseH / 2,
+          sprite, sx, sy, sw, sh,
+          bx - corpseW / 2, by - corpseH / 2, corpseW, corpseH,
         );
         ctx.imageSmoothingEnabled = true;
-        ctx.restore();
-
-        // Keep the exposed bone upright on screen, perpendicular to the body.
-        ctx.save();
-        ctx.translate(bx, by);
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = 'rgba(20, 12, 12, 0.92)';
-        ctx.lineWidth = Math.max(3, dpr * 4);
-        ctx.beginPath();
-        ctx.moveTo(0, 1);
-        ctx.lineTo(0, -corpseW * 0.46);
-        ctx.stroke();
-        ctx.strokeStyle = '#f5ead2';
-        ctx.lineWidth = Math.max(2, dpr * 2.5);
-        ctx.beginPath();
-        ctx.moveTo(0, 1);
-        ctx.lineTo(0, -corpseW * 0.46);
-        ctx.stroke();
-        for (const [boneX, boneY] of [
-          [-corpseW * 0.07, -corpseW * 0.40],
-          [ corpseW * 0.07, -corpseW * 0.40],
-          [-corpseW * 0.07, -corpseW * 0.47],
-          [ corpseW * 0.07, -corpseW * 0.47],
-        ]) {
-          ctx.beginPath();
-          ctx.arc(boneX, boneY, Math.max(2, dpr * 2), 0, Math.PI * 2);
-          ctx.fillStyle = '#f5ead2';
-          ctx.fill();
-        }
         ctx.restore();
       }
       ctx.restore();
