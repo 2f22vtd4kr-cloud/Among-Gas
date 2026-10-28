@@ -188,6 +188,11 @@ assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameM
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
+assert.match(gameMapSource, /sprite,\s*sx,\s*sy \+ splitY,\s*sw,\s*lowerHeight/, 'A corpse must render only the lower half of the balaclava sprite');
+assert.match(gameMapSource, /lastKill\.victimSlot !== mySlot/, 'Only the victim should receive the full-screen kill sequence');
+assert.match(gameMapSource, /sfx\('footstep'/, 'Local walking must trigger footsteps');
+assert.match(gameMapSource, /sfx\('taskComplete'/, 'Task completion must trigger its sound cue');
+assert.match(gameMapSource, /sfx\(meeting\.bodySlot === NO_TARGET \? 'meeting' : 'bodyReport'/, 'Body reports and emergency meetings must have distinct sound cues');
 assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\/collision-editor"/, 'Collision editor route must be development-only');
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
