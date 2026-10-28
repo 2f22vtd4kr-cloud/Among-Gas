@@ -369,11 +369,13 @@ try {
     const context = canvas.getContext('2d');
     if (!context) return null;
     const cx = Math.floor(canvas.width / 2);
-    const cy = Math.floor(canvas.height / 2);
-    const left = Math.max(0, cx - 56);
-    const top = Math.max(0, cy - 72);
-    const width = Math.min(112, canvas.width - left);
-    const height = Math.min(144, canvas.height - top);
+    // The camera anchors the player at mid-screen; use a tall region around
+    // that anchor to include the full sprite on both DPR-1 and DPR-2 runners.
+    const cy = Math.floor(canvas.height * 0.54);
+    const left = Math.max(0, cx - 80);
+    const top = Math.max(0, cy - 120);
+    const width = Math.min(160, canvas.width - left);
+    const height = Math.min(240, canvas.height - top);
     return [...context.getImageData(left, top, width, height).data];
   });
   const ghostFrameBefore = await readLocalGhostPixels();
