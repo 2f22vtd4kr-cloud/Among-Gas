@@ -272,7 +272,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS) &&
+        canMoveToPlayer(grid, x, y + FEET_OFFSET_Y) &&
         isSpawnReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
