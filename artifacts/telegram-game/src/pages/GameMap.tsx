@@ -141,7 +141,27 @@ function CharSpriteUI({
   const bgH   = _SHEET_PX_H * scale;
   const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
   const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
-  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.94); // trim only the bottommost ground-shadow pixels
+  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * (pose === 'dead-body' ? 1 : 0.94));
+
+  // The authored corpse cell places its detached helmet fragment far below the
+  // cut suit. Recompose the two visible parts toward the center so the body reads
+  // as one corpse at both map scale and the enlarged kill-screen scale.
+  if (pose === 'dead-body') {
+    const layerStyle: React.CSSProperties = {
+      position: 'absolute', inset: 0, backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+      backgroundSize: `${bgW}px ${bgH}px`, backgroundPosition: `${posX}px ${posY}px`,
+      backgroundRepeat: 'no-repeat', imageRendering: 'pixelated',
+    };
+    return (
+      <div style={{
+        position: 'relative', width: size, height, flexShrink: 0, overflow: 'hidden',
+        transform: flipped ? 'scaleX(-1)' : undefined,
+      }}>
+        <div style={{ ...layerStyle, clipPath: 'inset(0 0 26% 0)', transform: 'translateY(8%)' }} />
+        <div style={{ ...layerStyle, clipPath: 'inset(74% 0 0 0)', transform: 'translateY(-8%)' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -1090,9 +1110,23 @@ export default function GameMap() {
 
         ctx.save();
         ctx.imageSmoothingEnabled = false;
+        const corpseX = bx - corpseW / 2;
+        const corpseY = by - corpseH / 2;
+        const helmetSplitY = sy + Math.round(sh * 0.74);
+        // Keep the suit and bone in the upper layer, then move the detached
+        // helmet fragment upward to close the exaggerated gap in the source cell.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.74);
+        ctx.clip();
         ctx.drawImage(
           sprite, sx, sy, sw, sh,
-          bx - corpseW / 2, by - corpseH / 2, corpseW, corpseH,
+          corpseX, corpseY + corpseH * 0.08, corpseW, corpseH,
+        );
+        ctx.restore();
+        ctx.drawImage(
+          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
+          corpseX, corpseY + corpseH * 0.66, corpseW, corpseH * 0.26,
         );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
