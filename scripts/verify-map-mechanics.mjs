@@ -181,7 +181,7 @@ assert.match(sabotageSource, /IMPOSTOR_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMA
 assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* LIGHTS_VISION_SCALE\)/, 'Lights sabotage must reduce crew vision');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
-assert.match(gameMapSource, /canMoveTo\(grid,/, 'Movement must continue to use the original collision grid');
+assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
 assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
 const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
