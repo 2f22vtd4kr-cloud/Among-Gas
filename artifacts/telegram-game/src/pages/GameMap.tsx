@@ -1458,7 +1458,7 @@ export default function GameMap() {
               }}>
                 <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
               </div>
-              <div className="ag-kill-victim-lower" style={{
+              <div className="ag-kill-victim-lower" role="img" aria-label="Balaclava corpse with exposed bone" style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>

@@ -246,7 +246,9 @@ try {
   assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
     'no role-reveal title may remain visible over the kill animation');
   await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
-  await page.waitForTimeout(80);
+  // Capture the actual strike aftermath, not the initial frame before the sprites move.
+  await page.waitForTimeout(1_000);
+  await page.locator('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]').waitFor({ state: 'visible' });
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
