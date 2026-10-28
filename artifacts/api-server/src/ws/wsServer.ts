@@ -152,6 +152,19 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
 
       // ── Phase 2+: game opcodes ────────────────────────────────────────────
       if (raw.length < 1) return;
+
+      // A replaced WebSocket may have gameplay messages queued before its close
+      // handshake completes. Do not resolve actions from userId alone: that ID
+      // may now belong to a different socket in a new room.
+      if (ws.tgUserId !== undefined && !lobbyManager.isCurrentSocket(ws.tgUserId, ws)) {
+        logger.info(
+          { userId: ws.tgUserId },
+          '[WS] Rejected message from a replaced player session',
+        );
+        if (ws.readyState === ws.OPEN) ws.close(1000, 'Replaced by a newer session');
+        return;
+      }
+
       const opcode = raw.readUInt8(0);
 
       // ── 0x10: Lobby Control ───────────────────────────────────────────────
