@@ -686,8 +686,30 @@ export class LobbyManager {
 
   // ── Create ───────────────────────────────────────────────────────────────
 
+  /**
+   * Move an authenticated user to a new lobby/session without leaving the
+   * previous lobby's roster stale. removePlayer() performs host migration and
+   * may tear down the old lobby; if players remain, publish the roster change.
+   * Close the replaced socket only after removing its membership so its later
+   * close event is rejected by the socket-identity guard in removePlayer().
+   */
+  private detachForReplacement(tgUserId: number, replacementWs: WebSocket): void {
+    const currentLobby = this.getLobbyForUser(tgUserId);
+    const currentSlot = currentLobby?.userIdToSlot.get(tgUserId);
+    const previousWs = currentSlot === undefined
+      ? undefined
+      : currentLobby?.players.get(currentSlot)?.ws;
+
+    const remainingLobby = this.removePlayer(tgUserId, previousWs);
+    if (remainingLobby) this.broadcastRoomUpdate(remainingLobby);
+
+    if (previousWs && previousWs !== replacementWs && previousWs.readyState === 1) {
+      previousWs.close(1000, 'Replaced by a newer session');
+    }
+  }
+
   createLobby(tgUserId: number, username: string, ws: WebSocket): Lobby {
-    this.removePlayer(tgUserId);
+    this.detachForReplacement(tgUserId, ws);
 
     const code = this.freshCode();
     const hostPlayer: LobbyPlayer = {
@@ -760,20 +782,25 @@ export class LobbyManager {
     if (!lobby) return 'not_found';
     if (lobby.phase !== 'WAITING') return 'in_progress';
 
-    // Rejoin: same user already in this lobby
+    // Rejoin: same user already in this lobby. The older authenticated
+    // socket must not remain capable of sending actions as this same user.
     if (lobby.userIdToSlot.has(tgUserId)) {
       const slot = lobby.userIdToSlot.get(tgUserId)!;
       const existing = lobby.players.get(slot)!;
+      const previousWs = existing.ws;
       existing.ws = ws;
-      this.userToLobbyMap.set(tgUserId, roomCode);
-      logger.info(`[Lobby] Rejoin ${roomCode} — ${username} (slot=${slot})`);
+      this.userToLobbyMap.set(tgUserId, lobby.code);
+      if (previousWs !== ws && previousWs.readyState === 1) {
+        previousWs.close(1000, 'Replaced by a newer session');
+      }
+      logger.info(`[Lobby] Rejoin ${lobby.code} — ${username} (slot=${slot})`);
       return lobby;
     }
 
     const slot = this.nextFreeSlot(lobby);
     if (slot === null) return 'full';
 
-    this.removePlayer(tgUserId);
+    this.detachForReplacement(tgUserId, ws);
 
     const player: LobbyPlayer = {
       slot, tgUserId, username, ws,
