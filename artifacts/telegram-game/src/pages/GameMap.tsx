@@ -935,9 +935,10 @@ export default function GameMap() {
             ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
-            ctx.strokeText(def.name, tx, ty + markerR + 3);
+            const taskLabel = taskRu(def.name, language);
+            ctx.strokeText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(locked ? `🔒 ${def.name}` : def.name, tx, ty + markerR + 3);
+            ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
           }
           // Off-screen task compass: points towards the selected task (or the next
           // unfinished one). Coordinates are clamped in canvas pixels, so it works
@@ -1022,7 +1023,8 @@ export default function GameMap() {
               ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
               ctx.strokeStyle = 'rgba(0,0,0,0.85)';
               ctx.lineWidth = Math.round(3 * dpr);
-              const label = def.pads.length > 1 ? `${def.name} ${padId + 1}` : def.name;
+              const translatedName = sabotageRu(def.name, language);
+              const label = def.pads.length > 1 ? `${translatedName} ${padId + 1}` : translatedName;
               ctx.strokeText(label, tx, ty + markerR + 3);
               ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
               ctx.fillText(label, tx, ty + markerR + 3);
@@ -1986,7 +1988,8 @@ export default function GameMap() {
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
-          position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+          // Keep the action prompt in the HUD band, not on top of the player sprite.
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 82px)', left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
@@ -2150,7 +2153,7 @@ export default function GameMap() {
                 letterSpacing: '0.03em', cursor: 'pointer',
               }}
             >
-              {def.name}
+              {sabotageRu(def.name, language)}
             </button>
           ))}
           <button
