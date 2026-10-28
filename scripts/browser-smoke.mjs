@@ -23,6 +23,16 @@ try {
     return route.abort();
   });
 
+  // Language preference must work in the actual lobby and persist between screens.
+  await page.goto(`${origin}/?mock=lobby-host`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
+  assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
+    'the obsolete Telegram mini-game subtitle must not be shown');
+  await page.getByRole('button', { name: 'Switch to Russian' }).click();
+  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).waitFor({ state: 'visible' });
+
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
@@ -112,6 +122,18 @@ try {
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
 
+  // The victim gets the full-screen kill sequence; the attacker must not.
+  await page.goto(`${origin}/?mock=kill-animation-victim`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
+  await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
+  await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+
+  await page.goto(`${origin}/?mock=kill-animation-attacker`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
+    'the attacker should see gameplay, not the victim-only full-screen kill animation');
+
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -159,7 +181,9 @@ try {
     ok: true,
     viewport: '390×844, DPR 2 (mobile)',
     checks: [
+      'English/Russian lobby toggle works and persists; obsolete Telegram subtitle is absent',
       'custom map rendered',
+      'victim-only full-screen kill animation is triggered correctly', 
       'tactical map opens and closes',
       'tactical map freezes movement',
       'two-step Clean Filters task completes and resets correctly',
