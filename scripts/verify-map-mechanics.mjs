@@ -22,6 +22,11 @@ const gameMapSource = read('artifacts/telegram-game/src/pages/GameMap.tsx');
 const visibilitySource = read('artifacts/telegram-game/src/game/visibility.ts');
 const indexHtml = read('artifacts/telegram-game/index.html');
 const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
+const appSource = read('artifacts/telegram-game/src/App.tsx');
+const uiLobbySource = read('artifacts/telegram-game/src/pages/Lobby.tsx');
+const languageSource = read('artifacts/telegram-game/src/lib/language.ts');
+const impostorBotSource = read('artifacts/api-server/src/bot/ImpostorBot.ts');
+const gameplayInvariantSource = read('artifacts/api-server/src/test_gameplay_invariants.ts');
 const lobbySource = read('artifacts/api-server/src/ws/lobby.ts');
 
 const cols = num(collisionData, 'COLS');
@@ -182,6 +187,12 @@ assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
+assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \\[C\\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
+assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\\/collision-editor"/, 'Collision editor route must be development-only');
+assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
+assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
+assert.match(impostorBotSource, /BOT_OPENING_GRACE_MS = 8_000/, 'AI impostor must respect the opening grace period');
+assert.match(gameplayInvariantSource, /must not kill during the opening grace period/, 'Opening grace must have a gameplay regression test');
 assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
 assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
 const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
