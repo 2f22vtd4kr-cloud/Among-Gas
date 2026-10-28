@@ -230,7 +230,12 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
   await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
+  assert.equal(await page.getByText(/^(ваша роль|your role)$/i).count(), 0,
+    'the opening role reveal must not cover the kill-animation fixture');
+  assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
+    'no role-reveal title may remain visible over the kill animation');
   await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+  await page.waitForTimeout(80);
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });

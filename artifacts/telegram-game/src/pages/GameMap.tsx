@@ -2443,7 +2443,7 @@ export default function GameMap() {
       )}
 
       {/* ── Role reveal overlay (Phase 4) — Among Gas styled ────────────────── */}
-      {showReveal && myRole && (() => {
+      {showReveal && myRole && !skipMockReveal && (() => {
         const isImp  = myRole === 'impostor';
         const accent = isImp ? '#ff3344' : '#4dcdff';
         const outline = '-4px -4px 0 #000,4px -4px 0 #000,-4px 4px 0 #000,4px 4px 0 #000,-4px 0 0 #000,4px 0 0 #000,0 -4px 0 #000,0 4px 0 #000';
