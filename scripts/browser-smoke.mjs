@@ -336,7 +336,17 @@ try {
   await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  await page.getByText(/Вы мертвы — режим призрака/).waitFor({ state: 'visible', timeout: 10_000 });
+  const ghostBanner = page.getByText(/Вы мертвы — режим призрака/);
+  await ghostBanner.waitFor({ state: 'visible', timeout: 10_000 });
+  const taskListToggle = page.getByRole('button', { name: /ЗАДАНИЯ/ });
+  const ghostBannerBox = await ghostBanner.boundingBox();
+  const taskListBox = await taskListToggle.boundingBox();
+  assert.ok(ghostBannerBox && taskListBox, 'ghost banner and task toggle must be measurable');
+  assert.ok(
+    ghostBannerBox.x + ghostBannerBox.width <= taskListBox.x || taskListBox.x + taskListBox.width <= ghostBannerBox.x ||
+      ghostBannerBox.y + ghostBannerBox.height <= taskListBox.y || taskListBox.y + taskListBox.height <= ghostBannerBox.y,
+    'ghost banner must not overlap the task-list toggle',
+  );
   await page.waitForTimeout(450);
   await page.screenshot({ path: join(visualQaDir, 'ghost-mode.png'), fullPage: true });
 
@@ -344,6 +354,16 @@ try {
   await page.goto(`${origin}/?mock=sabotage-lights`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  const lightsBanner = page.getByText(/саботирован/);
+  await lightsBanner.waitFor({ state: 'visible', timeout: 10_000 });
+  const lightsBannerBox = await lightsBanner.boundingBox();
+  const lightsTaskListBox = await page.getByRole('button', { name: /ЗАДАНИЯ/ }).boundingBox();
+  assert.ok(lightsBannerBox && lightsTaskListBox, 'sabotage banner and task toggle must be measurable');
+  assert.ok(
+    lightsBannerBox.x + lightsBannerBox.width <= lightsTaskListBox.x || lightsTaskListBox.x + lightsTaskListBox.width <= lightsBannerBox.x ||
+      lightsBannerBox.y + lightsBannerBox.height <= lightsTaskListBox.y || lightsTaskListBox.y + lightsTaskListBox.height <= lightsBannerBox.y,
+    'sabotage banner must not overlap the task-list toggle',
+  );
   await page.waitForTimeout(250);
   await page.screenshot({ path: join(visualQaDir, 'vision-lights.png'), fullPage: true });
 
