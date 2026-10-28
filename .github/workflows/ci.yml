@@ -84,7 +84,7 @@ jobs:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
           VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
         run: |
-          nohup pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          nohup env VITE_ENABLE_GAME_MOCKS=true pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
             sleep 1
