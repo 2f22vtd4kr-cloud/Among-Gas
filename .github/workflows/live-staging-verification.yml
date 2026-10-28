@@ -1,0 +1,59 @@
+name: Live staging verification
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/live-staging-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-staging:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GAME_URL: https://c0ee5bc5-6e51-48f6-a8f1-60d6502e3bc2-00-19coy7mmkojdl.kirk.replit.dev
+      WS_URL: wss://c0ee5bc5-6e51-48f6-a8f1-60d6502e3bc2-00-19coy7mmkojdl.kirk.replit.dev/api/ws
+      PORT: 5173
+      BASE_PATH: /
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.6.5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build and typecheck current canonical source
+        run: pnpm run build
+
+      - name: Verify live Replit API health
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --retry 3 --retry-delay 2 --max-time 15 "$GAME_URL/api/healthz"
+
+      - name: Verify live three-client WebSocket gameplay
+        run: node test_sabotage.mjs
+
+      - name: Install Playwright and Chrome
+        run: |
+          npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
+          node /tmp/among-gas-playwright/node_modules/playwright/cli.js install --with-deps chrome
+
+      - name: Run real browser smoke against the live Replit preview
+        env:
+          PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
+        run: node scripts/browser-smoke.mjs
