@@ -3,11 +3,9 @@ import { haptic } from '../lib/haptics';
 import { sfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
-  COLS, ROWS, CELL_X, CELL_Y,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
-  ZONES,
 } from '../game/collisionMap';
 import {
   createInitialPlayerState,
@@ -176,12 +174,7 @@ export default function GameMap() {
 
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
-  const [showCollision, setShowCollision] = useState(false);
-  const [hoverZone,    setHoverZone]    = useState<string | null>(null);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
-
-  const showCollisionRef = useRef(false);
-  useEffect(() => { showCollisionRef.current = showCollision; }, [showCollision]);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -672,16 +665,6 @@ export default function GameMap() {
     };
   }, []);
 
-  // ── Keyboard shortcut 'C' → toggle collision overlay ──────────────────────
-  useEffect(() => {
-    if (!loaded) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'c' || e.key === 'C') setShowCollision(prev => !prev);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [loaded]);
-
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const playerStateRef = useRef(createInitialPlayerState());
 
@@ -833,60 +816,6 @@ export default function GameMap() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
-
-      // ── 2. Collision overlay ──────────────────────────────────────────────
-      if (showCollisionRef.current) {
-        const colStart = Math.max(0,        Math.floor(srcX / CELL_X));
-        const colEnd   = Math.min(COLS - 1, Math.ceil((srcX + srcW) / CELL_X));
-        const rowStart = Math.max(0,        Math.floor(srcY / CELL_Y));
-        const rowEnd   = Math.min(ROWS - 1, Math.ceil((srcY + srcH) / CELL_Y));
-
-        const cellW = CELL_X * scale;
-        const cellH = CELL_Y * scale;
-        const mW = cellW * 0.5;
-        const mH = cellH * 0.5;
-        const mOX = (cellW - mW) / 2;
-        const mOY = (cellH - mH) / 2;
-
-        for (let row = rowStart; row <= rowEnd; row++) {
-          for (let col = colStart; col <= colEnd; col++) {
-            const cx = (col * CELL_X - srcX) * scale;
-            const cy = (row * CELL_Y - srcY) * scale;
-            if (grid[row * COLS + col] === 1) {
-              ctx.fillStyle = 'rgba(255,50,50,0.55)';
-              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
-            } else {
-              ctx.fillStyle = 'rgba(60,220,120,0.15)';
-              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
-            }
-          }
-        }
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 0.5;
-        for (let row = rowStart; row <= rowEnd + 1; row++) {
-          const cy = (row * CELL_Y - srcY) * scale;
-          ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cw, cy); ctx.stroke();
-        }
-        for (let col = colStart; col <= colEnd + 1; col++) {
-          const cx = (col * CELL_X - srcX) * scale;
-          ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, ch); ctx.stroke();
-        }
-
-        ctx.font         = `bold ${Math.round(9 * dpr)}px monospace`;
-        ctx.textBaseline = 'top';
-        for (const zone of ZONES) {
-          const zx = (zone.px - srcX) * scale;
-          const zy = (zone.py - srcY) * scale;
-          const zw = zone.pw * scale;
-          const zh = zone.ph * scale;
-          ctx.strokeStyle = 'rgba(120,220,255,0.6)';
-          ctx.lineWidth   = 1;
-          ctx.strokeRect(zx, zy, zw, zh);
-          ctx.fillStyle = 'rgba(120,220,255,0.85)';
-          ctx.fillText(zone.label, zx + 3, zy + 3);
-        }
-      }
 
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
       {
@@ -1318,29 +1247,9 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  // ── Mouse hover → zone label ──────────────────────────────────────────────
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!showCollision) return;
-    const { x: px, y: py } = playerStateRef.current;
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
-    const srcW = vw / ZOOM;
-    const srcH = vh / ZOOM;
-    const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
-    const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
-    const mapX = srcX + (e.clientX / vw) * srcW;
-    const mapY = srcY + (e.clientY / vh) * srcH;
-    const found = ZONES.find(
-      (z) => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
-    );
-    setHoverZone(found?.label ?? null);
-  };
-
   return (
     <div
       style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverZone(null)}
     >
       {!loaded && !error && (
         <div style={{
@@ -1594,29 +1503,6 @@ export default function GameMap() {
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
           gap: 6, zIndex: 20,
         }}>
-          {showCollision && hoverZone && (
-            <div style={{
-              padding: '3px 8px',
-              background: 'rgba(20,32,44,0.9)', color: '#78d4ff',
-              fontFamily: 'monospace', fontSize: 11, borderRadius: 4,
-              border: '1px solid rgba(120,200,255,0.3)',
-            }}>
-              {hoverZone}
-            </div>
-          )}
-          <button
-            onClick={() => setShowCollision(prev => !prev)}
-            style={{
-              padding: '6px 14px',
-              background: showCollision ? 'rgba(200,50,50,0.85)' : 'rgba(20,32,44,0.85)',
-              color: showCollision ? '#ffcccc' : '#8ab8cc',
-              border: `1px solid ${showCollision ? 'rgba(255,100,100,0.4)' : 'rgba(100,160,200,0.3)'}`,
-              borderRadius: 6, fontFamily: 'monospace', fontSize: 12, cursor: 'pointer',
-              backdropFilter: 'blur(6px)', letterSpacing: '0.03em',
-            }}
-          >
-            {showCollision ? '■ Hide Collision [C]' : '□ Show Collision [C]'}
-          </button>
           {import.meta.env.DEV && (
             <Link
               href="/collision-editor"
