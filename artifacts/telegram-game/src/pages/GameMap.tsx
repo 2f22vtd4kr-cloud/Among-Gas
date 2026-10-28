@@ -1070,8 +1070,12 @@ export default function GameMap() {
         const bx = Math.round((body.x - srcX) * scale);
         const by = Math.round((body.y - srcY) * scale);
         if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
-        const corpseW = Math.max(12, Math.round(PLAYER_DISPLAY_WIDTH * scale));
-        const corpseH = Math.max(12, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+        // The corpse sprite is a horizontal pose, unlike the upright player
+        // cell. Give it its own landscape aspect ratio so the suit and exposed
+        // bone render as one readable body rather than a tiny clipped-looking
+        // upright-sized mark.
+        const corpseH = Math.max(12, Math.round(PLAYER_DISPLAY_HEIGHT * scale * 0.9));
+        const corpseW = Math.max(18, Math.round(corpseH * 1.65));
         const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
         const sx = Math.ceil(rect.x);
         const sy = Math.ceil(rect.y);
@@ -1192,7 +1196,13 @@ export default function GameMap() {
               : 'idle';
 
           const rpCX = Math.round((anim.renderX - srcX) * scale);
-          const rpCY = Math.round((anim.renderY - srcY) * scale);
+          // Ghosts float rather than walking on the floor. Keep the ghost suit
+          // silhouette, but animate its vertical drift so dead players do not
+          // look like static stickers sliding over the map.
+          const ghostBob = rIsGhost
+            ? Math.sin(ts / 190 + rp.slot * 0.8) * Math.max(1.5, rSpriteH * 0.075)
+            : 0;
+          const rpCY = Math.round((anim.renderY - srcY) * scale - ghostBob);
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
