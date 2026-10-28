@@ -156,6 +156,30 @@ try {
   assert.ok(localPlayerSuitPixels > 20,
     `local balaclava player sprite must be visible in the rendered canvas (teal pixels=${localPlayerSuitPixels})`);
 
+  // The report-ready fixture places a dead body just right of the local player.
+  // The real row-7 corpse asset includes an exposed ivory bone; ensure those
+  // pixels are present in the *rendered game canvas*, not just in the asset file.
+  const corpseBonePixels = await page.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) return 0;
+    const dpr = canvas.width / window.innerWidth;
+    const cx = Math.floor(canvas.width / 2 + 20 * 0.7 * dpr);
+    const cy = Math.floor(canvas.height / 2 + 6 * 0.7 * dpr - 14 * dpr);
+    const left = Math.max(0, cx - 15);
+    const top = Math.max(0, cy - 20);
+    const right = Math.min(canvas.width, cx + 16);
+    const bottom = Math.min(canvas.height, cy + 21);
+    const data = context.getImageData(left, top, right - left, bottom - top).data;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b, a] = data.slice(i, i + 4);
+      if (a > 200 && r > 175 && g > 165 && b > 135 && Math.max(r, g, b) - Math.min(r, g, b) < 85) count++;
+    }
+    return count;
+  });
+  assert.ok(corpseBonePixels > 8,
+    `dead body should visibly use the balaclava corpse sprite with its bone (bone pixels=${corpseBonePixels})`);
+
 
   // Meeting discussion and voting both keep the chat available; voting adds ballot controls.
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
