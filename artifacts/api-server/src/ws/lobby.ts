@@ -415,7 +415,7 @@ export class LobbyManager {
   readonly userToLobbyMap = new Map<number, string>();
 
   private _deltaInterval: ReturnType<typeof setInterval> | null = null;
-  /** 5Hz bot AI tick loop — runs alongside the 25Hz delta broadcast. */
+  /** 10Hz bot AI tick loop — smooth enough for motion, below the 25Hz delta broadcast rate. */
   private _botInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Optional sink for LobbyEvent — set only by the headless simulation runner. */
@@ -724,7 +724,7 @@ export class LobbyManager {
    * simulation runner (SINGLE_PLAY.md §8), which has no real WebSocket
    * connection to attach as a human host. Caller fills every slot via
    * `addBotPlayer` and then calls `startGame`. Registered + loop-started
-   * exactly like `createLobby`, so the existing 25Hz/5Hz loops (and, in turn,
+   * exactly like `createLobby`, so the existing 25Hz/10Hz loops (and, in turn,
    * every other lobby already running in this manager) pick it up automatically.
    */
   createHeadlessLobby(): Lobby {
@@ -1495,7 +1495,7 @@ export class LobbyManager {
 
     this._botInterval = setInterval(() => {
       this._tickBots();
-    }, 200); // 5Hz — sufficient for AI decisions, much cheaper than 25Hz
+    }, 100); // 10Hz — responsive bot motion without running pathfinding at 25Hz
 
     logger.info('[Lobby] Delta loop + bot tick loop started');
   }
@@ -1512,7 +1512,7 @@ export class LobbyManager {
   }
 
   /**
-   * 5Hz bot AI tick — called from _botInterval.
+   * 10Hz bot AI tick — called from _botInterval.
    * Runs every bot agent's tick() in every active lobby (ROAMING or MEETING).
    * Errors in individual bots are caught so a buggy agent can't crash the loop.
    */

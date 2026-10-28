@@ -106,8 +106,8 @@ function canTraverse(from: Point, to: Point): boolean {
   return true;
 }
 
-/** Pixel distance per 200ms tick ≈ 400px/s — a comfortable walking pace. */
-export const BOT_SPEED_PX = 80;
+/** Pixel distance per 100ms tick ≈ 400px/s — a comfortable walking pace. */
+export const BOT_SPEED_PX = 40;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 const ARRIVAL_SQ = 25 * 25;
@@ -117,7 +117,7 @@ export abstract class BotAgent {
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
-  /** Called every 200ms while the lobby phase is ROAMING. */
+  /** Called every 100ms while the lobby phase is ROAMING. */
   abstract roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 
   /**
