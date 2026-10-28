@@ -28,7 +28,7 @@ const COLOR_COL: Record<string, number> = {
 };
 const POSE_ROW: Record<string, number> = {
   idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'sit-hug-knees': 7, 'sit-crouch': 8,
+  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
 };
 const SLOT_COLORS = ['teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta'];
 
