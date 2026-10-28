@@ -168,7 +168,7 @@ function CharSpriteUI({
         </div>
         <div
           className="ag-corpse-head-window"
-          style={{ position: 'absolute', left: 0, top: '56%', width: size, height: '44%', overflow: 'hidden' }}
+          style={{ position: 'absolute', left: 0, top: '47%', width: size, height: '53%', overflow: 'hidden' }}
         >
           <div style={{ ...imageStyle, transform: 'translateY(-80%)' }} />
         </div>
@@ -1151,7 +1151,7 @@ export default function GameMap() {
         ctx.restore();
         ctx.drawImage(
           sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
-          corpseX, corpseY + corpseH * 0.48, corpseW, corpseH * 0.26,
+          corpseX, corpseY + corpseH * 0.36, corpseW, corpseH * 0.26,
         );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
