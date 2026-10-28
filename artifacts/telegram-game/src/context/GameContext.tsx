@@ -243,7 +243,7 @@ const GameRemotePlayersCtx = createContext<React.RefObject<Map<number, RemotePla
 /** Mutable ref holding a pending server position correction for the local player.
  *  Set by the 0xFF handler when the server disagrees with local position.
  *  Cleared by the rAF loop after applying. */
-const GameCorrectionCtx = createContext<React.RefObject<{ wireX: number; wireY: number } | null>>(
+const GameCorrectionCtx = createContext<React.RefObject<{ wireX: number; wireY: number; force?: boolean } | null>>(
   { current: null },
 );
 
@@ -261,7 +261,7 @@ export function useRemotePlayersRef(): React.RefObject<Map<number, RemotePlayer>
 }
 
 /** Returns a stable ref to the pending server correction ({wireX,wireY} or null). */
-export function useCorrectionRef(): React.RefObject<{ wireX: number; wireY: number } | null> {
+export function useCorrectionRef(): React.RefObject<{ wireX: number; wireY: number; force?: boolean } | null> {
   return useContext(GameCorrectionCtx);
 }
 
@@ -590,7 +590,7 @@ function applyDeltaPacket(
   view: DataView,
   mySlot: number | null,
   remotePlayersMap: Map<number, RemotePlayer>,
-  onCorrection: (wireX: number, wireY: number) => void,
+  onCorrection: (wireX: number, wireY: number, force?: boolean) => void,
 ): void {
   if (view.byteLength < 2) return;
   const count = view.getUint8(1);
@@ -634,7 +634,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const remotePlayersRef = useRef<Map<number, RemotePlayer>>(new Map());
 
   // Pending server correction for local player — read & cleared by GameMap's rAF loop
-  const correctionRef = useRef<{ wireX: number; wireY: number } | null>(null);
+  const correctionRef = useRef<{ wireX: number; wireY: number; force?: boolean } | null>(null);
 
   const send = useCallback((buf: Uint8Array | number[]) => {
     const ws = socketRef.current;
@@ -911,13 +911,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // ── 0x22: forced authoritative movement correction ─────────────────
+      // [0x22, wireX(UInt16LE), wireY(UInt16LE)]. Unlike a 0xFF echo, this is
+      // explicit: discard local prediction because the server clamped or rejected
+      // a speed/path-invalid movement target.
+      if (opcode === 0x22 && event.data.byteLength === 5) {
+        correctionRef.current = {
+          wireX: view.getUint16(1, true),
+          wireY: view.getUint16(3, true),
+          force: true,
+        };
+        return;
+      }
+
       // ── 0xFF: delta sync — update remote player positions ───────────────
       if (opcode === 0xFF) {
         applyDeltaPacket(
           view,
           mySlotRef.current,
           remotePlayersRef.current,
-          (wireX, wireY) => { correctionRef.current = { wireX, wireY }; },
+          (wireX, wireY, force) => { correctionRef.current = { wireX, wireY, force }; },
         );
         return;
       }
