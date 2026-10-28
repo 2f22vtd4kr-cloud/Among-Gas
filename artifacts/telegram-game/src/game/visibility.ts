@@ -136,7 +136,19 @@ export function buildShadowGrid(collisionGrid: Grid): Grid {
       }
     }
 
-    if (component.length >= minOccluderCells) {
+    // The two small bench groups in the upper atrium are solid for movement,
+    // but are low furniture and must not cast hard vision shadows. Keep this
+    // map-specific exception separate from collision so players still cannot
+    // walk through them. The larger statue component between the benches remains
+    // an occluder.
+    const isUpperAtriumBench = component.length <= 12 && component.every(index => {
+      const row = Math.floor(index / COLS);
+      const col = index - row * COLS;
+      return row >= 7 && row <= 11 &&
+        ((col >= 46 && col <= 50) || (col >= 61 && col <= 65));
+    });
+
+    if (component.length >= minOccluderCells && !isUpperAtriumBench) {
       for (const index of component) shadowGrid[index] = 1;
     }
   }
