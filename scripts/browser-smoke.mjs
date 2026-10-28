@@ -79,6 +79,17 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const reportButton = page.getByRole('button', { name: /Доложить/ });
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+  const litMapPixel = await page.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) return null;
+    const x = Math.floor(canvas.width / 2);
+    const y = Math.floor(canvas.height / 2);
+    return [...context.getImageData(x, y, 1, 1).data];
+  });
+  assert.ok(
+    litMapPixel && litMapPixel[3] > 0,
+    'fog-of-war must preserve the map beneath the lit area',
+  );
 
   // Meeting discussion and voting both keep the chat available; voting adds ballot controls.
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });

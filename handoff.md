@@ -1475,3 +1475,22 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **Left off / next steps**
 - Style the role-reveal and game-over overlays to match this new visual identity (Task #3)
 - Russify task minigames (Task #2)
+
+### 2026-10-28 — Import and fix map visibility rendering
+
+**Done**
+- Imported the public `main` branch, including the game, API/WebSocket server, assets, shared game logic, scripts, and project notes. Registered the game web artifact at `/` and started it alongside the API server.
+- Reproduced the reported dark/blank gameplay view with the `report-ready` fixture. The fog pass used `destination-out` on the main game canvas after drawing the map and player, erasing the visible map and sprite and exposing the page background.
+- Moved the fog mask to a reusable offscreen canvas and composited it over the game scene. Added a browser-smoke assertion that the lit map area remains opaque.
+- Updated blocked transitive packages to `proxy-addr@2.0.8` and `orval@8.45.0`; frozen dependency installation and the full workspace build now pass.
+- Verified the lobby's live WebSocket handshake, API health endpoint, gameplay invariants, collision/vision checks, live sabotage authorization, and the mobile browser smoke suite at portrait, landscape, and desktop sizes.
+
+**Decisions & gotchas**
+- Darkness outside the player's sight radius is intentional. The bug was that the lit area erased the scene instead of revealing it.
+- Keep the separate fog canvas limited to the visibility overlay; applying `destination-out` to the main canvas erases the world and player beneath it.
+
+**Left off / next steps**
+- The game and API server are running. The player and map render in gameplay; other issues need a specific reproduction or screenshot to investigate.
+
+**State to restore**
+- No temporary source changes or mock state; mock routes are enabled only by query parameters in development.

@@ -726,6 +726,9 @@ export default function GameMap() {
     if (!canvas || !mapImg || !sprite) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const fogCanvas = document.createElement('canvas');
+    const fogCtx = fogCanvas.getContext('2d');
+    if (!fogCtx) return;
 
     const grid = buildCollisionGrid();
     if (!isSpawnWalkable(grid)) {
@@ -1262,39 +1265,50 @@ export default function GameMap() {
         const visionR = visionRadius * scale;
         const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, grid);
 
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(0,0,0,0.96)';
-        ctx.fillRect(0, 0, cw, ch);
+        if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
+          fogCanvas.width = cw;
+          fogCanvas.height = ch;
+        }
+        fogCtx.setTransform(1, 0, 0, 1, 0, 0);
+        fogCtx.globalAlpha = 1;
+        fogCtx.globalCompositeOperation = 'source-over';
+        fogCtx.filter = 'none';
+        fogCtx.clearRect(0, 0, cw, ch);
+        fogCtx.fillStyle = 'rgba(0,0,0,0.96)';
+        fogCtx.fillRect(0, 0, cw, ch);
 
         // The visibility polygon ends at either the sight-radius boundary or
         // the first wall. Clipping a soft radial gradient to it makes open
         // rooms fade naturally while solid obstacles cast opaque shadows.
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath();
+        // Erase only this overlay: destination-out on the main canvas also
+        // removes the map and player underneath, exposing the page background.
+        fogCtx.save();
+        fogCtx.globalCompositeOperation = 'destination-out';
+        fogCtx.beginPath();
         for (let i = 0; i < visiblePolygon.length; i++) {
           const point = visiblePolygon[i];
           const x = (point.x - srcX) * scale;
           const y = (point.y - srcY) * scale;
-          if (i === 0) ctx.moveTo(x, y);
-          else ctx.lineTo(x, y);
+          if (i === 0) fogCtx.moveTo(x, y);
+          else fogCtx.lineTo(x, y);
         }
         if (visiblePolygon.length > 2) {
-          ctx.closePath();
-          ctx.clip();
-          const grad = ctx.createRadialGradient(pCX, pCY, visionR * 0.55, pCX, pCY, visionR);
+          fogCtx.closePath();
+          fogCtx.clip();
+          const grad = fogCtx.createRadialGradient(pCX, pCY, visionR * 0.55, pCX, pCY, visionR);
           grad.addColorStop(0, 'rgba(0,0,0,1)');
           grad.addColorStop(0.82, 'rgba(0,0,0,1)');
           grad.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = grad;
-          ctx.beginPath();
-          ctx.arc(pCX, pCY, visionR, 0, Math.PI * 2);
-          ctx.fill();
+          fogCtx.fillStyle = grad;
+          fogCtx.beginPath();
+          fogCtx.arc(pCX, pCY, visionR, 0, Math.PI * 2);
+          fogCtx.fill();
         }
-        ctx.restore();
+        fogCtx.restore();
         // iOS Safari can retain filters across canvas state resets; keeping
         // this explicit avoids radial-fog artefacts on the next frame.
-        ctx.filter = 'none';
+        fogCtx.filter = 'none';
+        ctx.drawImage(fogCanvas, 0, 0);
       }
 
       rafId = requestAnimationFrame(frame);
