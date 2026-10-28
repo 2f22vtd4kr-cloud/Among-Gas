@@ -1441,19 +1441,19 @@ export default function GameMap() {
               zIndex: 1,
             }} />
             <div className="ag-kill-attacker" style={{
-              position: 'absolute', left: '3%', top: '19%', zIndex: 3,
+              position: 'absolute', left: '3%', top: '19%', zIndex: 4,
               animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
-              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="mask" size={174} />
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
             </div>
             <div className="ag-kill-victim" style={{
-              position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 2,
+              position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
               <div className="ag-kill-victim-upper" style={{
                 position: 'absolute', inset: 0, width: 174, height: 154,
-                clipPath: 'inset(0 0 48% 0)',
+                // Keep the complete authored balaclava sprite visible during the strike.
                 animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
               }}>
                 <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
@@ -1471,7 +1471,7 @@ export default function GameMap() {
               background: 'linear-gradient(90deg, transparent 0%, #ff263b 11%, #fff4e8 26%, #fff 48%, #fff0df 68%, #f31330 88%, transparent 100%)',
               boxShadow: '0 0 12px rgba(255,45,70,.95), 0 0 44px rgba(255,10,35,.8), 0 0 92px rgba(255,10,35,.46)',
               animation: 'agKillSlash 1.65s cubic-bezier(.1,.8,.2,1) both',
-              zIndex: 4,
+              zIndex: 2,
             }} />
           </div>
           <div className="ag-kill-text" style={{
