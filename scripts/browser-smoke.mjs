@@ -87,8 +87,10 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  const movementJoystick = page.getByLabel('Movement joystick');
+  const movementJoystick = page.locator('[data-joystick-side]');
   await movementJoystick.waitFor({ state: 'visible' });
+  assert.equal(await movementJoystick.getAttribute('aria-label'), 'Movement joystick',
+    'the joystick must expose the accessible English label in English mode');
   assert.equal(await movementJoystick.getAttribute('data-joystick-side'), 'left',
     'the joystick side preference must persist into gameplay');
   await page.getByRole('button', { name: 'Settings' }).click();
@@ -99,7 +101,13 @@ try {
   await gameplaySettings.getByTestId('joystick-side-right').click();
   await gameplaySettings.getByRole('button', { name: 'Русский' }).click();
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
-  await page.waitForFunction(() => document.querySelector('[aria-label="Movement joystick"]')?.getAttribute('data-joystick-side') === 'right');
+  await page.waitForFunction(() => {
+    const joystick = document.querySelector('[data-joystick-side]');
+    return joystick?.getAttribute('data-joystick-side') === 'right' &&
+      joystick.getAttribute('aria-label') === 'Джойстик движения';
+  });
+  assert.equal(await movementJoystick.getAttribute('aria-label'), 'Джойстик движения',
+    'the joystick accessible label must follow the selected Russian language');
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
@@ -322,7 +330,7 @@ try {
   await page.getByText('УСТРАНЁН', { exact: true }).waitFor({ state: 'visible' });
   // Capture the strike while the transient 1.65s scene is still mounted.
   await page.waitForFunction(() => {
-    const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
+    const body = document.querySelector('.ag-kill-victim-lower');
     return body && Number.parseFloat(getComputedStyle(body).opacity) > 0.25;
   }, undefined, { timeout: 1_400 });
   const corpseSuitWindow = page.locator('.ag-kill-victim-lower .ag-corpse-suit-window');
