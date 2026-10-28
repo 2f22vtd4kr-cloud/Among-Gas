@@ -101,6 +101,30 @@ try {
     'fog-of-war must preserve the map beneath the lit area',
   );
 
+  // The local player is camera-centered; verify that the balaclava sprite's
+  // teal suit pixels are actually present in the rendered canvas, not just
+  // that the canvas element exists or has an opaque background.
+  const localPlayerSuitPixels = await page.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) return 0;
+    const cx = Math.floor(canvas.width / 2);
+    const cy = Math.floor(canvas.height / 2);
+    const left = Math.max(0, cx - 34);
+    const top = Math.max(0, cy - 34);
+    const width = Math.min(68, canvas.width - left);
+    const height = Math.min(68, canvas.height - top);
+    const data = context.getImageData(left, top, width, height).data;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b, a] = data.slice(i, i + 4);
+      if (a > 200 && g > 85 && g > r * 1.2 && b > 65 && g > b * 0.82) count++;
+    }
+    return count;
+  });
+  assert.ok(localPlayerSuitPixels > 20,
+    `local balaclava player sprite must be visible in the rendered canvas (teal pixels=${localPlayerSuitPixels})`);
+
+
   // Meeting discussion and voting both keep the chat available; voting adds ballot controls.
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
