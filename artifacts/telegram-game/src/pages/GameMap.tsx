@@ -1377,7 +1377,7 @@ export default function GameMap() {
         <div
           role="alert"
           aria-live="assertive"
-          aria-label="Kill animation"
+          aria-label={en ? 'Kill animation' : 'Анимация убийства'}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1507,7 +1507,7 @@ export default function GameMap() {
             color: '#fff4f2', textShadow: '0 4px 18px rgba(255,30,50,.8)',
             animation: 'agKillText 1.65s ease-out both',
           }}>
-            ELIMINATED
+            {en ? 'ELIMINATED' : 'УСТРАНЁН'}
           </div>
         </div>
       )}
