@@ -1152,7 +1152,7 @@ export default function GameMap() {
         if (!remotePlayers.has(slot)) remoteAnims.delete(slot);
       }
       if (remotePlayers.size > 0) {
-        const rSpriteH = Math.round(PLAYER_DISPLAY_HEIGHT * scale);
+        const rBaseSpriteH = Math.round(PLAYER_DISPLAY_HEIGHT * scale);
         const rSpriteW = Math.round(PLAYER_DISPLAY_WIDTH  * scale);
 
         ctx.save();
@@ -1218,6 +1218,8 @@ export default function GameMap() {
                 ? 'walk-1'
                 : 'walk-2'
               : 'idle';
+          const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
+          const rSpriteH = Math.round(rBaseSpriteH * rRect.height / CHARACTER_CELL_HEIGHT);
 
           const rpCX = Math.round((anim.renderX - srcX) * scale);
           // Ghosts float rather than walking on the floor. Keep the ghost suit
@@ -1246,8 +1248,7 @@ export default function GameMap() {
             ctx.filter = 'none';
           }
 
-          // Sprite (slot-keyed color from the character sheet)
-          const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
+          // Sprite (slot-keyed color from its isolated atlas window)
           const rsx = Math.ceil(rRect.x);
           const rsy = Math.ceil(rRect.y);
           const rsw = Math.floor(rRect.x + rRect.width)  - rsx;
@@ -1284,6 +1285,7 @@ export default function GameMap() {
       const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
+      const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
       const sx = Math.ceil(rect.x);
       const sy = Math.ceil(rect.y);
       const sw = Math.floor(rect.x + rect.width)  - sx;
@@ -1292,7 +1294,6 @@ export default function GameMap() {
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
-      const sH  = Math.round(spriteH);
 
       // Ground shadow (ghosts float — no shadow)
       const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
