@@ -118,7 +118,8 @@ const MIN_OCCLUDER_COMPONENT_CELLS = 24;
 // Cell coordinates in the 104 × 58 red-line reference grid. These cells contain
 // low furniture in the open upper atrium, not the room's enclosing walls.
 const NON_OCCLUDING_REGIONS = [
-  { minCol: 46, maxCol: 65, minRow: 6, maxRow: 12 },
+  { minCol: 47, maxCol: 50, minRow: 8, maxRow: 11 },
+  { minCol: 62, maxCol: 66, minRow: 8, maxRow: 11 },
 ] as const;
 
 function isNonOccludingFurniture(index: number): boolean {
