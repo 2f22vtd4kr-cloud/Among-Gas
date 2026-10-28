@@ -11,6 +11,8 @@ import { useState, useEffect } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
 import { useLocation } from 'wouter';
 import { haptic } from '@/lib/haptics';
+import { sfx, startMenuMusic, stopMenuMusic } from '@/lib/sfx';
+import { useLanguage, type AppLanguage } from '@/lib/language';
 import './lobby.css';
 
 // ── Sprite sheet constants (mirrors characterSprites.ts) ─────────────────────
@@ -26,7 +28,7 @@ const COLOR_COL: Record<string, number> = {
 };
 const POSE_ROW: Record<string, number> = {
   idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'sit-hug-knees': 7, 'sit-crouch': 8,
+  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
 };
 const SLOT_COLORS = ['teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta'];
 
@@ -45,11 +47,11 @@ function CharSprite({
   const sheetH = SHEET_H * scale;
   const posX   = -(col * CELL_W * scale);
   const posY   = -(row * CELL_H * scale);
-  // 82% clips the elliptical ground shadow at the bottom of each sprite cell
-  const height = Math.round(CELL_H * scale * (clipBottom ? 0.82 : 1));
+  // Clip only the bottommost shadow pixels; an 82% crop cut off the character's feet
+  const height = Math.round(CELL_H * scale * (clipBottom ? 0.94 : 1));
 
   return (
-    <div style={{
+    <div className="au-menu-character-sprite" style={{
       width: size, height,
       backgroundImage: 'url(/sprites/characters.png?v=4)',
       backgroundSize: `${sheetW}px ${sheetH}px`,
@@ -87,16 +89,26 @@ function GasParticles() {
 }
 
 // ── Bot count pluralisation ───────────────────────────────────────────────────
-function botLabel(n: number) {
+function botLabel(n: number, language: AppLanguage) {
+  if (language === 'en') return `${n} bot${n === 1 ? '' : 's'}`;
   const m10 = n % 10, m100 = n % 100;
   if (m10 === 1 && m100 !== 11) return `${n} бот`;
   if ([2, 3, 4].includes(m10) && ![12, 13, 14].includes(m100)) return `${n} бота`;
   return `${n} ботов`;
 }
 
+function translateLobbyError(message: string | null, en: boolean): string | null {
+  if (!message || !en) return message;
+  const translations: Record<string, string> = {
+    'Откройте Among Gas через Telegram, чтобы войти в игру.':
+      'Open Among Gas through Telegram to join the game.',
+  };
+  return translations[message] ?? message;
+}
+
 // ── Player row (in-room list) ─────────────────────────────────────────────────
-function PlayerRow({ slot, username, isHost, isMe }: {
-  slot: number; username: string; isHost: boolean; isMe: boolean;
+function PlayerRow({ slot, username, isHost, isMe, language }: {
+  slot: number; username: string; isHost: boolean; isMe: boolean; language: AppLanguage;
 }) {
   const color = SLOT_COLORS[slot % SLOT_COLORS.length];
   return (
@@ -104,7 +116,7 @@ function PlayerRow({ slot, username, isHost, isMe }: {
       <CharSprite color={color} pose="idle" size={26} />
       <span style={{ flex: 1, fontSize: 14, color: 'white', fontWeight: 500 }} className="truncate">
         {username}
-        {isMe && <span style={{ marginLeft: 4, fontSize: 12, color: 'rgba(255,255,255,0.38)' }}>(вы)</span>}
+        {isMe && <span style={{ marginLeft: 4, fontSize: 12, color: 'rgba(255,255,255,0.38)' }}>({language === 'en' ? 'you' : 'вы'})</span>}
       </span>
       {isHost && (
         <span style={{
@@ -112,7 +124,7 @@ function PlayerRow({ slot, username, isHost, isMe }: {
           background: 'rgba(255,210,50,0.16)', color: '#ffd23f', letterSpacing: '0.06em',
           fontFamily: "'Fredoka One', sans-serif",
         }}>
-          ХОСТ
+          {language === 'en' ? 'HOST' : 'ХОСТ'}
         </span>
       )}
     </div>
@@ -120,23 +132,27 @@ function PlayerRow({ slot, username, isHost, isMe }: {
 }
 
 // ── Title block ───────────────────────────────────────────────────────────────
-function TitleBlock() {
+function TitleBlock({ language, onLanguageChange }: {
+  language: AppLanguage; onLanguageChange: (language: AppLanguage) => void;
+}) {
   return (
-    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18 }}>
-      {/* Title row */}
-      <h1 className="ag-title" style={{ marginBottom: 6 }}>Among Gas</h1>
-      {/* Characters + subtitle row */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
-        <CharSprite color="teal"   pose="walk-1" size={52} />
-        <p style={{
-          fontFamily: "'Fredoka One', sans-serif",
-          fontSize: 11,
-          letterSpacing: '0.2em',
-          color: 'rgba(255,255,255,0.28)',
-        }}>
-          МИНИ-ИГРА В TELEGRAM
-        </p>
-        <CharSprite color="maroon" pose="walk-1" size={52} flipped />
+    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 30 }}>
+      <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
+        {(['ru', 'en'] as const).map(option => (
+          <button key={option} type="button" onClick={() => { sfx('uiSelect', 0.25); onLanguageChange(option); }}
+            aria-label={option === 'en' ? 'Switch to English' : 'Switch to Russian'}
+            style={{
+              border: '1px solid rgba(120,220,210,.35)', borderRadius: 8, padding: '5px 9px',
+              color: language === option ? '#f5fffd' : 'rgba(230,255,250,.55)',
+              background: language === option ? 'rgba(36,150,135,.7)' : 'rgba(0,0,0,.18)',
+              fontSize: 11, fontWeight: 800, cursor: 'pointer',
+            }}>{option.toUpperCase()}</button>
+        ))}
+      </div>
+      <h1 className="ag-title" style={{ marginBottom: 8 }}>Among Gas</h1>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, minHeight: 62 }}>
+        <CharSprite color="teal" pose="walk-1" size={52} clipBottom={false} />
+        <CharSprite color="maroon" pose="walk-1" size={52} flipped clipBottom={false} />
       </div>
     </div>
   );
@@ -147,12 +163,34 @@ export default function Lobby() {
   const state = useGameState();
   const { createRoom, createSolo, joinRoom, startGame } = useGameActions();
   const [, navigate] = useLocation();
+  const { language, setLanguage } = useLanguage();
+  const en = language === 'en';
   const [botCount,     setBotCount]     = useState(4);
   const [joinExpanded, setJoinExpanded] = useState(false);
   const [code,         setCode]         = useState('');
 
   useEffect(() => {
-    if (state.phase === 'playing') navigate('/game');
+    const unlock = () => {
+      startMenuMusic();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      stopMenuMusic();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (state.phase !== 'playing') return;
+    // Test-only kill-screen fixtures need to carry this opt-in through the
+    // lobby's route change. Production builds never enable game mocks.
+    const skipReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      && new URLSearchParams(window.location.search).get('skipReveal') === 'true';
+    navigate(skipReveal ? '/game?skipReveal=true' : '/game');
   }, [state.phase, navigate]);
 
   const isInRoom = state.roomCode !== null;
@@ -172,7 +210,7 @@ export default function Lobby() {
             fontFamily: "'Fredoka One', sans-serif", fontSize: 16,
             color: 'rgba(255,255,255,0.5)', letterSpacing: '0.08em',
           }}>
-            Подключение…
+            {en ? 'Connecting…' : 'Подключение…'}
           </span>
         </div>
       </div>
@@ -197,14 +235,14 @@ export default function Lobby() {
         }}>
           <div style={{ fontSize: 32, marginBottom: 10 }}>☠</div>
           <div style={{ color: '#ff9090', fontSize: 16, marginBottom: 16 }}>
-            {state.errorMessage ?? 'Ошибка подключения'}
+            {translateLobbyError(state.errorMessage, en) ?? (en ? 'Connection error' : 'Ошибка подключения')}
           </div>
           <button
             onClick={() => window.location.reload()}
             className="au-btn-ghost"
             style={{ margin: '0 auto' }}
           >
-            Повторить
+            {en ? 'Retry' : 'Повторить'}
           </button>
         </div>
       </div>
@@ -215,7 +253,7 @@ export default function Lobby() {
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     const clean = code.toUpperCase().replace(/[^A-Z2-9]/g, '');
-    if (clean.length === 6) { haptic.tap(); joinRoom(clean); }
+    if (clean.length === 6) { haptic.tap(); sfx('uiSelect', 0.35); joinRoom(clean); }
   }
 
   // ── In a room ─────────────────────────────────────────────────────────────
@@ -228,7 +266,7 @@ export default function Lobby() {
       }}>
         <GasParticles />
 
-        <TitleBlock />
+        <TitleBlock language={language} onLanguageChange={setLanguage} />
 
         {/* Error banner */}
         {state.errorMessage && (
@@ -239,7 +277,7 @@ export default function Lobby() {
             fontFamily: "'Fredoka One', sans-serif", fontSize: 14,
             color: '#ff9090', textAlign: 'center', zIndex: 1, position: 'relative',
           }}>
-            {state.errorMessage}
+            {translateLobbyError(state.errorMessage, en)}
           </div>
         )}
 
@@ -253,7 +291,7 @@ export default function Lobby() {
             <p style={{
               fontFamily: "'Fredoka One', sans-serif", fontSize: 11,
               letterSpacing: '0.2em', color: 'rgba(255,255,255,0.35)', marginBottom: 4,
-            }}>КОД КОМНАТЫ</p>
+            }}>{en ? 'ROOM CODE' : 'КОД КОМНАТЫ'}</p>
             <p style={{
               fontFamily: "'Fredoka One', monospace", fontSize: 32,
               letterSpacing: '0.3em', color: '#7DF5E8', userSelect: 'all',
@@ -265,7 +303,7 @@ export default function Lobby() {
               fontFamily: "'Fredoka One', sans-serif", fontSize: 12,
               color: 'rgba(255,255,255,0.25)', marginTop: 4, letterSpacing: '0.06em',
             }}>
-              Поделитесь кодом для приглашения
+              {en ? 'Share this code to invite others' : 'Поделитесь кодом для приглашения'}
             </p>
           </div>
 
@@ -279,13 +317,14 @@ export default function Lobby() {
               letterSpacing: '0.2em', color: 'rgba(255,255,255,0.3)',
               marginBottom: 8, paddingLeft: 2,
             }}>
-              ИГРОКИ — {state.players.length} / 15
+              {en ? 'PLAYERS' : 'ИГРОКИ'} — {state.players.length} / 15
             </p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
               {state.players.map(p => (
                 <PlayerRow
                   key={p.slot} slot={p.slot} username={p.username}
                   isHost={p.slot === state.hostSlot} isMe={p.slot === state.mySlot}
+                  language={language}
                 />
               ))}
               {state.players.length < 15 && (
@@ -297,7 +336,7 @@ export default function Lobby() {
                   letterSpacing: '0.06em',
                 }}>
                   <span style={{ fontSize: 11, fontFamily: 'monospace', width: 26, textAlign: 'center' }}>—</span>
-                  Ждём игроков…
+                  {en ? 'Waiting for players…' : 'Ждём игроков…'}
                 </div>
               )}
             </div>
@@ -308,7 +347,7 @@ export default function Lobby() {
             <>
               <button
                 className={`au-btn${state.players.length >= 2 ? ' au-btn-green' : ''}`}
-                onClick={() => { haptic.medium(); startGame(); }}
+                onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); startGame(); }}
                 disabled={state.players.length < 2}
                 style={{ marginBottom: 8 }}
               >
@@ -321,17 +360,17 @@ export default function Lobby() {
                     : 'rgba(40,40,40,0.5)',
                   backgroundImage: state.players.length >= 2 ? undefined : 'none',
                 }}>
-                  {state.players.length < 2 ? 'Нужно 2+ игрока' : 'Начать игру'}
+                  {state.players.length < 2 ? (en ? 'Need 2+ players' : 'Нужно 2+ игрока') : (en ? 'Start Game' : 'Начать игру')}
                 </div>
               </button>
 
               {state.players.length === 1 && (
                 <button
                   className="au-btn-ghost"
-                  onClick={() => { haptic.medium(); startGame(); }}
+                  onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); startGame(); }}
                   style={{ display: 'block', width: '100%', textAlign: 'center' }}
                 >
-                  Тест (Соло)
+                  {en ? 'Test (Solo)' : 'Тест (Соло)'}
                 </button>
               )}
             </>
@@ -344,7 +383,7 @@ export default function Lobby() {
               fontSize: 15, color: 'rgba(255,255,255,0.32)',
               letterSpacing: '0.06em',
             }}>
-              Ждём начала игры…
+              {en ? 'Waiting for the game to start…' : 'Ждём начала игры…'}
             </div>
           )}
         </div>
@@ -361,7 +400,7 @@ export default function Lobby() {
     }}>
       <GasParticles />
 
-      <TitleBlock />
+      <TitleBlock language={language} onLanguageChange={setLanguage} />
 
       {/* Non-fatal error */}
       {state.errorMessage && state.phase === 'lobby' && (
@@ -372,7 +411,7 @@ export default function Lobby() {
           fontFamily: "'Fredoka One', sans-serif", fontSize: 14,
           color: '#ff9090', textAlign: 'center', zIndex: 1, position: 'relative',
         }}>
-          {state.errorMessage}
+          {translateLobbyError(state.errorMessage, en)}
         </div>
       )}
 
@@ -381,25 +420,25 @@ export default function Lobby() {
         {/* ── СОЗДАТЬ КОМНАТУ ─────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.medium(); createRoom(); }}
+          onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); createRoom(); }}
           style={{ marginBottom: 8 }}
         >
           <div className="au-btn-icon">
             <CharSprite color="teal" pose="idle" size={46} />
           </div>
-          <div className="au-btn-label">СОЗДАТЬ КОМНАТУ</div>
+          <div className="au-btn-label">{en ? 'CREATE ROOM' : 'СОЗДАТЬ КОМНАТУ'}</div>
         </button>
 
         {/* ── СОЛО vs БОТЫ ────────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.medium(); createSolo(botCount); }}
+          onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); createSolo(botCount); }}
           style={{ marginBottom: 0 }}
         >
           <div className="au-btn-icon">
             <CharSprite color="maroon" pose="idle" size={46} />
           </div>
-          <div className="au-btn-label">СОЛО vs БОТЫ</div>
+          <div className="au-btn-label">{en ? 'SOLO vs BOTS' : 'СОЛО vs БОТЫ'}</div>
         </button>
 
         {/* Bot stepper — lives between buttons */}
@@ -420,7 +459,7 @@ export default function Lobby() {
             fontSize: 17, color: 'rgba(255,255,255,0.75)',
             letterSpacing: '0.06em', minWidth: 90, textAlign: 'center',
           }}>
-            {botLabel(botCount)}
+            {botLabel(botCount, language)}
           </span>
           <button
             className="au-stepper"
@@ -431,13 +470,13 @@ export default function Lobby() {
         {/* ── ВОЙТИ В КОМНАТУ ─────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.tap(); setJoinExpanded(v => !v); }}
+          onClick={() => { haptic.tap(); sfx('uiSelect', 0.35); setJoinExpanded(v => !v); }}
           style={{ marginBottom: joinExpanded ? 0 : 0 }}
         >
           <div className="au-btn-icon">
             <CharSprite color="navy" pose="idle" size={46} />
           </div>
-          <div className="au-btn-label">ВОЙТИ С КОДОМ</div>
+          <div className="au-btn-label">{en ? 'JOIN WITH CODE' : 'ВОЙТИ С КОДОМ'}</div>
         </button>
 
         {/* Code input — expands below ВОЙТИ button */}
@@ -459,7 +498,7 @@ export default function Lobby() {
               type="text"
               value={code}
               onChange={e => setCode(e.target.value.toUpperCase().replace(/[^A-Za-z2-9]/g, '').slice(0, 6))}
-              placeholder="КОД"
+              placeholder={en ? 'CODE' : 'КОД'}
               maxLength={6}
               autoCorrect="off"
               autoCapitalize="characters"
@@ -470,7 +509,7 @@ export default function Lobby() {
               className="au-btn-join"
               disabled={code.replace(/[^A-Za-z2-9]/g, '').length < 6}
             >
-              ВОЙТИ
+              {en ? 'JOIN' : 'ВОЙТИ'}
             </button>
           </form>
         )}

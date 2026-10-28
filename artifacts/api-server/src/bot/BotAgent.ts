@@ -106,8 +106,11 @@ function canTraverse(from: Point, to: Point): boolean {
   return true;
 }
 
-/** Pixel distance per 200ms tick ≈ 400px/s — a comfortable walking pace. */
+/** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
 export const BOT_SPEED_PX = 80;
+/** Living bots tick at 5Hz and walk at roughly 200px/s, matching the human player. */
+// Match the human player's roughly 200px/s walk speed on the custom map.
+export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 const ARRIVAL_SQ = 25 * 25;
@@ -117,7 +120,7 @@ export abstract class BotAgent {
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
-  /** Called every 200ms while the lobby phase is ROAMING. */
+  /** Called every 100ms while the lobby phase is ROAMING. */
   abstract roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 
   /**
@@ -189,7 +192,7 @@ export abstract class BotAgent {
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
     const distance = Math.hypot(dx, dy);
-    const step = Math.min(BOT_SPEED_PX, distance);
+    const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
     const direct = distance > 0
       ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
       : feetGoal;
@@ -207,8 +210,8 @@ export abstract class BotAgent {
         7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
       ];
       const stepLengths = [
-        Math.min(BOT_SPEED_PX, Math.hypot(dxGoal, dyGoal)),
-        BOT_SPEED_PX * 0.75, BOT_SPEED_PX * 0.5, BOT_SPEED_PX * 0.25, 8,
+        Math.min(BOT_MOVEMENT_STEP_PX, Math.hypot(dxGoal, dyGoal)),
+        BOT_MOVEMENT_STEP_PX * 0.75, BOT_MOVEMENT_STEP_PX * 0.5, BOT_MOVEMENT_STEP_PX * 0.25, 8,
       ];
       let bestScore = -Infinity;
       for (const length of stepLengths) {
@@ -222,7 +225,7 @@ export abstract class BotAgent {
           const remaining = Math.hypot(feetGoal.x - candidate.x, feetGoal.y - candidate.y);
           const progress = Math.hypot(feetGoal.x - feetStart.x, feetGoal.y - feetStart.y) - remaining;
           // Prefer progress, with a small penalty for wide detours and tiny steps.
-          const score = progress - Math.abs(offset) * 2 - (BOT_SPEED_PX - length) * 0.05;
+          const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
           if (score > bestScore) {
             bestScore = score;
             next = candidate;

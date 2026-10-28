@@ -177,6 +177,8 @@ export interface SabotageState {
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
+  /** Wall-clock start time used to prevent bots from instantly killing at spawn. */
+  startedAtMs?: number;
   /** slot → player */
   players: Map<number, LobbyPlayer>;
   /** tgUserId → slot (fast reverse lookup) */
@@ -413,7 +415,7 @@ export class LobbyManager {
   readonly userToLobbyMap = new Map<number, string>();
 
   private _deltaInterval: ReturnType<typeof setInterval> | null = null;
-  /** 5Hz bot AI tick loop — runs alongside the 25Hz delta broadcast. */
+  /** 5Hz bot AI tick loop — keeps server-side pathfinding economical; client animation interpolates between updates. */
   private _botInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Optional sink for LobbyEvent — set only by the headless simulation runner. */
@@ -916,9 +918,9 @@ export class LobbyManager {
       p.inVent = false;
       p.ventId = undefined;
       p.emergencyMeetingUsed = false;
-      // Cooldown starts ready (0) at game start — GAME_SPEC.md §9's 25s cooldown
-      // applies only *after* a kill, not before the first one.
-      p.killCooldownMs = 0;
+      // Match the real game's opening kill cooldown: impostors cannot kill
+      // immediately on spawn. Crewmates have no kill action or cooldown.
+      p.killCooldownMs = p.role === 'impostor' ? KILL_COOLDOWN_MS : 0;
     });
 
     const impostorSlots = shuffled
@@ -954,6 +956,7 @@ export class LobbyManager {
       }
     }
 
+    lobby.startedAtMs = Date.now();
     lobby.phase = 'ROAMING';
     logger.info(
       `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +
@@ -1492,7 +1495,7 @@ export class LobbyManager {
 
     this._botInterval = setInterval(() => {
       this._tickBots();
-    }, 200); // 5Hz — sufficient for AI decisions, much cheaper than 25Hz
+    }, 200); // 5Hz — economical AI/pathfinding tick; clients interpolate motion at render rate
 
     logger.info('[Lobby] Delta loop + bot tick loop started');
   }

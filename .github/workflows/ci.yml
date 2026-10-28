@@ -55,6 +55,9 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Verify production Telegram HMAC authentication
+        run: pnpm --filter @workspace/api-server exec tsx src/test_auth.ts
+
       - name: Verify live WebSocket lobby, role assignment, and sabotage authorization
         run: |
           set -euo pipefail
@@ -82,14 +85,24 @@ jobs:
       - name: Start Telegram Mini App and play a mobile UI smoke test
         env:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
+          VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
         run: |
-          nohup pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          nohup env VITE_ENABLE_GAME_MOCKS=true pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
             sleep 1
           done
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
+
+      - name: Upload gameplay visual QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: among-gas-visual-qa
+          path: ${{ runner.temp }}/among-gas-visual-qa/*.png
+          if-no-files-found: warn
+          retention-days: 3
 
       - name: Run headless multiplayer gameplay simulations
         run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0

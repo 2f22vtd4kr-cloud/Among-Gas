@@ -1,15 +1,18 @@
+# Run the API as the Replit preview server. The Vercel frontend points its
+# WebSocket client at this origin via the preview-only VITE_WS_URL variable.
+run = "pnpm --filter @workspace/api-server run dev"
+
 modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
+build = ["pnpm", "run", "build"]
+run = ["pnpm", "--filter", "@workspace/api-server", "run", "start"]
 
 [deployment.postBuild]
 args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
-
-[workflows]
-runButton = "Project"
 
 [agent]
 stack = "PNPM_WORKSPACE"

@@ -80,6 +80,13 @@ export interface VoteResultInfo {
   winner: 'crewmates' | 'impostors' | null;
 }
 
+/** Authoritative kill event used to trigger the local attacker/victim animation once. */
+export interface KillEventInfo {
+  victimSlot: number;
+  attackerSlot: number | null;
+  occurredAtMs: number;
+}
+
 /**
  * A task assigned to this crewmate (Phase 7 — GAME_SPEC.md §10).
  * `completedSteps` is incremented optimistically on the client when the player
@@ -118,6 +125,8 @@ export interface GameState {
   impostorSlots: number[];
   /** Slots killed or ejected this game. Reset on role reveal. */
   deadSlots: number[];
+  /** Most recent authoritative kill broadcast, used for the short kill animation. */
+  lastKill: KillEventInfo | null;
   /** Impostor-only kill cooldown countdown, ms. 0 = ready to kill. Client-side display estimate. */
   killCooldownMs: number;
   /** Non-null while a meeting (discussion or voting) is in progress. */
@@ -187,6 +196,7 @@ const DEFAULT_STATE: GameState = {
   myRole: null,
   impostorSlots: [],
   deadSlots: [],
+  lastKill: null,
   killCooldownMs: 0,
   meeting: null,
   hasVoted: false,
@@ -344,6 +354,35 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],
   },
+  // Kill-screen visual QA fixtures: only the victim sees the full-screen kill animation.
+  'kill-animation-victim': {
+    state: {
+      phase: 'playing', mySlot: 1, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [0], deadSlots: [1],
+      lastKill: { victimSlot: 1, attackerSlot: 0, occurredAtMs: Date.now() },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  'kill-animation-attacker': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], deadSlots: [1],
+      lastKill: { victimSlot: 1, attackerSlot: 0, occurredAtMs: Date.now() },
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Match start: impostor can see a nearby target but must wait for the initial cooldown.
+  'impostor-opening': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'impostor', impostorSlots: [0], killCooldownMs: KILL_COOLDOWN_MS,
+    },
+    remotePlayers: [
+      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 },
+      { slot: 2, x: PLAYER_SPAWN.x - 90, y: PLAYER_SPAWN.y + 60 },
+      { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
+    ],
+  },
   // Phase 5 — ghost mode: this client has been killed, sees the "You are dead" state.
   ghost: {
     state: {
@@ -383,7 +422,7 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
-      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }],
+      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 32, y: PLAYER_SPAWN.y + 65 }],
     },
     remotePlayers: [
       { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // ghost may move; body remains at this position
@@ -471,7 +510,9 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
 
 /** Returns the requested dev mock preset, or null if none/invalid/prod. */
 function getMockPreset(): MockPreset | null {
-  if (!import.meta.env.DEV) return null;
+  // Player-facing dev previews (e.g. Replit) must not be able to enter mock
+  // mid-game states through a query string. Tests opt in explicitly.
+  if (import.meta.env.VITE_ENABLE_GAME_MOCKS !== 'true') return null;
   const key = new URLSearchParams(window.location.search).get('mock');
   if (!key) return null;
   const preset = MOCK_PRESETS[key];
@@ -831,12 +872,13 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         // Clear stale remote player data from the previous session
         remotePlayersRef.current.clear();
-        // Cooldown starts ready (0) at game start — the 25s cooldown applies
-        // only after a kill, not before the impostor's first one.
+        // Mirror the server's initial cooldown so the local Kill button is
+        // disabled until the authoritative opening cooldown expires.
         setState(s => ({
           ...s, phase: 'playing', myRole, impostorSlots,
           deadSlots: [],
-          killCooldownMs: 0,
+          lastKill: null,
+          killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
           meeting: null,
           hasVoted: false,
           voteResult: null,
@@ -899,6 +941,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             return {
               ...s,
               deadSlots: [...s.deadSlots, victimSlot],
+              lastKill: { victimSlot, attackerSlot, occurredAtMs: Date.now() },
               killCooldownMs: attackerSlot === mySlotRef.current
                 ? KILL_COOLDOWN_MS
                 : s.killCooldownMs,

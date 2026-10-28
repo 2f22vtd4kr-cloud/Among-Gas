@@ -100,3 +100,58 @@ export function computeVisibilityPolygon(
 
   return points;
 }
+
+/**
+ * Build an occlusion-only grid from movement collision. Tiny isolated props
+ * (benches, small furniture, low fixtures) remain solid for movement but do
+ * not cast hard vision shadows. Long connected wall runs and major structures
+ * remain occluders. This intentionally never mutates the collision grid.
+ */
+export function buildShadowGrid(collisionGrid: Grid): Grid {
+  const shadowGrid = new Uint8Array(COLS * ROWS);
+  const visited = new Uint8Array(COLS * ROWS);
+  const minOccluderCells = 10;
+
+  for (let start = 0; start < collisionGrid.length; start++) {
+    if (collisionGrid[start] !== 1 || visited[start]) continue;
+    const component: number[] = [];
+    const queue = [start];
+    visited[start] = 1;
+
+    for (let head = 0; head < queue.length; head++) {
+      const index = queue[head];
+      component.push(index);
+      const row = Math.floor(index / COLS);
+      const col = index - row * COLS;
+      const neighbors = [
+        col > 0 ? index - 1 : -1,
+        col + 1 < COLS ? index + 1 : -1,
+        row > 0 ? index - COLS : -1,
+        row + 1 < ROWS ? index + COLS : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || visited[next] || collisionGrid[next] !== 1) continue;
+        visited[next] = 1;
+        queue.push(next);
+      }
+    }
+
+    // The two small bench groups in the upper atrium are solid for movement,
+    // but are low furniture and must not cast hard vision shadows. Keep this
+    // map-specific exception separate from collision so players still cannot
+    // walk through them. The larger statue component between the benches remains
+    // an occluder.
+    const isUpperAtriumBench = component.length <= 12 && component.every(index => {
+      const row = Math.floor(index / COLS);
+      const col = index - row * COLS;
+      return row >= 7 && row <= 11 &&
+        ((col >= 46 && col <= 50) || (col >= 61 && col <= 65));
+    });
+
+    if (component.length >= minOccluderCells && !isUpperAtriumBench) {
+      for (const index of component) shadowGrid[index] = 1;
+    }
+  }
+
+  return shadowGrid as Grid;
+}

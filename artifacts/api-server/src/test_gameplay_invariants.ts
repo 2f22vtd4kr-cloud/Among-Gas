@@ -20,6 +20,7 @@ import {
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import { BOT_SPEED_PX } from './bot/BotAgent.js';
 import { CrewmateBot } from './bot/CrewmateBot.js';
+import { ImpostorBot } from './bot/ImpostorBot.js';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import {
   VENT_DEFS,
@@ -556,6 +557,46 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   assert.equal(manager.applyRepair(lobby, 1, SABOTAGE_LIGHTS, 0), 'fixed',
     'Lights is resolved by one valid repair');
   assert.equal(lobby.sabotage, null);
+  manager.disposeLobby(lobby);
+}
+
+// 12. Impostors begin with the authoritative cooldown; bots cannot kill at spawn.
+{
+  const vent = findVent(0)!;
+  const playerA = makePlayer(0, 'impostor', vent.x, vent.y);
+  const playerB = makePlayer(1, 'crewmate', vent.x + 10, vent.y);
+  const lobby = makeLobby([playerA.player, playerB.player]);
+  lobby.phase = 'WAITING';
+  const manager = new LobbyManager();
+  manager.startGame(lobby, 1);
+
+  const impostor = [playerA.player, playerB.player].find(p => p.role === 'impostor')!;
+  const crewmate = [playerA.player, playerB.player].find(p => p.role === 'crewmate')!;
+  assert.equal(impostor.killCooldownMs, KILL_COOLDOWN_MS,
+    'the impostor starts with the full authoritative kill cooldown');
+  assert.equal(crewmate.killCooldownMs, 0,
+    'crewmates do not receive an impostor kill cooldown');
+
+  const bot = new ImpostorBot();
+  // Avoid the unrelated randomized sabotage timer in this deterministic regression.
+  (bot as unknown as { _sabotageCountdown: number })._sabotageCountdown = 100;
+  impostor.x = vent.x;
+  impostor.y = vent.y;
+  crewmate.x = vent.x + 10;
+  crewmate.y = vent.y;
+  bot.roamingTick(lobby, impostor, manager);
+  assert.equal(crewmate.alive, true,
+    'an impostor bot cannot kill while its initial cooldown is active');
+
+  // Once the authoritative cooldown expires, the bot can hunt and kill normally.
+  impostor.killCooldownMs = 0;
+  impostor.x = vent.x;
+  impostor.y = vent.y;
+  crewmate.x = vent.x + 10;
+  crewmate.y = vent.y;
+  bot.roamingTick(lobby, impostor, manager);
+  assert.equal(crewmate.alive, false,
+    'the bot may kill normally after the initial cooldown expires');
   manager.disposeLobby(lobby);
 }
 

@@ -1,13 +1,11 @@
 import { useRef, useEffect, useState, useCallback } from 'react';
 import { haptic } from '../lib/haptics';
-import { sfx } from '../lib/sfx';
+import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
-  COLS, ROWS, CELL_X, CELL_Y,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
-  ZONES,
 } from '../game/collisionMap';
 import {
   createInitialPlayerState,
@@ -54,9 +52,10 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { computeVisibilityPolygon } from '../game/visibility';
+import { buildShadowGrid, computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
+import { useLanguage } from '../lib/language';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -82,10 +81,12 @@ const SABOTAGE_NAME_RU: Record<string, string> = {
   'Comms':    'Связь',
   'Doors':    'Двери',
 };
-function taskRu(name: string | undefined): string {
+function taskRu(name: string | undefined, language: 'ru' | 'en'): string {
+  if (language === 'en') return name || 'Task';
   return (name && TASK_NAME_RU[name]) || name || 'Задание';
 }
-function sabotageRu(name: string | undefined): string {
+function sabotageRu(name: string | undefined, language: 'ru' | 'en'): string {
+  if (language === 'en') return name || 'System';
   return (name && SABOTAGE_NAME_RU[name]) || name || 'Система';
 }
 
@@ -119,7 +120,7 @@ function slotColor(slot: number): CharacterColor {
 // ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
 const _POSE_ROW: Record<string, number> = {
   idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'sit-hug-knees': 7, 'sit-crouch': 8,
+  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
 };
 const _SHEET_COLS = 7;
 const _SHEET_PX_W = CHARACTER_CELL_WIDTH * _SHEET_COLS;
@@ -138,7 +139,7 @@ function CharSpriteUI({
   const bgH   = _SHEET_PX_H * scale;
   const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
   const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
-  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.82); // clip ground shadow
+  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.94); // trim only the bottommost ground-shadow pixels
 
   return (
     <div style={{
@@ -157,17 +158,32 @@ function CharSpriteUI({
 // Remote positions arrive at 25Hz via 0xFF deltas; the rAF loop compares
 // against the previous frame to derive walk animation and facing direction.
 interface RemoteAnim {
+  /** Most recently received authoritative position. */
   x: number;
   y: number;
+  /** Interpolated screen position; bot updates arrive slower than human updates. */
+  renderX: number;
+  renderY: number;
+  fromX: number;
+  fromY: number;
+  targetX: number;
+  targetY: number;
+  segmentStartTs: number;
+  segmentDurationMs: number;
+  lastTargetTs: number;
   animMs: number;
   facingLeft: boolean;
   lastMovedTs: number;
 }
 
-/** A remote player is "moving" if its position changed within this window. */
-const REMOTE_MOVING_WINDOW_MS = 160;
+/** Keep the walk cycle alive across the server's 200ms bot tick interval. */
+const REMOTE_MOVING_WINDOW_MS = 260;
+const REMOTE_INTERPOLATION_MIN_MS = 40;
+const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
@@ -176,12 +192,7 @@ export default function GameMap() {
 
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
-  const [showCollision, setShowCollision] = useState(false);
-  const [hoverZone,    setHoverZone]    = useState<string | null>(null);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
-
-  const showCollisionRef = useRef(false);
-  useEffect(() => { showCollisionRef.current = showCollision; }, [showCollision]);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -197,13 +208,29 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
   } = useGameState();
   const {
     sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
     triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
+
+  const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
+  useEffect(() => {
+    if (!lastKill) return;
+    // The victim receives the blocking full-screen death sequence; the
+    // attacker gets the kill sound but can keep playing and moving.
+    if (lastKill.attackerSlot === mySlot && lastKill.victimSlot !== mySlot) {
+      sfx('kill', 0.48);
+      return;
+    }
+    if (lastKill.victimSlot !== mySlot) return;
+    setKillAnimation(lastKill);
+    sfx('kill', 0.72);
+    const timer = window.setTimeout(() => setKillAnimation(null), 1700);
+    return () => window.clearTimeout(timer);
+  }, [lastKill, mySlot]);
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -509,19 +536,27 @@ export default function GameMap() {
   // Dev screenshot harness: `?mock=reveal-*` holds the overlay open indefinitely
   // (both the React state AND the CSS fade animation, which otherwise finishes
   // and hides itself after 3.2s regardless of state) so it can be screenshotted.
-  const isMockReveal = import.meta.env.DEV
-    && new URLSearchParams(window.location.search).get('mock')?.startsWith('reveal-');
+  const mockQuery = new URLSearchParams(window.location.search);
+  const isMockReveal = import.meta.env.DEV && mockQuery.get('mock')?.startsWith('reveal-');
+  // Visual fixtures can skip the role overlay so screenshots of later events
+  // (e.g. a kill sequence) do not get obscured by an unrelated opening screen.
+  const skipMockReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+    && mockQuery.get('skipReveal') === 'true';
   const [showReveal, setShowReveal] = useState(false);
   useEffect(() => {
     if (!myRole) return;
     // Clear stale remote animation state so sprites animate fresh from spawns.
     remoteAnimMapRef.current.clear();
+    if (skipMockReveal) {
+      setShowReveal(false);
+      return;
+    }
     setShowReveal(true);
     sfx('roundStart', 0.75);
     if (isMockReveal) return;
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
-  }, [myRole, isMockReveal]);
+  }, [myRole, isMockReveal, skipMockReveal]);
 
   // ── Sound effects for game-over and meeting ───────────────────────────────
   useEffect(() => {
@@ -538,6 +573,21 @@ export default function GameMap() {
     }
     prevMeetingRef.current = meeting;
   }, [meeting]);
+
+  const prevSabotageIdRef = useRef<number | null>(null);
+  useEffect(() => {
+    const currentId = sabotage?.systemId ?? null;
+    if (currentId !== null && prevSabotageIdRef.current === null) sfx('sabotage', 0.55);
+    prevSabotageIdRef.current = currentId;
+  }, [sabotage?.systemId]);
+
+  const prevVentIdRef = useRef<number | null>(myVentId);
+  useEffect(() => {
+    if (myVentId !== prevVentIdRef.current && (myVentId !== null || prevVentIdRef.current !== null)) {
+      sfx('vent', 0.48);
+    }
+    prevVentIdRef.current = myVentId;
+  }, [myVentId]);
 
   // Inject role-reveal keyframes once (avoids a CSS file dependency)
   useEffect(() => {
@@ -653,6 +703,7 @@ export default function GameMap() {
   useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
     const onDown  = (e: KeyboardEvent) => {
+      unlockSfx();
       const k = e.key.toLowerCase();
       if (!tracked.has(k)) return;
       e.preventDefault();
@@ -671,16 +722,6 @@ export default function GameMap() {
       document.removeEventListener('visibilitychange', clear);
     };
   }, []);
-
-  // ── Keyboard shortcut 'C' → toggle collision overlay ──────────────────────
-  useEffect(() => {
-    if (!loaded) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'c' || e.key === 'C') setShowCollision(prev => !prev);
-    };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [loaded]);
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const playerStateRef = useRef(createInitialPlayerState());
@@ -731,6 +772,9 @@ export default function GameMap() {
     if (!fogCtx) return;
 
     const grid = buildCollisionGrid();
+    // Movement still uses every solid collision cell. Vision shadows use a
+    // separate occlusion grid that ignores tiny isolated props like benches.
+    const shadowGrid = buildShadowGrid(grid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -739,6 +783,7 @@ export default function GameMap() {
     let lastTs: number | null = null;
     /** Timestamp of the last 0x11 sent. */
     let lastMoveSentTs = 0;
+    let lastFootstepTs = 0;
     /** Wire-space position at last send (for delta filtering). */
     let lastSentWireX = -1;
     let lastSentWireY = -1;
@@ -796,6 +841,14 @@ export default function GameMap() {
         grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
+      if (
+        (pose === 'walk-1' || pose === 'walk-2') &&
+        !deadSlotsRef.current.has(mySlotRef.current ?? -1) &&
+        ts - lastFootstepTs >= 320
+      ) {
+        sfx('footstep', 0.42);
+        lastFootstepTs = ts;
+      }
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
@@ -833,60 +886,6 @@ export default function GameMap() {
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
-
-      // ── 2. Collision overlay ──────────────────────────────────────────────
-      if (showCollisionRef.current) {
-        const colStart = Math.max(0,        Math.floor(srcX / CELL_X));
-        const colEnd   = Math.min(COLS - 1, Math.ceil((srcX + srcW) / CELL_X));
-        const rowStart = Math.max(0,        Math.floor(srcY / CELL_Y));
-        const rowEnd   = Math.min(ROWS - 1, Math.ceil((srcY + srcH) / CELL_Y));
-
-        const cellW = CELL_X * scale;
-        const cellH = CELL_Y * scale;
-        const mW = cellW * 0.5;
-        const mH = cellH * 0.5;
-        const mOX = (cellW - mW) / 2;
-        const mOY = (cellH - mH) / 2;
-
-        for (let row = rowStart; row <= rowEnd; row++) {
-          for (let col = colStart; col <= colEnd; col++) {
-            const cx = (col * CELL_X - srcX) * scale;
-            const cy = (row * CELL_Y - srcY) * scale;
-            if (grid[row * COLS + col] === 1) {
-              ctx.fillStyle = 'rgba(255,50,50,0.55)';
-              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
-            } else {
-              ctx.fillStyle = 'rgba(60,220,120,0.15)';
-              ctx.fillRect(cx + mOX, cy + mOY, mW, mH);
-            }
-          }
-        }
-
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth = 0.5;
-        for (let row = rowStart; row <= rowEnd + 1; row++) {
-          const cy = (row * CELL_Y - srcY) * scale;
-          ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(cw, cy); ctx.stroke();
-        }
-        for (let col = colStart; col <= colEnd + 1; col++) {
-          const cx = (col * CELL_X - srcX) * scale;
-          ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, ch); ctx.stroke();
-        }
-
-        ctx.font         = `bold ${Math.round(9 * dpr)}px monospace`;
-        ctx.textBaseline = 'top';
-        for (const zone of ZONES) {
-          const zx = (zone.px - srcX) * scale;
-          const zy = (zone.py - srcY) * scale;
-          const zw = zone.pw * scale;
-          const zh = zone.ph * scale;
-          ctx.strokeStyle = 'rgba(120,220,255,0.6)';
-          ctx.lineWidth   = 1;
-          ctx.strokeRect(zx, zy, zw, zh);
-          ctx.fillStyle = 'rgba(120,220,255,0.85)';
-          ctx.fillText(zone.label, zx + 3, zy + 3);
-        }
-      }
 
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
       {
@@ -1053,31 +1052,29 @@ export default function GameMap() {
       ctx.restore();
 
       // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      const corpseMarkerSize = Math.max(6, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+      // Use the dedicated row-7 Among Gas corpse sprite: it already contains
+      // the cut suit, exposed bone, wound and ground contact. Never synthesize
+      // a corpse by cropping an upright living character or drawing a fake bone.
       ctx.save();
       for (const body of corpsePositionsRef.current) {
         const bx = Math.round((body.x - srcX) * scale);
         const by = Math.round((body.y - srcY) * scale);
-        if (bx < -40 || bx > cw + 40 || by < -40 || by > ch + 40) continue;
+        if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
+        const corpseW = Math.max(12, Math.round(PLAYER_DISPLAY_WIDTH * scale));
+        const corpseH = Math.max(12, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+        const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
+        const sx = Math.ceil(rect.x);
+        const sy = Math.ceil(rect.y);
+        const sw = Math.floor(rect.x + rect.width) - sx;
+        const sh = Math.floor(rect.y + rect.height) - sy;
+
         ctx.save();
-        ctx.translate(bx, by);
-        ctx.rotate(-0.28);
-        // Small, readable dropped-character silhouette in the custom game's palette.
-        ctx.beginPath();
-        ctx.ellipse(0, corpseMarkerSize * 0.2, corpseMarkerSize * 0.48, corpseMarkerSize * 0.18, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(92,12,23,0.72)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.roundRect(-corpseMarkerSize * 0.34, -corpseMarkerSize * 0.12, corpseMarkerSize * 0.68, corpseMarkerSize * 0.32, corpseMarkerSize * 0.12);
-        ctx.fillStyle = '#71363e';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = '#ffb2a8';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(corpseMarkerSize * 0.36, -corpseMarkerSize * 0.04, corpseMarkerSize * 0.13, 0, Math.PI * 2);
-        ctx.fillStyle = '#a0ccd2';
-        ctx.fill();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(
+          sprite, sx, sy, sw, sh,
+          bx - corpseW / 2, by - corpseH / 2, corpseW, corpseH,
+        );
+        ctx.imageSmoothingEnabled = true;
         ctx.restore();
       }
       ctx.restore();
@@ -1135,17 +1132,44 @@ export default function GameMap() {
           // Update per-slot animation state from position deltas
           let anim = remoteAnims.get(rp.slot);
           if (!anim) {
-            anim = { x: rp.x, y: rp.y, animMs: 0, facingLeft: false, lastMovedTs: -1e9 };
+            anim = {
+              x: rp.x, y: rp.y,
+              renderX: rp.x, renderY: rp.y,
+              fromX: rp.x, fromY: rp.y,
+              targetX: rp.x, targetY: rp.y,
+              segmentStartTs: ts, segmentDurationMs: REMOTE_INTERPOLATION_MIN_MS,
+              lastTargetTs: ts,
+              animMs: 0, facingLeft: false, lastMovedTs: -1e9,
+            };
             remoteAnims.set(rp.slot, anim);
           }
           const rdx = rp.x - anim.x;
           const rdy = rp.y - anim.y;
           if (rdx * rdx + rdy * rdy > 0.25) {
+            // Start the next interpolation segment from the current rendered
+            // position, not the previous network sample. This avoids visible
+            // jumps when synthetic bots update at 5Hz while humans update at 25Hz.
+            anim.fromX = anim.renderX;
+            anim.fromY = anim.renderY;
+            anim.targetX = rp.x;
+            anim.targetY = rp.y;
+            anim.segmentStartTs = ts;
+            anim.segmentDurationMs = Math.max(
+              REMOTE_INTERPOLATION_MIN_MS,
+              Math.min(REMOTE_INTERPOLATION_MAX_MS, ts - anim.lastTargetTs),
+            );
+            anim.lastTargetTs = ts;
             anim.lastMovedTs = ts;
             if (Math.abs(rdx) > 0.1) anim.facingLeft = rdx < 0;
           }
           anim.x = rp.x;
           anim.y = rp.y;
+          const segmentT = Math.max(0, Math.min(1,
+            (ts - anim.segmentStartTs) / anim.segmentDurationMs,
+          ));
+          const easedT = segmentT * segmentT * (3 - 2 * segmentT);
+          anim.renderX = anim.fromX + (anim.targetX - anim.fromX) * easedT;
+          anim.renderY = anim.fromY + (anim.targetY - anim.fromY) * easedT;
           const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
           anim.animMs = rMoving ? anim.animMs + dtMs : 0;
           // Phase 5: dead players always render the static "ghost" pose.
@@ -1157,8 +1181,8 @@ export default function GameMap() {
                 : 'walk-2'
               : 'idle';
 
-          const rpCX = Math.round((rp.x - srcX) * scale);
-          const rpCY = Math.round((rp.y - srcY) * scale);
+          const rpCX = Math.round((anim.renderX - srcX) * scale);
+          const rpCY = Math.round((anim.renderY - srcY) * scale);
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
@@ -1263,7 +1287,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, grid);
+        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
 
         if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
           fogCanvas.width = cw;
@@ -1318,30 +1342,149 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  // ── Mouse hover → zone label ──────────────────────────────────────────────
-  const handleMouseMove = (e: React.MouseEvent) => {
-    if (!showCollision) return;
-    const { x: px, y: py } = playerStateRef.current;
-    const vw   = window.innerWidth;
-    const vh   = window.innerHeight;
-    const srcW = vw / ZOOM;
-    const srcH = vh / ZOOM;
-    const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
-    const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
-    const mapX = srcX + (e.clientX / vw) * srcW;
-    const mapY = srcY + (e.clientY / vh) * srcH;
-    const found = ZONES.find(
-      (z) => mapX >= z.px && mapX < z.px + z.pw && mapY >= z.py && mapY < z.py + z.ph,
-    );
-    setHoverZone(found?.label ?? null);
-  };
-
   return (
     <div
+      onPointerDown={unlockSfx}
       style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => setHoverZone(null)}
     >
+      {killAnimation && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          aria-label="Kill animation"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'linear-gradient(155deg, #8b0612 0%, #37050b 48%, #050609 100%)',
+            color: '#fff4f2', fontFamily: 'system-ui, sans-serif',
+            animation: 'agKillBackdrop 1.65s ease-out both',
+            pointerEvents: 'none',
+          }}
+        >
+          {/* Original Among Gas speed-line treatment; character art stays on our balaclava sprites. */}
+          <div aria-hidden="true" className="ag-kill-speedlines" style={{
+            position: 'absolute', inset: '-35% -25%', pointerEvents: 'none',
+            backgroundImage: [
+              'repeating-linear-gradient(169deg, transparent 0 24px, rgba(255,34,48,.88) 26px 39px, rgba(255,226,210,.94) 40px 47px, transparent 49px 76px)',
+              'repeating-linear-gradient(169deg, transparent 0 72px, rgba(250,14,28,.66) 74px 91px, transparent 93px 136px)',
+              'linear-gradient(90deg, transparent 0%, rgba(255,245,230,.72) 45%, rgba(255,20,42,.48) 54%, transparent 86%)',
+            ].join(','),
+            opacity: 0.66,
+            transform: 'rotate(-7deg) scale(1.08)',
+            animation: 'agKillStreaks .9s cubic-bezier(.12,.75,.21,1) both',
+          }} />
+          <style>{`
+            @keyframes agKillBackdrop {
+              0% { opacity: 0; filter: brightness(2.0) saturate(1.3); }
+              10% { opacity: 1; filter: brightness(1.4) saturate(1.2); }
+              100% { opacity: 1; filter: brightness(1) saturate(1); }
+            }
+            @keyframes agKillStreaks {
+              0% { transform: translateX(-18%) rotate(-7deg) scale(1.08); opacity: 0; }
+              24% { opacity: .9; }
+              100% { transform: translateX(18%) rotate(-7deg) scale(1.08); opacity: .35; }
+            }
+            @keyframes agKillAttacker {
+              0% { transform: translateX(-105vw) scale(.62) rotate(-8deg); opacity: 0; }
+              28% { transform: translateX(3vw) scale(1.12) rotate(5deg); opacity: 1; }
+              48% { transform: translateX(17vw) scale(1.04) rotate(0); opacity: 1; }
+              100% { transform: translateX(14vw) scale(1) rotate(-2deg); opacity: 1; }
+            }
+            @keyframes agKillVictimUpper {
+              0%, 25% { transform: translate(0, 0) rotate(0) scale(1); opacity: 1; }
+              36% { transform: translate(-4vw, -1vh) rotate(-12deg) scale(1.06); opacity: 1; }
+              52% { transform: translate(8vw, -10vh) rotate(34deg) scale(.96); opacity: .92; }
+              74%, 100% { transform: translate(15vw, -18vh) rotate(62deg) scale(.74); opacity: 0; }
+            }
+            @keyframes agKillVictimLower {
+              0%, 34% { transform: translateY(0) rotate(0); opacity: 0; }
+              46% { transform: translateY(2vh) rotate(-8deg); opacity: .25; }
+              70% { transform: translateY(7vh) rotate(7deg); opacity: .86; }
+              100% { transform: translateY(5vh) rotate(3deg); opacity: 1; }
+            }
+            @keyframes agKillSlash {
+              0%, 20% { transform: translate(-130%, -50%) rotate(-17deg) scaleX(.45); opacity: 0; }
+              31% { opacity: 1; }
+              46% { transform: translate(0, -50%) rotate(-17deg) scaleX(1.2); opacity: 1; }
+              62% { transform: translate(115%, -50%) rotate(-17deg) scaleX(.65); opacity: 0; }
+              100% { transform: translate(115%, -50%) rotate(-17deg) scaleX(.65); opacity: 0; }
+            }
+            @keyframes agKillBurst {
+              0%, 28% { transform: translate(-50%, -50%) scale(.1) rotate(0); opacity: 0; }
+              42% { transform: translate(-50%, -50%) scale(1.25) rotate(15deg); opacity: .9; }
+              68%, 100% { transform: translate(-50%, -50%) scale(1.55) rotate(28deg); opacity: 0; }
+            }
+            @keyframes agKillText {
+              0%, 43% { opacity: 0; transform: translateY(14px); }
+              62% { opacity: 1; transform: translateY(0); }
+              100% { opacity: 1; transform: translateY(0); }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .ag-kill-speedlines, .ag-kill-attacker, .ag-kill-victim-upper,
+              .ag-kill-victim-lower, .ag-kill-slash, .ag-kill-burst, .ag-kill-text {
+                animation-duration: 1ms !important;
+              }
+            }
+          `}</style>
+          <div style={{
+            position: 'relative', width: 'min(100vw, 900px)', height: 'min(62vh, 520px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            isolation: 'isolate',
+          }}>
+            {/* Compact flash/impact burst, not a plain line painted over the sprites. */}
+            <div aria-hidden="true" className="ag-kill-burst" style={{
+              position: 'absolute', left: '55%', top: '43%', width: 'min(88vw, 660px)', height: 'min(42vh, 300px)',
+              transform: 'translate(-50%, -50%)',
+              background: 'radial-gradient(ellipse at center, rgba(255,249,228,.98) 0%, rgba(255,100,89,.96) 8%, rgba(211,0,25,.86) 22%, rgba(120,0,15,.32) 42%, transparent 68%)',
+              clipPath: 'polygon(0 48%, 20% 40%, 5% 28%, 32% 36%, 26% 9%, 43% 32%, 52% 0, 61% 30%, 84% 8%, 73% 39%, 100% 44%, 74% 54%, 93% 77%, 66% 64%, 65% 100%, 51% 70%, 31% 91%, 37% 64%, 10% 73%, 27% 55%)',
+              animation: 'agKillBurst 1.65s ease-out both',
+              zIndex: 1,
+            }} />
+            <div className="ag-kill-attacker" style={{
+              position: 'absolute', left: '3%', top: '19%', zIndex: 4,
+              animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
+              filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
+            }}>
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
+            </div>
+            <div className="ag-kill-victim" style={{
+              position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
+              filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
+            }}>
+              <div className="ag-kill-victim-upper" style={{
+                position: 'absolute', inset: 0, width: 174, height: 154,
+                // Keep the complete authored balaclava sprite visible during the strike.
+                animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
+              }}>
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
+              </div>
+              <div className="ag-kill-victim-lower" role="img" aria-label="Balaclava corpse with exposed bone" style={{
+                position: 'absolute', inset: 0,
+                animation: 'agKillVictimLower 1.65s ease-out both',
+              }}>
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
+              </div>
+            </div>
+            <div className="ag-kill-slash" style={{
+              position: 'absolute', left: '-5%', top: '45%', width: '112%', height: 'clamp(12px, 2.2vh, 22px)',
+              borderRadius: 999,
+              background: 'linear-gradient(90deg, transparent 0%, #ff263b 11%, #fff4e8 26%, #fff 48%, #fff0df 68%, #f31330 88%, transparent 100%)',
+              boxShadow: '0 0 12px rgba(255,45,70,.95), 0 0 44px rgba(255,10,35,.8), 0 0 92px rgba(255,10,35,.46)',
+              animation: 'agKillSlash 1.65s cubic-bezier(.1,.8,.2,1) both',
+              zIndex: 2,
+            }} />
+          </div>
+          <div className="ag-kill-text" style={{
+            position: 'absolute', left: '4%', right: '4%', bottom: '10%',
+            textAlign: 'center', fontSize: 'clamp(20px, 4vw, 42px)',
+            fontWeight: 950, letterSpacing: '.18em', textTransform: 'uppercase',
+            color: '#fff4f2', textShadow: '0 4px 18px rgba(255,30,50,.8)',
+            animation: 'agKillText 1.65s ease-out both',
+          }}>
+            ELIMINATED
+          </div>
+        </div>
+      )}
       {!loaded && !error && (
         <div style={{
           position: 'absolute', inset: 0,
@@ -1386,12 +1529,12 @@ export default function GameMap() {
                 touchAction: 'manipulation',
               }}
             >
-              {showTaskList ? '✕ ЗАКРЫТЬ ЗАДАНИЯ' : '☷ ЗАДАНИЯ'}
+              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : (en ? '☷ TASKS' : '☷ ЗАДАНИЯ')}
             </button>
           </div>
 
           {showTaskList && (
-            <div role="region" aria-label="Список заданий" style={{
+            <div role="region" aria-label={en ? 'Task list' : 'Список заданий'} style={{
               position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 106px)', left: 12,
               width: 'min(330px, calc(100vw - 24px))', maxHeight: 'min(55vh, 420px)',
               overflowY: 'auto', zIndex: 52, padding: 10, borderRadius: 12,
@@ -1401,15 +1544,15 @@ export default function GameMap() {
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px 2px 8px' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>ЗАДАНИЯ ЭКИПАЖА</div>
+                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>{en ? 'CREW TASKS' : 'ЗАДАНИЯ ЭКИПАЖА'}</div>
                   <div style={{ marginTop: 3, color: 'rgba(220,239,242,0.58)', fontSize: 10 }}>
                     {myTasks.filter(task => {
                       const def = TASK_DEFS.find(item => item.id === task.taskId);
                       return def && task.completedSteps >= def.steps;
-                    }).length} / {myTasks.length} выполнено
+                    }).length} / {myTasks.length} {en ? 'completed' : 'выполнено'}
                   </div>
                 </div>
-                <button onClick={() => setShowTaskList(false)} aria-label="Закрыть задания" style={{
+                <button onClick={() => setShowTaskList(false)} aria-label={en ? 'Close tasks' : 'Закрыть задания'} style={{
                   width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(220,240,240,0.18)',
                   background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 19, touchAction: 'manipulation',
                 }}>×</button>
@@ -1420,7 +1563,7 @@ export default function GameMap() {
                   marginTop: 4, padding: 12, borderRadius: 8, background: 'rgba(155,48,39,0.18)',
                   border: '1px solid rgba(255,90,80,0.26)', fontSize: 12, lineHeight: 1.4,
                 }}>
-                  <strong>Связь нарушена.</strong> Список заданий временно недоступен до восстановления связи.
+                  <strong>{en ? 'Communications disrupted.' : 'Связь нарушена.'}</strong> {en ? 'The task list is unavailable until communications are restored.' : 'Список заданий временно недоступен до восстановления связи.'}
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
@@ -1450,7 +1593,7 @@ export default function GameMap() {
                           border: `1px solid ${done ? 'rgba(80,220,130,0.45)' : locked ? 'rgba(250,90,90,0.4)' : 'rgba(241,196,15,0.5)'}`,
                           color: done ? '#7fe3a3' : locked ? '#ff9999' : '#f1c40f', fontWeight: 950,
                         }}>{done ? '✓' : locked ? '×' : '!'}</span>
-                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name)}</span>
+                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name, language)}</span>
                         <span style={{ color: 'rgba(220,239,242,0.6)', fontVariantNumeric: 'tabular-nums', fontSize: 10 }}>
                           {Math.min(task.completedSteps, def.steps)} / {def.steps}
                         </span>
@@ -1458,7 +1601,7 @@ export default function GameMap() {
                     );
                   })}
                   <div style={{ padding: '5px 3px 0', fontSize: 10, color: 'rgba(220,239,242,0.55)' }}>
-                    Выберите задание: компас укажет направление к цели.
+                    {en ? 'Choose a task; the compass will point toward it.' : 'Выберите задание: компас укажет направление к цели.'}
                   </div>
                 </div>
               )}
@@ -1483,13 +1626,13 @@ export default function GameMap() {
               touchAction: 'manipulation',
             }}
           >
-            {showMiniMap ? '✕ ЗАКРЫТЬ КАРТУ' : '🗺 КАРТА'}
+            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : (en ? '🗺 MAP' : '🗺 КАРТА')}
           </button>
         </div>
       )}
 
       {showMiniMap && loaded && myRole !== null && meeting === null && (
-        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label="Карта Among Gas"
+        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
           onClick={() => setShowMiniMap(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 75,
@@ -1504,12 +1647,12 @@ export default function GameMap() {
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 9 }}>
               <div>
-                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>КАРТА ОБЪЕКТА</div>
+                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>{en ? 'FACILITY MAP' : 'КАРТА ОБЪЕКТА'}</div>
                 <div style={{ marginTop: 3, fontSize: 11, color: 'rgba(190,225,235,0.68)' }}>
-                  {myRole === 'crewmate' ? 'Ваши незавершённые задания отмечены жёлтым' : 'Обзор карты'}
+                  {myRole === 'crewmate' ? (en ? 'Your unfinished tasks are marked in yellow' : 'Ваши незавершённые задания отмечены жёлтым') : (en ? 'Map overview' : 'Обзор карты')}
                 </div>
               </div>
-              <button onClick={() => setShowMiniMap(false)} aria-label="Закрыть карту" style={{
+              <button onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
                 width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
                 background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
               }}>×</button>
@@ -1518,7 +1661,7 @@ export default function GameMap() {
               position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
               overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
             }}>
-              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt="Карта Among Gas" draggable={false}
+              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
               {myRole === 'crewmate' && myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
@@ -1535,7 +1678,7 @@ export default function GameMap() {
                 }}>!</span>;
               })}
               {myVentId === null && (
-                <span title="Вы здесь" aria-label="Ваше местоположение" style={{
+                <span title={en ? 'You are here' : 'Вы здесь'} aria-label={en ? 'Your location' : 'Ваше местоположение'} style={{
                   position: 'absolute', left: `${playerStateRef.current.x / MAP_W * 100}%`, top: `${playerStateRef.current.y / MAP_H * 100}%`,
                   transform: 'translate(-50%,-50%)', width: 'clamp(12px, 2.6vw, 19px)', height: 'clamp(12px, 2.6vw, 19px)',
                   borderRadius: '50%', background: '#45e6bc', border: '2px solid #fff',
@@ -1544,12 +1687,12 @@ export default function GameMap() {
               )}
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, padding: '8px 2px 0', fontSize: 11, color: 'rgba(220,239,242,0.7)' }}>
-              <span>● Ваше местоположение</span>
-              <span>! Незавершённое задание</span>
+              <span>● {en ? 'Your location' : 'Ваше местоположение'}</span>
+              <span>! {en ? 'Unfinished task' : 'Незавершённое задание'}</span>
               <span>{myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
                 return def !== undefined && task.completedSteps < def.steps;
-              }).length} заданий осталось</span>
+              }).length} {en ? 'tasks remaining' : 'заданий осталось'}</span>
             </div>
           </div>
         </div>
@@ -1594,30 +1737,7 @@ export default function GameMap() {
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
           gap: 6, zIndex: 20,
         }}>
-          {showCollision && hoverZone && (
-            <div style={{
-              padding: '3px 8px',
-              background: 'rgba(20,32,44,0.9)', color: '#78d4ff',
-              fontFamily: 'monospace', fontSize: 11, borderRadius: 4,
-              border: '1px solid rgba(120,200,255,0.3)',
-            }}>
-              {hoverZone}
-            </div>
-          )}
-          <button
-            onClick={() => setShowCollision(prev => !prev)}
-            style={{
-              padding: '6px 14px',
-              background: showCollision ? 'rgba(200,50,50,0.85)' : 'rgba(20,32,44,0.85)',
-              color: showCollision ? '#ffcccc' : '#8ab8cc',
-              border: `1px solid ${showCollision ? 'rgba(255,100,100,0.4)' : 'rgba(100,160,200,0.3)'}`,
-              borderRadius: 6, fontFamily: 'monospace', fontSize: 12, cursor: 'pointer',
-              backdropFilter: 'blur(6px)', letterSpacing: '0.03em',
-            }}
-          >
-            {showCollision ? '■ Hide Collision [C]' : '□ Show Collision [C]'}
-          </button>
-          {import.meta.env.DEV && (
+          {import.meta.env.VITE_ENABLE_DEV_TOOLS === 'true' && (
             <Link
               href="/collision-editor"
               style={{
@@ -1649,7 +1769,7 @@ export default function GameMap() {
               cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
-            🕳️ ВЛЕЗТЬ В ЛЮК
+            🕳️ {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
           </button>
         </div>
       )}
@@ -1799,7 +1919,7 @@ export default function GameMap() {
             gap: 12, padding: 24, background: 'rgba(4,10,15,0.96)',
             color: '#e3fbff', fontFamily: 'sans-serif',
           }}>
-            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>СИСТЕМА ЛЮКОВ</div>
+            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>{en ? 'VENT SYSTEM' : 'СИСТЕМА ЛЮКОВ'}</div>
             <div style={{ fontSize: 26, fontWeight: 900, textAlign: 'center' }}>{vent.name}</div>
             <div style={{ width: 'min(360px, 100%)', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
               {vent.connections.map(id => {
@@ -1822,7 +1942,7 @@ export default function GameMap() {
               color: '#fff', background: '#8b2430', border: '1px solid #ff7785',
               fontWeight: 900, fontSize: 15, touchAction: 'manipulation',
             }}>
-              ВЫЛЕЗТИ ИЗ ЛЮКА
+              {en ? 'EXIT VENT' : 'ВЫЛЕЗТИ ИЗ ЛЮКА'}
             </button>
           </div>
         );
@@ -1845,7 +1965,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(60,140,255,0.35)',
             }}
           >
-            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name)}
+            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
           </button>
         </div>
       )}
@@ -1860,6 +1980,9 @@ export default function GameMap() {
         }}>
           {amIImpostor && (
             <button
+              aria-label={killCooldownMs > 0
+                ? (en ? `Kill cooldown ${Math.ceil(killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(killCooldownMs / 1000)} секунд`)
+                : (en ? 'Kill' : 'Убить')}
               disabled={killCooldownMs > 0 || nearestTarget === null}
               onClick={() => { if (nearestTarget !== null) { haptic.tap(); sendKill(nearestTarget); } }}
               style={{
@@ -1876,12 +1999,12 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : '☠ Убить'}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : (en ? '☠ Kill' : '☠ Убить')}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
             <button
-              onClick={() => { haptic.tap(); reportBody(nearestBody); }}
+              onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); reportBody(nearestBody); }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
@@ -1893,7 +2016,7 @@ export default function GameMap() {
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}
             >
-              🛑 Доложить
+              🛑 {en ? 'Report' : 'Доложить'}
             </button>
           )}
         </div>
@@ -1919,7 +2042,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : '⚡ Саботаж'}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (en ? '⚡ Sabotage' : '⚡ Саботаж')}
           </button>
         </div>
       )}
@@ -1930,7 +2053,7 @@ export default function GameMap() {
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
           <button
-            onClick={() => { haptic.tap(); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
+            onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
               background: 'rgba(200,50,50,0.9)', color: '#ffe8e8',
@@ -1941,7 +2064,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(255,60,60,0.35)',
             }}
           >
-            🔧 Починить {sabotageRu(sabotageDef?.name)}
+            🔧 {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
           </button>
         </div>
       )}
@@ -1956,9 +2079,9 @@ export default function GameMap() {
           letterSpacing: '0.03em', borderRadius: 8,
           border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
         }}>
-          ⚠ {sabotageRu(sabotageDef.name)} саботирован — {Math.ceil(sabotageRemainingMs / 1000)}с
+          ⚠ {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
           {sabotageDef.pads.length > 1 && (
-            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} починено)</span>
+            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} {en ? 'fixed' : 'починено'})</span>
           )}
         </div>
       )}
@@ -1978,12 +2101,12 @@ export default function GameMap() {
             fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
             letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4,
           }}>
-            Выберите систему саботажа
+            {en ? 'Choose a sabotage system' : 'Выберите систему саботажа'}
           </div>
           {Object.values(SABOTAGE_DEFS).map(def => (
             <button
               key={def.id}
-              onClick={(e) => { e.stopPropagation(); haptic.tap(); triggerSabotage(def.id); setShowSabotagePanel(false); }}
+              onClick={(e) => { e.stopPropagation(); haptic.tap(); sfx('uiSelect', 0.3); triggerSabotage(def.id); setShowSabotagePanel(false); }}
               style={{
                 padding: '12px 32px', borderRadius: 10, minWidth: 180,
                 background: 'rgba(130,40,200,0.85)', color: '#f0e4ff',
@@ -2004,7 +2127,7 @@ export default function GameMap() {
               fontFamily: 'sans-serif', fontSize: 12, cursor: 'pointer',
             }}
           >
-            Отмена
+            {en ? 'Cancel' : 'Отмена'}
           </button>
         </div>
       )}
@@ -2014,7 +2137,7 @@ export default function GameMap() {
         <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
           <button
             disabled={emergencyMeetingUsed}
-            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); callEmergencyMeeting(); } }}
+            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
             style={{
               padding: '8px 14px', borderRadius: 8,
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
@@ -2025,7 +2148,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓ Тревога использована' : '🚨 Тревога'}
+            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : (en ? '🚨 Emergency' : '🚨 Тревога')}
           </button>
         </div>
       )}
@@ -2041,8 +2164,8 @@ export default function GameMap() {
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
           {voteResult.ejectedSlot === NO_TARGET
-            ? '🗳️ Никто не исключён'
-            : `🗳️ ${playerName(voteResult.ejectedSlot)} исключён`}
+            ? (en ? '🗳️ Nobody ejected' : '🗳️ Никто не исключён')
+            : `🗳️ ${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
         </div>
       )}
 
@@ -2060,12 +2183,12 @@ export default function GameMap() {
               fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
               letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
             }}>
-              {meeting.bodySlot === NO_TARGET ? 'Экстренное собрание' : 'Найдено тело'}
+              {meeting.bodySlot === NO_TARGET ? (en ? 'Emergency meeting' : 'Экстренное собрание') : (en ? 'Body reported' : 'Найдено тело')}
             </div>
             <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
               {meeting.bodySlot === NO_TARGET
-                ? `${playerName(meeting.reporterSlot)} вызвал экстренное собрание`
-                : `${playerName(meeting.reporterSlot)} нашёл тело ${playerName(meeting.bodySlot)}`}
+                ? `${playerName(meeting.reporterSlot)} ${en ? 'called an emergency meeting' : 'вызвал экстренное собрание'}`
+                : `${playerName(meeting.reporterSlot)} ${en ? 'reported' : 'нашёл тело'} ${playerName(meeting.bodySlot)}`}
             </div>
             <div style={{
               marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
@@ -2077,7 +2200,7 @@ export default function GameMap() {
               fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
               textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
             }}>
-              {inDiscussion ? 'Обсуждение' : 'Голосование'}
+              {inDiscussion ? (en ? 'Discussion' : 'Обсуждение') : (en ? 'Voting' : 'Голосование')}
             </div>
           </div>
 
@@ -2085,7 +2208,7 @@ export default function GameMap() {
             <div style={{
               color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
             }}>
-              👻 Вы мертвы — наблюдаете
+              👻 {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
             </div>
           )}
 
@@ -2093,7 +2216,7 @@ export default function GameMap() {
             <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {inDiscussion && (
                 <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
-                  Голосование начнётся после обсуждения
+                  {en ? 'Voting begins after discussion' : 'Голосование начнётся после обсуждения'}
                 </div>
               )}
               <div aria-live="polite" style={{
@@ -2103,7 +2226,7 @@ export default function GameMap() {
                 textAlign: 'left',
               }}>
                 {meetingMessages.length === 0 && (
-                  <div style={{ fontSize: 12, opacity: 0.4, textAlign: 'center', margin: 'auto' }}>Чат обсуждения</div>
+                  <div style={{ fontSize: 12, opacity: 0.4, textAlign: 'center', margin: 'auto' }}>{en ? 'Meeting chat' : 'Чат обсуждения'}</div>
                 )}
                 {meetingMessages.map((message, i) => (
                   <div key={`${message.receivedAt}-${message.slot}-${i}`} style={{
@@ -2120,11 +2243,11 @@ export default function GameMap() {
                 setChatDraft('');
               }} style={{ display: 'flex', gap: 8 }}>
                 <input
-                  aria-label="Сообщение в обсуждении"
+                  aria-label={en ? 'Meeting message' : 'Сообщение в обсуждении'}
                   value={chatDraft}
                   onChange={e => setChatDraft(e.target.value)}
                   maxLength={200}
-                  placeholder="Написать сообщение…"
+                  placeholder={en ? 'Write a message…' : 'Написать сообщение…'}
                   style={{
                     flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 9,
                     color: '#fff', background: '#172230', border: '1px solid rgba(130,180,220,0.35)',
@@ -2148,7 +2271,7 @@ export default function GameMap() {
                   <button
                     key={p.slot}
                     disabled={hasVoted}
-                    onClick={() => { haptic.tap(); castVote(p.slot); }}
+                    onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); castVote(p.slot); }}
                     style={{
                       padding: '10px 14px', borderRadius: 8, textAlign: 'left',
                       background: hasVoted ? 'rgba(30,40,55,0.6)' : 'rgba(30,40,55,0.9)',
@@ -2157,12 +2280,12 @@ export default function GameMap() {
                       cursor: hasVoted ? 'default' : 'pointer',
                     }}
                   >
-                    {p.slot === mySlot ? `${p.username} (вы)` : p.username}
+                    {p.slot === mySlot ? `${p.username} (${en ? 'you' : 'вы'})` : p.username}
                   </button>
                 ))}
               <button
                 disabled={hasVoted}
-                onClick={() => { haptic.tap(); castVote(NO_TARGET); }}
+                onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); castVote(NO_TARGET); }}
                 style={{
                   padding: '10px 14px', borderRadius: 8, textAlign: 'center', fontWeight: 700,
                   background: hasVoted ? 'rgba(60,60,60,0.4)' : 'rgba(60,60,60,0.75)',
@@ -2171,11 +2294,11 @@ export default function GameMap() {
                   cursor: hasVoted ? 'default' : 'pointer',
                 }}
               >
-                Пропустить
+                {en ? 'Skip' : 'Пропустить'}
               </button>
               {hasVoted && (
                 <div style={{ textAlign: 'center', color: 'rgba(150,220,150,0.85)', fontSize: 12, marginTop: 2 }}>
-                  Голос отдан — ждём других…
+                  {en ? 'Vote cast — waiting for others…' : 'Голос отдан — ждём других…'}
                 </div>
               )}
             </div>
@@ -2200,6 +2323,7 @@ export default function GameMap() {
             stepIndex={stepIndex}
             onComplete={() => {
               haptic.success();
+              sfx('taskComplete', 0.58);
               completeTaskStep(activeTaskId, stepIndex);
               // If this was the last step, close the panel
               if (stepIndex + 1 >= def.steps) setActiveTaskId(null);
@@ -2234,7 +2358,7 @@ export default function GameMap() {
               fontSize: 12, color: 'rgba(255,255,255,0.38)',
               letterSpacing: '0.35em', textTransform: 'uppercase', marginBottom: 20,
             }}>
-              Конец игры
+              {en ? 'Game over' : 'Конец игры'}
             </p>
 
             {/* Character row */}
@@ -2258,7 +2382,7 @@ export default function GameMap() {
               textAlign: 'center', lineHeight: 1.1, marginBottom: 36,
               whiteSpace: 'pre-line',
             }}>
-              {isImpWin ? 'ПРЕДАТЕЛИ\nПОБЕДИЛИ' : 'ЭКИПАЖ\nПОБЕДИЛ'}
+              {isImpWin ? (en ? 'IMPOSTORS\nWIN' : 'ПРЕДАТЕЛИ\nПОБЕДИЛИ') : (en ? 'CREWMATES\nWIN' : 'ЭКИПАЖ\nПОБЕДИЛ')}
             </div>
 
             {/* В ЛОББИ button — Among Gas pill style */}
@@ -2297,7 +2421,7 @@ export default function GameMap() {
                 textShadow: '0 2px 5px rgba(0,0,0,0.5)',
                 letterSpacing: '0.08em',
               }}>
-                В ЛОББИ
+                {en ? 'TO LOBBY' : 'В ЛОББИ'}
               </div>
             </button>
           </div>
@@ -2314,12 +2438,12 @@ export default function GameMap() {
           letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
-          👻 Вы мертвы — режим призрака
+          👻 {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
         </div>
       )}
 
       {/* ── Role reveal overlay (Phase 4) — Among Gas styled ────────────────── */}
-      {showReveal && myRole && (() => {
+      {showReveal && myRole && !skipMockReveal && (() => {
         const isImp  = myRole === 'impostor';
         const accent = isImp ? '#ff3344' : '#4dcdff';
         const outline = '-4px -4px 0 #000,4px -4px 0 #000,-4px 4px 0 #000,4px 4px 0 #000,-4px 0 0 #000,4px 0 0 #000,0 -4px 0 #000,0 4px 0 #000';
@@ -2348,7 +2472,7 @@ export default function GameMap() {
                 letterSpacing: '0.35em', textTransform: 'uppercase',
                 marginBottom: 28,
               }}>
-                Ваша роль
+                {en ? 'Your role' : 'Ваша роль'}
               </p>
 
               {/* Large character sprite */}
@@ -2367,7 +2491,7 @@ export default function GameMap() {
                 textShadow: outline + glow,
                 marginBottom: 20,
               }}>
-                {isImp ? 'ПРЕДАТЕЛЬ' : 'ЭКИПАЖНИК'}
+                {isImp ? (en ? 'IMPOSTOR' : 'ПРЕДАТЕЛЬ') : (en ? 'CREWMATE' : 'ЭКИПАЖНИК')}
               </div>
 
               {/* Fellow impostors */}
@@ -2377,7 +2501,7 @@ export default function GameMap() {
                   fontSize: 16, color: 'rgba(255,150,150,0.85)',
                   letterSpacing: '0.06em',
                 }}>
-                  {impostorSlots.filter(s => s !== mySlot).length > 1 ? 'Сообщники' : 'Сообщник'}:{' '}
+                  {impostorSlots.filter(s => s !== mySlot).length > 1 ? (en ? 'Teammates' : 'Сообщники') : (en ? 'Teammate' : 'Сообщник')}:{' '}
                   {impostorSlots
                     .filter(s => s !== mySlot)
                     .map(s => players.find(p => p.slot === s)?.username ?? `Slot ${s}`)

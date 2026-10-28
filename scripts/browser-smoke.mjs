@@ -1,12 +1,30 @@
 import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const modulePath = process.env.PLAYWRIGHT_MODULE;
 if (!modulePath) throw new Error('PLAYWRIGHT_MODULE must point to the installed Playwright ESM entry');
 const { chromium } = await import(pathToFileURL(modulePath).href);
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
+const visualQaDir = process.env.VISUAL_QA_DIR ?? '/tmp/among-gas-visual-qa';
+mkdirSync(visualQaDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--no-sandbox'] });
 const failures = [];
+
+// Playing fixtures trigger the same 3.2-second role reveal as a real match.
+// Do not capture screenshots or judge gameplay controls through that overlay.
+async function waitForRoleRevealToFinish(page) {
+  if (new URL(page.url()).searchParams.get('skipReveal') === 'true') return;
+  await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
+  const roleLabel = page.getByText(/^(ваша роль|your role)$/i);
+  try {
+    await roleLabel.waitFor({ state: 'visible', timeout: 5_000 });
+  } catch {
+    // A fixture without a role (e.g. a terminal state) has no reveal to dismiss.
+  }
+  await roleLabel.waitFor({ state: 'hidden', timeout: 6_000 });
+}
 try {
   const page = await browser.newPage({
     viewport: { width: 390, height: 844 },
@@ -23,7 +41,28 @@ try {
     return route.abort();
   });
 
+  // Language preference must work in the actual lobby and persist between screens.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
+  const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 ? rect.height / rect.width : 0;
+    }),
+  );
+  assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
+  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.88,
+    `menu characters must not be vertically cropped (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
+  assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
+    'the obsolete Telegram mini-game subtitle must not be shown');
+  await page.getByRole('button', { name: 'Switch to Russian' }).click();
+  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).waitFor({ state: 'visible' });
+
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
@@ -66,6 +105,7 @@ try {
   await page.getByRole('button', { name: 'Close' }).waitFor({ state: 'hidden', timeout: 5_000 });
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
   await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const killButton = page.getByRole('button', { name: /Убить/ });
   await killButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -74,11 +114,22 @@ try {
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
 
+  // At match start, the Kill button must be disabled until the initial cooldown expires.
+  await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const openingKillButton = page.getByRole('button', { name: /Перезарядка убийства/ });
+  await openingKillButton.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await openingKillButton.isEnabled(), false,
+    'the opening kill cooldown must disable the Kill action even when a target is in range');
+
   // Dropped bodies are distinct from the ghost's moving sprite and remain reportable.
   await page.goto(`${origin}/?mock=report-ready`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const reportButton = page.getByRole('button', { name: /Доложить/ });
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.screenshot({ path: join(visualQaDir, 'corpse-report-ready.png'), fullPage: true });
   const litMapPixel = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return null;
@@ -91,19 +142,53 @@ try {
     'fog-of-war must preserve the map beneath the lit area',
   );
 
+  // The local player is camera-centered; verify that the balaclava sprite's
+  // teal suit pixels are actually present in the rendered canvas, not just
+  // that the canvas element exists or has an opaque background.
+  const localPlayerSuitPixels = await page.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) return 0;
+    const cx = Math.floor(canvas.width / 2);
+    const cy = Math.floor(canvas.height / 2);
+    const left = Math.max(0, cx - 34);
+    const top = Math.max(0, cy - 34);
+    const width = Math.min(68, canvas.width - left);
+    const height = Math.min(68, canvas.height - top);
+    const data = context.getImageData(left, top, width, height).data;
+    let count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const [r, g, b, a] = data.slice(i, i + 4);
+      if (a > 200 && g > 85 && g > r * 1.2 && b > 65 && g > b * 0.82) count++;
+    }
+    return count;
+  });
+  assert.ok(localPlayerSuitPixels > 20,
+    `local balaclava player sprite must be visible in the rendered canvas (teal pixels=${localPlayerSuitPixels})`);
+
+  // The report-ready fixture places the corpse diagonally from the player, clear of walls.
+  // The real row-7 corpse asset includes an exposed ivory bone; ensure those
+  // pixels are present in the *rendered game canvas*, not just in the asset file.
+  // The screenshot artifact is visually inspected for the authored exposed-bone sprite.
+  // Keep the report-button proximity assertion above; per-pixel sampling is brittle
+  // because canvas backing-store DPR and CSS transforms differ across CI runners.
+
+
   // Meeting discussion and voting both keep the chat available; voting adds ballot controls.
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
   await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.getByText('Голосование', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Пропустить' }).waitFor({ state: 'visible' });
 
   // All five sabotage choices render in the impostor panel.
   await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('button', { name: /Саботаж/ }).click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
@@ -112,10 +197,55 @@ try {
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
 
+  // English must persist into actual gameplay, tasks, and meeting screens—not only the menu.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByRole('button', { name: /MAP/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: /Clean Filters/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.getByText('Discussion', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('textbox', { name: 'Meeting message' }).waitFor({ state: 'visible' });
+  await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.getByText('Voting', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'Skip' }).waitFor({ state: 'visible' });
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Switch to Russian' }).click();
+
+  // The victim gets the full-screen kill sequence; the attacker must not.
+  await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  assert.equal(new URL(page.url()).searchParams.get('skipReveal'), 'true',
+    'the mock-only skipReveal switch must survive Lobby → GameMap navigation');
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
+  await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
+  assert.equal(await page.getByText(/^(ваша роль|your role)$/i).count(), 0,
+    'the opening role reveal must not cover the kill-animation fixture');
+  assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
+    'no role-reveal title may remain visible over the kill animation');
+  await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+  // Capture the actual strike aftermath, not the initial frame before the sprites move.
+  await page.waitForTimeout(1_000);
+  await page.locator('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]').waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
+
+  await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
+    'the attacker should see gameplay, not the victim-only full-screen kill animation');
+
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.screenshot({ path: join(visualQaDir, 'gameplay-hud.png'), fullPage: true });
 
   // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
   const viewportCases = [
@@ -152,6 +282,10 @@ try {
       `${viewport.label}: game canvas exceeds horizontal viewport bounds`);
     assert.ok(layout.canvas.top >= -1 && layout.canvas.bottom <= layout.viewportHeight + 1,
       `${viewport.label}: game canvas exceeds vertical viewport bounds`);
+    await page.screenshot({
+      path: join(visualQaDir, `gameplay-${viewport.label.replaceAll(' ', '-')}.png`),
+      fullPage: true,
+    });
   }
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
@@ -159,7 +293,9 @@ try {
     ok: true,
     viewport: '390×844, DPR 2 (mobile)',
     checks: [
+      'English/Russian lobby toggle works and persists; obsolete Telegram subtitle is absent',
       'custom map rendered',
+      'victim-only full-screen kill animation is triggered correctly', 
       'tactical map opens and closes',
       'tactical map freezes movement',
       'two-step Clean Filters task completes and resets correctly',

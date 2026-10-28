@@ -58,7 +58,6 @@ const SABOTAGE_INTERVAL_TICKS = 300;
 
 /** How many ticks to linger at a fake task console before moving on. */
 const FAKE_DWELL_TICKS = 3;
-
 /** Crewmate tasks the impostor pretends to work at (for faking cover). */
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
 
@@ -106,7 +105,7 @@ export class ImpostorBot extends BotAgent {
     if (this._sabotageCountdown <= 0) {
       this._trySabotage(lobby, self, manager);
       this._sabotageCountdown = SABOTAGE_INTERVAL_TICKS +
-        Math.floor(Math.random() * 60); // jitter ±60 ticks
+        Math.floor(Math.random() * 60); // add 0–12s jitter at 5Hz
     }
 
     // Transition to HUNTING if cooldown is ready and we were FAKING/COOLDOWN
@@ -220,7 +219,8 @@ export class ImpostorBot extends BotAgent {
 
     this.navigateTo(self, { x: victim.x, y: victim.y });
 
-    // Attempt kill if in range
+    // The authoritative initial kill cooldown is assigned at game start and
+    // decremented by the server. Bots use that same cooldown as human impostors.
     if (self.killCooldownMs === 0) {
       const applied = manager.applyKill(lobby, self.slot, victim.slot);
       if (applied) {
