@@ -105,7 +105,7 @@ export class ImpostorBot extends BotAgent {
     if (this._sabotageCountdown <= 0) {
       this._trySabotage(lobby, self, manager);
       this._sabotageCountdown = SABOTAGE_INTERVAL_TICKS +
-        Math.floor(Math.random() * 120); // jitter up to ±12s at 10Hz
+        Math.floor(Math.random() * 120); // add 0–12s jitter at 10Hz
     }
 
     // Transition to HUNTING if cooldown is ready and we were FAKING/COOLDOWN
