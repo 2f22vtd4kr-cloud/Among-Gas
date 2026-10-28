@@ -15,6 +15,7 @@ const failures = [];
 // Playing fixtures trigger the same 3.2-second role reveal as a real match.
 // Do not capture screenshots or judge gameplay controls through that overlay.
 async function waitForRoleRevealToFinish(page) {
+  if (new URL(page.url()).searchParams.get('skipReveal') === 'true') return;
   await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
   const roleLabel = page.getByText(/^(ваша роль|your role)$/i);
   try {
@@ -200,7 +201,7 @@ try {
   await page.getByRole('button', { name: 'Switch to Russian' }).click();
 
   // The victim gets the full-screen kill sequence; the attacker must not.
-  await page.goto(`${origin}/?mock=kill-animation-victim`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
@@ -208,7 +209,7 @@ try {
   await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
-  await page.goto(`${origin}/?mock=kill-animation-attacker`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
