@@ -995,31 +995,64 @@ export default function GameMap() {
       ctx.restore();
 
       // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      const corpseMarkerSize = Math.max(6, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
+      // Reuse the game's actual balaclava character art and lay it on its side.
+      // The bone is drawn as a high-contrast silhouette so a corpse reads as a
+      // killed player at the real in-game size instead of an abstract blob.
+      const corpseMarkerSize = Math.max(8, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
       ctx.save();
       for (const body of corpsePositionsRef.current) {
         const bx = Math.round((body.x - srcX) * scale);
         const by = Math.round((body.y - srcY) * scale);
-        if (bx < -40 || bx > cw + 40 || by < -40 || by > ch + 40) continue;
+        if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
+        const corpseW = Math.max(8, Math.round(PLAYER_DISPLAY_WIDTH * scale));
+        const corpseH = corpseMarkerSize;
+        const rect = getCharacterFrameRect(slotColor(body.slot), 'idle');
+        const sx = Math.ceil(rect.x);
+        const sy = Math.ceil(rect.y);
+        const sw = Math.floor(rect.x + rect.width) - sx;
+        const sh = Math.floor(rect.y + rect.height) - sy;
+
         ctx.save();
         ctx.translate(bx, by);
-        ctx.rotate(-0.28);
-        // Small, readable dropped-character silhouette in the custom game's palette.
+        ctx.rotate(-Math.PI / 2 - 0.12);
+        // Keep a restrained ground stain beneath the body; it never participates
+        // in collision or shadow casting.
         ctx.beginPath();
-        ctx.ellipse(0, corpseMarkerSize * 0.2, corpseMarkerSize * 0.48, corpseMarkerSize * 0.18, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(92,12,23,0.72)';
+        ctx.ellipse(0, corpseH * 0.18, corpseW * 0.52, corpseH * 0.16, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(104, 18, 24, 0.48)';
         ctx.fill();
+
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sprite, sx, sy, sw, sh, -corpseW / 2, -corpseH / 2, corpseW, corpseH);
+        ctx.imageSmoothingEnabled = true;
+
+        // The exposed bone is intentionally larger than a literal anatomical
+        // bone so it remains legible at mobile viewport scale.
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = 'rgba(20, 12, 12, 0.9)';
+        ctx.lineWidth = Math.max(3, dpr * 4);
         ctx.beginPath();
-        ctx.roundRect(-corpseMarkerSize * 0.34, -corpseMarkerSize * 0.12, corpseMarkerSize * 0.68, corpseMarkerSize * 0.32, corpseMarkerSize * 0.12);
-        ctx.fillStyle = '#71363e';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = '#ffb2a8';
+        ctx.moveTo(0, -corpseH * 0.08);
+        ctx.lineTo(0, -corpseH * 0.48);
         ctx.stroke();
+        ctx.strokeStyle = '#f5ead2';
+        ctx.lineWidth = Math.max(2, dpr * 2.6);
         ctx.beginPath();
-        ctx.arc(corpseMarkerSize * 0.36, -corpseMarkerSize * 0.04, corpseMarkerSize * 0.13, 0, Math.PI * 2);
-        ctx.fillStyle = '#a0ccd2';
-        ctx.fill();
+        ctx.moveTo(0, -corpseH * 0.1);
+        ctx.lineTo(0, -corpseH * 0.47);
+        ctx.stroke();
+        for (const [bx2, by2] of [
+          [-corpseH * 0.055, -corpseH * 0.44],
+          [ corpseH * 0.055, -corpseH * 0.44],
+          [-corpseH * 0.055, -corpseH * 0.5],
+          [ corpseH * 0.055, -corpseH * 0.5],
+        ]) {
+          ctx.beginPath();
+          ctx.arc(bx2, by2, Math.max(2, dpr * 2.2), 0, Math.PI * 2);
+          ctx.fillStyle = '#f5ead2';
+          ctx.fill();
+        }
         ctx.restore();
       }
       ctx.restore();
