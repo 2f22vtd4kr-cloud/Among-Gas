@@ -1505,7 +1505,7 @@ export default function GameMap() {
               }}>
                 <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
               </div>
-              <div className="ag-kill-victim-lower" role="img" aria-label="Balaclava corpse with exposed bone" style={{
+              <div className="ag-kill-victim-lower" role="img" aria-label={en ? 'Balaclava corpse with exposed bone' : 'Тело с открытой костью'} style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>
@@ -1538,7 +1538,7 @@ export default function GameMap() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#8faabb', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
         }}>
-          Loading map…
+          {en ? 'Loading map…' : 'Загрузка карты…'}
         </div>
       )}
       {error && (
@@ -1547,7 +1547,7 @@ export default function GameMap() {
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#cc4444', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
         }}>
-          Failed to load map.
+          {en ? 'Failed to load map.' : 'Не удалось загрузить карту.'}
         </div>
       )}
 
@@ -1715,7 +1715,7 @@ export default function GameMap() {
                 return def !== undefined && task.completedSteps < def.steps;
               }).map(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId)!;
-                return <span key={task.taskId} title={def.name} style={{
+                return <span key={task.taskId} title={taskRu(def.name, language)} style={{
                   position: 'absolute', left: `${def.x / MAP_W * 100}%`, top: `${def.y / MAP_H * 100}%`,
                   transform: 'translate(-50%,-50%)', display: 'grid', placeItems: 'center',
                   width: 'clamp(13px, 2.8vw, 22px)', height: 'clamp(13px, 2.8vw, 22px)',
@@ -1875,7 +1875,7 @@ export default function GameMap() {
           <div
             role="dialog"
             aria-modal="true"
-            aria-label="Admin Table"
+            aria-label={en ? 'Admin Table' : 'Планшет администратора'}
             onClick={() => setShowAdminTable(false)}
             style={{
               position: 'fixed', inset: 0, zIndex: 88,
@@ -1895,12 +1895,12 @@ export default function GameMap() {
             }} onClick={e => e.stopPropagation()}>
               <div style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                 <div>
-                  <div style={{ fontWeight: 950, fontSize: 'clamp(19px, 4vw, 28px)', letterSpacing: '0.1em' }}>ADMIN TABLE</div>
+                  <div style={{ fontWeight: 950, fontSize: 'clamp(19px, 4vw, 28px)', letterSpacing: '0.1em' }}>{en ? 'ADMIN TABLE' : 'ПЛАНШЕТ АДМИНИСТРАТОРА'}</div>
                   <div style={{ fontSize: 12, color: 'rgba(190,225,235,0.68)', marginTop: 3 }}>
-                    Live player locations · {agents.length} visible
+                    {en ? `Live player locations · ${agents.length} visible` : `Позиции игроков в реальном времени · видно: ${agents.length}`}
                   </div>
                 </div>
-                <button onClick={() => setShowAdminTable(false)} aria-label="Close Admin Table" style={{
+                <button onClick={() => setShowAdminTable(false)} aria-label={en ? 'Close Admin Table' : 'Закрыть планшет администратора'} style={{
                   width: 42, height: 42, borderRadius: 12, border: '1px solid rgba(130,195,215,0.35)',
                   background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 22, fontWeight: 800,
                   touchAction: 'manipulation',
@@ -1914,7 +1914,7 @@ export default function GameMap() {
               }}>
                 <img
                   src={`${import.meta.env.BASE_URL}map-hires.png`}
-                  alt="Among Gas map"
+                  alt={en ? 'Among Gas map' : 'Карта Among Gas'}
                   draggable={false}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }}
                 />
@@ -1922,7 +1922,7 @@ export default function GameMap() {
                   <div
                     key={agent.slot}
                     title={agent.username}
-                    aria-label={`${agent.username}, ${agent.alive ? 'alive' : 'dead'}`}
+                    aria-label={`${agent.username}, ${agent.alive ? (en ? 'alive' : 'жив') : (en ? 'dead' : 'мёртв')}`}
                     style={{
                       position: 'absolute',
                       left: `${Math.max(0, Math.min(100, agent.x / MAP_W * 100))}%`,
