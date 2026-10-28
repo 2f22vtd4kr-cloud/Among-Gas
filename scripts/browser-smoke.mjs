@@ -181,6 +181,7 @@ try {
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
   await page.getByText('Почистить фильтры', { exact: true }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'task-minigame-russian.png'), fullPage: true });
   const dirtyFilter = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await dirtyFilter.first().click();
   await page.getByText('Шаг 2 из 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
