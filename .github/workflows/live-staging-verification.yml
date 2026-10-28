@@ -40,10 +40,21 @@ jobs:
       - name: Build and typecheck current canonical source
         run: pnpm run build
 
-      - name: Verify live Replit API health
+      - name: Verify live Replit API health (strict HTTP 200 JSON)
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error --retry 3 --retry-delay 2 --max-time 15 "$GAME_URL/api/healthz"
+          status=$(curl --silent --show-error --max-time 15 --output /tmp/health-response --write-out '%{http_code}' "$GAME_URL/api/healthz")
+          if [ "$status" != "200" ]; then
+            echo "BLOCKED: Replit preview health endpoint returned HTTP $status; expected 200. Response follows:"
+            cat /tmp/health-response
+            exit 1
+          fi
+          if ! grep -q '{' /tmp/health-response; then
+            echo "BLOCKED: Replit health endpoint did not return JSON."
+            cat /tmp/health-response
+            exit 1
+          fi
+          cat /tmp/health-response
 
       - name: Verify live three-client WebSocket gameplay
         run: node test_sabotage.mjs
