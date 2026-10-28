@@ -325,13 +325,25 @@ try {
     const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
     return body && Number.parseFloat(getComputedStyle(body).opacity) > 0.25;
   }, undefined, { timeout: 1_400 });
+  const corpseSuitWindow = page.locator('.ag-kill-victim-lower .ag-corpse-suit-window');
+  const corpseHeadWindow = page.locator('.ag-kill-victim-lower .ag-corpse-head-window');
+  const suitWindowBox = await corpseSuitWindow.boundingBox();
+  const headWindowBox = await corpseHeadWindow.boundingBox();
+  assert.ok(suitWindowBox && headWindowBox, 'kill-screen corpse layers must be measurable');
+  assert.ok(
+    headWindowBox.y < suitWindowBox.y + suitWindowBox.height,
+    'the helmet window must overlap the suit window so the corpse does not appear disconnected',
+  );
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
-    'the attacker should see gameplay, not the victim-only full-screen kill animation');
+  assert.equal(
+    await page.locator('[role="alert"][aria-label="Анимация убийства"], [role="alert"][aria-label="Kill animation"]').count(),
+    0,
+    'the attacker should see gameplay, not the victim-only full-screen kill animation',
+  );
 
   // Inspect the post-death ghost presentation as well as the transient kill sequence.
   await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });

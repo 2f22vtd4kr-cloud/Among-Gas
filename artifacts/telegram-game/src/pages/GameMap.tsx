@@ -143,13 +143,16 @@ function CharSpriteUI({
   const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
   const height = Math.round(CHARACTER_CELL_HEIGHT * scale * (pose === 'dead-body' ? 1 : 0.94));
 
-  // The authored corpse cell places its detached helmet fragment far below the
-  // cut suit. Recompose the two visible parts toward the center so the body reads
-  // as one corpse at both map scale and the enlarged kill-screen scale.
+  // The authored corpse cell stores the suit/bone in its upper half and a
+  // detached helmet fragment near the bottom. Clip each region in a fixed
+  // window, then move the helmet image behind that window: transforming the
+  // clipped element itself also moves its clip boundary and can reopen a gap.
   if (pose === 'dead-body') {
-    const layerStyle: React.CSSProperties = {
-      position: 'absolute', inset: 0, backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
-      backgroundSize: `${bgW}px ${bgH}px`, backgroundPosition: `${posX}px ${posY}px`,
+    const imageStyle: React.CSSProperties = {
+      position: 'absolute', left: 0, top: 0, width: size, height,
+      backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+      backgroundSize: `${bgW}px ${bgH}px`,
+      backgroundPosition: `${posX}px ${posY}px`,
       backgroundRepeat: 'no-repeat', imageRendering: 'pixelated',
     };
     return (
@@ -157,8 +160,18 @@ function CharSpriteUI({
         position: 'relative', width: size, height, flexShrink: 0, overflow: 'hidden',
         transform: flipped ? 'scaleX(-1)' : undefined,
       }}>
-        <div style={{ ...layerStyle, clipPath: 'inset(0 0 34% 0)', transform: 'translateY(8%)' }} />
-        <div style={{ ...layerStyle, clipPath: 'inset(74% 0 0 0)', transform: 'translateY(-23%)' }} />
+        <div
+          className="ag-corpse-suit-window"
+          style={{ position: 'absolute', left: 0, top: '8%', width: size, height: '55%', overflow: 'hidden' }}
+        >
+          <div style={imageStyle} />
+        </div>
+        <div
+          className="ag-corpse-head-window"
+          style={{ position: 'absolute', left: 0, top: '56%', width: size, height: '44%', overflow: 'hidden' }}
+        >
+          <div style={{ ...imageStyle, transform: 'translateY(-80%)' }} />
+        </div>
       </div>
     );
   }
@@ -450,6 +463,9 @@ export default function GameMap() {
 
   /** Closest in-range incomplete task (null when nothing is nearby). */
   const [nearestTask, setNearestTask] = useState<{ taskId: number; stepIndex: number } | null>(null);
+  // Mirrors the actionable task into the canvas loop so it can suppress the
+  // duplicate map marker while the matching fixed-position action button is shown.
+  const nearestTaskRef = useRef<number | null>(null);
   /** Which task minigame is currently open (null = none). */
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
 
@@ -477,7 +493,11 @@ export default function GameMap() {
 
   useEffect(() => {
     if (meeting !== null || myRole !== 'crewmate' ||
-        sabotage?.systemId === SABOTAGE_COMMS) { setNearestTask(null); return; }
+        sabotage?.systemId === SABOTAGE_COMMS) {
+      nearestTaskRef.current = null;
+      setNearestTask(null);
+      return;
+    }
     const id = setInterval(() => {
       const myPos = playerStateRef.current;
       if (!myPos) return;
@@ -496,6 +516,7 @@ export default function GameMap() {
           bestDistSq = distSq;
         }
       }
+      nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
     }, 150);
     return () => clearInterval(id);
@@ -927,6 +948,10 @@ export default function GameMap() {
         if (snap.length > 0 && !meetingActiveRef.current && sabotageRef.current?.systemId !== SABOTAGE_COMMS) {
           ctx.textAlign = 'center';
           for (const t of snap) {
+            // When a task is in interaction range, the fixed action button
+            // already names it; drawing the map marker beneath that button
+            // creates a crowded overlap on short portrait screens.
+            if (t.taskId === nearestTaskRef.current) continue;
             const def = TASK_DEFS[t.taskId];
             if (!def) continue;
             const done = t.completedSteps >= def.steps;
