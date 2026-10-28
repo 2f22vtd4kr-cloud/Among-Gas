@@ -103,6 +103,16 @@ try {
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
+  const taskPromptBox = await taskButton.boundingBox();
+  const movementJoystickBox = await movementJoystick.boundingBox();
+  assert.ok(taskPromptBox && movementJoystickBox, 'task prompt and joystick must be measurable');
+  assert.ok(
+    taskPromptBox.x + taskPromptBox.width <= movementJoystickBox.x ||
+      movementJoystickBox.x + movementJoystickBox.width <= taskPromptBox.x ||
+      taskPromptBox.y + taskPromptBox.height <= movementJoystickBox.y ||
+      movementJoystickBox.y + movementJoystickBox.height <= taskPromptBox.y,
+    'the task prompt must not overlap the movement joystick',
+  );
 
   // The emergency action and Settings must have independent tap targets on mobile.
   const emergencyButton = page.getByRole('button', { name: /Тревога/ });
@@ -280,13 +290,13 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('skipReveal'), 'true',
     'the mock-only skipReveal switch must survive Lobby → GameMap navigation');
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
+  const victimKillScreen = page.getByRole('alert', { name: 'Анимация убийства' });
   await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
   assert.equal(await page.getByText(/^(ваша роль|your role)$/i).count(), 0,
     'the opening role reveal must not cover the kill-animation fixture');
   assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
     'no role-reveal title may remain visible over the kill animation');
-  await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('УСТРАНЁН', { exact: true }).waitFor({ state: 'visible' });
   // Capture the strike while the transient 1.65s scene is still mounted.
   await page.waitForFunction(() => {
     const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
