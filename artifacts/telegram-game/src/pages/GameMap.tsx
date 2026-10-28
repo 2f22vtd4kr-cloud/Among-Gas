@@ -1950,6 +1950,9 @@ export default function GameMap() {
         }}>
           {amIImpostor && (
             <button
+              aria-label={killCooldownMs > 0
+                ? (en ? `Kill cooldown ${Math.ceil(killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(killCooldownMs / 1000)} секунд`)
+                : (en ? 'Kill' : 'Убить')}
               disabled={killCooldownMs > 0 || nearestTarget === null}
               onClick={() => { if (nearestTarget !== null) { haptic.tap(); sendKill(nearestTarget); } }}
               style={{
