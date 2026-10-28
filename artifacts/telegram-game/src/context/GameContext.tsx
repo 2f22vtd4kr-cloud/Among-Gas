@@ -422,7 +422,7 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
-      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x, y: PLAYER_SPAWN.y + 65 }],
+      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 40, y: PLAYER_SPAWN.y + 40 }],
     },
     remotePlayers: [
       { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // ghost may move; body remains at this position
