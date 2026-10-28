@@ -51,6 +51,7 @@ import {
 import {
   buildMovementCorrectionPacket,
   isMovementPathWalkable,
+  isWalkableMovementPoint,
   validateMovementIntent,
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
@@ -661,10 +662,10 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   let wallCrossing: [number, number, number, number] | undefined;
   for (let y = 0; y <= MAP_H && !wallCrossing; y += 4) {
     for (let x = 4; x <= MAP_W - 4; x += 4) {
-      if (!canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS)) continue;
+      if (!isWalkableMovementPoint(grid, x, y)) continue;
       for (const dx of [40, 48, 56, 64, 72]) {
         const tx = x + dx;
-        if (tx > MAP_W || !canMoveTo(grid, tx, y + FEET_OFFSET_Y, PLAYER_RADIUS)) continue;
+        if (tx > MAP_W || !isWalkableMovementPoint(grid, tx, y)) continue;
         if (!isMovementPathWalkable(grid, x, y, tx, y)) {
           wallCrossing = [x, y, tx, y];
           break;
