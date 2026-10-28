@@ -173,7 +173,7 @@ try {
     if (!context) return 0;
     const dpr = canvas.width / window.innerWidth;
     const cx = Math.floor(canvas.width / 2);
-    const cy = Math.floor(canvas.height / 2 + 80 * 0.7 * dpr - 14 * dpr);
+    const cy = Math.floor(canvas.height / 2 + 65 * 0.7 * dpr - 14 * dpr);
     const left = Math.max(0, cx - 15);
     const top = Math.max(0, cy - 20);
     const right = Math.min(canvas.width, cx + 16);
