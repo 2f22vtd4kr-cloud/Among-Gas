@@ -218,7 +218,14 @@ export default function GameMap() {
 
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
   useEffect(() => {
-    if (!lastKill || lastKill.victimSlot !== mySlot) return;
+    if (!lastKill) return;
+    // The victim receives the blocking full-screen death sequence; the
+    // attacker gets the kill sound but can keep playing and moving.
+    if (lastKill.attackerSlot === mySlot && lastKill.victimSlot !== mySlot) {
+      sfx('kill', 0.48);
+      return;
+    }
+    if (lastKill.victimSlot !== mySlot) return;
     setKillAnimation(lastKill);
     sfx('kill', 0.72);
     const timer = window.setTimeout(() => setKillAnimation(null), 1150);
