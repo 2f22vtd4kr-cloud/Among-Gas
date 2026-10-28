@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const modulePath = process.env.PLAYWRIGHT_MODULE;
 if (!modulePath) throw new Error('PLAYWRIGHT_MODULE must point to the installed Playwright ESM entry');
 const { chromium } = await import(pathToFileURL(modulePath).href);
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
+const visualQaDir = process.env.VISUAL_QA_DIR ?? '/tmp/among-gas-visual-qa';
+mkdirSync(visualQaDir, { recursive: true });
 const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--no-sandbox'] });
 const failures = [];
 try {
@@ -28,6 +32,7 @@ try {
   await page.getByRole('button', { name: 'Switch to English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
   await page.getByRole('button', { name: 'Switch to Russian' }).click();
@@ -89,6 +94,7 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const reportButton = page.getByRole('button', { name: /Доложить/ });
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+  await page.screenshot({ path: join(visualQaDir, 'corpse-report-ready.png'), fullPage: true });
   const litMapPixel = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return null;
@@ -152,6 +158,7 @@ try {
   const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
   await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
   await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
   await page.goto(`${origin}/?mock=kill-animation-attacker`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -162,6 +169,7 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.screenshot({ path: join(visualQaDir, 'gameplay-hud.png'), fullPage: true });
 
   // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
   const viewportCases = [
