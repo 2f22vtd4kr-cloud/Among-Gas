@@ -113,7 +113,7 @@ export function computeVisibilityPolygon(
  *
  * This function returns a new grid and never mutates the movement collision grid.
  */
-const MIN_OCCLUDER_COMPONENT_CELLS = 12;
+const MIN_OCCLUDER_COMPONENT_CELLS = 4;
 
 // Cell coordinates in the 104 × 58 red-line reference grid. These cells contain
 // low furniture in the open upper atrium, not the room's enclosing walls.
