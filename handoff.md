@@ -1515,3 +1515,23 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - Remove the temporary `VITE_ENABLE_GAME_MOCKS=true` QA setting from the artifact manifest after screenshot-based testing.
 - Leave the game web and API workflows running.
+
+### 2026-10-28 — Settings menu and configurable movement control
+
+**Done**
+- Replaced the lobby's direct RU/EN buttons with a Settings dialog and added the same settings entry point during gameplay.
+- Added a persisted joystick-side preference. New players default to the right; the browser suite verifies switching sides, persistence into gameplay, and changing it there.
+- Opening Settings clears held movement input and freezes keyboard movement until the dialog closes.
+- Added screenshots for the default settings and English lobby, and re-ran the complete browser suite at phone portrait, phone landscape, and desktop sizes.
+
+**Decisions & gotchas**
+- Keep language persistence on the existing shared language store; store control preferences separately so the menu and live joystick stay in sync.
+- Place the in-game settings button below the top-right alert control to avoid covering it.
+
+**Left off / next steps**
+- The browser suite passes with right-side joystick default, selectable left/right placement, language selection inside Settings, and no page errors.
+- Next, refine collision resolution and shadow-only geometry; then use the public-domain clone assets for corpse, kill-screen, and moving-ghost visuals.
+
+**State to restore**
+- Remove the temporary `VITE_ENABLE_GAME_MOCKS=true` QA setting from the artifact manifest after screenshot-based testing.
+- Leave the game web and API workflows running.

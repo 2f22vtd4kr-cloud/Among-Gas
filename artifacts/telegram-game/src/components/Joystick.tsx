@@ -1,4 +1,5 @@
 import { useRef, useEffect } from 'react';
+import { useGameSettings } from '../lib/gameSettings';
 
 const BASE_RADIUS = 52;   // outer ring radius (px)
 const KNOB_RADIUS = 22;   // draggable knob radius (px)
@@ -10,6 +11,7 @@ interface JoystickProps {
 }
 
 export default function Joystick({ keysRef }: JoystickProps) {
+  const { joystickSide } = useGameSettings();
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
   const activeTouch = useRef<number | null>(null);
@@ -111,10 +113,13 @@ export default function Joystick({ keysRef }: JoystickProps) {
   return (
     <div
       ref={baseRef}
+      aria-label="Movement joystick"
+      data-joystick-side={joystickSide}
       style={{
         position: 'fixed',
         bottom: 32,
-        left: 32,
+        left: joystickSide === 'left' ? 32 : 'auto',
+        right: joystickSide === 'right' ? 32 : 'auto',
         width:  BASE_RADIUS * 2,
         height: BASE_RADIUS * 2,
         borderRadius: '50%',

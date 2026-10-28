@@ -55,6 +55,7 @@ import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/share
 import { buildShadowGrid, computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
+import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -193,6 +194,7 @@ export default function GameMap() {
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -281,6 +283,8 @@ export default function GameMap() {
   const [showTaskList, setShowTaskList] = useState(false);
   const [trackedTaskId, setTrackedTaskId] = useState<number | null>(null);
   const miniMapOpenRef = useRef(false);
+  const settingsOpenRef = useRef(false);
+  settingsOpenRef.current = settingsOpen;
   useEffect(() => {
     miniMapOpenRef.current = showMiniMap;
     // Prevent the keyboard and joystick from moving the player behind the modal.
@@ -701,9 +705,15 @@ export default function GameMap() {
   // ── Track held movement keys ──────────────────────────────────────────────
   const keysRef = useRef<Set<string>>(new Set());
   useEffect(() => {
+    if (!settingsOpen) return;
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [settingsOpen]);
+  useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
     const onDown  = (e: KeyboardEvent) => {
       unlockSfx();
+      if (settingsOpenRef.current) return;
       const k = e.key.toLowerCase();
       if (!tracked.has(k)) return;
       e.preventDefault();
@@ -834,7 +844,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
+      const effectiveKeys = meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -1699,6 +1709,14 @@ export default function GameMap() {
       )}
 
       {loaded && <Joystick keysRef={keysRef} />}
+      {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
+        <SettingsButton
+          label={en ? 'Settings' : 'Настройки'}
+          onClick={() => setSettingsOpen(true)}
+          style={{ position: 'fixed', top: 72, right: 14, zIndex: 35 }}
+        />
+      )}
+      <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
 
       {/* ── Task progress bar — thin strip at top of screen (Phase 7) ──────── */}
       {loaded && myRole !== null && meeting === null && (

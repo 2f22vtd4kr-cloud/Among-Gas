@@ -13,6 +13,7 @@ import { useLocation } from 'wouter';
 import { haptic } from '@/lib/haptics';
 import { sfx, startMenuMusic, stopMenuMusic } from '@/lib/sfx';
 import { useLanguage, type AppLanguage } from '@/lib/language';
+import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
 import './lobby.css';
 
 // ── Sprite sheet constants (mirrors characterSprites.ts) ─────────────────────
@@ -132,22 +133,16 @@ function PlayerRow({ slot, username, isHost, isMe, language }: {
 }
 
 // ── Title block ───────────────────────────────────────────────────────────────
-function TitleBlock({ language, onLanguageChange }: {
-  language: AppLanguage; onLanguageChange: (language: AppLanguage) => void;
+function TitleBlock({ language, onSettingsClick }: {
+  language: AppLanguage; onSettingsClick: () => void;
 }) {
   return (
     <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 30 }}>
-      <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
-        {(['ru', 'en'] as const).map(option => (
-          <button key={option} type="button" onClick={() => { sfx('uiSelect', 0.25); onLanguageChange(option); }}
-            aria-label={option === 'en' ? 'Switch to English' : 'Switch to Russian'}
-            style={{
-              border: '1px solid rgba(120,220,210,.35)', borderRadius: 8, padding: '5px 9px',
-              color: language === option ? '#f5fffd' : 'rgba(230,255,250,.55)',
-              background: language === option ? 'rgba(36,150,135,.7)' : 'rgba(0,0,0,.18)',
-              fontSize: 11, fontWeight: 800, cursor: 'pointer',
-            }}>{option.toUpperCase()}</button>
-        ))}
+      <div style={{ position: 'absolute', right: 0, top: 0 }}>
+        <SettingsButton
+          label={language === 'en' ? 'Settings' : 'Настройки'}
+          onClick={onSettingsClick}
+        />
       </div>
       <h1 className="ag-title" style={{ marginBottom: 8 }}>Among Gas</h1>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, minHeight: 62 }}>
@@ -163,8 +158,9 @@ export default function Lobby() {
   const state = useGameState();
   const { createRoom, createSolo, joinRoom, startGame } = useGameActions();
   const [, navigate] = useLocation();
-  const { language, setLanguage } = useLanguage();
+  const { language } = useLanguage();
   const en = language === 'en';
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [botCount,     setBotCount]     = useState(4);
   const [joinExpanded, setJoinExpanded] = useState(false);
   const [code,         setCode]         = useState('');
@@ -266,7 +262,8 @@ export default function Lobby() {
       }}>
         <GasParticles />
 
-        <TitleBlock language={language} onLanguageChange={setLanguage} />
+        <TitleBlock language={language} onSettingsClick={() => setSettingsOpen(true)} />
+        <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
         {/* Error banner */}
         {state.errorMessage && (
@@ -400,7 +397,8 @@ export default function Lobby() {
     }}>
       <GasParticles />
 
-      <TitleBlock language={language} onLanguageChange={setLanguage} />
+      <TitleBlock language={language} onSettingsClick={() => setSettingsOpen(true)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
 
       {/* Non-fatal error */}
       {state.errorMessage && state.phase === 'lobby' && (

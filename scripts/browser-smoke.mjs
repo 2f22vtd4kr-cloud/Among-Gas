@@ -43,11 +43,22 @@ try {
     return route.abort();
   });
 
-  // Language preference must work in the actual lobby and persist between screens.
+  // Settings own both language and joystick placement; defaults must be right-handed.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Switch to English' }).click();
+  assert.equal(await page.getByRole('button', { name: /Switch to (English|Russian)/ }).count(), 0,
+    'language controls must live inside Settings, not the title bar');
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
+  const lobbySettings = page.locator('[role="dialog"]');
+  assert.equal(await lobbySettings.getByTestId('joystick-side-right').getAttribute('aria-pressed'), 'true',
+    'the movement joystick must default to the right side');
+  assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
+  await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
+  await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
+  await lobbySettings.getByTestId('joystick-side-left').click();
+  await page.getByRole('button', { name: 'Close settings' }).click();
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
   const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
     nodes.map(node => {
@@ -60,12 +71,23 @@ try {
     `menu characters must not be vertically cropped (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
-  await page.getByRole('button', { name: 'Switch to Russian' }).click();
-  await page.getByRole('button', { name: 'СОЗДАТЬ КОМНАТУ' }).waitFor({ state: 'visible' });
 
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  const movementJoystick = page.getByLabel('Movement joystick');
+  await movementJoystick.waitFor({ state: 'visible' });
+  assert.equal(await movementJoystick.getAttribute('data-joystick-side'), 'left',
+    'the joystick side preference must persist into gameplay');
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const gameplaySettings = page.getByRole('dialog', { name: 'Settings' });
+  await gameplaySettings.waitFor({ state: 'visible' });
+  assert.equal(await gameplaySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'the selected joystick side must remain selected when settings are reopened');
+  await gameplaySettings.getByTestId('joystick-side-right').click();
+  await gameplaySettings.getByRole('button', { name: 'Русский' }).click();
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  await page.waitForFunction(() => document.querySelector('[aria-label="Movement joystick"]')?.getAttribute('data-joystick-side') === 'right');
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
@@ -201,7 +223,10 @@ try {
 
   // English must persist into actual gameplay, tasks, and meeting screens—not only the menu.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Switch to English' }).click();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const languageSettings = page.getByRole('dialog', { name: 'Настройки' });
+  await languageSettings.getByRole('button', { name: 'English' }).click();
+  await page.getByRole('button', { name: 'Close settings' }).click();
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -216,7 +241,10 @@ try {
   await page.getByText('Voting', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('button', { name: 'Skip' }).waitFor({ state: 'visible' });
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Switch to Russian' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const russianSettings = page.getByRole('dialog', { name: 'Settings' });
+  await russianSettings.getByRole('button', { name: 'Русский' }).click();
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
 
   // The victim gets the full-screen kill sequence; the attacker must not.
   await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
@@ -297,7 +325,8 @@ try {
     ok: true,
     viewport: '390×844, DPR 2 (mobile)',
     checks: [
-      'English/Russian lobby toggle works and persists; obsolete Telegram subtitle is absent',
+      'language and joystick preferences persist through Settings; right-side default verified',
+      'obsolete Telegram subtitle is absent',
       'custom map rendered',
       'victim-only full-screen kill animation is triggered correctly', 
       'tactical map opens and closes',
