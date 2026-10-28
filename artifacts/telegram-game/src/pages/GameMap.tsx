@@ -218,7 +218,7 @@ export default function GameMap() {
 
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
   useEffect(() => {
-    if (!lastKill || (lastKill.victimSlot !== mySlot && lastKill.attackerSlot !== mySlot)) return;
+    if (!lastKill || lastKill.victimSlot !== mySlot) return;
     setKillAnimation(lastKill);
     sfx('kill', 0.72);
     const timer = window.setTimeout(() => setKillAnimation(null), 1150);
@@ -1037,9 +1037,9 @@ export default function GameMap() {
       ctx.restore();
 
       // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      // Reuse the game's actual balaclava character art and lay it on its side.
-      // The bone is drawn as a high-contrast silhouette so a corpse reads as a
-      // killed player at the real in-game size instead of an abstract blob.
+      // Among Gas's balaclava character art is retained, but only the lower half
+      // remains after a kill. The bone rises from the cut edge; it is not drawn
+      // over a complete standing character. This marker is visual only.
       const corpseMarkerSize = Math.max(8, Math.round(PLAYER_DISPLAY_HEIGHT * scale));
       ctx.save();
       for (const body of corpsePositionsRef.current) {
@@ -1053,45 +1053,51 @@ export default function GameMap() {
         const sy = Math.ceil(rect.y);
         const sw = Math.floor(rect.x + rect.width) - sx;
         const sh = Math.floor(rect.y + rect.height) - sy;
+        const splitY = Math.floor(sh * 0.52);
+        const lowerHeight = Math.max(1, sh - splitY);
 
+        // The original sprite faces up. Rotate the lower half onto its side so
+        // the remaining legs extend from the cut point, with a subtle stain below.
         ctx.save();
         ctx.translate(bx, by);
         ctx.rotate(-Math.PI / 2 - 0.12);
-        // Keep a restrained ground stain beneath the body; it never participates
-        // in collision or shadow casting.
         ctx.beginPath();
-        ctx.ellipse(0, corpseH * 0.18, corpseW * 0.52, corpseH * 0.16, 0, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(104, 18, 24, 0.48)';
+        ctx.ellipse(0, corpseH * 0.1, corpseW * 0.48, corpseH * 0.12, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(104, 18, 24, 0.42)';
         ctx.fill();
-
         ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(sprite, sx, sy, sw, sh, -corpseW / 2, -corpseH / 2, corpseW, corpseH);
+        ctx.drawImage(
+          sprite, sx, sy + splitY, sw, lowerHeight,
+          -corpseW / 2, 0, corpseW, corpseH / 2,
+        );
         ctx.imageSmoothingEnabled = true;
+        ctx.restore();
 
-        // The exposed bone is intentionally larger than a literal anatomical
-        // bone so it remains legible at mobile viewport scale.
+        // Keep the exposed bone upright on screen, perpendicular to the body.
+        ctx.save();
+        ctx.translate(bx, by);
         ctx.lineCap = 'round';
         ctx.lineJoin = 'round';
-        ctx.strokeStyle = 'rgba(20, 12, 12, 0.9)';
+        ctx.strokeStyle = 'rgba(20, 12, 12, 0.92)';
         ctx.lineWidth = Math.max(3, dpr * 4);
         ctx.beginPath();
-        ctx.moveTo(0, -corpseH * 0.08);
-        ctx.lineTo(0, -corpseH * 0.48);
+        ctx.moveTo(0, 1);
+        ctx.lineTo(0, -corpseW * 0.46);
         ctx.stroke();
         ctx.strokeStyle = '#f5ead2';
-        ctx.lineWidth = Math.max(2, dpr * 2.6);
+        ctx.lineWidth = Math.max(2, dpr * 2.5);
         ctx.beginPath();
-        ctx.moveTo(0, -corpseH * 0.1);
-        ctx.lineTo(0, -corpseH * 0.47);
+        ctx.moveTo(0, 1);
+        ctx.lineTo(0, -corpseW * 0.46);
         ctx.stroke();
-        for (const [bx2, by2] of [
-          [-corpseH * 0.055, -corpseH * 0.44],
-          [ corpseH * 0.055, -corpseH * 0.44],
-          [-corpseH * 0.055, -corpseH * 0.5],
-          [ corpseH * 0.055, -corpseH * 0.5],
+        for (const [boneX, boneY] of [
+          [-corpseW * 0.07, -corpseW * 0.40],
+          [ corpseW * 0.07, -corpseW * 0.40],
+          [-corpseW * 0.07, -corpseW * 0.47],
+          [ corpseW * 0.07, -corpseW * 0.47],
         ]) {
           ctx.beginPath();
-          ctx.arc(bx2, by2, Math.max(2, dpr * 2.2), 0, Math.PI * 2);
+          ctx.arc(boneX, boneY, Math.max(2, dpr * 2), 0, Math.PI * 2);
           ctx.fillStyle = '#f5ead2';
           ctx.fill();
         }
