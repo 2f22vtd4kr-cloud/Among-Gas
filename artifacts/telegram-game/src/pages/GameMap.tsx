@@ -1138,13 +1138,8 @@ export default function GameMap() {
         const corpseX = bx - corpseW / 2;
         const corpseY = by - corpseH / 2;
         const helmetSplitY = sy + Math.round(sh * 0.74);
-        // Draw the raised helmet fragment first, behind the torso. The two
-        // regions deliberately overlap so the torso's legs stay visible while
-        // the helmet fills the empty center gap instead of covering the suit.
-        ctx.drawImage(
-          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
-          corpseX, corpseY + corpseH * 0.36, corpseW, corpseH * 0.26,
-        );
+        // Draw the suit first, then raise the helmet crop enough to close most
+        // of the source gap without covering the suit's distinctive lower legs.
         ctx.save();
         ctx.beginPath();
         ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.58);
@@ -1154,6 +1149,10 @@ export default function GameMap() {
           corpseX, corpseY + corpseH * 0.08, corpseW, corpseH,
         );
         ctx.restore();
+        ctx.drawImage(
+          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
+          corpseX, corpseY + corpseH * 0.43, corpseW, corpseH * 0.26,
+        );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
       }
