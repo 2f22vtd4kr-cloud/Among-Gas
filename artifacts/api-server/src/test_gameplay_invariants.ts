@@ -540,6 +540,10 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'the old lobby receives a room update after host migration',
   );
   assert.equal(originalHostSocket.closeCalls, 1, 'the replaced host socket is closed');
+  assert.equal(manager.isCurrentSocket(91001, originalHostSocket.ws), false,
+    'the previous socket loses ownership immediately, before its close handshake completes');
+  assert.equal(manager.isCurrentSocket(91001, replacementHostSocket.ws), true,
+    'the new socket owns the replacement room');
   assert.equal(
     manager.removePlayer(91001, originalHostSocket.ws),
     null,
@@ -577,6 +581,9 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'the previous lobby receives a roster update when a member joins another room',
   );
   assert.equal(oldHostSocket.closeCalls, 1);
+  assert.equal(manager.isCurrentSocket(92001, oldHostSocket.ws), false,
+    'the old socket must not authorize queued actions after moving rooms');
+  assert.equal(manager.isCurrentSocket(92001, movedSocket.ws), true);
   assert.equal(manager.getLobbyForUser(92001), targetLobby);
   assert.equal(targetLobby.players.get(1)?.ws, movedSocket.ws);
   assert.equal(manager.removePlayer(92001, oldHostSocket.ws), null);
@@ -593,6 +600,9 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const newSocket = fakeSocket();
   assert.equal(manager.joinLobby(lobby.code, 93001, 'Reconnect', newSocket.ws), lobby);
   assert.equal(oldSocket.closeCalls, 1);
+  assert.equal(manager.isCurrentSocket(93001, oldSocket.ws), false,
+    'reconnecting into the same room invalidates the older socket immediately');
+  assert.equal(manager.isCurrentSocket(93001, newSocket.ws), true);
   assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
   assert.equal(manager.removePlayer(93001, oldSocket.ws), null);
   assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
