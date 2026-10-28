@@ -171,18 +171,21 @@ try {
   const corpseBonePixels = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return 0;
-    const dpr = canvas.width / window.innerWidth;
-    const cx = Math.floor(canvas.width / 2 + 40 * 0.7 * dpr);
-    const cy = Math.floor(canvas.height / 2 + 40 * 0.7 * dpr - 14 * dpr);
-    const left = Math.max(0, cx - 15);
-    const top = Math.max(0, cy - 20);
-    const right = Math.min(canvas.width, cx + 16);
-    const bottom = Math.min(canvas.height, cy + 21);
+    // The canvas CSS box is shorter than the viewport because the HUD sits
+    // above/below it. Search a generous local neighborhood around the camera-
+    // centered player so DPR and canvas layout differences cannot miss the bone.
+    const cx = Math.floor(canvas.width / 2);
+    const cy = Math.floor(canvas.height / 2);
+    const left = Math.max(0, cx - 8);
+    const top = Math.max(0, cy - 12);
+    const right = Math.min(canvas.width, cx + 112);
+    const bottom = Math.min(canvas.height, cy + 92);
     const data = context.getImageData(left, top, right - left, bottom - top).data;
     let count = 0;
     for (let i = 0; i < data.length; i += 4) {
       const [r, g, b, a] = data.slice(i, i + 4);
-      if (a > 200 && r > 175 && g > 165 && b > 135 && Math.max(r, g, b) - Math.min(r, g, b) < 85) count++;
+      if (a > 200 && r > 145 && g > 125 && b > 90
+        && r >= g && g >= b && r - b < 105) count++;
     }
     return count;
   });
