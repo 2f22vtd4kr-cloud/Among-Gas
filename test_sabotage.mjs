@@ -107,6 +107,7 @@ async function main() {
     assert.equal(impostors.length, 1, 'a three-player game must have exactly one impostor');
     assert.equal(crewmates.length, 2, 'remaining players must be crewmates');
     const impostor = impostors[0].player;
+    const crew = crewmates[0].player;
     console.log('Impostor slot:', impostor.slot, 'Crewmate slots:', crewmates.map(x => x.player.slot));
 
     console.log('--- Reject a forged movement teleport and return an authoritative correction ---');
@@ -125,7 +126,6 @@ async function main() {
       'the server must not echo the forged teleport y coordinate');
 
     console.log('--- Reject a crewmate sabotage attempt ---');
-    const crew = crewmates[0].player;
     const priorStartCounts = players.map(p => p.msgs.filter(b => b[0] === 0x16 && b[1] === 0x01).length);
     send(crew, [0x15, 0x04, 0x01]);
     await sleep(350);
