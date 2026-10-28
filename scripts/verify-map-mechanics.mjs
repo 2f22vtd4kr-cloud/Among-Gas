@@ -193,7 +193,8 @@ assert.match(gameMapSource, /lastKill\.victimSlot !== mySlot/, 'Only the victim 
 assert.match(gameMapSource, /sfx\('footstep'/, 'Local walking must trigger footsteps');
 assert.match(gameMapSource, /sfx\('taskComplete'/, 'Task completion must trigger its sound cue');
 assert.match(gameMapSource, /sfx\(meeting\.bodySlot === NO_TARGET \? 'meeting' : 'bodyReport'/, 'Body reports and emergency meetings must have distinct sound cues');
-assert.match(appSource, /import\.meta\.env\.DEV && <Route path="\/collision-editor"/, 'Collision editor route must be development-only');
+assert.match(appSource, /VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="\/collision-editor"/, 'Collision editor route must require explicit opt-in even on dev preview servers');
+assert.match(gameMapSource, /VITE_ENABLE_DEV_TOOLS === 'true' && \(/, 'Collision editor link must require explicit opt-in even on dev preview servers');
 assert.match(uiLobbySource, /onLanguageChange/, 'Lobby must expose the language selector');
 assert.match(languageSource, /amongGas\.language/, 'Language preference must persist across lobby/game routes');
 assert.match(lobbySource, /p\.killCooldownMs = p\.role === 'impostor' \? KILL_COOLDOWN_MS : 0/, 'Impostors must start with the authoritative kill cooldown');
