@@ -1556,3 +1556,22 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - PR #9 branch: `fix/portrait-hud-visibility-polish`.
 - No deployment was published or altered. The exact user Replit project remains unverified.
+
+
+### 2026-10-28 — Follow-up gameplay visual QA (PR #9)
+
+**Done**
+- Repositioned the crewmate task-action prompt opposite the movement joystick and made its vertical offset responsive to viewport height. Browser smoke now checks prompt/joystick separation at 320×568, 844×390, and 1365×768.
+- Localized task markers and sabotage labels on the canvas, the active sabotage/ghost/ejection banners, the victim kill-screen label, and task-minigame titles, instructions, controls, and accessible names. Canvas labels read the current language preference without restarting the movement/render loop.
+- Re-composed the corpse's detached helmet fragment closer to the cut suit in both canvas gameplay and the enlarged kill-screen sprite. The sprite now retains its full cell height instead of clipping the lower fragment.
+- Moved the ghost, sabotage, and ejection banners below the top-left map/task controls; browser smoke asserts that ghost and sabotage banners do not overlap the task toggle.
+- Added visual QA screenshots for ghost mode and Lights sabotage alongside portrait, landscape, desktop, corpse/report, lobby, settings, and victim kill animation states.
+
+**Validation / current state**
+- Workflow run #221 passed the complete build, browser smoke, and gameplay checks before the final banner/corpse follow-up.
+- Runs #224 and #225 are validating the banner/corpse composition and final task-minigame copy. The screenshot artifact from #224 was inspected: task HUD and banners are separated, the Lights vision radius remains intentionally narrow during sabotage, and the corpse's suit/helmet gap is materially reduced.
+- The Replit connector still has not resolved the exact user project https://replit.com/@ookkakxkow1093/Among-Gas. No Replit project or live deployment was modified; do not claim live deployment verification.
+
+**Decisions**
+- Preserve collision geometry, visibility polygon, wall occlusion, and vision radii; this pass changes presentation, not gameplay rules.
+- Keep VITE_ENABLE_GAME_MOCKS=true limited to the CI test process. It is not committed into production configuration.
