@@ -57,6 +57,7 @@ import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/s
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
+import { useGameSettings } from '../lib/gameSettings';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -140,7 +141,27 @@ function CharSpriteUI({
   const bgH   = _SHEET_PX_H * scale;
   const posX  = -(col * CHARACTER_CELL_WIDTH * scale);
   const posY  = -(row * CHARACTER_CELL_HEIGHT * scale);
-  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * 0.94); // trim only the bottommost ground-shadow pixels
+  const height = Math.round(CHARACTER_CELL_HEIGHT * scale * (pose === 'dead-body' ? 1 : 0.94));
+
+  // The authored corpse cell places its detached helmet fragment far below the
+  // cut suit. Recompose the two visible parts toward the center so the body reads
+  // as one corpse at both map scale and the enlarged kill-screen scale.
+  if (pose === 'dead-body') {
+    const layerStyle: React.CSSProperties = {
+      position: 'absolute', inset: 0, backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+      backgroundSize: `${bgW}px ${bgH}px`, backgroundPosition: `${posX}px ${posY}px`,
+      backgroundRepeat: 'no-repeat', imageRendering: 'pixelated',
+    };
+    return (
+      <div style={{
+        position: 'relative', width: size, height, flexShrink: 0, overflow: 'hidden',
+        transform: flipped ? 'scaleX(-1)' : undefined,
+      }}>
+        <div style={{ ...layerStyle, clipPath: 'inset(0 0 26% 0)', transform: 'translateY(8%)' }} />
+        <div style={{ ...layerStyle, clipPath: 'inset(74% 0 0 0)', transform: 'translateY(-8%)' }} />
+      </div>
+    );
+  }
 
   return (
     <div style={{
@@ -184,6 +205,9 @@ const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
   const { language } = useLanguage();
+  const { joystickSide } = useGameSettings();
+  const languageRef = useRef(language);
+  useEffect(() => { languageRef.current = language; }, [language]);
   const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
@@ -935,9 +959,10 @@ export default function GameMap() {
             ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
-            ctx.strokeText(def.name, tx, ty + markerR + 3);
+            const taskLabel = taskRu(def.name, languageRef.current);
+            ctx.strokeText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(locked ? `🔒 ${def.name}` : def.name, tx, ty + markerR + 3);
+            ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
           }
           // Off-screen task compass: points towards the selected task (or the next
           // unfinished one). Coordinates are clamped in canvas pixels, so it works
@@ -1022,7 +1047,8 @@ export default function GameMap() {
               ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
               ctx.strokeStyle = 'rgba(0,0,0,0.85)';
               ctx.lineWidth = Math.round(3 * dpr);
-              const label = def.pads.length > 1 ? `${def.name} ${padId + 1}` : def.name;
+              const translatedName = sabotageRu(def.name, languageRef.current);
+              const label = def.pads.length > 1 ? `${translatedName} ${padId + 1}` : translatedName;
               ctx.strokeText(label, tx, ty + markerR + 3);
               ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
               ctx.fillText(label, tx, ty + markerR + 3);
@@ -1084,9 +1110,23 @@ export default function GameMap() {
 
         ctx.save();
         ctx.imageSmoothingEnabled = false;
+        const corpseX = bx - corpseW / 2;
+        const corpseY = by - corpseH / 2;
+        const helmetSplitY = sy + Math.round(sh * 0.74);
+        // Keep the suit and bone in the upper layer, then move the detached
+        // helmet fragment upward to close the exaggerated gap in the source cell.
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(corpseX, corpseY + corpseH * 0.08, corpseW, corpseH * 0.74);
+        ctx.clip();
         ctx.drawImage(
           sprite, sx, sy, sw, sh,
-          bx - corpseW / 2, by - corpseH / 2, corpseW, corpseH,
+          corpseX, corpseY + corpseH * 0.08, corpseW, corpseH,
+        );
+        ctx.restore();
+        ctx.drawImage(
+          sprite, sx, helmetSplitY, sw, sy + sh - helmetSplitY,
+          corpseX, corpseY + corpseH * 0.66, corpseW, corpseH * 0.26,
         );
         ctx.imageSmoothingEnabled = true;
         ctx.restore();
@@ -1318,7 +1358,9 @@ export default function GameMap() {
         fogCtx.globalCompositeOperation = 'source-over';
         fogCtx.filter = 'none';
         fogCtx.clearRect(0, 0, cw, ch);
-        fogCtx.fillStyle = 'rgba(0,0,0,0.96)';
+        // Keep distant rooms dimly legible instead of flattening the map to near-black.
+        // The visibility polygon still strictly enforces radius and wall occlusion.
+        fogCtx.fillStyle = 'rgba(3,8,14,0.86)';
         fogCtx.fillRect(0, 0, cw, ch);
 
         // The visibility polygon ends at either the sight-radius boundary or
@@ -1371,7 +1413,7 @@ export default function GameMap() {
         <div
           role="alert"
           aria-live="assertive"
-          aria-label="Kill animation"
+          aria-label={en ? 'Kill animation' : 'Анимация убийства'}
           style={{
             position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1501,7 +1543,7 @@ export default function GameMap() {
             color: '#fff4f2', textShadow: '0 4px 18px rgba(255,30,50,.8)',
             animation: 'agKillText 1.65s ease-out both',
           }}>
-            ELIMINATED
+            {en ? 'ELIMINATED' : 'УСТРАНЁН'}
           </div>
         </div>
       )}
@@ -1984,7 +2026,11 @@ export default function GameMap() {
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
-          position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+          // Keep the action prompt opposite the movement control and clear of the player sprite.
+          position: 'fixed', bottom: 'clamp(150px, 22vh, 210px)',
+          left: joystickSide === 'right' ? 16 : 'auto',
+          right: joystickSide === 'left' ? 16 : 'auto',
+          zIndex: 25,
         }}>
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
@@ -2105,7 +2151,7 @@ export default function GameMap() {
       {/* ── Sabotage active banner (Phase 8) ─────────────────────────────────── */}
       {loaded && sabotage && sabotageDef && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 40, textAlign: 'center',
           background: 'rgba(70,10,10,0.9)', color: '#ffe4e4',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
@@ -2148,7 +2194,7 @@ export default function GameMap() {
                 letterSpacing: '0.03em', cursor: 'pointer',
               }}
             >
-              {def.name}
+              {sabotageRu(def.name, language)}
             </button>
           ))}
           <button
@@ -2167,7 +2213,13 @@ export default function GameMap() {
 
       {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
       {loaded && !amIDead && meeting === null && sabotage === null && (
-        <div style={{ position: 'fixed', top: 16, right: 16, zIndex: 20 }}>
+        <div style={{
+          position: 'fixed',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          // Reserve the Settings button's 44px hit area plus a 12px gap.
+          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
+          zIndex: 35,
+        }}>
           <button
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
@@ -2189,7 +2241,7 @@ export default function GameMap() {
       {/* ── Ejection / no-ejection banner (Phase 6) ─────────────────────────── */}
       {voteResult && !voteResult.winner && !meeting && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 45,
           background: 'rgba(20,32,44,0.9)', color: '#e8f0ff',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
@@ -2464,7 +2516,7 @@ export default function GameMap() {
       {/* ── Dead / ghost-mode banner (Phase 5) ────────────────────────────── */}
       {loaded && amIDead && (
         <div style={{
-          position: 'fixed', top: 16, left: '50%', transform: 'translateX(-50%)',
+          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
           padding: '6px 16px', zIndex: 25,
           background: 'rgba(20,32,44,0.85)', color: '#a8c8e0',
           fontFamily: 'sans-serif', fontSize: 12, fontWeight: 600,

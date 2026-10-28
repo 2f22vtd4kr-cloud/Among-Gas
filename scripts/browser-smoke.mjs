@@ -45,6 +45,18 @@ try {
 
   // Settings own both language and joystick placement; defaults must be right-handed.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  const menuTitle = page.getByRole('heading', { name: 'Among Gas' });
+  const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
+  await menuTitle.waitFor({ state: 'visible' });
+  await menuSettingsButton.waitFor({ state: 'visible' });
+  const menuTitleBox = await menuTitle.boundingBox();
+  const menuSettingsBox = await menuSettingsButton.boundingBox();
+  assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
+  assert.ok(
+    menuSettingsBox.y + menuSettingsBox.height <= menuTitleBox.y ||
+      menuTitleBox.y + menuTitleBox.height <= menuSettingsBox.y,
+    'the Settings button must not overlap the menu title on a mobile viewport',
+  );
   assert.equal(await page.getByRole('button', { name: /Switch to (English|Russian)/ }).count(), 0,
     'language controls must live inside Settings, not the title bar');
   await page.getByRole('button', { name: 'Настройки' }).click();
@@ -91,6 +103,54 @@ try {
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
+  const taskPromptBox = await taskButton.boundingBox();
+  const movementJoystickBox = await movementJoystick.boundingBox();
+  assert.ok(taskPromptBox && movementJoystickBox, 'task prompt and joystick must be measurable');
+  assert.ok(
+    taskPromptBox.x + taskPromptBox.width <= movementJoystickBox.x ||
+      movementJoystickBox.x + movementJoystickBox.width <= taskPromptBox.x ||
+      taskPromptBox.y + taskPromptBox.height <= movementJoystickBox.y ||
+      movementJoystickBox.y + movementJoystickBox.height <= taskPromptBox.y,
+    'the task prompt must not overlap the movement joystick',
+  );
+
+  // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
+  for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1365, height: 768 }]) {
+    await page.setViewportSize(size);
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('canvas');
+      return !!canvas && canvas.style.width === window.innerWidth + 'px' && canvas.style.height === window.innerHeight + 'px';
+    }, undefined, { timeout: 3_000 });
+    const prompt = await taskButton.boundingBox();
+    const stick = await movementJoystick.boundingBox();
+    assert.ok(prompt && stick, 'task prompt and joystick must remain measurable after resize');
+    assert.ok(
+      prompt.x + prompt.width <= stick.x || stick.x + stick.width <= prompt.x ||
+        prompt.y + prompt.height <= stick.y || stick.y + stick.height <= prompt.y,
+      `task prompt must not overlap joystick at ${size.width}×${size.height}`,
+    );
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas');
+    return !!canvas && canvas.style.width === window.innerWidth + 'px' && canvas.style.height === window.innerHeight + 'px';
+  }, undefined, { timeout: 3_000 });
+
+  // The emergency action and Settings must have independent tap targets on mobile.
+  const emergencyButton = page.getByRole('button', { name: /Тревога/ });
+  const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
+  await emergencyButton.waitFor({ state: 'visible' });
+  await gameplaySettingsButton.waitFor({ state: 'visible' });
+  const emergencyBox = await emergencyButton.boundingBox();
+  const gameplaySettingsBox = await gameplaySettingsButton.boundingBox();
+  assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
+  assert.ok(
+    emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
+      gameplaySettingsBox.x + gameplaySettingsBox.width <= emergencyBox.x ||
+      emergencyBox.y + emergencyBox.height <= gameplaySettingsBox.y ||
+      gameplaySettingsBox.y + gameplaySettingsBox.height <= emergencyBox.y,
+    'Emergency and Settings must not overlap on a mobile viewport',
+  );
 
   // Tactical map: rendered over the custom Among Gas map and safely dismissible.
   await page.getByRole('button', { name: /КАРТА/ }).click();
@@ -120,13 +180,14 @@ try {
 
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
-  await page.getByText('Clean Filters', { exact: true }).waitFor({ state: 'visible' });
-  const dirtyFilter = page.getByRole('button', { name: /Dirty filter/ });
+  await page.getByText('Почистить фильтры', { exact: true }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: join(visualQaDir, 'task-minigame-russian.png'), fullPage: true });
+  const dirtyFilter = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await dirtyFilter.first().click();
-  await page.getByText('Step 2 of 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
-  const secondStepDirty = page.getByRole('button', { name: /Dirty filter/ });
+  await page.getByText('Шаг 2 из 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
+  const secondStepDirty = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
-  await page.getByRole('button', { name: 'Close' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  await page.getByRole('button', { name: 'Закрыть' }).waitFor({ state: 'hidden', timeout: 5_000 });
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
   await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
@@ -216,7 +277,7 @@ try {
   await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('button', { name: /Саботаж/ }).click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
-  for (const system of ['Lights', 'O₂', 'Reactor', 'Comms', 'Doors']) {
+  for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
     await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
@@ -252,13 +313,13 @@ try {
   assert.equal(new URL(page.url()).searchParams.get('skipReveal'), 'true',
     'the mock-only skipReveal switch must survive Lobby → GameMap navigation');
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  const victimKillScreen = page.getByRole('alert', { name: 'Kill animation' });
+  const victimKillScreen = page.getByRole('alert', { name: 'Анимация убийства' });
   await victimKillScreen.waitFor({ state: 'visible', timeout: 5_000 });
   assert.equal(await page.getByText(/^(ваша роль|your role)$/i).count(), 0,
     'the opening role reveal must not cover the kill-animation fixture');
   assert.equal(await page.getByText(/^(экипажник|crewmate|предатель|impostor)$/i).count(), 0,
     'no role-reveal title may remain visible over the kill animation');
-  await page.getByText('ELIMINATED', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('УСТРАНЁН', { exact: true }).waitFor({ state: 'visible' });
   // Capture the strike while the transient 1.65s scene is still mounted.
   await page.waitForFunction(() => {
     const body = document.querySelector('.ag-kill-victim-lower[aria-label="Balaclava corpse with exposed bone"]');
@@ -271,6 +332,41 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   assert.equal(await page.getByRole('alert', { name: 'Kill animation' }).count(), 0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation');
+
+  // Inspect the post-death ghost presentation as well as the transient kill sequence.
+  await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const ghostBanner = page.getByText(/Вы мертвы — режим призрака/);
+  await ghostBanner.waitFor({ state: 'visible', timeout: 10_000 });
+  const taskListToggle = page.getByRole('button', { name: /ЗАДАНИЯ/ });
+  const ghostBannerBox = await ghostBanner.boundingBox();
+  const taskListBox = await taskListToggle.boundingBox();
+  assert.ok(ghostBannerBox && taskListBox, 'ghost banner and task toggle must be measurable');
+  assert.ok(
+    ghostBannerBox.x + ghostBannerBox.width <= taskListBox.x || taskListBox.x + taskListBox.width <= ghostBannerBox.x ||
+      ghostBannerBox.y + ghostBannerBox.height <= taskListBox.y || taskListBox.y + taskListBox.height <= ghostBannerBox.y,
+    'ghost banner must not overlap the task-list toggle',
+  );
+  await page.waitForTimeout(450);
+  await page.screenshot({ path: join(visualQaDir, 'ghost-mode.png'), fullPage: true });
+
+  // Capture the low-vision Lights sabotage state to review contrast and the HUD.
+  await page.goto(`${origin}/?mock=sabotage-lights`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
+  const lightsBanner = page.getByText(/саботирован/);
+  await lightsBanner.waitFor({ state: 'visible', timeout: 10_000 });
+  const lightsBannerBox = await lightsBanner.boundingBox();
+  const lightsTaskListBox = await page.getByRole('button', { name: /ЗАДАНИЯ/ }).boundingBox();
+  assert.ok(lightsBannerBox && lightsTaskListBox, 'sabotage banner and task toggle must be measurable');
+  assert.ok(
+    lightsBannerBox.x + lightsBannerBox.width <= lightsTaskListBox.x || lightsTaskListBox.x + lightsTaskListBox.width <= lightsBannerBox.x ||
+      lightsBannerBox.y + lightsBannerBox.height <= lightsTaskListBox.y || lightsTaskListBox.y + lightsTaskListBox.height <= lightsBannerBox.y,
+    'sabotage banner must not overlap the task-list toggle',
+  );
+  await page.waitForTimeout(250);
+  await page.screenshot({ path: join(visualQaDir, 'vision-lights.png'), fullPage: true });
 
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });

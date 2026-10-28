@@ -137,7 +137,7 @@ function TitleBlock({ language, onSettingsClick }: {
   language: AppLanguage; onSettingsClick: () => void;
 }) {
   return (
-    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 30 }}>
+    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 62 }}>
       <div style={{ position: 'absolute', right: 0, top: 0 }}>
         <SettingsButton
           label={language === 'en' ? 'Settings' : 'Настройки'}
