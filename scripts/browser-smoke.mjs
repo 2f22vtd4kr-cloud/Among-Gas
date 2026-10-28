@@ -28,7 +28,7 @@ try {
   });
 
   // Language preference must work in the actual lobby and persist between screens.
-  await page.goto(`${origin}/?mock=lobby-host`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Switch to English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
