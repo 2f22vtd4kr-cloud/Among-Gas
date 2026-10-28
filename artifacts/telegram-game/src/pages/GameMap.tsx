@@ -463,6 +463,9 @@ export default function GameMap() {
 
   /** Closest in-range incomplete task (null when nothing is nearby). */
   const [nearestTask, setNearestTask] = useState<{ taskId: number; stepIndex: number } | null>(null);
+  // Mirrors the actionable task into the canvas loop so it can suppress the
+  // duplicate map marker while the matching fixed-position action button is shown.
+  const nearestTaskRef = useRef<number | null>(null);
   /** Which task minigame is currently open (null = none). */
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
 
@@ -490,7 +493,11 @@ export default function GameMap() {
 
   useEffect(() => {
     if (meeting !== null || myRole !== 'crewmate' ||
-        sabotage?.systemId === SABOTAGE_COMMS) { setNearestTask(null); return; }
+        sabotage?.systemId === SABOTAGE_COMMS) {
+      nearestTaskRef.current = null;
+      setNearestTask(null);
+      return;
+    }
     const id = setInterval(() => {
       const myPos = playerStateRef.current;
       if (!myPos) return;
@@ -509,6 +516,7 @@ export default function GameMap() {
           bestDistSq = distSq;
         }
       }
+      nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
     }, 150);
     return () => clearInterval(id);
@@ -940,6 +948,10 @@ export default function GameMap() {
         if (snap.length > 0 && !meetingActiveRef.current && sabotageRef.current?.systemId !== SABOTAGE_COMMS) {
           ctx.textAlign = 'center';
           for (const t of snap) {
+            // When a task is in interaction range, the fixed action button
+            // already names it; drawing the map marker beneath that button
+            // creates a crowded overlap on short portrait screens.
+            if (t.taskId === nearestTaskRef.current) continue;
             const def = TASK_DEFS[t.taskId];
             if (!def) continue;
             const done = t.completedSteps >= def.steps;
