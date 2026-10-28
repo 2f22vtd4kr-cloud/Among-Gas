@@ -61,11 +61,17 @@ function assertClientWalkable(x: number, y: number, label: string): void {
 
 function fakeSocket() {
   const packets: Buffer[] = [];
+  let closeCalls = 0;
   const ws = {
     readyState: 1,
     send(data: Uint8Array) { packets.push(Buffer.from(data)); },
+    close() { closeCalls++; this.readyState = 3; },
   };
-  return { ws: ws as unknown as LobbyPlayer['ws'], packets };
+  return {
+    ws: ws as unknown as LobbyPlayer['ws'],
+    packets,
+    get closeCalls() { return closeCalls; },
+  };
 }
 
 function makePlayer(
@@ -597,6 +603,91 @@ console.log('PASS: Among Gas gameplay invariants (map, task validation, vents, s
   bot.roamingTick(lobby, impostor, manager);
   assert.equal(crewmate.alive, false,
     'the bot may kill normally after the initial cooldown expires');
+  manager.disposeLobby(lobby);
+}
+
+// 13. Replacing a player session keeps the old lobby roster current and
+// prevents an obsolete authenticated socket from acting as the same user.
+{
+  const manager = new LobbyManager();
+  const originalHostSocket = fakeSocket();
+  const originalLobby = manager.createLobby(91001, 'OriginalHost', originalHostSocket.ws);
+  const guestSocket = fakeSocket();
+  const joinedOriginal = manager.joinLobby(
+    originalLobby.code, 91002, 'Guest', guestSocket.ws,
+  );
+  assert.equal(joinedOriginal, originalLobby);
+  manager.broadcastRoomUpdate(originalLobby);
+  guestSocket.packets.length = 0;
+
+  const replacementHostSocket = fakeSocket();
+  const replacementLobby = manager.createLobby(
+    91001, 'ReplacementHost', replacementHostSocket.ws,
+  );
+
+  assert.equal(originalLobby.hostSlot, 1, 'moving a host migrates the old lobby host');
+  assert.ok(
+    guestSocket.packets.some(packet => packet[0] === 0x10 && packet[1] === 0x03),
+    'the old lobby receives a room update after host migration',
+  );
+  assert.equal(originalHostSocket.closeCalls, 1, 'the replaced host socket is closed');
+  assert.equal(
+    manager.removePlayer(91001, originalHostSocket.ws),
+    null,
+    'a delayed close from the replaced socket is ignored',
+  );
+  assert.equal(manager.getLobbyForUser(91001), replacementLobby);
+  assert.equal(replacementLobby.players.get(0)?.ws, replacementHostSocket.ws);
+  manager.disposeLobby(originalLobby);
+  manager.disposeLobby(replacementLobby);
+}
+
+// Moving a user by joining a different room must publish the old-room removal,
+// migrate its host, and close the previous WebSocket just like create-room does.
+{
+  const manager = new LobbyManager();
+  const oldHostSocket = fakeSocket();
+  const oldLobby = manager.createLobby(92001, 'MovingHost', oldHostSocket.ws);
+  const oldGuestSocket = fakeSocket();
+  assert.equal(
+    manager.joinLobby(oldLobby.code, 92002, 'OldGuest', oldGuestSocket.ws),
+    oldLobby,
+  );
+  const targetHostSocket = fakeSocket();
+  const targetLobby = manager.createLobby(92003, 'TargetHost', targetHostSocket.ws);
+  oldGuestSocket.packets.length = 0;
+
+  const movedSocket = fakeSocket();
+  assert.equal(
+    manager.joinLobby(targetLobby.code, 92001, 'MovingHost', movedSocket.ws),
+    targetLobby,
+  );
+  assert.equal(oldLobby.hostSlot, 1);
+  assert.ok(
+    oldGuestSocket.packets.some(packet => packet[0] === 0x10 && packet[1] === 0x03),
+    'the previous lobby receives a roster update when a member joins another room',
+  );
+  assert.equal(oldHostSocket.closeCalls, 1);
+  assert.equal(manager.getLobbyForUser(92001), targetLobby);
+  assert.equal(targetLobby.players.get(1)?.ws, movedSocket.ws);
+  assert.equal(manager.removePlayer(92001, oldHostSocket.ws), null);
+  manager.disposeLobby(oldLobby);
+  manager.disposeLobby(targetLobby);
+}
+
+// Reconnecting into the same waiting room replaces and closes the old socket;
+// its late close event must not remove the newly bound player.
+{
+  const manager = new LobbyManager();
+  const oldSocket = fakeSocket();
+  const lobby = manager.createLobby(93001, 'Reconnect', oldSocket.ws);
+  const newSocket = fakeSocket();
+  assert.equal(manager.joinLobby(lobby.code, 93001, 'Reconnect', newSocket.ws), lobby);
+  assert.equal(oldSocket.closeCalls, 1);
+  assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
+  assert.equal(manager.removePlayer(93001, oldSocket.ws), null);
+  assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
+  assert.equal(manager.getLobbyForUser(93001), lobby);
   manager.disposeLobby(lobby);
 }
 
