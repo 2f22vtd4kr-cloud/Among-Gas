@@ -11,6 +11,7 @@ import { useState, useEffect } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
 import { useLocation } from 'wouter';
 import { haptic } from '@/lib/haptics';
+import { sfx, startMenuMusic, stopMenuMusic } from '@/lib/sfx';
 import { useLanguage, type AppLanguage } from '@/lib/language';
 import './lobby.css';
 
@@ -129,7 +130,7 @@ function TitleBlock({ language, onLanguageChange }: {
     <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 30 }}>
       <div style={{ position: 'absolute', right: 0, top: 0, display: 'flex', gap: 4 }}>
         {(['ru', 'en'] as const).map(option => (
-          <button key={option} type="button" onClick={() => onLanguageChange(option)}
+          <button key={option} type="button" onClick={() => { sfx('uiSelect', 0.25); onLanguageChange(option); }}
             aria-label={option === 'en' ? 'Switch to English' : 'Switch to Russian'}
             style={{
               border: '1px solid rgba(120,220,210,.35)', borderRadius: 8, padding: '5px 9px',
@@ -158,6 +159,21 @@ export default function Lobby() {
   const [botCount,     setBotCount]     = useState(4);
   const [joinExpanded, setJoinExpanded] = useState(false);
   const [code,         setCode]         = useState('');
+
+  useEffect(() => {
+    const unlock = () => {
+      startMenuMusic();
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+    window.addEventListener('pointerdown', unlock);
+    window.addEventListener('keydown', unlock);
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+      stopMenuMusic();
+    };
+  }, []);
 
   useEffect(() => {
     if (state.phase === 'playing') navigate('/game');
@@ -223,7 +239,7 @@ export default function Lobby() {
   function handleJoin(e: React.FormEvent) {
     e.preventDefault();
     const clean = code.toUpperCase().replace(/[^A-Z2-9]/g, '');
-    if (clean.length === 6) { haptic.tap(); joinRoom(clean); }
+    if (clean.length === 6) { haptic.tap(); sfx('uiSelect', 0.35); joinRoom(clean); }
   }
 
   // ── In a room ─────────────────────────────────────────────────────────────
@@ -317,7 +333,7 @@ export default function Lobby() {
             <>
               <button
                 className={`au-btn${state.players.length >= 2 ? ' au-btn-green' : ''}`}
-                onClick={() => { haptic.medium(); startGame(); }}
+                onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); startGame(); }}
                 disabled={state.players.length < 2}
                 style={{ marginBottom: 8 }}
               >
@@ -337,7 +353,7 @@ export default function Lobby() {
               {state.players.length === 1 && (
                 <button
                   className="au-btn-ghost"
-                  onClick={() => { haptic.medium(); startGame(); }}
+                  onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); startGame(); }}
                   style={{ display: 'block', width: '100%', textAlign: 'center' }}
                 >
                   {en ? 'Test (Solo)' : 'Тест (Соло)'}
@@ -390,7 +406,7 @@ export default function Lobby() {
         {/* ── СОЗДАТЬ КОМНАТУ ─────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.medium(); createRoom(); }}
+          onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); createRoom(); }}
           style={{ marginBottom: 8 }}
         >
           <div className="au-btn-icon">
@@ -402,7 +418,7 @@ export default function Lobby() {
         {/* ── СОЛО vs БОТЫ ────────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.medium(); createSolo(botCount); }}
+          onClick={() => { haptic.medium(); sfx('uiSelect', 0.35); createSolo(botCount); }}
           style={{ marginBottom: 0 }}
         >
           <div className="au-btn-icon">
@@ -440,7 +456,7 @@ export default function Lobby() {
         {/* ── ВОЙТИ В КОМНАТУ ─────────────────────────────────────────── */}
         <button
           className="au-btn"
-          onClick={() => { haptic.tap(); setJoinExpanded(v => !v); }}
+          onClick={() => { haptic.tap(); sfx('uiSelect', 0.35); setJoinExpanded(v => !v); }}
           style={{ marginBottom: joinExpanded ? 0 : 0 }}
         >
           <div className="au-btn-icon">
