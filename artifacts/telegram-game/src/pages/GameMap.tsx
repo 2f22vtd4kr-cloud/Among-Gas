@@ -186,6 +186,8 @@ const REMOTE_INTERPOLATION_MAX_MS = 220;
 export default function GameMap() {
   const { language } = useLanguage();
   const { joystickSide } = useGameSettings();
+  const languageRef = useRef(language);
+  useEffect(() => { languageRef.current = language; }, [language]);
   const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
@@ -937,7 +939,7 @@ export default function GameMap() {
             ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
-            const taskLabel = taskRu(def.name, language);
+            const taskLabel = taskRu(def.name, languageRef.current);
             ctx.strokeText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
             ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
@@ -1025,7 +1027,7 @@ export default function GameMap() {
               ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
               ctx.strokeStyle = 'rgba(0,0,0,0.85)';
               ctx.lineWidth = Math.round(3 * dpr);
-              const translatedName = sabotageRu(def.name, language);
+              const translatedName = sabotageRu(def.name, languageRef.current);
               const label = def.pads.length > 1 ? `${translatedName} ${padId + 1}` : translatedName;
               ctx.strokeText(label, tx, ty + markerR + 3);
               ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
@@ -1366,7 +1368,7 @@ export default function GameMap() {
 
     rafId = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafId);
-  }, [loaded, spriteLoaded, sendMove, remotePlayersRef, language]);
+  }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
   return (
     <div
