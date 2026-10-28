@@ -1707,7 +1707,7 @@ export default function GameMap() {
           display: 'flex', flexDirection: 'column', alignItems: 'flex-end',
           gap: 6, zIndex: 20,
         }}>
-          {import.meta.env.DEV && (
+          {import.meta.env.VITE_ENABLE_DEV_TOOLS === 'true' && (
             <Link
               href="/collision-editor"
               style={{
