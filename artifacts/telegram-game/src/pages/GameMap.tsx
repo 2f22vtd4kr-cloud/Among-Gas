@@ -1210,7 +1210,9 @@ export default function GameMap() {
           anim.renderY = anim.fromY + (anim.targetY - anim.fromY) * easedT;
           const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
           anim.animMs = rMoving ? anim.animMs + dtMs : 0;
-          // Phase 5: dead players always render the static "ghost" pose.
+          // The atlas contains one dedicated ghost pose, not a walking ghost
+          // cycle. Keep that silhouette and animate its body transform rather
+          // than swapping in living-player frames that would lose the ghost look.
           const rPose: CharacterPose = rIsGhost
             ? 'ghost'
             : rMoving
@@ -1221,13 +1223,17 @@ export default function GameMap() {
           const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
           const rSpriteH = Math.round(rBaseSpriteH * rRect.height / CHARACTER_CELL_HEIGHT);
 
-          const rpCX = Math.round((anim.renderX - srcX) * scale);
-          // Ghosts float rather than walking on the floor. Keep the ghost suit
-          // silhouette, but animate its vertical drift so dead players do not
-          // look like static stickers sliding over the map.
+          // Give ghosts a readable float path: vertical drift, lateral sway,
+          // and a slow breathing pulse. This is draw-only; authoritative/world
+          // positions and collision remain untouched.
+          const ghostPhase = ts / 245 + rp.slot * 0.8;
           const ghostBob = rIsGhost
-            ? Math.sin(ts / 190 + rp.slot * 0.8) * Math.max(1.5, rSpriteH * 0.075)
+            ? Math.sin(ghostPhase) * Math.max(2.5, rSpriteH * 0.13)
             : 0;
+          const ghostDrift = rIsGhost
+            ? Math.sin(ts / 335 + rp.slot * 1.1) * Math.max(1.5, rSpriteW * 0.06)
+            : 0;
+          const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
           const rpCY = Math.round((anim.renderY - srcY) * scale - ghostBob);
 
           // Skip players that are off-screen (with margin)
@@ -1256,8 +1262,14 @@ export default function GameMap() {
 
           ctx.save();
           ctx.translate(rpCX, rpCY);
+          if (rIsGhost) {
+            const ghostPulse = Math.sin(ts / 275 + rp.slot * 0.9);
+            const ghostSway = Math.sin(ts / 390 + rp.slot * 0.7);
+            ctx.rotate(ghostSway * 0.045);
+            ctx.scale(1 + ghostPulse * 0.025, 1 - ghostPulse * 0.04);
+            ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + rp.slot * 0.6));
+          }
           if (anim.facingLeft) ctx.scale(-1, 1);
-          if (rIsGhost) ctx.globalAlpha = 0.55;
           ctx.imageSmoothingEnabled = false;
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
@@ -1295,8 +1307,16 @@ export default function GameMap() {
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
 
-      // Ground shadow (ghosts float — no shadow)
+      // Ground shadow (ghosts float — no shadow). The local ghost uses the
+      // same draw-only float/sway as remote ghosts, without affecting movement.
       const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
+      const localGhostPhase = ts / 245 + (mySlotRef.current ?? 0) * 0.8;
+      const localGhostBob = amIGhostFrame
+        ? Math.sin(localGhostPhase) * Math.max(2.5, sH * 0.13)
+        : 0;
+      const localGhostDrift = amIGhostFrame
+        ? Math.sin(ts / 335 + (mySlotRef.current ?? 0) * 1.1) * Math.max(1.5, sW * 0.06)
+        : 0;
       if (!amIGhostFrame) {
         const blurPx = Math.max(2, Math.round(sH * 0.05));
         ctx.save();
@@ -1311,9 +1331,15 @@ export default function GameMap() {
       }
 
       ctx.save();
-      ctx.translate(pCX, pCY);
+      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob);
+      if (amIGhostFrame) {
+        const ghostPulse = Math.sin(ts / 275 + (mySlotRef.current ?? 0) * 0.9);
+        const ghostSway = Math.sin(ts / 390 + (mySlotRef.current ?? 0) * 0.7);
+        ctx.rotate(ghostSway * 0.045);
+        ctx.scale(1 + ghostPulse * 0.025, 1 - ghostPulse * 0.04);
+        ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + (mySlotRef.current ?? 0) * 0.6));
+      }
       if (facingLeft) ctx.scale(-1, 1);
-      if (amIGhostFrame) ctx.globalAlpha = 0.55;
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
