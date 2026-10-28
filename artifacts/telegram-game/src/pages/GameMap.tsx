@@ -203,13 +203,22 @@ export default function GameMap() {
   const {
     mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
   } = useGameState();
   const {
     sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
     triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
+
+  const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
+  useEffect(() => {
+    if (!lastKill || (lastKill.victimSlot !== mySlot && lastKill.attackerSlot !== mySlot)) return;
+    setKillAnimation(lastKill);
+    sfx('kill', 0.72);
+    const timer = window.setTimeout(() => setKillAnimation(null), 1150);
+    return () => window.clearTimeout(timer);
+  }, [lastKill, mySlot]);
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -1324,6 +1333,81 @@ export default function GameMap() {
     <div
       style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
     >
+      {killAnimation && (
+        <div
+          role="alert"
+          aria-live="assertive"
+          aria-label="Kill animation"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 1000, overflow: 'hidden',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'radial-gradient(circle at center, rgba(70,8,14,0.94), rgba(5,7,12,0.98) 72%)',
+            color: '#fff4f2', fontFamily: 'system-ui, sans-serif',
+            animation: 'agKillBackdrop 1.15s ease-out both',
+            pointerEvents: 'none',
+          }}
+        >
+          <style>{`
+            @keyframes agKillBackdrop {
+              0% { opacity: 0; filter: brightness(2.2); }
+              12% { opacity: 1; filter: brightness(1.25); }
+              100% { opacity: 1; filter: brightness(1); }
+            }
+            @keyframes agKillAttacker {
+              0% { transform: translateX(-110vw) scale(.72); opacity: .2; }
+              35% { transform: translateX(0) scale(1.08); opacity: 1; }
+              100% { transform: translateX(-3vw) scale(1); opacity: 1; }
+            }
+            @keyframes agKillVictim {
+              0%, 26% { transform: translateX(12vw) rotate(0deg); opacity: 1; }
+              45% { transform: translateX(16vw) rotate(18deg); opacity: .65; }
+              100% { transform: translateX(16vw) rotate(28deg) translateY(5vh); opacity: .45; }
+            }
+            @keyframes agKillSlash {
+              0%, 22% { transform: translate(-120%, -50%) rotate(-18deg); opacity: 0; }
+              34% { opacity: 1; }
+              52% { transform: translate(0, -50%) rotate(-18deg); opacity: 1; }
+              100% { transform: translate(120%, -50%) rotate(-18deg); opacity: 0; }
+            }
+            @media (prefers-reduced-motion: reduce) {
+              .ag-kill-attacker, .ag-kill-victim, .ag-kill-slash { animation-duration: 1ms !important; }
+            }
+          `}</style>
+          <div style={{
+            position: 'relative', width: 'min(94vw, 760px)', height: 'min(58vh, 420px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <div className="ag-kill-attacker" style={{
+              position: 'absolute', left: '12%', top: '25%',
+              animation: 'agKillAttacker 1.15s cubic-bezier(.2,.8,.2,1) both',
+              filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.7))',
+            }}>
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="run-lean" size={150} />
+            </div>
+            <div className="ag-kill-victim" style={{
+              position: 'absolute', right: '15%', top: '25%',
+              animation: 'agKillVictim 1.15s ease-in both',
+              filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.7))',
+            }}>
+              <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="sit-crouch" size={150} />
+            </div>
+            <div className="ag-kill-slash" style={{
+              position: 'absolute', left: '5%', top: '48%', width: '90%', height: 10,
+              borderRadius: 999, background: 'linear-gradient(90deg, transparent, #ff334d 12%, #fff4f2 50%, #ff334d 88%, transparent)',
+              boxShadow: '0 0 24px rgba(255,35,65,.9)',
+              animation: 'agKillSlash 1.15s ease-out both',
+            }} />
+          </div>
+          <div style={{
+            position: 'absolute', left: 0, right: 0, bottom: '12%',
+            textAlign: 'center', fontSize: 'clamp(20px, 4vw, 42px)',
+            fontWeight: 950, letterSpacing: '.18em', textTransform: 'uppercase',
+            color: '#fff4f2', textShadow: '0 4px 18px rgba(255,30,50,.8)',
+          }}>
+            ELIMINATED
+          </div>
+        </div>
+      )}
       {!loaded && !error && (
         <div style={{
           position: 'absolute', inset: 0,
