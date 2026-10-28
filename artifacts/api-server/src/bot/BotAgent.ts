@@ -134,7 +134,7 @@ export abstract class BotAgent {
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
-  /** Called every 100ms while the lobby phase is ROAMING. */
+  /** Called every 200ms by LobbyManager's 5Hz bot tick while the lobby is ROAMING. */
   abstract roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void;
 
   /**
