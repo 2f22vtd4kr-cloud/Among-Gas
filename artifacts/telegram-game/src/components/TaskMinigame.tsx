@@ -15,6 +15,20 @@ interface Props {
 
 // ── Shared panel styles ────────────────────────────────────────────────────────
 
+const TASK_NAME_RU: Record<string, string> = {
+  'Fix Wiring': 'Починить проводку',
+  'Download Data': 'Скачать данные',
+  'Calibrate Distributor': 'Настроить распределитель',
+  'Empty Garbage': 'Вынести мусор',
+  'Clean Filters': 'Почистить фильтры',
+  'Stabilize Navigation': 'Стабилизировать навигацию',
+  'Reboot WiFi': 'Перезапустить связь',
+  'Fuel Engine': 'Заправить двигатель',
+  'Start Reactor': 'Запустить реактор',
+  'Align Engine': 'Выровнять двигатель',
+  'Clear Asteroids': 'Уничтожить астероиды',
+};
+
 const panelStyle: React.CSSProperties = {
   background: 'rgba(10,18,34,0.98)',
   border: '1px solid rgba(100,150,200,0.25)',
@@ -938,6 +952,8 @@ function AsteroidsGame({ onComplete }: { stepIndex: number; onComplete: () => vo
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export default function TaskMinigame({ taskId, stepIndex, onComplete, onClose }: Props) {
+  const { language } = useLanguage();
+  const en = language === 'en';
   const def = TASK_DEFS[taskId];
   if (!def) return null;
 
@@ -952,14 +968,14 @@ export default function TaskMinigame({ taskId, stepIndex, onComplete, onClose }:
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
           <div>
-            <div style={labelStyle}>Step {stepIndex + 1} of {def.steps}</div>
+            <div style={labelStyle}>{en ? `Step ${stepIndex + 1} of ${def.steps}` : `Шаг ${stepIndex + 1} из ${def.steps}`}</div>
             <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
-              {def.name}
+              {en ? def.name : (TASK_NAME_RU[def.name] ?? def.name)}
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={en ? 'Close' : 'Закрыть'}
             style={{
               width: 32, height: 32, borderRadius: '50%', flexShrink: 0,
               background: 'rgba(255,255,255,0.07)', color: 'rgba(255,255,255,0.5)',
