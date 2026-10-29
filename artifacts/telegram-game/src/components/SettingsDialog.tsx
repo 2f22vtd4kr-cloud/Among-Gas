@@ -330,7 +330,9 @@ export default function SettingsDialog({
               touchAction: 'none', userSelect: 'none', marginBottom: 12,
             }}
           >
-            <div style={{
+            <div
+            data-testid="control-layout-fixed-hud"
+            style={{
               position: 'absolute', inset: '0 0 auto', height: '24%', display: 'flex',
               alignItems: 'flex-start', justifyContent: 'space-between', padding: '7px 8px',
               boxSizing: 'border-box', borderBottom: '1px dashed rgba(255,255,255,.25)',
