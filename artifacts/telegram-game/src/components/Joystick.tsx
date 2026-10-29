@@ -114,7 +114,7 @@ export default function Joystick({ keysRef }: JoystickProps) {
         bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
         left: joystickSide === 'left' ? 'max(24px, env(safe-area-inset-left, 0px))' : 'auto',
         right: joystickSide === 'right' ? 'max(24px, env(safe-area-inset-right, 0px))' : 'auto',
-        ...customControlPositionStyle('joystick', controlLayout),
+        ...customControlPositionStyle('joystick', controlLayout, joystickSide),
         width: BASE_RADIUS * 2,
         height: BASE_RADIUS * 2,
         borderRadius: '50%',
