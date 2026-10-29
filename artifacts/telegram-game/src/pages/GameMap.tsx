@@ -774,25 +774,41 @@ export default function GameMap() {
   // ── Load map image ─────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      mapImgRef.current = img;
-      setLoaded(true);
-    };
     let triedPngFallback = false;
-    img.onerror = () => {
+    let completedSource = '';
+    const img = new Image();
+    const fallbackOrFail = () => {
       if (cancelled) return;
       if (!triedPngFallback) {
         triedPngFallback = true;
+        completedSource = '';
         img.src = `${import.meta.env.BASE_URL}map-hires.png`;
         return;
       }
       setError(true);
     };
-    // Prefer the smaller WebP map asset on mobile; fall back to PNG if needed.
+    const finishDecodedLoad = async () => {
+      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
+      const source = img.currentSrc || img.src;
+      if (completedSource === source) return;
+      try {
+        // load fires before some browsers finish decoding. Do not release the
+        // gameplay-ready handshake until the map can be drawn without a decode stall.
+        if (typeof img.decode === 'function') await img.decode();
+      } catch {
+        if (!cancelled && (img.currentSrc || img.src) === source) fallbackOrFail();
+        return;
+      }
+      if (cancelled || (img.currentSrc || img.src) !== source) return;
+      completedSource = source;
+      mapImgRef.current = img;
+      setLoaded(true);
+    };
+    img.onload = () => { void finishDecodedLoad(); };
+    img.onerror = fallbackOrFail;
+    // Prefer the smaller WebP map asset on mobile; fall back to PNG if loading or decoding fails.
     img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
-    if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
+    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
@@ -813,18 +829,29 @@ export default function GameMap() {
   // ── Load the original vector sprite sheet ────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let completedSource = '';
     const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      // Keep the clean SVG as the actual drawing source. Do not destructively
-      // threshold antialiased pixels or guess at crop padding: exact row/cell
-      // geometry lives in characterSprites.ts and shadows are rendered below.
+    const finishDecodedLoad = async () => {
+      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
+      const source = img.currentSrc || img.src;
+      if (completedSource === source) return;
+      try {
+        if (typeof img.decode === 'function') await img.decode();
+      } catch {
+        if (!cancelled) setError(true);
+        return;
+      }
+      if (cancelled || (img.currentSrc || img.src) !== source) return;
+      completedSource = source;
+      // Keep the authored character atlas intact; crop windows and draw scale
+      // are defined in characterSprites.ts and never threshold the source pixels.
       spriteImgRef.current = img;
       setSpriteLoaded(true);
     };
+    img.onload = () => { void finishDecodedLoad(); };
     img.onerror = () => { if (!cancelled) setError(true); };
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
-    if (img.complete && img.naturalWidth > 0) img.onload?.(new Event('load'));
+    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
