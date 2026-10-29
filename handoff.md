@@ -1596,3 +1596,30 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - Branch: `fix/session-replacement-guard`.
 - No runtime settings or environment variables changed.
+
+### 2026-10-29 — Mobile gameplay stabilization, sprite atlas refresh, and UI repair
+
+**Done**
+- `artifacts/telegram-game/src/game/player.ts` now checks the complete movement segment against collision geometry, matching server path validation and preventing client prediction from crossing thin walls before the server snaps the player back.
+- `artifacts/telegram-game/src/pages/GameMap.tsx` smooths the follow camera, avoids canvas backing-store resets for transient visual-viewport toolbar animation, reconciles ordinary position echoes without snapping local prediction, and includes an always-available Leave Match confirmation flow.
+- `artifacts/telegram-game/src/components/Joystick.tsx` uses pointer capture and clears held movement on pointer cancel/lost capture, blur, pagehide, visibility changes, and cleanup.
+- `artifacts/telegram-game/src/pages/GameMap.tsx` keeps movement key bindings out of editable controls; `scripts/browser-smoke.mjs` verifies W/A/S/D chat typing, joystick release, Leave Match cancellation, and non-overlapping HUD controls at 320×568.
+- Added original vector art at `artifacts/telegram-game/public/sprites/characters.svg` (7 colors × 9 fixed 320×300 pose cells) and shared measured geometry in `artifacts/telegram-game/src/game/characterSprites.ts`; lobby and gameplay now use crisp vector sprites without baked ground shadows.
+- Fixed the in-game Leave button placement to use a second HUD row on narrow screens so it cannot cover Emergency or Settings. Kept menu Settings inside the full-width title layout and made Settings scroll safely on short viewports.
+- Added `scripts/test-player-movement.ts` and wired it into `.github/workflows/ci.yml` to guard against local movement crossing thin collision walls.
+- Opened PR #23 for review; the duplicate PR #24 was closed to keep a single implementation path. No Replit project was opened, configured, or published.
+
+**Decisions & gotchas**
+- Do not treat a green build as proof of device-level stability. Inspect the latest CI visual-QA screenshots, especially the 320×568 portrait HUD after the Leave button's second-row adjustment, and still perform a real iOS Safari/Telegram WebView pass.
+- The new SVG atlas is original Among Gas vector artwork, not copied Among Us art. Preserve that provenance and keep player shadows as separate gameplay rendering.
+- The Leave action navigates to the app's configured base URL; it must close the old WebSocket through normal page teardown and establish a fresh lobby session.
+
+**Left off / next steps**
+- Wait for the latest PR #23 CI run to finish; confirm the 320×568 HUD non-overlap assertions, browser smoke suite, and 100-game simulation pass.
+- Inspect the latest screenshots after the second-row Leave control adjustment, then merge only when all required checks are green.
+- User will run the game on Replit. No Replit deployment was published or modified.
+
+**State to restore**
+- Branch: `fix/mobile-movement-chat-sprites-ui`.
+- PR: #23. Duplicate PR #24 is closed.
+- No runtime configuration, secrets, or deployment were changed.
