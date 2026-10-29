@@ -285,15 +285,19 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   ejectionManager.disposeLobby(ejectionLobby);
 }
 
-// Bots speak during the discussion window before they make their vote.
+// Bots speak during the discussion window, without using omniscient global positions.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const botPlayer = makePlayer(1, 'crewmate', 130, 100);
+  const bodyPlayer = makePlayer(2, 'crewmate', 101, 100);
   botPlayer.player.isBot = true;
-  const lobby = makeLobby([host.player, botPlayer.player]);
+  bodyPlayer.player.alive = false;
+  bodyPlayer.player.corpseX = 100;
+  bodyPlayer.player.corpseY = 100;
+  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player]);
   lobby.phase = 'MEETING';
   lobby.meeting = {
-    reporterSlot: 0, bodySlot: NO_TARGET, votes: new Map(), votingOpen: false,
+    reporterSlot: 0, bodySlot: 2, votes: new Map(), votingOpen: false,
     discussionTimer: null, votingTimer: null,
   };
   const manager = new LobbyManager();
@@ -301,8 +305,11 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   bot.tick(lobby, botPlayer.player, manager);
   (bot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
   bot.tick(lobby, botPlayer.player, manager);
-  assert.ok(host.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 1),
-    'living bot contributes a discussion message to human clients');
+  const chatPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 1);
+  assert.ok(chatPacket, 'living bot contributes a discussion message to human clients');
+  const chatText = chatPacket!.toString('utf8');
+  assert.doesNotMatch(chatText, new RegExp(host.player.username), 'bot must not accuse a nearby player based on omniscient coordinates');
+  assert.match(chatText, /body was reported|did not witness/i, 'body discussion should use public meeting context without fabricated sightings');
   assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
   manager.disposeLobby(lobby);
 }
