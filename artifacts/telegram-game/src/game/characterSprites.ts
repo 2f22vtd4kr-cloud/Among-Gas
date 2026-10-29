@@ -56,15 +56,15 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number }> = [
   // Crop just beyond each measured silhouette. The source sheet has stray
   // ground/underline strokes in the otherwise transparent padding below poses;
   // excluding that padding keeps those marks out of live and corpse sprites.
-  { top: 0, bottom: 158 },       // idle: visible pixels y=16–155
-  { top: 172, bottom: 315 },     // walk-1: y=188–312
-  { top: 327, bottom: 463 },     // walk-2: y=342–460
-  { top: 471, bottom: 625 },     // run-lean: y=481–622
-  { top: 636, bottom: 780 },     // ghost: y=650–777
-  { top: 795, bottom: 908 },     // mask: y=811–905
-  { top: 915, bottom: 1056 },    // hold-item: y=924–1053
-  { top: 1067, bottom: 1190 },   // dead-body: y=1080–1187
-  { top: 1198, bottom: 1339 },   // sit-crouch: y=1209–1336
+  { top: 0, bottom: 153 },       // idle: visible pixels y=16–155
+  { top: 172, bottom: 310 },     // walk-1: y=188–312
+  { top: 327, bottom: 458 },     // walk-2: y=342–460
+  { top: 471, bottom: 620 },     // run-lean: y=481–622
+  { top: 636, bottom: 775 },     // ghost: y=650–777
+  { top: 795, bottom: 903 },     // mask: y=811–905
+  { top: 915, bottom: 1051 },    // hold-item: y=924–1053
+  { top: 1067, bottom: 1185 },   // dead-body: y=1080–1187
+  { top: 1198, bottom: 1334 },   // sit-crouch: y=1209–1336
 ];
 
 /** Returns an isolated source window (px) for a given color and pose. */
