@@ -3,8 +3,8 @@ interface ActiveModal{token:number;root:HTMLElement|null}
 let sequence=1;const stack:ActiveModal[]=[];
 const SELECTOR=['button:not([disabled])','[href]','input:not([disabled])','select:not([disabled])','textarea:not([disabled])','[tabindex]:not([tabindex="-1"])'].join(',');
 /** Stack-aware keyboard focus management for custom modal surfaces. */
-export function useModalFocus(open:boolean,onEscape:()=>void,getInitialFocus?:()=>HTMLElement|null){
- const rootRef=useRef<HTMLElement|null>(null),escapeRef=useRef(onEscape),initialRef=useRef(getInitialFocus);
+export function useModalFocus<T extends HTMLElement = HTMLElement>(open:boolean,onEscape:()=>void,getInitialFocus?:()=>HTMLElement|null){
+ const rootRef=useRef<T|null>(null),escapeRef=useRef(onEscape),initialRef=useRef(getInitialFocus);
  escapeRef.current=onEscape;initialRef.current=getInitialFocus;
  useEffect(()=>{
   if(!open)return;const root=rootRef.current;if(!root)return;

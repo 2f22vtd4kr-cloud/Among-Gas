@@ -317,10 +317,10 @@ export default function GameMap() {
 
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
   const [showAdminTable, setShowAdminTable] = useState(false);
-  const adminDialogRef = useModalFocus(showAdminTable, () => setShowAdminTable(false));
+  const adminDialogRef = useModalFocus<HTMLDivElement>(showAdminTable, () => setShowAdminTable(false));
   const [, setAdminTableTick] = useState(0);
   const [showMiniMap, setShowMiniMap] = useState(false);
-  const mapDialogRef = useModalFocus(showMiniMap && loaded && myRole !== null && meeting === null, () => setShowMiniMap(false));
+  const mapDialogRef = useModalFocus<HTMLDivElement>(showMiniMap && loaded && myRole !== null && meeting === null, () => setShowMiniMap(false));
   const [miniMapTick, setMiniMapTick] = useState(0);
   const [showTaskList, setShowTaskList] = useState(false);
   const [trackedTaskId, setTrackedTaskId] = useState<number | null>(null);
