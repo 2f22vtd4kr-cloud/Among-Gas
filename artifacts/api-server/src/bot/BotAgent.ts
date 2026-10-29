@@ -182,7 +182,7 @@ export abstract class BotAgent {
     }
   }
 
-  /** Lightweight, zero-API-cost discussion behaviour with a spatial clue. */
+  /** Lightweight, zero-API-cost discussion behaviour using only public meeting context. */
   private discuss(
     lobby: Lobby,
     self: LobbyPlayer,
@@ -197,24 +197,19 @@ export abstract class BotAgent {
     }
     if (this.discussionMessageSent || Date.now() < this.nextDiscussionChatAtMs) return;
 
-    const body = meeting.bodySlot === NO_TARGET ? undefined : lobby.players.get(meeting.bodySlot);
-    let message: string;
-    if (body && Number.isFinite(body.corpseX) && Number.isFinite(body.corpseY)) {
-      const nearest = Array.from(lobby.players.values())
-        .filter(player => player.alive && player.slot !== body.slot)
-        .map(player => ({
-          player,
-          distance: Math.hypot(player.x - body.corpseX!, player.y - body.corpseY!),
-        }))
-        .sort((a, b) => a.distance - b.distance)[0];
-      if (nearest && nearest.player.slot !== self.slot && nearest.distance < 360) {
-        message = `Based on positions, ${nearest.player.username} was close to the body. What were you doing there?`;
-      } else {
-        message = 'I am trying to work out who was near the body. Did anyone see anything?';
-      }
-    } else {
-      message = 'I was keeping to my tasks. What did everyone see before the meeting?';
-    }
+    // The server has access to every player's coordinates, but bots do not
+    // maintain a witnessed-player history. Do not infer accusations from the
+    // authoritative global positions: that would give bots omniscient evidence.
+    // Only use facts available to everyone from the meeting itself.
+    const hasBody = meeting.bodySlot !== NO_TARGET;
+    const message = hasBody
+      ? (self.role === 'impostor'
+          ? 'I was moving around the station. Did anyone actually see what happened?'
+          : 'A body was reported, but I did not witness the elimination. Did anyone see something useful?')
+      : (self.role === 'impostor'
+          ? 'I was moving around the station. Did anyone notice anything suspicious before the call?'
+          : 'I was focused on my tasks. Did anyone notice anything suspicious before the call?');
+
     this.discussionMessageSent = true;
     manager.sendMeetingChat(lobby, self.slot, message);
   }
