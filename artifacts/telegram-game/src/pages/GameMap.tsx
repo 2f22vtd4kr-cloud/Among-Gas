@@ -234,7 +234,7 @@ export default function GameMap() {
 
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
   useEffect(() => {
-    if (!lastKill) return;
+    if (!lastKill) return undefined;
     // Victims see the blocking death sequence; attackers keep playing.
     if (lastKill.victimSlot === mySlot) {
       setKillAnimation(lastKill);
@@ -250,12 +250,13 @@ export default function GameMap() {
     // The server broadcasts kill events to the whole lobby. Give nearby
     // bystanders an audible cue too, without leaking kills across the map.
     const local = playerStateRef.current;
-    const attacker = remotePlayersRef.current.get(lastKill.attackerSlot);
-    const victim = remotePlayersRef.current.get(lastKill.victimSlot);
+    const attacker = lastKill.attackerSlot === null ? undefined : remotePlayersRef.current.get(lastKill.attackerSlot);
+    const victim = lastKill.victimSlot === null ? undefined : remotePlayersRef.current.get(lastKill.victimSlot);
     const hearingRange = 520;
     const nearby = [attacker, victim].some(player => player &&
       Math.hypot(player.x - local.x, player.y - local.y) <= hearingRange);
     if (nearby) sfx('kill', 0.34);
+    return undefined;
   }, [lastKill, mySlot, remotePlayersRef]);
 
   const playerName = useCallback(
