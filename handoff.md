@@ -1678,3 +1678,27 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Final QA screenshots and built static client are available from run #326: https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/40873859815. Artifacts: `among-gas-visual-qa` ID `12896534266`; `telegram-game-static-build` ID `12896519573`.
 - The screenshot artifact was extracted and inspected: the lobby Settings gear is centered at native touch size; the restored character atlas shows the original separate eye openings and striped face; the victim strike scene retains the standing attack pose; the corpse still has the exposed bone; and the portrait HUD shows no permanent Leave Match control.
 - The next commit only updates this handoff log; source and test code is unchanged from the passing #326 head. GitHub Actions is rerun for the exact final commit before merge.
+
+### 2026-10-29 — Among Gas gameplay-readiness and visual QA follow-up (PR #27)
+
+**Implementation**
+- Added an explicit client gameplay-ready acknowledgement after the map texture and character atlas are decoded. The server keeps bot movement and gameplay locked until connected human clients are ready; disconnects are excluded from the readiness quorum, and the ready state persists across meetings.
+- Moved Leave Match into the in-game Settings dialog, repaired the centered menu gear geometry, and added a per-control layout editor with persisted positions.
+- Kept the original balaclava atlas and dedicated corpse pose; tightened the idle sprite crop while preserving the complete feet and added browser assertions for the measured crop.
+- Added integration coverage for solo bot startup readiness and strengthened browser checks for WebP-to-PNG fallback, map/canvas loading, settings geometry, controls, and gameplay UI.
+- Kept vision-only occlusion separate from movement collision and added regression coverage for narrow visual occluders and sprite crop geometry.
+
+**Verification on source/test head `abea036fe788225444049f05c431239ae03c5586`**
+- GitHub Actions run [40925809834](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/40925809834) passed every step: map mechanics, vision/shadow tests, thin-wall movement, production build, server gameplay invariants, Telegram HMAC authentication, live WebSocket lobby/role/sabotage/session behavior, mobile browser smoke, visual screenshot artifact upload, and headless multiplayer simulations.
+- Simulation summary: 100 games, 0 timeouts, 68 crewmate wins, 32 impostor wins, 45.6s average match duration, 13.7 average completed task steps, 1.3 average kills/game, 0.5 average meetings/game; 3m59s wall-clock.
+- Inspected the generated lobby, Settings, portrait/landscape gameplay, role reveal, corpse/report, kill-screen, ghost-mode, and lights-vision screenshots. Role-reveal sprite crop retains the feet; gameplay loading/fallback and main-menu Settings gear checks pass.
+
+**Remaining limitations / release caveats**
+- No physical iPhone/Android Telegram WebView was available. Device-specific movement/camera jitter, touch cancellation under app suspension, and actual audible kill-sound latency still require a real-device pass.
+- The CI browser run is mobile Chromium, not a substitute for iOS Safari/Telegram WebView.
+- Replit/Vercel deployment configuration and secrets were not changed or deployed by this audit. The repository's `.replit` currently starts the API service; confirm the intended frontend preview/deployment workflow in the user's Replit workspace before treating this as a published live deployment.
+- Do not claim every possible defect is eliminated; use the passing CI run as verified coverage for the listed automated paths and continue real-device QA after deployment.
+
+**Next state**
+- PR #27 remains the single implementation PR targeting `main`: https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/27.
+- Run the full CI workflow again on the documentation-finalized head, verify it is green, then merge only that exact head. Do not merge if any required check fails.
