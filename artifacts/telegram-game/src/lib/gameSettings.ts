@@ -57,11 +57,11 @@ export function defaultControlPosition(
     case 'map': return { x: 12, y: 6 };
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
-    case 'emergency': return { x: 75, y: 26 };
-    case 'taskAction': return { x: 50, y: 58 };
+    case 'emergency': return { x: 75, y: 33 };
+    case 'taskAction': return { x: 50, y: 62 };
     case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 90 };
     case 'sabotage': return { x: oppositeSide, y: 74 };
-    case 'repair': return { x: 74, y: 42 };
+    case 'repair': return { x: 74, y: 50 };
   }
 }
 
