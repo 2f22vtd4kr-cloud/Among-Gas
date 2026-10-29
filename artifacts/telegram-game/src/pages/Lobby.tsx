@@ -24,6 +24,7 @@ import {
   CHARACTER_SHEET_HEIGHT,
   CHARACTER_SHEET_PATH,
   getCharacterFrameRect,
+  getCharacterClipPath,
   type CharacterColor,
   type CharacterPose,
 } from '@/game/characterSprites';
@@ -53,6 +54,7 @@ function CharSprite({
         imageRendering: 'pixelated',
         transformOrigin: 'top center',
         transform: flipped ? 'scaleX(-1)' : 'none',
+        clipPath: getCharacterClipPath(pose),
         flexShrink: 0,
         overflow: 'hidden',
       }}
