@@ -719,9 +719,41 @@ export default function GameMap() {
       const px = id.data;
       for (let i = 0; i < px.length; i += 4) {
         // Preserve authored alpha. Forcing every semi-transparent pixel to
-        // fully opaque turns anti-aliased sketch/scratch pixels and stray
-        // under-sprite marks into hard black lines at gameplay scale.
+        // fully opaque turns anti-aliased sketch/scratch pixels into hard marks.
         if (px[i + 3] <= 20) px[i + 3] = 0;
+      }
+
+      // The generated atlas includes stray horizontal ground strokes beneath
+      // several poses. Remove only long near-black runs in the bottom padding
+      // of each measured pose window; keep the actual feet outlines and suit art.
+      const poseWindows = [
+        [0, 158], [172, 315], [327, 463], [471, 625], [636, 780],
+        [795, 908], [915, 1056], [1067, 1190], [1198, 1339],
+      ] as const;
+      const cellW = oc.width / CHARACTER_COLORS.length;
+      for (const [top, bottom] of poseWindows) {
+        const bandStart = Math.max(top, bottom - 10);
+        for (let col = 0; col < CHARACTER_COLORS.length; col++) {
+          const xStart = Math.round(col * cellW);
+          const xEnd = Math.round((col + 1) * cellW);
+          for (let y = bandStart; y < bottom; y++) {
+            let runStart = -1;
+            const clearRun = (runEnd: number) => {
+              if (runStart >= 0 && runEnd - runStart >= 22) {
+                for (let x = runStart; x < runEnd; x++) px[(y * oc.width + x) * 4 + 3] = 0;
+              }
+              runStart = -1;
+            };
+            for (let x = xStart; x < xEnd; x++) {
+              const i = (y * oc.width + x) * 4;
+              const dark = px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180;
+              if (dark) {
+                if (runStart < 0) runStart = x;
+              } else clearRun(x);
+            }
+            clearRun(xEnd);
+          }
+        }
       }
       octx.putImageData(id, 0, 0);
       spriteImgRef.current = oc;
