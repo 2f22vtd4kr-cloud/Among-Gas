@@ -1728,7 +1728,7 @@ export default function GameMap() {
                 touchAction: 'manipulation',
               }}
             >
-              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : (en ? '☷ TASKS' : '☷ ЗАДАНИЯ')}
+              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : <><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 5 }}><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{en ? 'TASKS' : 'ЗАДАНИЯ'}</>}
             </button>
           </div>
 
@@ -2282,7 +2282,7 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : (en ? '☠ Kill' : '☠ Убить')}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/kill_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Kill' : 'Убить'}</>}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
@@ -2328,7 +2328,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (en ? '⚡ Sabotage' : '⚡ Саботаж')}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Sabotage' : 'Саботаж'}</>}
           </button>
         </div>
       )}
@@ -2366,7 +2366,7 @@ export default function GameMap() {
           letterSpacing: '0.03em', borderRadius: 8,
           border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
         }}>
-          ⚠ {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
+          {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
           {sabotageDef.pads.length > 1 && (
             <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} {en ? 'fixed' : 'починено'})</span>
           )}
