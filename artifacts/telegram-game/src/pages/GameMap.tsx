@@ -136,15 +136,27 @@ function clipSpriteLegGap(
 ) {
   const notch = getCharacterClipNotch(pose);
   if (!notch) return;
+  const leftStart = x + width * notch.leftLegStart;
+  const leftEnd = x + width * notch.leftLegEnd;
+  const rightStart = x + width * notch.rightLegStart;
+  const rightEnd = x + width * notch.rightLegEnd;
+  const top = y + height * notch.top;
+  const bottom = y + height;
   ctx.beginPath();
-  ctx.rect(x, y, width, height);
-  ctx.rect(
-    x + width * notch.left,
-    y + height * notch.top,
-    width * (notch.right - notch.left),
-    height * (1 - notch.top),
-  );
-  ctx.clip('evenodd');
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width, y);
+  ctx.lineTo(x + width, top);
+  ctx.lineTo(rightEnd, top);
+  ctx.lineTo(rightEnd, bottom);
+  ctx.lineTo(rightStart, bottom);
+  ctx.lineTo(rightStart, top);
+  ctx.lineTo(leftEnd, top);
+  ctx.lineTo(leftEnd, bottom);
+  ctx.lineTo(leftStart, bottom);
+  ctx.lineTo(leftStart, top);
+  ctx.lineTo(x, top);
+  ctx.closePath();
+  ctx.clip();
 }
 
 function CharSpriteUI({
