@@ -723,35 +723,26 @@ export default function GameMap() {
         if (px[i + 3] <= 20) px[i + 3] = 0;
       }
 
-      // The generated atlas includes stray horizontal ground strokes beneath
-      // several poses. Remove only long near-black runs in the bottom padding
-      // of each measured pose window; keep the actual feet outlines and suit art.
+      // The generated atlas includes stray dark ground strokes beneath
+      // several poses. Clear only dark pixels in the final transparent-padding
+      // band of each measured pose window; colored feet and suit pixels remain.
       const poseWindows = [
         [0, 158], [172, 315], [327, 463], [471, 625], [636, 780],
         [795, 908], [915, 1056], [1067, 1190], [1198, 1339],
       ] as const;
       const cellW = oc.width / CHARACTER_COLORS.length;
       for (const [top, bottom] of poseWindows) {
-        const bandStart = Math.max(top, bottom - 10);
+        const bandStart = Math.max(top, bottom - 12);
         for (let col = 0; col < CHARACTER_COLORS.length; col++) {
           const xStart = Math.round(col * cellW);
           const xEnd = Math.round((col + 1) * cellW);
           for (let y = bandStart; y < bottom; y++) {
-            let runStart = -1;
-            const clearRun = (runEnd: number) => {
-              if (runStart >= 0 && runEnd - runStart >= 22) {
-                for (let x = runStart; x < runEnd; x++) px[(y * oc.width + x) * 4 + 3] = 0;
-              }
-              runStart = -1;
-            };
             for (let x = xStart; x < xEnd; x++) {
               const i = (y * oc.width + x) * 4;
-              const dark = px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180;
-              if (dark) {
-                if (runStart < 0) runStart = x;
-              } else clearRun(x);
+              if (px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180) {
+                px[i + 3] = 0;
+              }
             }
-            clearRun(xEnd);
           }
         }
       }
