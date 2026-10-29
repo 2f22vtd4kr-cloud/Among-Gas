@@ -85,10 +85,14 @@ const ACTUAL_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], 
 
 function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {
   const viewportWidth = typeof window === 'undefined' ? 390 : Math.max(1, window.innerWidth);
-  const margin = (DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] ?? 22) / viewportWidth * 100;
+  const viewportHeight = typeof window === 'undefined' ? 844 : Math.max(1, window.innerHeight);
+  const halfWidth = DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] ?? 22;
+  const halfHeight = DRAG_SAFE_HALF_HEIGHT[id as keyof typeof DRAG_SAFE_HALF_HEIGHT] ?? 22;
+  const horizontalMargin = (halfWidth + 6) / viewportWidth * 100;
+  const verticalMargin = (halfHeight + 10) / viewportHeight * 100;
   return {
-    x: Math.round(Math.max(margin, Math.min(100 - margin, position.x))),
-    y: Math.round(Math.max(25, Math.min(95, position.y))),
+    x: Math.round(Math.max(horizontalMargin, Math.min(100 - horizontalMargin, position.x))),
+    y: Math.round(Math.max(24 + verticalMargin, Math.min(100 - verticalMargin, position.y))),
   };
 }
 
