@@ -226,17 +226,17 @@ try {
 
   // Leaving must be available from Settings, not as a permanent gameplay button.
   await page.getByRole('button', { name: 'Настройки' }).click();
-  const gameplaySettings = page.getByRole('dialog', { name: 'Настройки' });
-  await gameplaySettings.waitFor({ state: 'visible' });
-  const leaveFromSettings = gameplaySettings.getByRole('button', { name: 'Выйти из матча…' });
+  const settingsForLeaveFlow = page.getByRole('dialog', { name: 'Настройки' });
+  await settingsForLeaveFlow.waitFor({ state: 'visible' });
+  const leaveFromSettings = settingsForLeaveFlow.getByRole('button', { name: 'Выйти из матча…' });
   await leaveFromSettings.waitFor({ state: 'visible' });
   await leaveFromSettings.click();
   const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
   await leaveDialog.waitFor({ state: 'visible' });
   await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
   await leaveDialog.waitFor({ state: 'hidden' });
-  await gameplaySettings.waitFor({ state: 'visible' });
-  await gameplaySettings.getByRole('button', { name: 'Выйти из матча…' }).click();
+  await settingsForLeaveFlow.waitFor({ state: 'visible' });
+  await settingsForLeaveFlow.getByRole('button', { name: 'Выйти из матча…' }).click();
   await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
   // Return to a predictable fixture for the rest of the visual smoke suite.
