@@ -56,7 +56,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   // Crop just beyond each measured silhouette. The source sheet has stray
   // horizontal strokes through the otherwise transparent leg gap and below the feet;
   // the pose-specific notch removes the bridges while retaining the outer feet.
-  { top: 0, bottom: 132, displayHeight: 153 }, // idle: trim the remaining detached baseline beneath the foot outline
+  { top: 0, bottom: 138, displayHeight: 153 }, // idle: retain the complete authored feet; leg-gap mask removes detached strokes
   { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
   { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
   { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
