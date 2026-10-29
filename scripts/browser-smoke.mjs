@@ -62,6 +62,12 @@ try {
   await page.getByRole('button', { name: 'Настройки' }).click();
   await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   const lobbySettings = page.locator('[role="dialog"]');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-reset',
+    'Settings must keep reverse keyboard navigation inside the modal');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть настройки',
+    'Settings must wrap forward keyboard navigation back to its first focus target');
   assert.equal(await lobbySettings.getByTestId('joystick-side-right').getAttribute('aria-pressed'), 'true',
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
@@ -262,6 +268,14 @@ try {
   assert.deepEqual(after, before, 'the player must not move behind the open tactical map');
   await mapDialog.getByRole('button', { name: 'Закрыть карту' }).click();
   await mapDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: /КАРТА/ }).click();
+  await mapDialog.waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть карту',
+    'opening the tactical map must move focus into the dialog');
+  await page.keyboard.press('Escape');
+  await mapDialog.waitFor({ state: 'hidden' });
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-expanded')), 'false',
+    'closing the tactical map must restore focus to its trigger');
 
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
@@ -439,6 +453,13 @@ try {
     0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation',
   );
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.getByRole('alert', { name: 'Анимация убийства' }).waitFor({ state: 'visible', timeout: 5_000 });
+  await page.getByRole('alert', { name: 'Анимация убийства' }).waitFor({ state: 'hidden', timeout: 1_000 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
 
   // Inspect the post-death ghost presentation as well as the transient kill sequence.
   await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });
