@@ -43,7 +43,7 @@ function commit(next:GameSettings):void{
 }
 export function setJoystickSide(joystickSide:JoystickSide):void{
  const current=getGameSettings();
- commit({...current,joystickSide,controlLayout:{...current.controlLayout,joystick:{...current.controlLayout.joystick,x:joystickSide === 'left' ? 0.20 : 0.80}});
+ commit({...current,joystickSide,controlLayout:{...current.controlLayout,joystick:{...current.controlLayout.joystick,x:joystickSide === 'left' ? 0.20 : 0.80}}});
 }
 export function setControlLayout(controlLayout:ControlLayout):void{
  const current=getGameSettings(),normalized=normalize({...current,controlLayout},current);
