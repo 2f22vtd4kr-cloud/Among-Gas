@@ -1668,3 +1668,13 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - The kill-audio change primes a decoded buffer after a trusted gesture; only real-device measurement can conclusively verify the report of event-to-audible-output delay.
 - The public original Among Us client collision implementation is not available for direct source comparison. Among Gas's gameplay collision remains unchanged by visual shadow smoothing.
 - Settings still do not offer separate master/music/effects volume sliders (identified as a P3 product gap in this audit). Architecture refactoring of the large `GameMap.tsx` and deeper combined-state HUD tests remain follow-up work.
+
+
+### 2026-10-29 — Final validation after balaclava pixel-identity regression checks
+
+- Final pre-documentation source/test head: `9e417f6b1f789ea1f8bb2763af1df4c44a72446f`.
+- GitHub Actions run #326 (`40873859815`) passed every step on that exact head, including the added PNG/eye-opening identity guard, production build, map/visibility tests, gameplay invariants, Telegram HMAC authentication, live WebSocket lobby/sabotage/session replacement, browser smoke, QA screenshot upload, and multiplayer simulation.
+- Final simulation summary: 100 matches, 0 timeouts, 70 crew wins, 30 impostor wins, mean duration 43.2 seconds, 14 average tasks completed, 1.1 kills/game, and 3m34s total wall-clock.
+- Final QA screenshots and built static client are available from run #326: https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/40873859815. Artifacts: `among-gas-visual-qa` ID `12896534266`; `telegram-game-static-build` ID `12896519573`.
+- The screenshot artifact was extracted and inspected: the lobby Settings gear is centered at native touch size; the restored character atlas shows the original separate eye openings and striped face; the victim strike scene retains the standing attack pose; the corpse still has the exposed bone; and the portrait HUD shows no permanent Leave Match control.
+- The next commit only updates this handoff log; source and test code is unchanged from the passing #326 head. GitHub Actions is rerun for the exact final commit before merge.
