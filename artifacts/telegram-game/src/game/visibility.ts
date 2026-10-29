@@ -6,6 +6,12 @@ export interface VisionPoint {
   y: number;
 }
 
+export interface VisualOccluderCircle {
+  x: number;
+  y: number;
+  radius: number;
+}
+
 // A half-degree angular step keeps wall silhouettes smooth without the
 // quadratic segment-intersection cost of testing every ray against every wall.
 const VISION_RAY_COUNT = 720;
@@ -16,6 +22,32 @@ const VISION_DIRECTIONS = Array.from({ length: VISION_RAY_COUNT }, (_, index) =>
 
 function isBlocked(grid: Grid, col: number, row: number): boolean {
   return col < 0 || col >= COLS || row < 0 || row >= ROWS || grid[row * COLS + col] === 1;
+}
+
+/** Exact ray/circle hit used for narrow visual-only props such as light poles. */
+function rayCircleHitDistance(
+  px: number,
+  py: number,
+  dx: number,
+  dy: number,
+  circle: VisualOccluderCircle,
+  maxDistance: number,
+): number | null {
+  const vx = circle.x - px;
+  const vy = circle.y - py;
+  const along = vx * dx + vy * dy;
+  if (along < -circle.radius || along > maxDistance + circle.radius) return null;
+
+  const perpendicularSquared = vx * vx + vy * vy - along * along;
+  const radiusSquared = circle.radius * circle.radius;
+  if (perpendicularSquared > radiusSquared) return null;
+
+  const halfChord = Math.sqrt(Math.max(0, radiusSquared - perpendicularSquared));
+  const near = along - halfChord;
+  if (near >= 0 && near < maxDistance) return near;
+  const far = along + halfChord;
+  if (near < 0 && far >= 0) return 0;
+  return null;
 }
 
 /**
@@ -30,6 +62,7 @@ export function computeVisibilityPolygon(
   py: number,
   radius: number,
   grid: Grid,
+  narrowOccluders: readonly VisualOccluderCircle[] = [],
 ): VisionPoint[] {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(radius) || radius <= 0) {
     return [];
@@ -95,6 +128,12 @@ export function computeVisibilityPolygon(
       }
     }
 
+    // Narrow props use authored visual circles rather than the wider square
+    // collision cells. They can shorten a ray but can never reveal through a wall.
+    for (const occluder of narrowOccluders) {
+      const circleHit = rayCircleHitDistance(px, py, dx, dy, occluder, hitDistance);
+      if (circleHit !== null && circleHit < hitDistance) hitDistance = circleHit;
+    }
     points.push({ x: px + dx * hitDistance, y: py + dy * hitDistance });
   }
 
@@ -166,6 +205,61 @@ function isNonOccludingFurniture(index: number): boolean {
     col >= region.minCol && col <= region.maxCol &&
     row >= region.minRow && row <= region.maxRow
   );
+}
+
+/**
+ * Trace four-cell 2×2 props as narrow circular vision occluders.
+ * Their collision cells remain unchanged and are deliberately omitted from the
+ * coarse shadow grid; this avoids projecting their square collision footprint
+ * as a wide shadow while still letting poles and similarly narrow props block
+ * the sight rays behind their actual visual silhouette.
+ */
+export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderCircle[] {
+  if (collisionGrid.length !== COLS * ROWS) {
+    throw new RangeError(
+      `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`
+    );
+  }
+
+  const visited = new Uint8Array(COLS * ROWS);
+  const occluders: VisualOccluderCircle[] = [];
+  for (let start = 0; start < collisionGrid.length; start++) {
+    if (collisionGrid[start] !== 1 || visited[start]) continue;
+    const component: number[] = [];
+    const queue = [start];
+    visited[start] = 1;
+    for (let head = 0; head < queue.length; head++) {
+      const index = queue[head];
+      component.push(index);
+      const row = Math.floor(index / COLS);
+      const col = index - row * COLS;
+      const neighbors = [
+        col > 0 ? index - 1 : -1,
+        col + 1 < COLS ? index + 1 : -1,
+        row > 0 ? index - COLS : -1,
+        row + 1 < ROWS ? index + COLS : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || visited[next] || collisionGrid[next] !== 1) continue;
+        visited[next] = 1;
+        queue.push(next);
+      }
+    }
+    if (component.length !== 4 || component.some(isNonOccludingFurniture)) continue;
+    const cols = component.map(index => index % COLS);
+    const rows = component.map(index => Math.floor(index / COLS));
+    const minCol = Math.min(...cols);
+    const maxCol = Math.max(...cols);
+    const minRow = Math.min(...rows);
+    const maxRow = Math.max(...rows);
+    if (maxCol - minCol !== 1 || maxRow - minRow !== 1) continue;
+    occluders.push({
+      x: (minCol + 1) * CELL_X,
+      y: (minRow + 1) * CELL_Y,
+      radius: Math.min(CELL_X, CELL_Y) * 0.2,
+    });
+  }
+  return occluders;
 }
 
 export function buildShadowGrid(collisionGrid: Grid): Grid {
