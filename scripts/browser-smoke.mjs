@@ -658,6 +658,23 @@ try {
   const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
   const dragBox = await dragHandle.boundingBox();
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
+  const fixedHudLegend = layoutSettings.getByTestId('control-layout-fixed-hud');
+  assert.equal(await fixedHudLegend.evaluate(el => el.scrollWidth <= el.clientWidth),
+    true, 'fixed HUD legend must fit inside the preview at mobile width');
+  const previewControls = await preview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < previewControls.length; i++) {
+    for (let j = i + 1; j < previewControls.length; j++) {
+      const a = previewControls[i];
+      const b = previewControls[j];
+      const overlaps = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      assert.equal(overlaps, false, `default control preview must not overlap: ${a.id} / ${b.id}`);
+    }
+  }
   // Exercise real mobile touch/pointer delivery, including pointer capture,
   // instead of relying on mouse events for a touch-first control editor.
   const touchSession = await page.context().newCDPSession(page);
