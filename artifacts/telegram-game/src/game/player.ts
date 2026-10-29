@@ -37,14 +37,32 @@ function canMoveToWide(grid: Grid, cx: number, cy: number): boolean {
   );
 }
 
+/** Sample the whole segment so local prediction cannot step over a thin wall
+ * that the authoritative server correctly rejects. Both sides sample at 2px.
+ */
+/** Public for regression coverage: a path can be blocked even when both endpoints are walkable. */
+export function isMovementPathWalkableWide(
+  grid: Grid, x: number, y: number, nx: number, ny: number,
+): boolean {
+  const distance = Math.hypot(nx - x, ny - y);
+  const steps = Math.max(1, Math.ceil(distance / 2));
+  for (let step = 1; step <= steps; step++) {
+    const t = step / steps;
+    if (!canMoveToWide(grid, x + (nx - x) * t, y + (ny - y) * t)) return false;
+  }
+  return true;
+}
+
 function resolveMovementWide(
   grid: Grid,
   x: number,  y: number,
   nx: number, ny: number,
 ): [number, number] {
-  if (canMoveToWide(grid, nx, ny)) return [nx, ny];
-  if (canMoveToWide(grid, nx, y))  return [nx, y];
-  if (canMoveToWide(grid, x,  ny)) return [x, ny];
+  if (isMovementPathWalkableWide(grid, x, y, nx, ny)) return [nx, ny];
+  // Preserve the established x-first sliding order, but validate the entire
+  // axis segment so player prediction agrees with the server at wall corners.
+  if (isMovementPathWalkableWide(grid, x, y, nx, y)) return [nx, y];
+  if (isMovementPathWalkableWide(grid, x, y, x, ny)) return [x, ny];
   return [x, y];
 }
 

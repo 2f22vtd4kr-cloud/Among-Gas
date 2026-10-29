@@ -84,6 +84,23 @@ try {
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
 
+  // The main menu must not clip join controls in short landscape viewports.
+  await page.setViewportSize({ width: 844, height: 390 });
+  const scrollableLobby = page.locator('.au-lobby-scroll');
+  await scrollableLobby.waitFor({ state: 'visible' });
+  assert.equal(await scrollableLobby.evaluate(element => getComputedStyle(element).overflowY), 'auto',
+    'short landscape lobby content must be scrollable');
+  await scrollableLobby.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  const menuFooter = page.getByText('v1.0 · AMONG GAS', { exact: true });
+  const footerBox = await menuFooter.boundingBox();
+  const joinCodeBox = await page.getByRole('button', { name: 'JOIN WITH CODE' }).boundingBox();
+  assert.ok(footerBox && footerBox.y >= 0 && footerBox.y + footerBox.height <= 390,
+    'the menu footer must be reachable within the short landscape viewport');
+  assert.ok(joinCodeBox && joinCodeBox.y >= 0 && joinCodeBox.y + joinCodeBox.height <= 390,
+    'the join-by-code control must be reachable within the short landscape viewport');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -109,6 +126,61 @@ try {
   assert.equal(await movementJoystick.getAttribute('aria-label'), 'Джойстик движения',
     'the joystick accessible label must follow the selected Russian language');
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
+
+  // Pointer capture plus pointer-up must return the joystick to neutral. A lost
+  // touch must never leave a movement key held and keep nudging the player.
+  const initialJoystickBox = await movementJoystick.boundingBox();
+  assert.ok(initialJoystickBox, 'movement joystick must be measurable for pointer testing');
+  await page.mouse.move(initialJoystickBox.x + initialJoystickBox.width / 2, initialJoystickBox.y + initialJoystickBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(initialJoystickBox.x + initialJoystickBox.width / 2 + 38, initialJoystickBox.y + initialJoystickBox.height / 2, { steps: 4 });
+  await page.waitForFunction(() => {
+    const element = document.querySelector('[data-testid="joystick-knob"]');
+    return !!element && element.style.transform !== 'translate(-50%, -50%)';
+  });
+  await page.mouse.up();
+  await page.waitForFunction(() => {
+    const element = document.querySelector('[data-testid="joystick-knob"]');
+    return !!element && element.style.transform === 'translate(-50%, -50%)';
+  });
+
+  // The HUD must remain tappable even on the narrowest supported portrait size.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.waitForTimeout(150);
+  const hudSelectors = [
+    page.getByRole('button', { name: /КАРТА/ }),
+    page.getByRole('button', { name: /ЗАДАНИЯ/ }),
+    page.getByRole('button', { name: /Покинуть матч/ }),
+    page.getByRole('button', { name: /тревога/i }),
+    page.getByRole('button', { name: 'Настройки' }),
+  ];
+  const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
+  assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
+  for (let i = 0; i < hudBoxes.length; i++) {
+    for (let j = i + 1; j < hudBoxes.length; j++) {
+      const a = hudBoxes[i];
+      const b = hudBoxes[j];
+      const overlaps = a.x < b.x + b.width && a.x + a.width > b.x &&
+        a.y < b.y + b.height && a.y + a.height > b.y;
+      assert.equal(overlaps, false, `gameplay controls ${i} and ${j} must not overlap at 320×568`);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+
+  // Leaving a live match is explicit and cancellable before it disconnects.
+  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
+  await leaveDialog.waitFor({ state: 'visible' });
+  await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
+  await leaveDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
+  await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
+  // Return to a predictable fixture for the rest of the visual smoke suite.
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
@@ -270,7 +342,14 @@ try {
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
+  const chatTextbox = page.getByRole('textbox', { name: 'Сообщение в обсуждении' });
+  await chatTextbox.waitFor({ state: 'visible' });
+  await chatTextbox.focus();
+  const typedMessage = 'wasd WASD qwerty 123';
+  await page.keyboard.type(typedMessage);
+  assert.equal(await chatTextbox.inputValue(), typedMessage,
+    'keyboard movement bindings must never prevent W/A/S/D or other letters in chat input');
+  await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
   await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
@@ -339,9 +418,9 @@ try {
     'the corpse must render from one isolated atlas pose, not synthesized layers');
   assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
-  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '2100',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '300',
     'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
