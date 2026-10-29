@@ -115,6 +115,9 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
+const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
+assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
+assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
 const upperAtriumLeftBench = 9 * COLS + 48;
@@ -135,6 +138,7 @@ const realPolygon = computeVisibilityPolygon(
   realOrigin.y,
   NORMAL_VISION_RADIUS_PX,
   realShadowGrid,
+  realNarrowOccluders,
 );
 const roundedRealPolygon = smoothVisibilityPolygon(realPolygon, realOrigin);
 assert.equal(realPolygon.length, 720, 'custom map returns a full visibility polygon');
@@ -145,6 +149,7 @@ assert.ok(LIGHTS_CREWMATE_VISION_RADIUS_PX < NORMAL_VISION_RADIUS_PX, 'Lights re
 console.log(JSON.stringify({
   ok: true,
   rayCount: realPolygon.length,
+  narrowOccluderCount: realNarrowOccluders.length,
   crewVisionPx: NORMAL_VISION_RADIUS_PX,
   impostorVisionPx: IMPOSTOR_VISION_RADIUS_PX,
   lightsCrewVisionPx: LIGHTS_CREWMATE_VISION_RADIUS_PX,
