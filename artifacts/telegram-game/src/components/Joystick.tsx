@@ -41,27 +41,6 @@ export default function Joystick({ keysRef }: JoystickProps) {
     for (const key of MOVEMENT_KEYS) keysRef.current.delete(key);
   }
 
-  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (activePointer.current !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
-    event.preventDefault();
-    activePointer.current = event.pointerId;
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Pointer capture is unavailable in a few older WebViews; window focus
-      // and visibility handlers below still guarantee movement is released.
-    }
-    const rect = event.currentTarget.getBoundingClientRect();
-    centerRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
-    updatePointer(event.clientX, event.clientY);
-  }
-
-  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (event.pointerId !== activePointer.current) return;
-    event.preventDefault();
-    updatePointer(event.clientX, event.clientY);
-  }
-
   function updatePointer(clientX: number, clientY: number) {
     const dx = clientX - centerRef.current.x;
     const dy = clientY - centerRef.current.y;
@@ -74,6 +53,27 @@ export default function Joystick({ keysRef }: JoystickProps) {
       knobRef.current.style.transform = `translate(calc(-50% + ${kx}px), calc(-50% + ${ky}px))`;
     }
     applyDirection(dx, dy);
+  }
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (activePointer.current !== null || (event.pointerType === 'mouse' && event.button !== 0)) return;
+    event.preventDefault();
+    activePointer.current = event.pointerId;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Older embedded WebViews may not support pointer capture. Focus and
+      // visibility cleanup below still prevent a held movement key getting stuck.
+    }
+    const rect = event.currentTarget.getBoundingClientRect();
+    centerRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    updatePointer(event.clientX, event.clientY);
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.pointerId !== activePointer.current) return;
+    event.preventDefault();
+    updatePointer(event.clientX, event.clientY);
   }
 
   function onPointerEnd(event: ReactPointerEvent<HTMLDivElement>) {
@@ -98,15 +98,6 @@ export default function Joystick({ keysRef }: JoystickProps) {
     };
   }, []);
 
-  return () => {
-      base.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend',  onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   return (
     <div
       ref={baseRef}
@@ -115,14 +106,15 @@ export default function Joystick({ keysRef }: JoystickProps) {
       onPointerUp={onPointerEnd}
       onPointerCancel={onPointerEnd}
       onLostPointerCapture={onLostPointerCapture}
+      role="application"
       aria-label={language === 'en' ? 'Movement joystick' : 'Джойстик движения'}
       data-joystick-side={joystickSide}
       style={{
         position: 'fixed',
-        bottom: 32,
-        left: joystickSide === 'left' ? 32 : 'auto',
-        right: joystickSide === 'right' ? 32 : 'auto',
-        width:  BASE_RADIUS * 2,
+        bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
+        left: joystickSide === 'left' ? 'max(24px, env(safe-area-inset-left, 0px))' : 'auto',
+        right: joystickSide === 'right' ? 'max(24px, env(safe-area-inset-right, 0px))' : 'auto',
+        width: BASE_RADIUS * 2,
         height: BASE_RADIUS * 2,
         borderRadius: '50%',
         background: 'rgba(20, 40, 60, 0.55)',
@@ -131,16 +123,17 @@ export default function Joystick({ keysRef }: JoystickProps) {
         zIndex: 30,
         touchAction: 'none',
         userSelect: 'none',
+        WebkitUserSelect: 'none',
       }}
     >
-      {/* knob */}
       <div
         ref={knobRef}
+        data-testid="joystick-knob"
         style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
-          width:  KNOB_RADIUS * 2,
+          width: KNOB_RADIUS * 2,
           height: KNOB_RADIUS * 2,
           borderRadius: '50%',
           background: 'rgba(100, 200, 240, 0.75)',
