@@ -723,6 +723,25 @@ try {
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.32)) < 3,
     'saved task action Y position must hydrate after reload');
 
+  // Drag directly onto the joystick: the editor should find a nearby free spot.
+  const joystickHandle = reloadedSettings.getByTestId('control-drag-joystick');
+  const joystickHandleBox = await joystickHandle.boundingBox();
+  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(joystickHandleBox && taskHandleBox, 'overlap regression controls are visible');
+  await page.mouse.move(taskHandleBox.x + taskHandleBox.width / 2, taskHandleBox.y + taskHandleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(joystickHandleBox.x + joystickHandleBox.width / 2, joystickHandleBox.y + joystickHandleBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const currentJoystickBox = await joystickHandle.boundingBox();
+  assert.ok(nudgedTaskBox && currentJoystickBox, 'dragged control and joystick remain visible');
+  const previewOverlap =
+    nudgedTaskBox.x < currentJoystickBox.x + currentJoystickBox.width &&
+    nudgedTaskBox.x + nudgedTaskBox.width > currentJoystickBox.x &&
+    nudgedTaskBox.y < currentJoystickBox.y + currentJoystickBox.height &&
+    nudgedTaskBox.y + nudgedTaskBox.height > currentJoystickBox.y;
+  assert.equal(previewOverlap, false, 'dragging one control onto another must nudge it to a non-overlapping position');
+
   // Reset is a draft operation; Cancel must not alter the saved layout.
   await reloadedSettings.getByTestId('control-layout-reset').click();
   await reloadedSettings.getByTestId('control-layout-cancel').click();
