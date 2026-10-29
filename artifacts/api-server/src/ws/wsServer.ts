@@ -330,7 +330,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const sub = raw.readUInt8(1);
         const tgUserId = ws.tgUserId!;
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
-        if (!lobby) return;
+        if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
 
