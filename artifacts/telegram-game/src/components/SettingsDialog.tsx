@@ -54,7 +54,6 @@ export function SettingsButton({
           strokeWidth="1.8"
         />
         <path
-          transform="translate(-2 0)"
           d="m19.4 13.5 1.1.9-1.5 2.6-1.4-.5a7.8 7.8 0 0 1-1.4.8l-.2 1.5h-3l-.3-1.5a7.8 7.8 0 0 1-1.4-.8l-1.4.5-1.5-2.6 1.1-.9a6.4 6.4 0 0 1 0-1.6l-1.1-.9 1.5-2.6 1.4.5a7.8 7.8 0 0 1 1.4-.8l.3-1.5h3l.2 1.5a7.8 7.8 0 0 1 1.4.8l1.4-.5 1.5 2.6-1.1.9a6.4 6.4 0 0 1 0 1.6Z"
           stroke="currentColor"
           strokeWidth="1.4"
