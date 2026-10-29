@@ -692,8 +692,8 @@ try {
 
   // Persisted layout survives a reload, not merely the current React session.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Настройки' }).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).waitFor({ state: 'visible', timeout: 15_000 });
+  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const reloadedSettings = page.locator('[role="dialog"]');
   await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
@@ -714,7 +714,7 @@ try {
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
     'Cancel must preserve the previously saved Y position');
 
-  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const resetSettings = page.locator('[role="dialog"]');
   await resetSettings.getByTestId('control-layout-reset').click();
   await resetSettings.getByTestId('control-layout-save').click();
