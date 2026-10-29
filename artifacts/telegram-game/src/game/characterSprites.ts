@@ -118,13 +118,3 @@ export function getCharacterClipPath(pose: CharacterPose): string | undefined {
   const top = notch.top * 100;
   return `polygon(0 0, 100% 0, 100% ${top}%, ${rightEnd}% ${top}%, ${rightEnd}% 100%, ${rightStart}% 100%, ${rightStart}% ${top}%, ${leftEnd}% ${top}%, ${leftEnd}% 100%, ${leftStart}% 100%, ${leftStart}% ${top}%, 0 ${top}%)`;
 }
-}
-
-export function getCharacterClipPath(pose: CharacterPose): string | undefined {
-  const notch = getCharacterClipNotch(pose);
-  if (!notch) return undefined;
-  const left = notch.left * 100;
-  const right = notch.right * 100;
-  const top = notch.top * 100;
-  return `polygon(0 0, 100% 0, 100% 100%, ${right}% 100%, ${right}% ${top}%, ${left}% ${top}%, ${left}% 100%, 0 100%)`;
-}
