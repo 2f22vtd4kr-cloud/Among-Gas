@@ -101,7 +101,7 @@ try {
   const savedTaskPosition = await page.evaluate(() => JSON.parse(localStorage.getItem('amongGas.settings') || '{}').controlLayout?.task);
   assert.ok(savedTaskPosition && Math.abs(savedTaskPosition.x - 0.30) < 0.06,
     'the per-control position editor must persist the dragged position');
-  await lobbySettings.getByRole('button', { name: 'Close control layout editor' }).click();
+  // Saving closes the editor; the new control position is now persistent.
   await lobbySettings.getByTestId('joystick-side-left').click();
   await page.getByRole('button', { name: 'Close settings' }).click();
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });

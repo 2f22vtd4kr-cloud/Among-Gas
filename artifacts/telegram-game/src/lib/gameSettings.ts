@@ -8,7 +8,7 @@ export interface AudioSettings{masterVolume:number;musicVolume:number;effectsVol
 export interface GameSettings extends AudioSettings{joystickSide:JoystickSide;controlLayout:ControlLayout}
 const STORAGE_KEY='amongGas.settings',CHANGE_EVENT='among-gas-settings-change';
 const DEFAULT_CONTROL_LAYOUT:ControlLayout={
- joystick:{x:.80,y:.83},kill:{x:.39,y:.74},report:{x:.65,y:.74},task:{x:.22,y:.57},
+ joystick:{x:.80,y:.83},kill:{x:.39,y:.74},report:{x:.65,y:.74},task:{x:.28,y:.57},
  emergency:{x:.84,y:.18},map:{x:.16,y:.08},tasks:{x:.16,y:.18},sabotage:{x:.18,y:.74},
  vent:{x:.80,y:.55},admin:{x:.80,y:.43},settings:{x:.84,y:.08},
 };
