@@ -156,6 +156,17 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  const mapTiming = await page.evaluate(() => performance.getEntriesByType('resource')
+    .filter(entry => /map-hires\\.(webp|png)(?:$|\\?)/i.test(entry.name))
+    .map(entry => ({
+      asset: entry.name.split('/').pop(),
+      durationMs: Math.round(entry.duration),
+      transferBytes: entry.transferSize,
+      decodedBytes: entry.decodedBodySize,
+    })));
+  assert.ok(mapTiming.some(entry => String(entry.asset).includes('map-hires.webp')),
+    'cold gameplay load should prefer the compact WebP map asset');
+  console.log('Cold map asset resource timings:', JSON.stringify(mapTiming));
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
   assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '139',
@@ -801,6 +812,27 @@ try {
   await decodePage.evaluate(() => window.__releaseImageDecodes());
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
+
+  // If WebP loading fails, the original PNG map must still render and unlock play.
+  const fallbackPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  fallbackPage.on('pageerror', error => failures.push(error.message));
+  await fallbackPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await fallbackPage.route('**/map-hires.webp', route => route.abort());
+  await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  assert.equal(await fallbackPage.evaluate(() => performance.getEntriesByType('resource')
+    .some(entry => /map-hires\\.png(?:$|\\?)/i.test(entry.name))), true,
+    'failed WebP loading must fall back to the PNG map');
+  await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
