@@ -207,6 +207,7 @@ try {
     'Leave Match must not occupy a permanent, high-emphasis gameplay HUD slot');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
   assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
+  console.log('HUD boxes at 320×568:', JSON.stringify(hudBoxes));
   for (let i = 0; i < hudBoxes.length; i++) {
     for (let j = i + 1; j < hudBoxes.length; j++) {
       const a = hudBoxes[i];
