@@ -182,6 +182,8 @@ try {
     'the authored role-reveal baseline remains available as metadata');
   assert.equal(await roleRevealSprite.evaluate(el => el.style.transform), 'none',
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
+  assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
+    'role sprites must mask detached lower-leg strokes without removing the feet');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
