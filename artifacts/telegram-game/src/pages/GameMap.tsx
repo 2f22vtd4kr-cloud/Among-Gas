@@ -1861,8 +1861,8 @@ export default function GameMap() {
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 35,
-          }}
             ...customControlPositionStyle('settings', controlLayout),
+          }}
         />
       )}
       <SettingsDialog
@@ -2186,8 +2186,8 @@ export default function GameMap() {
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
-        }}>
           ...customControlPositionStyle('taskAction', controlLayout),
+        }}>
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
             style={{
@@ -2212,8 +2212,8 @@ export default function GameMap() {
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
-        }}>
           ...customControlPositionStyle('killReport', controlLayout),
+        }}>
           {amIImpostor && (
             <button
               aria-label={killCooldownMs > 0
@@ -2260,7 +2260,7 @@ export default function GameMap() {
 
       {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
-        <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}><div style={{
+        <div style={{
           position: 'fixed', bottom: 130, left: 24, zIndex: 25,
           ...customControlPositionStyle('sabotage', controlLayout),
         }}>
@@ -2290,8 +2290,8 @@ export default function GameMap() {
       {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
-        }}>
           ...customControlPositionStyle('repair', controlLayout),
+        }}>
           <button
             onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
             style={{
@@ -2380,8 +2380,8 @@ export default function GameMap() {
           // Reserve the Settings button's 44px hit area plus a 12px gap.
           right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
           zIndex: 35,
-        }}>
           ...customControlPositionStyle('emergency', controlLayout),
+        }}>
           <button
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
