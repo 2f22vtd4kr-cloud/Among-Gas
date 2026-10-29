@@ -162,7 +162,7 @@ try {
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
     'trimming sprite padding must preserve the authored role-reveal scale');
-  assert.equal(await roleRevealSprite.evaluate(el => (el as HTMLElement).style.transform), 'none',
+  assert.equal(await roleRevealSprite.evaluate(el => el.style.transform), 'none',
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
