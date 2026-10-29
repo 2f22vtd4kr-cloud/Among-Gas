@@ -235,18 +235,28 @@ export default function GameMap() {
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
   useEffect(() => {
     if (!lastKill) return;
-    // The victim receives the blocking full-screen death sequence; the
-    // attacker gets the kill sound but can keep playing and moving.
-    if (lastKill.attackerSlot === mySlot && lastKill.victimSlot !== mySlot) {
+    // Victims see the blocking death sequence; attackers keep playing.
+    if (lastKill.victimSlot === mySlot) {
+      setKillAnimation(lastKill);
+      sfx('kill', 0.72);
+      const timer = window.setTimeout(() => setKillAnimation(null), 1700);
+      return () => window.clearTimeout(timer);
+    }
+    if (lastKill.attackerSlot === mySlot) {
       sfx('kill', 0.48);
       return;
     }
-    if (lastKill.victimSlot !== mySlot) return;
-    setKillAnimation(lastKill);
-    sfx('kill', 0.72);
-    const timer = window.setTimeout(() => setKillAnimation(null), 1700);
-    return () => window.clearTimeout(timer);
-  }, [lastKill, mySlot]);
+
+    // The server broadcasts kill events to the whole lobby. Give nearby
+    // bystanders an audible cue too, without leaking kills across the map.
+    const local = playerStateRef.current;
+    const attacker = remotePlayersRef.current.get(lastKill.attackerSlot);
+    const victim = remotePlayersRef.current.get(lastKill.victimSlot);
+    const hearingRange = 520;
+    const nearby = [attacker, victim].some(player => player &&
+      Math.hypot(player.x - local.x, player.y - local.y) <= hearingRange);
+    if (nearby) sfx('kill', 0.34);
+  }, [lastKill, mySlot, remotePlayersRef]);
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -702,15 +712,10 @@ export default function GameMap() {
       const id = octx.getImageData(0, 0, oc.width, oc.height);
       const px = id.data;
       for (let i = 0; i < px.length; i += 4) {
-        const a = px[i + 3];
-        if (a <= 20) {
-          px[i + 3] = 0;
-        } else {
-          px[i + 3] = 255;
-          if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 80) {
-            px[i] = 0; px[i + 1] = 0; px[i + 2] = 0;
-          }
-        }
+        // Preserve authored alpha. Forcing every semi-transparent pixel to
+        // fully opaque turns anti-aliased sketch/scratch pixels and stray
+        // under-sprite marks into hard black lines at gameplay scale.
+        if (px[i + 3] <= 20) px[i + 3] = 0;
       }
       octx.putImageData(id, 0, 0);
       spriteImgRef.current = oc;
@@ -1057,65 +1062,8 @@ export default function GameMap() {
         }
       }
 
-      // ── 2.8 Vent markers ──────────────────────────────────────────────────
-      // Positions are in Among Gas's own collision-checked map coordinate space.
-      ctx.save();
-      ctx.textAlign = 'center';
-      VENT_DEFS.forEach(vent => {
-        const vx = Math.round((vent.x - srcX) * scale);
-        const vy = Math.round((vent.y - srcY) * scale);
-        if (vx < -32 || vx > cw + 32 || vy < -32 || vy > ch + 32) return;
-        const radius = Math.max(5, Math.round(10 * dpr));
-        ctx.beginPath();
-        ctx.arc(vx, vy, radius + 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.56)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(vx, vy, radius, radius * 0.62, 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#34454e';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = 'rgba(170,220,230,0.9)';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(vx - radius * 0.65, vy + radius * 0.08);
-        ctx.lineTo(vx + radius * 0.65, vy + radius * 0.08);
-        ctx.strokeStyle = 'rgba(10,20,26,0.95)';
-        ctx.lineWidth = Math.max(2, dpr * 2);
-        ctx.stroke();
-      });
-      ctx.restore();
-
-      // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      // Use the dedicated row-7 Among Gas corpse sprite: it already contains
-      // the cut suit, exposed bone, wound and ground contact. Never synthesize
-      // a corpse by cropping an upright living character or drawing a fake bone.
-      ctx.save();
-      for (const body of corpsePositionsRef.current) {
-        const bx = Math.round((body.x - srcX) * scale);
-        const by = Math.round((body.y - srcY) * scale);
-        if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
-        const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
-        const sx = Math.ceil(rect.x);
-        const sy = Math.ceil(rect.y);
-        const sw = Math.floor(rect.x + rect.width) - sx;
-        const sh = Math.floor(rect.y + rect.height) - sy;
-        // Preserve the authored sprite's pixel aspect ratio. Its row window is
-        // shorter than the atlas average, so scale height with the source window
-        // instead of stretching a mixed corpse/crouch crop into a fake landscape.
-        const corpseW = Math.max(18, Math.round(PLAYER_DISPLAY_WIDTH * scale * 0.95));
-        const corpseH = Math.max(12, Math.round(
-          PLAYER_DISPLAY_HEIGHT * scale * (rect.height / CHARACTER_CELL_HEIGHT) * 0.95,
-        ));
-        const corpseX = bx - corpseW / 2;
-        const corpseY = by - corpseH / 2;
-
-        ctx.save();
-        ctx.imageSmoothingEnabled = false;
-        ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
-        ctx.restore();
-      }
-      ctx.restore();
+      // Vent positions remain active for proximity-gated controls, but we do not
+      // paint synthetic black/white vent glyphs over the illustrated floor.
 
       // ── 2.9 Admin Table console marker ────────────────────────────────────
       ctx.save();
