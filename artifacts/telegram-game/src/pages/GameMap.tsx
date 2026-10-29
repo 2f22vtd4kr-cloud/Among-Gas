@@ -281,7 +281,8 @@ export default function GameMap() {
     if (lastKill.victimSlot === mySlot) {
       setKillAnimation(lastKill);
       sfx('kill', 0.72);
-      const timer = window.setTimeout(() => setKillAnimation(null), 1700);
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      const timer = window.setTimeout(() => setKillAnimation(null), reducedMotion ? 150 : 1700);
       return () => window.clearTimeout(timer);
     }
     if (lastKill.attackerSlot === mySlot) {
