@@ -59,7 +59,7 @@ export function defaultControlPosition(
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
     case 'taskAction': return { x: 50, y: 62 };
-    case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 87 };
+    case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 90 };
     case 'sabotage': return { x: oppositeSide, y: 74 };
     case 'repair': return { x: 76, y: 50 };
   }
@@ -175,11 +175,11 @@ export function customControlPositionStyle(
     map: { halfWidth: 50, halfHeight: 24 },
     tasks: { halfWidth: 54, halfHeight: 24 },
     settings: { halfWidth: 22, halfHeight: 22 },
-    emergency: { halfWidth: 80, halfHeight: 24 },
-    taskAction: { halfWidth: 100, halfHeight: 24 },
-    killReport: { halfWidth: 100, halfHeight: 40 },
-    sabotage: { halfWidth: 42, halfHeight: 42 },
-    repair: { halfWidth: 100, halfHeight: 24 },
+    emergency: { halfWidth: 70, halfHeight: 20 },
+    taskAction: { halfWidth: 84, halfHeight: 20 },
+    killReport: { halfWidth: 84, halfHeight: 38 },
+    sabotage: { halfWidth: 38, halfHeight: 38 },
+    repair: { halfWidth: 90, halfHeight: 20 },
   };
   const { halfWidth, halfHeight } = safeBounds[id];
   return {
