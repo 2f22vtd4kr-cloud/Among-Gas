@@ -727,8 +727,8 @@ export default function GameMap() {
       // several poses. Clear only dark pixels in the final transparent-padding
       // band of each measured pose window; colored feet and suit pixels remain.
       const poseWindows = [
-        [0, 158], [172, 315], [327, 463], [471, 625], [636, 780],
-        [795, 908], [915, 1056], [1067, 1190], [1198, 1339],
+        [0, 153], [172, 310], [327, 458], [471, 620], [636, 775],
+        [795, 903], [915, 1051], [1067, 1185], [1198, 1334],
       ] as const;
       const cellW = oc.width / CHARACTER_COLORS.length;
       for (const [top, bottom] of poseWindows) {
