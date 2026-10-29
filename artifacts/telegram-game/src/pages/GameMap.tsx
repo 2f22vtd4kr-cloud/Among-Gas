@@ -2310,7 +2310,7 @@ export default function GameMap() {
           position: 'fixed',
           top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
           // Reserve the Settings button's 44px hit area plus a 12px gap.
-          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
+          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 120px)',
           zIndex: 35,
         }}>
           <button
