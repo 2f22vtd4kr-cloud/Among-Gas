@@ -1185,23 +1185,23 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // the actual kill validation; this just drives the impostor's UI timer).
   useEffect(() => {
     if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
-    if (state.killCooldownMs <= 0) return;
+    if (!state.gameplayReady || state.killCooldownMs <= 0) return;
     const id = setInterval(() => {
       setState(s => ({ ...s, killCooldownMs: Math.max(0, s.killCooldownMs - 250) }));
     }, 250);
     return () => clearInterval(id);
-  }, [state.phase, state.myRole, state.killCooldownMs > 0]);
+  }, [state.phase, state.myRole, state.gameplayReady, state.killCooldownMs > 0]);
 
   // Client-side sabotage cooldown countdown display (server is authoritative
   // for the actual trigger validation; this just drives the impostor's UI timer).
   useEffect(() => {
     if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
-    if (state.sabotageCooldownMs <= 0) return;
+    if (!state.gameplayReady || state.sabotageCooldownMs <= 0) return;
     const id = setInterval(() => {
       setState(s => ({ ...s, sabotageCooldownMs: Math.max(0, s.sabotageCooldownMs - 250) }));
     }, 250);
     return () => clearInterval(id);
-  }, [state.phase, state.myRole, state.sabotageCooldownMs > 0]);
+  }, [state.phase, state.myRole, state.gameplayReady, state.sabotageCooldownMs > 0]);
 
   const actions: GameActions = {
     createRoom, createSolo, joinRoom, startGame, markGameplayReady, sendMove, sendKill,
