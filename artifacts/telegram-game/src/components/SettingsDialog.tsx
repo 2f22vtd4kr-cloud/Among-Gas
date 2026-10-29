@@ -405,6 +405,7 @@ export default function SettingsDialog({
             {controlOptions.map(([id, label]) => {
               const position = draftLayout[id] ?? controlLayout[id] ?? defaultControlPosition(id, joystickSide);
               const selected = selectedControl === id;
+              const previewDimensions = PREVIEW_CONTROL_DIMENSIONS[id as keyof typeof PREVIEW_CONTROL_DIMENSIONS];
               return (
                 <button
                   key={id}
@@ -435,8 +436,8 @@ export default function SettingsDialog({
                   style={{
                     position: 'absolute', left: `${position.x}%`, top: `${Math.max(25, position.y)}%`,
                     transform: 'translate(-50%, -50%)',
-                    width: PREVIEW_CONTROL_DIMENSIONS[id].width,
-                    height: PREVIEW_CONTROL_DIMENSIONS[id].height,
+                    width: previewDimensions.width,
+                    height: previewDimensions.height,
                     minWidth: 0, minHeight: 0, maxWidth: 'none', padding: 0, boxSizing: 'border-box',
                     borderRadius: id === 'joystick' ? 999 : 7, border: `2px solid ${selected ? '#62e8d8' : 'rgba(200,225,230,.5)'}`,
                     background: selected ? 'rgba(26,130,121,.95)' : 'rgba(17,37,48,.94)',
