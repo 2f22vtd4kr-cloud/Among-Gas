@@ -1687,7 +1687,7 @@ export default function GameMap() {
         </div>
       )}
       {(!loaded || !spriteLoaded || !gameplayReady) && !error && (
-        <div style={{
+        <div data-testid="gameplay-loading-screen" style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#8faabb', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
