@@ -87,6 +87,50 @@ try {
   assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
   assert.ok(Math.min(...menuSpriteHeightRatios) > 0.80,
     `original pose crops must retain a substantial visible silhouette (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
+
+  // Protect the recognizable balaclava identity at source-pixel level, not just suit color.
+  const balaclavaFacePixels = await page.evaluate(async () => {
+    const sprite = new Image();
+    sprite.src = `/sprites/characters.png?identity-check=${Date.now()}`;
+    await sprite.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = sprite.naturalWidth;
+    canvas.height = sprite.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not inspect original character atlas pixels');
+    context.drawImage(sprite, 0, 0);
+
+    const darkRatio = (box: { x: number; y: number; width: number; height: number }) => {
+      const pixels = context.getImageData(box.x, box.y, box.width, box.height).data;
+      let opaque = 0;
+      let dark = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const [r, g, b, alpha] = pixels.slice(i, i + 4);
+        if (alpha <= 200) continue;
+        opaque++;
+        if (Math.max(r, g, b) < 45) dark++;
+      }
+      return opaque ? dark / opaque : 0;
+    };
+
+    return {
+      width: sprite.naturalWidth,
+      height: sprite.naturalHeight,
+      leftEye: darkRatio({ x: 78, y: 48, width: 16, height: 14 }),
+      rightEye: darkRatio({ x: 109, y: 46, width: 16, height: 15 }),
+      eyeBridge: darkRatio({ x: 96, y: 47, width: 11, height: 14 }),
+      maskFabric: darkRatio({ x: 57, y: 43, width: 10, height: 15 }),
+    };
+  });
+  assert.equal(balaclavaFacePixels.width, 1123, 'legacy balaclava atlas width must remain measured');
+  assert.equal(balaclavaFacePixels.height, 1401, 'legacy balaclava atlas height must remain measured');
+  assert.ok(balaclavaFacePixels.leftEye > 0.85, 'the left black eye opening must remain visible in the balaclava');
+  assert.ok(balaclavaFacePixels.rightEye > 0.80, 'the separate right black eye opening must remain visible in the balaclava');
+  assert.ok(
+    balaclavaFacePixels.eyeBridge < Math.min(balaclavaFacePixels.leftEye, balaclavaFacePixels.rightEye) * 0.5,
+    'the two eye openings must remain visually separate rather than becoming one continuous visor',
+  );
+  assert.ok(balaclavaFacePixels.maskFabric < 0.10, 'the eye apertures must not consume the striped mask fabric');
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
 
