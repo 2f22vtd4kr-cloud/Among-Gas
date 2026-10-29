@@ -267,12 +267,12 @@ export default function GameMap() {
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
   const {
-    mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
+    phase, mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
     sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
   } = useGameState();
   const {
-    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
+    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep, markGameplayReady,
     triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
@@ -783,6 +783,20 @@ export default function GameMap() {
     if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
+
+  // Do not let bots or other players act against this client while its
+  // map-loading screen is still visible. The server starts gameplay only
+  // after every connected human client acknowledges both decoded assets.
+  const gameplayReadySentRef = useRef(false);
+  useEffect(() => {
+    if (phase !== 'playing' || myRole === null) {
+      gameplayReadySentRef.current = false;
+      return;
+    }
+    if (!loaded || !spriteLoaded || gameplayReadySentRef.current) return;
+    gameplayReadySentRef.current = true;
+    markGameplayReady();
+  }, [phase, myRole, loaded, spriteLoaded, markGameplayReady]);
 
   // ── Load the original vector sprite sheet ────────────────────────────────
   useEffect(() => {
