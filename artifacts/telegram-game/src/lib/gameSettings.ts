@@ -75,18 +75,23 @@ function sanitizePosition(value: unknown): ControlPosition | undefined {
   };
 }
 
-function sanitizeLayout(value: unknown): ControlLayout {
-  if (!value || typeof value !== 'object') return {};
-  const source = value as Partial<Record<GameplayControlId, unknown>>;
+function sanitizeLayout(value: unknown, joystickSide: JoystickSide): ControlLayout {
+  const source = value && typeof value === 'object'
+    ? value as Partial<Record<GameplayControlId, unknown>>
+    : {};
   const layout: ControlLayout = {};
   for (const id of CONTROL_IDS) {
+    // These controls are part of the protected top HUD, not user-draggable
+    // controls. Migrate any legacy custom coordinates back to responsive
+    // defaults so old saved layouts cannot place them over gameplay controls.
+    if (id === 'map' || id === 'tasks' || id === 'settings') {
+      layout[id] = defaultControlPosition(id, joystickSide);
+      continue;
+    }
     const point = sanitizePosition(source[id]);
     if (point) {
-      // Map, task list and Settings stay in the fixed top HUD. Every movable
-      // gameplay control is migrated out of the reserved top quarter.
-      layout[id] = id === 'map' || id === 'tasks' || id === 'settings'
-        ? point
-        : { x: point.x, y: Math.max(25, point.y) };
+      // Migrate movable controls out of the reserved top quarter.
+      layout[id] = { x: point.x, y: Math.max(25, point.y) };
     }
   }
   return layout;
@@ -101,9 +106,10 @@ function readStoredSettings(): GameSettings {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return { ...DEFAULT_SETTINGS, controlLayout: {} };
     const parsed = JSON.parse(stored) as Partial<GameSettings>;
+    const joystickSide: JoystickSide = parsed.joystickSide === 'left' ? 'left' : 'right';
     return {
-      joystickSide: parsed.joystickSide === 'left' ? 'left' : 'right',
-      controlLayout: sanitizeLayout(parsed.controlLayout),
+      joystickSide,
+      controlLayout: sanitizeLayout(parsed.controlLayout, joystickSide),
     };
   } catch {
     return { ...DEFAULT_SETTINGS, controlLayout: {} };
