@@ -22,6 +22,7 @@ import {
   CHARACTER_POSES,
   getCharacterFrameRect,
   getCharacterClipPath,
+  getCharacterClipNotch,
   type CharacterColor,
   type CharacterPose,
 } from '../game/characterSprites';
@@ -124,6 +125,27 @@ function slotColor(slot: number): CharacterColor {
 // ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
 const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
+
+function clipSpriteLegGap(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  pose: CharacterPose,
+) {
+  const notch = getCharacterClipNotch(pose);
+  if (!notch) return;
+  ctx.beginPath();
+  ctx.rect(x, y, width, height);
+  ctx.rect(
+    x + width * notch.left,
+    y + height * notch.top,
+    width * (notch.right - notch.left),
+    height * (1 - notch.top),
+  );
+  ctx.clip('evenodd');
+}
 
 function CharSpriteUI({
   color, pose = 'idle', size = 64, flipped = false,
@@ -1250,6 +1272,7 @@ export default function GameMap() {
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        clipSpriteLegGap(ctx, corpseX, corpseY, corpseW, corpseH, 'dead-body');
         ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
         ctx.restore();
       }
@@ -1419,6 +1442,7 @@ export default function GameMap() {
           if (anim.facingLeft) ctx.scale(-1, 1);
           ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+          clipSpriteLegGap(ctx, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH, rPose);
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
           ctx.imageSmoothingEnabled = true;
@@ -1497,6 +1521,7 @@ export default function GameMap() {
       if (facingLeft) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+      clipSpriteLegGap(ctx, -sW / 2, -sH / 2, sW, sH, pose);
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
