@@ -1723,14 +1723,14 @@ export default function GameMap() {
               onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
               aria-expanded={showTaskList}
               style={{
-                padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
+                display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
                 background: showTaskList ? 'rgba(106,79,18,0.96)' : 'rgba(10,22,34,0.92)',
                 border: '1px solid rgba(241,196,15,0.62)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
                 fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap', backdropFilter: 'blur(8px)',
                 touchAction: 'manipulation',
               }}
             >
-              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : <><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 5 }}><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{en ? 'TASKS' : 'ЗАДАНИЯ'}</>}
+              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : <><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle' }}><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{en ? 'TASKS' : 'ЗАДАНИЯ'}</>}
             </button>
           </div>
 
@@ -1820,7 +1820,7 @@ export default function GameMap() {
             onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
             aria-expanded={showMiniMap}
             style={{
-              padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
+              display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
               background: showMiniMap ? 'rgba(24,95,103,0.96)' : 'rgba(10,22,34,0.92)',
               border: '1px solid rgba(105,205,220,0.65)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
               fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
