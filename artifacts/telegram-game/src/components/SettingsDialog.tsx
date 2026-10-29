@@ -74,6 +74,14 @@ const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], numbe
 const DRAG_SAFE_HALF_HEIGHT: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
   joystick: 52, emergency: 24, taskAction: 24, killReport: 40, sabotage: 42, repair: 24,
 };
+const PREVIEW_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], { width: number; height: number }> = {
+  joystick: { width: 40, height: 40 },
+  emergency: { width: 32, height: 22 },
+  taskAction: { width: 72, height: 22 },
+  killReport: { width: 72, height: 31 },
+  sabotage: { width: 36, height: 32 },
+  repair: { width: 72, height: 22 },
+};
 
 function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {
   const viewportWidth = typeof window === 'undefined' ? 390 : Math.max(1, window.innerWidth);
@@ -426,12 +434,14 @@ export default function SettingsDialog({
                   onClick={() => setSelectedControl(id)}
                   style={{
                     position: 'absolute', left: `${position.x}%`, top: `${Math.max(25, position.y)}%`,
-                    transform: 'translate(-50%, -50%)', minWidth: id === 'joystick' ? 54 : 42,
-                    minHeight: id === 'joystick' ? 54 : 36, maxWidth: 72, padding: '5px 5px',
-                    borderRadius: id === 'joystick' ? 999 : 9, border: `2px solid ${selected ? '#62e8d8' : 'rgba(200,225,230,.5)'}`,
+                    transform: 'translate(-50%, -50%)',
+                    width: PREVIEW_CONTROL_DIMENSIONS[id].width,
+                    height: PREVIEW_CONTROL_DIMENSIONS[id].height,
+                    minWidth: 0, minHeight: 0, maxWidth: 'none', padding: 0, boxSizing: 'border-box',
+                    borderRadius: id === 'joystick' ? 999 : 7, border: `2px solid ${selected ? '#62e8d8' : 'rgba(200,225,230,.5)'}`,
                     background: selected ? 'rgba(26,130,121,.95)' : 'rgba(17,37,48,.94)',
                     boxShadow: selected ? '0 0 0 3px rgba(98,232,216,.16)' : '0 2px 5px rgba(0,0,0,.28)',
-                    color: '#f0ffff', font: '10px/1.1 system-ui, sans-serif', fontWeight: 700,
+                    color: '#f0ffff', font: '8px/1 system-ui, sans-serif', fontWeight: 700,
                     touchAction: 'none', cursor: 'grab', zIndex: selected ? 2 : 1,
                   }}
                 >
