@@ -7,6 +7,8 @@ import {
   setControlPosition,
   setJoystickSide,
   useGameSettings,
+  type ControlLayout,
+  type ControlPosition,
   type GameplayControlId,
   type JoystickSide,
 } from '../lib/gameSettings';
@@ -47,7 +49,7 @@ export function SettingsButton({
     >
       <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" style={{ display: 'block', flexShrink: 0 }}>
         <path
-          d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
+          d="M13 9.3a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
           stroke="currentColor"
           strokeWidth="1.8"
         />
@@ -93,6 +95,9 @@ export default function SettingsDialog({
   const { language, setLanguage } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const [selectedControl, setSelectedControl] = useState<GameplayControlId>('joystick');
+  const [draftLayout, setDraftLayout] = useState<ControlLayout>({});
+  const previewRef = useRef<HTMLDivElement>(null);
+  const draggingControlRef = useRef<GameplayControlId | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -102,6 +107,16 @@ export default function SettingsDialog({
   const controlOptions = Object.entries(CONTROL_LABELS) as Array<[GameplayControlId, { en: string; ru: string }]>;
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const draft: ControlLayout = {};
+    (Object.keys(CONTROL_LABELS) as GameplayControlId[]).forEach(id => {
+      draft[id] = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
+    });
+    setDraftLayout(draft);
+    draggingControlRef.current = null;
+  }, [open, joystickSide, controlLayout]);
 
   useEffect(() => {
     if (!open) return;
@@ -262,15 +277,15 @@ export default function SettingsDialog({
 
         <fieldset style={{ border: 0, padding: 0, margin: '20px 0 0' }}>
           <legend style={{ padding: 0, marginBottom: 5, color: 'rgba(226,239,241,.78)', fontSize: 14 }}>
-            {en ? 'Custom gameplay controls' : 'Расположение игровых кнопок'}
+            {en ? 'Arrange gameplay controls' : 'Расположение игровых кнопок'}
           </legend>
           <p style={{ margin: '0 0 10px', color: 'rgba(220,237,239,.58)', font: '12px/1.4 system-ui, sans-serif' }}>
             {en
-              ? 'Choose a control, then adjust its position. Changes save automatically for this device.'
-              : 'Выберите элемент и настройте его положение. Изменения сохраняются автоматически на этом устройстве.'}
+              ? 'Drag a control to where you want it. Keep controls below the fixed top HUD, then press Save.'
+              : 'Перетащите элемент в нужное место. Оставляйте элементы ниже верхней панели и нажмите «Сохранить».'}
           </p>
-          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.8)', font: '12px/1.4 system-ui, sans-serif' }}>
-            {en ? 'Control' : 'Элемент управления'}
+          <label style={{ display: 'block', marginBottom: 9, color: 'rgba(226,239,241,.8)', font: '12px/1.4 system-ui, sans-serif' }}>
+            {en ? 'Selected control' : 'Выбранный элемент'}
             <select
               data-testid="control-layout-select"
               value={selectedControl}
@@ -287,54 +302,104 @@ export default function SettingsDialog({
               ))}
             </select>
           </label>
-
-          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.85)', font: '12px/1.4 system-ui, sans-serif' }}>
-            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-              <span>{en ? 'Horizontal position' : 'По горизонтали'}</span>
-              <strong>{selectedPosition.x}%</strong>
-            </span>
-            <input
-              data-testid="control-layout-x"
-              type="range"
-              min={5}
-              max={95}
-              step={1}
-              value={selectedPosition.x}
-              onChange={event => setControlPosition(selectedControl, { ...selectedPosition, x: Number(event.target.value) })}
-              style={{ display: 'block', width: '100%', margin: '8px 0 0', accentColor: '#5bdccd', touchAction: 'pan-y' }}
-            />
-          </label>
-
-          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.85)', font: '12px/1.4 system-ui, sans-serif' }}>
-            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-              <span>{en ? 'Vertical position' : 'По вертикали'}</span>
-              <strong>{selectedPosition.y}%</strong>
-            </span>
-            <input
-              data-testid="control-layout-y"
-              type="range"
-              min={5}
-              max={95}
-              step={1}
-              value={selectedPosition.y}
-              onChange={event => setControlPosition(selectedControl, { ...selectedPosition, y: Number(event.target.value) })}
-              style={{ display: 'block', width: '100%', margin: '8px 0 0', accentColor: '#5bdccd', touchAction: 'pan-y' }}
-            />
-          </label>
-
-          <button
-            type="button"
-            data-testid="control-layout-reset"
-            onClick={resetControlLayout}
+          <div
+            ref={previewRef}
+            data-testid="control-layout-preview"
+            aria-label={en ? 'Drag controls in this preview' : 'Перетаскивайте элементы в этой области'}
             style={{
-              width: '100%', minHeight: 40, padding: '8px 12px', borderRadius: 10,
-              border: '1px solid rgba(167,193,203,.22)', background: 'rgba(5,15,23,.5)',
-              color: 'rgba(226,238,241,.85)', fontFamily: 'inherit', fontSize: 13,
-              fontWeight: 700, cursor: 'pointer',
+              position: 'relative', width: '100%', aspectRatio: '3 / 4', maxHeight: 300,
+              overflow: 'hidden', borderRadius: 13, border: '1px solid rgba(167,193,203,.3)',
+              background: 'linear-gradient(180deg, rgba(10,22,31,.98), rgba(17,48,55,.94))',
+              touchAction: 'none', userSelect: 'none', marginBottom: 12,
             }}
           >
-            {en ? 'Reset all control positions' : 'Сбросить расположение кнопок'}
-          </button>
+            <div style={{
+              position: 'absolute', inset: '0 0 auto', height: '24%', display: 'flex',
+              alignItems: 'flex-start', justifyContent: 'space-between', padding: '7px 8px',
+              boxSizing: 'border-box', borderBottom: '1px dashed rgba(255,255,255,.25)',
+              color: 'rgba(220,237,239,.5)', font: '10px system-ui, sans-serif', pointerEvents: 'none',
+            }}>
+              <span>{en ? 'Fixed top HUD' : 'Верхняя панель'}</span>
+              <span>{en ? 'Reserved' : 'Зарезервировано'}</span>
+            </div>
+            {controlOptions.map(([id, label]) => {
+              const position = draftLayout[id] ?? controlLayout[id] ?? defaultControlPosition(id, joystickSide);
+              const selected = selectedControl === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`control-drag-${id}`}
+                  aria-label={en ? `Drag ${label.en}` : `Переместить: ${label.ru}`}
+                  aria-pressed={selected}
+                  onPointerDown={event => {
+                    event.preventDefault();
+                    setSelectedControl(id);
+                    draggingControlRef.current = id;
+                    event.currentTarget.setPointerCapture(event.pointerId);
+                  }}
+                  onPointerMove={event => {
+                    const dragging = draggingControlRef.current;
+                    const bounds = previewRef.current?.getBoundingClientRect();
+                    if (!dragging || !bounds || bounds.width <= 0 || bounds.height <= 0) return;
+                    const x = Math.round(Math.max(5, Math.min(95, ((event.clientX - bounds.left) / bounds.width) * 100)));
+                    const y = Math.round(Math.max(25, Math.min(95, ((event.clientY - bounds.top) / bounds.height) * 100)));
+                    setDraftLayout(previous => ({ ...previous, [dragging]: { x, y } as ControlPosition }));
+                  }}
+                  onPointerUp={() => { draggingControlRef.current = null; }}
+                  onPointerCancel={() => { draggingControlRef.current = null; }}
+                  onClick={() => setSelectedControl(id)}
+                  style={{
+                    position: 'absolute', left: `${position.x}%`, top: `${Math.max(25, position.y)}%`,
+                    transform: 'translate(-50%, -50%)', minWidth: id === 'joystick' ? 54 : 42,
+                    minHeight: id === 'joystick' ? 54 : 36, maxWidth: 94, padding: '5px 7px',
+                    borderRadius: id === 'joystick' ? 999 : 9, border: `2px solid ${selected ? '#62e8d8' : 'rgba(200,225,230,.5)'}`,
+                    background: selected ? 'rgba(26,130,121,.95)' : 'rgba(17,37,48,.94)',
+                    boxShadow: selected ? '0 0 0 3px rgba(98,232,216,.16)' : '0 2px 5px rgba(0,0,0,.28)',
+                    color: '#f0ffff', font: '10px/1.1 system-ui, sans-serif', fontWeight: 700,
+                    touchAction: 'none', cursor: 'grab', zIndex: selected ? 2 : 1,
+                  }}
+                >
+                  {id === 'joystick' ? '◉' : (en ? label.en : label.ru).replace(' button', '').replace(' кнопка', '')}
+                </button>
+              );
+            })}
+          </div>
+          <div style={{ display: 'flex', gap: 9 }}>
+            <button
+              type="button"
+              data-testid="control-layout-reset"
+              onClick={() => {
+                resetControlLayout();
+                const defaults: ControlLayout = {};
+                controlOptions.forEach(([id]) => { defaults[id] = defaultControlPosition(id, joystickSide); });
+                setDraftLayout(defaults);
+              }}
+              style={{
+                flex: 1, minHeight: 42, padding: '8px 10px', borderRadius: 10,
+                border: '1px solid rgba(167,193,203,.22)', background: 'rgba(5,15,23,.5)',
+                color: 'rgba(226,238,241,.85)', fontFamily: 'inherit', fontSize: 12,
+                fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Reset' : 'Сбросить'}
+            </button>
+            <button
+              type="button"
+              data-testid="control-layout-save"
+              onClick={() => {
+                controlOptions.forEach(([id]) => setControlPosition(id, draftLayout[id] ?? defaultControlPosition(id, joystickSide));
+                onClose();
+              }}
+              style={{
+                flex: 2, minHeight: 42, padding: '8px 12px', borderRadius: 10,
+                border: '1px solid rgba(91,221,205,.9)', background: 'linear-gradient(180deg, #208e83, #155c59)',
+                color: '#f2fffd', fontFamily: 'inherit', fontSize: 13, fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Save positions' : 'Сохранить'}
+            </button>
+          </div>
         </fieldset>
 
         {showLeaveMatch && onLeaveMatch && (
