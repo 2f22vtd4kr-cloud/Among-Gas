@@ -2234,7 +2234,7 @@ export default function GameMap() {
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
-          ...customControlPositionStyle('taskAction', controlLayout),
+          ...customControlPositionStyle('taskAction', controlLayout, joystickSide),
         }}>
           <button
             data-testid="gameplay-task-action"
@@ -2261,7 +2261,7 @@ export default function GameMap() {
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
-          ...customControlPositionStyle('killReport', controlLayout),
+          ...customControlPositionStyle('killReport', controlLayout, joystickSide),
         }}>
           {amIImpostor && (
             <button
@@ -2311,7 +2311,7 @@ export default function GameMap() {
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
         <div style={{
           position: 'fixed', bottom: 130, left: 24, zIndex: 25,
-          ...customControlPositionStyle('sabotage', controlLayout),
+          ...customControlPositionStyle('sabotage', controlLayout, joystickSide),
         }}>
           <button
             disabled={sabotageCooldownMs > 0}
@@ -2339,7 +2339,7 @@ export default function GameMap() {
       {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
-          ...customControlPositionStyle('repair', controlLayout),
+          ...customControlPositionStyle('repair', controlLayout, joystickSide),
         }}>
           <button
             onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
@@ -2429,7 +2429,7 @@ export default function GameMap() {
           top: 'max(calc(env(safe-area-inset-top, 0px) + 144px), 25dvh)',
           right: 'max(12px, env(safe-area-inset-right, 0px))',
           zIndex: 35,
-          ...customControlPositionStyle('emergency', controlLayout),
+          ...customControlPositionStyle('emergency', controlLayout, joystickSide),
         }}>
           <button
             disabled={emergencyMeetingUsed}
