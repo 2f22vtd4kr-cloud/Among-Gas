@@ -789,7 +789,14 @@ export default function GameMap() {
   }, [settingsOpen]);
   useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
-    const onDown  = (e: KeyboardEvent) => {
+    const isTextEntryTarget = (target: EventTarget | null) => {
+      if (!(target instanceof Element)) return false;
+      return Boolean(target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'));
+    };
+    const onDown = (e: KeyboardEvent) => {
+      // Never steal WASD letters from chat or other editable controls. This
+      // matters on desktop and on mobile keyboards that synthesize key events.
+      if (isTextEntryTarget(e.target)) return;
       unlockSfx();
       if (settingsOpenRef.current) return;
       const k = e.key.toLowerCase();
@@ -797,7 +804,9 @@ export default function GameMap() {
       e.preventDefault();
       keysRef.current.add(k);
     };
-    const onUp   = (e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()); };
+    const onUp = (e: KeyboardEvent) => {
+      keysRef.current.delete(e.key.toLowerCase());
+    };
     const clear  = () => keysRef.current.clear();
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
@@ -1806,16 +1815,56 @@ export default function GameMap() {
 
       {loaded && <Joystick keysRef={keysRef} />}
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
-        <SettingsButton
-          label={en ? 'Settings' : 'Настройки'}
-          onClick={() => setSettingsOpen(true)}
-          style={{
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            right: 'max(12px, env(safe-area-inset-right, 0px))',
-            zIndex: 35,
-          }}
-        />
+        <div style={{
+          position: 'fixed',
+          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          right: 'max(12px, env(safe-area-inset-right, 0px))',
+          zIndex: 35,
+          display: 'flex',
+          gap: 8,
+          alignItems: 'center',
+        }}>
+          <SettingsButton
+            label={en ? 'Settings' : 'Настройки'}
+            onClick={() => setSettingsOpen(true)}
+          />
+          <button
+            type="button"
+            aria-label={en ? 'Leave match' : 'Покинуть матч'}
+            title={en ? 'Leave match' : 'Покинуть матч'}
+            onClick={() => {
+              const message = en
+                ? 'Leave this match and return to the lobby?'
+                : 'Покинуть матч и вернуться в лобби?';
+              if (!window.confirm(message)) return;
+              keysRef.current.clear();
+              pendingSentRef.current.length = 0;
+              // A full reload closes the current WebSocket. The server's
+              // existing disconnect handler removes this player and the app
+              // reconnects into the lobby without inventing a client-only
+              // leave protocol that the server does not implement.
+              window.location.reload();
+            }}
+            style={{
+              width: 44,
+              height: 44,
+              display: 'grid',
+              placeItems: 'center',
+              padding: 0,
+              borderRadius: 13,
+              color: '#fff0ed',
+              background: 'linear-gradient(180deg, rgba(91,35,42,.97), rgba(47,18,25,.97))',
+              border: '1px solid rgba(255,160,160,.42)',
+              boxShadow: '0 3px 10px rgba(0,0,0,.34), inset 0 1px rgba(255,255,255,.1)',
+              fontSize: 22,
+              lineHeight: 1,
+              cursor: 'pointer',
+              touchAction: 'manipulation',
+            }}
+          >
+            ↩
+          </button>
+        </div>
       )}
       <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
 
