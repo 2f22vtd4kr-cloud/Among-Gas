@@ -1623,3 +1623,32 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Branch: `fix/mobile-movement-chat-sprites-ui`.
 - PR: #23. Duplicate PR #24 is closed.
 - No runtime configuration, secrets, or deployment were changed.
+
+### 2026-10-29 — Follow-up audit and repair PR #25
+
+**Verified starting state**
+- Confirmed live `main` was `bc3c51d6609f18bc7bce7bd694831d8dfbcc4d0c`, the merge commit for PR #23.
+- Created isolated branch `fix/gameplay-visual-fidelity-audit` and opened PR #25: https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/25.
+- No Replit environment or deployment was changed.
+
+**Implemented in the follow-up**
+- Restored the previous `characters.png` atlas path, original nine pose definitions, and measured crop windows from Git history. The runtime loader no longer selects the newer visor-style SVG atlas. Cache URL bumped to force WebView refresh.
+- Moved Leave Match out of the permanent gameplay HUD into the in-game Settings dialog; the confirmation flow remains intact. Settings, Leave, and tactical-map dialogs now trap focus, support Escape where appropriate, and restore focus to their trigger.
+- Added per-control viewport-relative positioning preferences for joystick, map, task list, Settings, emergency, task action, kill/report, sabotage, and repair controls. Positions save automatically and are clamped to estimated control dimensions and safe-area insets; a reset action restores defaults.
+- Made language and joystick preferences continue working in the current session if WebView localStorage writes fail.
+- Added conservative smoothing of vision polygons: it may shrink rays at discontinuities but never extends visibility beyond the original collision-derived hit. Movement still uses the unmodified collision grid.
+- Predecode the existing kill sound after the first trusted menu/game gesture and use a decoded Web Audio buffer for later kill events when ready. A real device is still required to measure actual output latency.
+- Reduced the blocking kill overlay to a short 150 ms hold when the user requests reduced motion.
+- Improved narrow-screen lobby button geometry and added browser regression coverage for the new flows.
+
+**Verification state**
+- `node scripts/verify-map-mechanics.mjs`, `scripts/test-visibility.ts`, and `scripts/test-player-movement.ts` passed on CI run #311.
+- That run then failed in the TypeScript/JSX build because custom style spreads had been inserted outside several JSX style objects. The syntax was repaired on the branch; the subsequent CI run is the merge gate. Do not treat the failed run as validation or merge until a later run passes every required step.
+- The remaining unresolved physical-device requirements are camera/player jitter under real iOS Safari/Telegram WebView, audio output latency on iOS/Android, and full visual review of CI screenshots at native gameplay scale.
+- The original Among Us client collision algorithm remains unavailable for direct source verification. Keep Among Gas movement collision authoritative and separate from visual shadow smoothing; do not claim the original internal algorithm was replicated.
+- A Vercel bot reported its optional deployment preview was rate-limited by the provider. This patch has not attempted to redeploy or alter Vercel configuration.
+
+**Next actions**
+- Inspect the latest PR #25 CI run, fix any remaining failures, and rerun until the exact head commit passes build, gameplay, WebSocket, auth, browser, and simulation checks.
+- Inspect the freshly uploaded visual-QA screenshots for Settings, restored balaclava sprites, kill/corpse composition, HUD placement, and vision shadows. Merge only after review and green CI.
+- Continue the larger audit after this focused repair: audio volume preferences, repeated collision/camera probes under latency and orientation changes, stronger character-identity screenshot assertions, and physical iOS/Android Telegram WebView testing.
