@@ -833,7 +833,7 @@ try {
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  await fallbackPage.route(url => url.includes('map-hires.webp'), route => route.abort());
+  await fallbackPage.route(url => url.href.includes('map-hires.webp'), route => route.abort());
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   assert.equal(await fallbackPage.evaluate(() => performance.getEntriesByType('resource')
