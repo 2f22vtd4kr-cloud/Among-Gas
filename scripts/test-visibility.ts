@@ -58,7 +58,7 @@ assert.ok(
   assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 7, 'each color has its own corpse atlas column');
   for (const frame of corpseFrames) {
     assert.equal(frame.row, CHARACTER_POSES.indexOf('dead-body'));
-    assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes the detached underline while preserving display scale');
+    assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes detached underline rows and keeps the source pixels unstretched');
   }
   for (const color of CHARACTER_COLORS) {
     for (const pose of CHARACTER_POSES) {
