@@ -1623,3 +1623,28 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Branch: `fix/mobile-movement-chat-sprites-ui`.
 - PR: #23. Duplicate PR #24 is closed.
 - No runtime configuration, secrets, or deployment were changed.
+
+
+### 2026-10-29 — Restore character identity and repair gameplay settings/HUD
+
+**Done**
+- Added a repair branch from the verified main merge commit bc3c51d6609f18bc7bce7bd694831d8dfbcc4d0c.
+- Restored the original Among Gas textured characters.png atlas in artifacts/telegram-game/src/game/characterSprites.ts, including measured pose/corpse crop windows and cache-busting version.
+- Made language and game settings retain in-memory state if localStorage writes fail. Added persisted normalized positions for each gameplay control, plus master/music/effects volume settings.
+- Added keyboard-focus management for custom modals and a Settings layout editor that allows touch controls to be dragged individually. Integrated Leave Match into the gameplay Settings dialog instead of leaving it as a permanent HUD button.
+- Updated the gameplay renderer to use stored control positions, shortened the blocking kill overlay when reduced motion is requested, and added visual source metadata to guard the character atlas.
+- Added a combined task/report mock state and initial browser regression coverage for settings focus, per-control position saving, blocked storage writes, atlas source/crops, and narrow/landscape task/report geometry.
+- Applied a compact menu-button treatment for very narrow portrait screens and wired sound sliders into the game's effect/music volume handling.
+
+**Decisions & gotchas**
+- The original Among Us client's exact collision implementation is not public source; no proprietary assets or unlicensed clone assets were imported.
+- The current shadow change only softens the final rendered visibility mask. The visibility polygon still uses this game's collision-derived grid, so this is not proof of exact authored-wall shadow contours.
+- Headless browser audio calls do not establish when sound reaches a real speaker. iOS Safari/Telegram WebView movement jitter and audible kill timing still require device testing.
+
+**Left off / next steps**
+- Review the new diff, run CI on the repair branch, inspect its newly generated screenshots, and fix any failed assertions or visual regressions before merging.
+- If tests pass, merge only after reviewing the exact final diff and then verify CI against the resulting main commit.
+- No Replit workspace or deployment was changed; the owner runs the verified main branch on Replit.
+
+**State to restore**
+- None. The repair is isolated to branch fix/full-gameplay-qa-repair-2026-10-29; main remains unchanged until a reviewed merge.
