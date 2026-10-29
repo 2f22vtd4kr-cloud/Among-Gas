@@ -65,6 +65,10 @@ export function SettingsButton({
 }
 
 const DRAGGABLE_CONTROL_IDS = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'] as const;
+const DRAG_SHORT_LABELS: Record<GameplayControlId, string> = {
+  joystick: 'J', emergency: 'SOS', taskAction: 'ACT', killReport: 'K/R', sabotage: 'SAB', repair: 'FIX',
+  map: 'MAP', tasks: 'TASK', settings: 'SET',
+};
 const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
   joystick: 52, emergency: 80, taskAction: 100, killReport: 100, sabotage: 42, repair: 100,
 };
@@ -374,7 +378,7 @@ export default function SettingsDialog({
                     touchAction: 'none', cursor: 'grab', zIndex: selected ? 2 : 1,
                   }}
                 >
-                  {id === 'joystick' ? '◉' : (en ? label.en : label.ru).replace(' button', '').replace(' кнопка', '')}
+                  {DRAG_SHORT_LABELS[id]}
                 </button>
               );
             })}
