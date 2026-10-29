@@ -598,7 +598,7 @@ try {
   await layoutX.focus();
   for (let i = 0; i < 5; i++) await layoutX.press('ArrowLeft');
   await layoutY.focus();
-  for (let i = 0; i < 6; i++) await layoutY.press('ArrowDown');
+  for (let i = 0; i < 6; i++) await layoutY.press('ArrowRight');
   assert.equal(await layoutX.inputValue(), '88', 'custom control X setting must be adjustable');
   assert.equal(await layoutY.inputValue(), '12', 'custom control Y setting must be adjustable');
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
