@@ -2425,9 +2425,9 @@ export default function GameMap() {
       {loaded && !amIDead && meeting === null && sabotage === null && (
         <div style={{
           position: 'fixed',
-          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-          // Reserve the Settings button's 44px hit area plus a 12px gap.
-          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
+          // Place the movable Emergency action below the fixed top HUD, even on narrow phones.
+          top: 'max(calc(env(safe-area-inset-top, 0px) + 144px), 25dvh)',
+          right: 'max(12px, env(safe-area-inset-right, 0px))',
           zIndex: 35,
           ...customControlPositionStyle('emergency', controlLayout),
         }}>
