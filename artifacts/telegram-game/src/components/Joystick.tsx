@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { useGameSettings } from '../lib/gameSettings';
+import { useGameSettings, type ControlPoint } from '../lib/gameSettings';
 import { useLanguage } from '../lib/language';
 
 const BASE_RADIUS = 52;
@@ -10,9 +10,10 @@ const MOVEMENT_KEYS = ['w', 'a', 's', 'd'] as const;
 
 interface JoystickProps {
   keysRef: React.MutableRefObject<Set<string>>;
+  position: ControlPoint;
 }
 
-export default function Joystick({ keysRef }: JoystickProps) {
+export default function Joystick({ keysRef, position }: JoystickProps) {
   const { joystickSide } = useGameSettings();
   const { language } = useLanguage();
   const baseRef = useRef<HTMLDivElement>(null);
@@ -109,11 +110,14 @@ export default function Joystick({ keysRef }: JoystickProps) {
       role="application"
       aria-label={language === 'en' ? 'Movement joystick' : 'Джойстик движения'}
       data-joystick-side={joystickSide}
+      data-control-id="joystick"
       style={{
         position: 'fixed',
-        bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-        left: joystickSide === 'left' ? 'max(24px, env(safe-area-inset-left, 0px))' : 'auto',
-        right: joystickSide === 'right' ? 'max(24px, env(safe-area-inset-right, 0px))' : 'auto',
+        left: `${position.x * 100}%`,
+        top: `${position.y * 100}%`,
+        right: 'auto',
+        bottom: 'auto',
+        transform: 'translate(-50%, -50%)',
         width: BASE_RADIUS * 2,
         height: BASE_RADIUS * 2,
         borderRadius: '50%',

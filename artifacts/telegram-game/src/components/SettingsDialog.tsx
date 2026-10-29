@@ -1,211 +1,41 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
-import { useLanguage } from '../lib/language';
-import { setJoystickSide, useGameSettings, type JoystickSide } from '../lib/gameSettings';
-
-export function SettingsButton({
-  label,
-  onClick,
-  style,
-}: {
-  label: string;
-  onClick: () => void;
-  style?: CSSProperties;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      onClick={onClick}
-      style={{
-        width: 44,
-        height: 44,
-        display: 'grid',
-        placeItems: 'center',
-        padding: 0,
-        borderRadius: 13,
-        color: '#e7f2f4',
-        background: 'linear-gradient(180deg, rgba(32,53,67,.96), rgba(14,27,37,.96))',
-        border: '1px solid rgba(160,205,215,.4)',
-        boxShadow: '0 3px 10px rgba(0,0,0,.34), inset 0 1px rgba(255,255,255,.1)',
-        cursor: 'pointer',
-        ...style,
-      }}
-    >
-      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none">
-        <path
-          d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
-          stroke="currentColor"
-          strokeWidth="1.8"
-        />
-        <path
-          d="m19.4 13.5 1.1.9-1.5 2.6-1.4-.5a7.8 7.8 0 0 1-1.4.8l-.2 1.5h-3l-.3-1.5a7.8 7.8 0 0 1-1.4-.8l-1.4.5-1.5-2.6 1.1-.9a6.4 6.4 0 0 1 0-1.6l-1.1-.9 1.5-2.6 1.4.5a7.8 7.8 0 0 1 1.4-.8l.3-1.5h3l.2 1.5a7.8 7.8 0 0 1 1.4.8l1.4-.5 1.5 2.6-1.1.9a6.4 6.4 0 0 1 0 1.6Z"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </button>
-  );
+import {useEffect,useRef,useState,type CSSProperties,type PointerEvent as ReactPointerEvent} from 'react';
+import {useLanguage} from '../lib/language';
+import {CONTROL_IDS,DEFAULT_SETTINGS,resetControlLayout,setAudioSettings,setControlLayout,setJoystickSide,useGameSettings,type ControlId,type ControlLayout} from '../lib/gameSettings';
+import {useModalFocus} from '../lib/useModalFocus';
+export function SettingsButton({label,onClick,style}:{label:string;onClick:()=>void;style?:CSSProperties}){
+ return <button type="button" aria-label={label} title={label} onClick={onClick} style={{width:44,height:44,display:'grid',placeItems:'center',padding:0,borderRadius:13,color:'#e7f2f4',background:'linear-gradient(180deg,rgba(32,53,67,.96),rgba(14,27,37,.96))',border:'1px solid rgba(160,205,215,.4)',boxShadow:'0 3px 10px rgba(0,0,0,.34),inset 0 1px rgba(255,255,255,.1)',cursor:'pointer',...style}}>
+ <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none"><path d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z" stroke="currentColor" strokeWidth="1.8"/><path d="m19.4 13.5 1.1.9-1.5 2.6-1.4-.5a7.8 7.8 0 0 1-1.4.8l-.2 1.5h-3l-.3-1.5a7.8 7.8 0 0 1-1.4-.8l-1.4.5-1.5-2.6 1.1-.9a6.4 6.4 0 0 1 0-1.6l-1.1-.9 1.5-2.6 1.4.5a7.8 7.8 0 0 1 1.4-.8l.3-1.5h3l.2 1.5a7.8 7.8 0 0 1 1.4.8l1.4-.5 1.5 2.6-1.1.9a6.4 6.4 0 0 1 0 1.6Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/></svg>
+ </button>;
 }
-
-const optionStyle = (selected: boolean): CSSProperties => ({
-  minHeight: 54,
-  flex: 1,
-  padding: '9px 12px',
-  borderRadius: 12,
-  border: `1px solid ${selected ? 'rgba(91,221,205,.9)' : 'rgba(167,193,203,.2)'}`,
-  color: selected ? '#f2fffd' : 'rgba(226,238,241,.78)',
-  background: selected
-    ? 'linear-gradient(180deg, rgba(27,124,115,.78), rgba(18,82,80,.82))'
-    : 'rgba(5,15,23,.5)',
-  boxShadow: selected ? '0 0 0 2px rgba(63,204,187,.12), inset 0 1px rgba(255,255,255,.1)' : 'none',
-  fontFamily: 'inherit',
-  fontSize: 15,
-  fontWeight: 700,
-  cursor: 'pointer',
-});
-
-export default function SettingsDialog({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
-  const { language, setLanguage } = useLanguage();
-  const { joystickSide } = useGameSettings();
-  const closeRef = useRef<HTMLButtonElement>(null);
-  const en = language === 'en';
-
-  useEffect(() => {
-    if (!open) return;
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
-
-  if (!open) return null;
-
-  const selectSide = (side: JoystickSide) => setJoystickSide(side);
-
-  return (
-    <div
-      onPointerDown={(event) => {
-        if (event.target === event.currentTarget) onClose();
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 2000,
-        display: 'grid',
-        placeItems: 'center',
-        padding: 18,
-        background: 'rgba(3,8,13,.76)',
-        backdropFilter: 'blur(8px)',
-      }}
-    >
-      <section
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="ag-settings-title"
-        style={{
-          width: 'min(100%, 370px)',
-          boxSizing: 'border-box',
-          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
-          overflowY: 'auto',
-          overscrollBehavior: 'contain',
-          padding: '22px 20px 18px',
-          borderRadius: 20,
-          border: '1px solid rgba(157,205,214,.28)',
-          background: 'linear-gradient(165deg, #172b39 0%, #0b141e 100%)',
-          boxShadow: '0 24px 70px rgba(0,0,0,.58), inset 0 1px rgba(255,255,255,.07)',
-          color: '#eaf4f5',
-          fontFamily: "'Fredoka One', system-ui, sans-serif",
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 22 }}>
-          <div>
-            <h2 id="ag-settings-title" style={{ margin: 0, fontSize: 23, lineHeight: 1.15 }}>
-              {en ? 'Settings' : 'Настройки'}
-            </h2>
-            <p style={{ margin: '5px 0 0', color: 'rgba(220,237,239,.58)', font: '12px/1.4 system-ui, sans-serif' }}>
-              {en ? 'Your preferences are saved automatically.' : 'Настройки сохраняются автоматически.'}
-            </p>
-          </div>
-          <button
-            ref={closeRef}
-            type="button"
-            aria-label={en ? 'Close settings' : 'Закрыть настройки'}
-            onClick={onClose}
-            style={{
-              width: 40,
-              height: 40,
-              flex: '0 0 auto',
-              borderRadius: 12,
-              border: '1px solid rgba(170,200,208,.22)',
-              background: 'rgba(5,15,23,.58)',
-              color: '#eaf4f5',
-              fontSize: 26,
-              lineHeight: 1,
-              cursor: 'pointer',
-            }}
-          >
-            ×
-          </button>
-        </div>
-
-        <fieldset style={{ border: 0, padding: 0, margin: '0 0 19px' }}>
-          <legend style={{ padding: 0, marginBottom: 9, color: 'rgba(226,239,241,.78)', fontSize: 14 }}>
-            {en ? 'Language' : 'Язык'}
-          </legend>
-          <div style={{ display: 'flex', gap: 9 }}>
-            {([
-              { value: 'ru', label: 'Русский' },
-              { value: 'en', label: 'English' },
-            ] as const).map(option => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={language === option.value}
-                onClick={() => setLanguage(option.value)}
-                style={optionStyle(language === option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-
-        <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-          <legend style={{ padding: 0, marginBottom: 9, color: 'rgba(226,239,241,.78)', fontSize: 14 }}>
-            {en ? 'Movement joystick' : 'Джойстик движения'}
-          </legend>
-          <div style={{ display: 'flex', gap: 9 }}>
-            {([
-              { value: 'right', label: en ? 'Right side' : 'Справа' },
-              { value: 'left', label: en ? 'Left side' : 'Слева' },
-            ] as const).map(option => (
-              <button
-                key={option.value}
-                type="button"
-                data-testid={`joystick-side-${option.value}`}
-                aria-label={en
-                  ? `Move joystick to the ${option.value}`
-                  : `Переместить джойстик ${option.value === 'right' ? 'вправо' : 'влево'}`}
-                aria-pressed={joystickSide === option.value}
-                onClick={() => selectSide(option.value)}
-                style={optionStyle(joystickSide === option.value)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      </section>
-    </div>
-  );
+const optionStyle=(selected:boolean):CSSProperties=>({minHeight:46,flex:1,padding:'8px 10px',borderRadius:12,border:`1px solid ${selected?'rgba(91,221,205,.9)':'rgba(167,193,203,.2)'}`,color:selected?'#f2fffd':'rgba(226,238,241,.78)',background:selected?'linear-gradient(180deg,rgba(27,124,115,.78),rgba(18,82,80,.82))':'rgba(5,15,23,.5)',boxShadow:selected?'0 0 0 2px rgba(63,204,187,.12),inset 0 1px rgba(255,255,255,.1)':'none',fontFamily:'inherit',fontSize:14,fontWeight:700,cursor:'pointer'});
+const legendStyle:CSSProperties={padding:0,marginBottom:8,color:'rgba(226,239,241,.78)',fontSize:13};
+const fieldsetStyle:CSSProperties={border:0,padding:0,margin:'0 0 15px'},rangeStyle:CSSProperties={width:'100%',accentColor:'#5bdccd',touchAction:'pan-y'};
+const labels:Record<ControlId,{en:string;ru:string}>={joystick:{en:'Stick',ru:'Стик'},kill:{en:'Kill',ru:'Убить'},report:{en:'Report',ru:'Тело'},task:{en:'Task',ru:'Дело'},emergency:{en:'Alert',ru:'Тревога'},map:{en:'Map',ru:'Карта'},tasks:{en:'Tasks',ru:'Задания'},sabotage:{en:'Sabotage',ru:'Саботаж'},vent:{en:'Vent',ru:'Люк'},admin:{en:'Admin',ru:'Планшет'},settings:{en:'Settings',ru:'Настр.'}};
+function clampPosition(id:ControlId,x:number,y:number){return{x:Math.max(id==='joystick'?.20:.12,Math.min(id==='joystick'?.80:.88,x)),y:Math.max(.08,Math.min(.90,y))}}
+export default function SettingsDialog({open,onClose,inGame=false,onLeaveMatch}:{open:boolean;onClose:()=>void;inGame?:boolean;onLeaveMatch?:()=>void}){
+ const {language,setLanguage}=useLanguage(),{joystickSide,controlLayout,masterVolume,musicVolume,effectsVolume}=useGameSettings();
+ const closeRef=useRef<HTMLButtonElement>(null),previewRef=useRef<HTMLDivElement>(null);
+ const [layoutEditing,setLayoutEditing]=useState(false),[layoutDraft,setLayoutDraft]=useState<ControlLayout>(controlLayout),[dragging,setDragging]=useState<ControlId|null>(null);
+ const en=language==='en',dialogRef=useModalFocus(open,onClose,()=>closeRef.current);
+ useEffect(()=>{if(!open)return;setLayoutDraft(Object.fromEntries(CONTROL_IDS.map(id=>[id,{...controlLayout[id]}])) as ControlLayout);setLayoutEditing(false);setDragging(null)},[open,controlLayout]);
+ if(!open)return null;
+ const updatePoint=(id:ControlId,event:ReactPointerEvent<HTMLButtonElement>)=>{const r=previewRef.current?.getBoundingClientRect();if(!r)return;setLayoutDraft(p=>({...p,[id]:clampPosition(id,(event.clientX-r.left)/r.width,(event.clientY-r.top)/r.height)}))};
+ const sizeOf=(id:ControlId)=>id==='joystick'?54:id==='task'?47:['kill','report','sabotage'].includes(id)?34:40;
+ return <div onPointerDown={e=>{if(e.target===e.currentTarget)onClose()}} style={{position:'fixed',inset:0,zIndex:2000,display:'grid',placeItems:'center',padding:12,background:'rgba(3,8,13,.76)',backdropFilter:'blur(8px)'}}>
+ <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="ag-settings-title" style={{width:'min(100%,370px)',boxSizing:'border-box',maxHeight:'calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 20px)',overflowY:'auto',overscrollBehavior:'contain',padding:'18px 18px 16px',borderRadius:20,border:'1px solid rgba(157,205,214,.28)',background:'linear-gradient(165deg,#172b39 0%,#0b141e 100%)',boxShadow:'0 24px 70px rgba(0,0,0,.58),inset 0 1px rgba(255,255,255,.07)',color:'#eaf4f5',fontFamily:"'Fredoka One',system-ui,sans-serif"}}>
+  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:12,marginBottom:16}}><div><h2 id="ag-settings-title" style={{margin:0,fontSize:23,lineHeight:1.15}}>{en?'Settings':'Настройки'}</h2><p style={{margin:'5px 0 0',color:'rgba(220,237,239,.58)',font:'12px/1.4 system-ui,sans-serif'}}>{en?'Preferences save automatically.':'Настройки сохраняются автоматически.'}</p></div>
+   <button ref={closeRef} type="button" aria-label={en?'Close settings':'Закрыть настройки'} onClick={onClose} style={{width:40,height:40,flex:'0 0 auto',borderRadius:12,border:'1px solid rgba(170,200,208,.22)',background:'rgba(5,15,23,.58)',color:'#eaf4f5',fontSize:26,lineHeight:1,cursor:'pointer'}}>×</button>
+  </div>
+  <fieldset style={fieldsetStyle}><legend style={legendStyle}>{en?'Language':'Язык'}</legend><div style={{display:'flex',gap:9}}>{([{value:'ru',label:'Русский'},{value:'en',label:'English'}] as const).map(o=><button key={o.value} type="button" aria-pressed={language===o.value} onClick={()=>setLanguage(o.value)} style={optionStyle(language===o.value)}>{o.label}</button>)}</div></fieldset>
+  <fieldset style={fieldsetStyle}><legend style={legendStyle}>{en?'Movement joystick preset':'Расположение джойстика'}</legend><div style={{display:'flex',gap:9}}>{([{value:'right',label:en?'Right side':'Справа'},{value:'left',label:en?'Left side':'Слева'}] as const).map(o=><button key={o.value} type="button" data-testid={`joystick-side-${o.value}`} aria-label={en?`Move joystick to the ${o.value}`:`Переместить джойстик ${o.value==='right'?'вправо':'влево'}`} aria-pressed={joystickSide===o.value} onClick={()=>setJoystickSide(o.value)} style={optionStyle(joystickSide===o.value)}>{o.label}</button>)}</div></fieldset>
+  <fieldset style={fieldsetStyle}><legend style={legendStyle}>{en?'Sound':'Звук'}</legend>{([{key:'masterVolume',label:en?'Master volume':'Общая громкость',value:masterVolume},{key:'musicVolume',label:en?'Music':'Музыка',value:musicVolume},{key:'effectsVolume',label:en?'Sound effects':'Эффекты',value:effectsVolume}] as const).map(o=><label key={o.key} style={{display:'block',marginBottom:8,font:'12px/1.4 system-ui,sans-serif'}}><span style={{display:'flex',justifyContent:'space-between',gap:8,marginBottom:2}}><span>{o.label}</span><span>{Math.round(o.value*100)}%</span></span><input aria-label={o.label} type="range" min="0" max="100" step="5" value={Math.round(o.value*100)} onChange={e=>{const v=Number(e.currentTarget.value)/100;if(o.key==='masterVolume')setAudioSettings({masterVolume:v});else if(o.key==='musicVolume')setAudioSettings({musicVolume:v});else setAudioSettings({effectsVolume:v})}} style={rangeStyle}/></label>)}</fieldset>
+  <fieldset style={{...fieldsetStyle,marginBottom:14}}><legend style={legendStyle}>{en?'Touch controls':'Кнопки управления'}</legend><button type="button" aria-expanded={layoutEditing} onClick={()=>{setLayoutDraft(Object.fromEntries(CONTROL_IDS.map(id=>[id,{...controlLayout[id]}])) as ControlLayout);setLayoutEditing(v=>!v)}} style={{...optionStyle(layoutEditing),width:'100%',minHeight:44}}>{layoutEditing?(en?'Close control layout editor':'Закрыть настройку кнопок'):(en?'Customize button positions':'Настроить расположение кнопок')}</button>
+  {layoutEditing&&<><p style={{margin:'7px 0',font:'11px/1.4 system-ui,sans-serif',color:'rgba(220,237,239,.66)'}}>{en?'Drag each control to a comfortable position. Positions adapt to screen size and orientation.':'Перетащите каждую кнопку в удобное место. Позиции подстраиваются под размер и ориентацию экрана.'}</p>
+   <div ref={previewRef} aria-label={en?'Draggable game control layout preview':'Предпросмотр расположения игровых кнопок'} style={{position:'relative',height:292,width:'min(100%,180px)',margin:'0 auto 10px',overflow:'hidden',touchAction:'none',borderRadius:13,border:'1px solid rgba(123,196,210,.42)',background:'linear-gradient(180deg,#203c4a,#0c1a24)',boxShadow:'inset 0 0 0 4px rgba(3,9,15,.28)'}}>
+   {CONTROL_IDS.map(id=>{const p=layoutDraft[id],size=sizeOf(id);return <button key={id} type="button" aria-label={`${en?'Move':'Переместить'} ${labels[id][en?'en':'ru']}`} data-control-id={id} onPointerDown={e=>{e.preventDefault();try{e.currentTarget.setPointerCapture(e.pointerId)}catch{/* legacy embedded browsers */}setDragging(id)}} onPointerMove={e=>{if(dragging===id)updatePoint(id,e)}} onPointerUp={()=>setDragging(null)} onPointerCancel={()=>setDragging(null)} onLostPointerCapture={()=>setDragging(null)} style={{position:'absolute',left:`${p.x*100}%`,top:`${p.y*100}%`,transform:'translate(-50%,-50%)',width:size,height:id==='joystick'?size:Math.min(size,34),padding:0,display:'grid',placeItems:'center',borderRadius:id==='joystick'||['kill','report','sabotage'].includes(id)?'50%':8,border:`1px solid ${dragging===id?'#fff1a8':'rgba(180,224,232,.72)'}`,outline:dragging===id?'2px solid rgba(255,230,120,.6)':'none',background:id==='kill'?'#9b2638':id==='report'?'#987014':id==='sabotage'?'#67318d':id==='task'?'#225b9f':id==='joystick'?'rgba(100,200,240,.72)':'#1c4555',color:'#fff',font:'700 8px/1 system-ui,sans-serif',cursor:dragging===id?'grabbing':'grab',touchAction:'none',userSelect:'none',zIndex:dragging===id?2:1}}>{labels[id][en?'en':'ru']}</button>})}
+   </div><div style={{display:'flex',gap:8}}><button type="button" onClick={()=>{setControlLayout(layoutDraft);setLayoutEditing(false)}} style={{...optionStyle(false),minHeight:40}}>{en?'Save positions':'Сохранить позиции'}</button><button type="button" onClick={()=>{resetControlLayout();const reset=Object.fromEntries(CONTROL_IDS.map(id=>[id,{...DEFAULT_SETTINGS.controlLayout[id]}])) as ControlLayout;reset.joystick.x=joystickSide==='left'?.20:.80;setLayoutDraft(reset)}} style={{...optionStyle(false),minHeight:40}}>{en?'Reset':'Сброс'}</button></div>
+  </>}
+  </fieldset>
+  {inGame&&onLeaveMatch&&<button type="button" onClick={onLeaveMatch} style={{width:'100%',minHeight:44,padding:'10px 14px',borderRadius:11,border:'1px solid rgba(255,145,145,.38)',background:'rgba(135,35,51,.22)',color:'#ffb8bd',font:'800 14px system-ui,sans-serif',cursor:'pointer'}}>{en?'Leave match…':'Выйти из матча…'}</button>}
+ </section></div>;
 }
