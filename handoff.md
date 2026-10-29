@@ -1652,3 +1652,19 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Inspect the latest PR #25 CI run, fix any remaining failures, and rerun until the exact head commit passes build, gameplay, WebSocket, auth, browser, and simulation checks.
 - Inspect the freshly uploaded visual-QA screenshots for Settings, restored balaclava sprites, kill/corpse composition, HUD placement, and vision shadows. Merge only after review and green CI.
 - Continue the larger audit after this focused repair: audio volume preferences, repeated collision/camera probes under latency and orientation changes, stronger character-identity screenshot assertions, and physical iOS/Android Telegram WebView testing.
+
+
+### 2026-10-29 — Final verification for PR #25
+
+**Verified exact revision**
+- PR #25 head `d62bfb78cf85f26430fc67c9024cc3fd4a557aa1` passed GitHub Actions run #316 (`40871633905`).
+- All CI steps succeeded: map mechanics, visibility/shadow tests, thin-wall movement regression, production TypeScript/build, game invariants, Telegram HMAC authentication, live WebSocket lobby and sabotage authorization, mobile Playwright browser smoke, screenshot artifact upload, and 100-game headless multiplayer simulation.
+- Simulation result: 100 games, 0 timeouts, 60 crewmate wins, 40 impostor wins, 52.1s average match duration, 4m53s wall-clock.
+- The run's visual-QA artifact is `among-gas-visual-qa` (artifact ID `12896157882`); the production static build artifact is `telegram-game-static-build` (artifact ID `12895324773`). The lobby, Settings, portrait gameplay, lights-vision, corpse/report, and kill-scene screenshots were opened and inspected.
+- The browser smoke's sprite-crop geometry threshold is kept above 0.80: the measured legacy walk pose is naturally shorter than the SVG atlas cell, but a severely clipped/collapsed menu sprite must still fail the visual geometry check.
+
+**Remaining limitations**
+- No physical iPhone/Android Telegram WebView was available. Camera jitter and audible output latency therefore remain unverified on real hardware, despite the automated test pass and mobile Chromium coverage.
+- The kill-audio change primes a decoded buffer after a trusted gesture; only real-device measurement can conclusively verify the report of event-to-audible-output delay.
+- The public original Among Us client collision implementation is not available for direct source comparison. Among Gas's gameplay collision remains unchanged by visual shadow smoothing.
+- Settings still do not offer separate master/music/effects volume sliders (identified as a P3 product gap in this audit). Architecture refactoring of the large `GameMap.tsx` and deeper combined-state HUD tests remain follow-up work.

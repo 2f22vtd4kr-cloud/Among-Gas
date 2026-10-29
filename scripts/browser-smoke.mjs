@@ -85,7 +85,7 @@ try {
     }),
   );
   assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
-  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.60,
+  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.80,
     `original pose crops must retain a substantial visible silhouette (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
