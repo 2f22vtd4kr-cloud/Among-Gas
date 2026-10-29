@@ -1707,7 +1707,6 @@ export default function GameMap() {
         <>
           <div style={{
             position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
-            ...customControlPositionStyle('tasks', controlLayout),
           }}>
             <button
               onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
@@ -1805,7 +1804,6 @@ export default function GameMap() {
       {loaded && myRole !== null && meeting === null && (
         <div style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
-          ...customControlPositionStyle('map', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
@@ -1901,7 +1899,6 @@ export default function GameMap() {
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 35,
-            ...customControlPositionStyle('settings', controlLayout),
           }}
         />
       )}
@@ -2229,6 +2226,7 @@ export default function GameMap() {
           ...customControlPositionStyle('taskAction', controlLayout),
         }}>
           <button
+            data-testid="gameplay-task-action"
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
@@ -2240,7 +2238,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(60,140,255,0.35)',
             }}
           >
-            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
+            {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
           </button>
         </div>
       )}
