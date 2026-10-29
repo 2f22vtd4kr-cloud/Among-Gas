@@ -58,10 +58,10 @@ export function defaultControlPosition(
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 26 };
-    case 'taskAction': return { x: oppositeSide, y: 72 };
-    case 'killReport': return { x: 50, y: 84 };
-    case 'sabotage': return { x: 16, y: 84 };
-    case 'repair': return { x: 50, y: 74 };
+    case 'taskAction': return { x: 50, y: 72 };
+    case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 84 };
+    case 'sabotage': return { x: oppositeSide, y: 68 };
+    case 'repair': return { x: 50, y: 58 };
   }
 }
 
@@ -161,9 +161,9 @@ export function resetControlLayout(): void {
 export function customControlPositionStyle(
   id: GameplayControlId,
   controlLayout: ControlLayout,
+  joystickSide: JoystickSide = 'right',
 ): CSSProperties {
-  const point = controlLayout[id];
-  if (!point) return {};
+  const point = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
   const safeBounds: Record<GameplayControlId, { halfWidth: number; halfHeight: number }> = {
     joystick: { halfWidth: 52, halfHeight: 52 },
     map: { halfWidth: 50, halfHeight: 24 },
