@@ -83,16 +83,29 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
   };
 }
 
+export interface CharacterClipNotch {
+  /** Normalized horizontal bounds of the transparent leg gap. */
+  left: number;
+  right: number;
+  /** Normalized vertical point where the gap begins. */
+  top: number;
+}
+
 /**
  * Clip stray horizontal atlas strokes from the transparent gap between the
- * legs. The notch is pose-specific and stays outside the colored leg pixels.
+ * legs. The same normalized notch is shared by DOM and canvas renderers.
  */
-export function getCharacterClipPath(pose: CharacterPose): string | undefined {
-  if (pose === 'idle' || pose === 'mask') {
-    return 'polygon(0 0, 100% 0, 100% 100%, 56% 100%, 56% 79%, 50% 79%, 50% 100%, 0 100%)';
-  }
-  if (pose === 'dead-body') {
-    return 'polygon(0 0, 100% 0, 100% 100%, 58% 100%, 58% 82%, 53% 82%, 53% 100%, 0 100%)';
-  }
+export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
+  if (pose === 'idle' || pose === 'mask') return { left: 0.5, right: 0.56, top: 0.79 };
+  if (pose === 'dead-body') return { left: 0.53, right: 0.58, top: 0.82 };
   return undefined;
+}
+
+export function getCharacterClipPath(pose: CharacterPose): string | undefined {
+  const notch = getCharacterClipNotch(pose);
+  if (!notch) return undefined;
+  const left = notch.left * 100;
+  const right = notch.right * 100;
+  const top = notch.top * 100;
+  return `polygon(0 0, 100% 0, 100% 100%, ${right}% 100%, ${right}% ${top}%, ${left}% ${top}%, ${left}% 100%, 0 100%)`;
 }
