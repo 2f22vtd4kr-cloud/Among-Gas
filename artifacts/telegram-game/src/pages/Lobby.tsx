@@ -14,49 +14,43 @@ import { haptic } from '@/lib/haptics';
 import { sfx, startMenuMusic, stopMenuMusic } from '@/lib/sfx';
 import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
+import {
+  CHARACTER_SHEET_PATH,
+  CHARACTER_SHEET_WIDTH,
+  CHARACTER_SHEET_HEIGHT,
+  CHARACTER_CELL_WIDTH,
+  CHARACTER_COLORS,
+  CHARACTER_POSES,
+  getCharacterFrameRect,
+  type CharacterColor,
+  type CharacterPose,
+} from '../game/characterSprites';
 import './lobby.css';
 
-// ── Sprite sheet constants (mirrors characterSprites.ts) ─────────────────────
-const SHEET_W = 1123;
-const SHEET_H = 1401;
-const COLS    = 7;
-const ROWS_S  = 9;
-const CELL_W  = SHEET_W / COLS;   // ≈ 160.43
-const CELL_H  = SHEET_H / ROWS_S; // ≈ 155.67
+const SLOT_COLORS = CHARACTER_COLORS;
 
-const COLOR_COL: Record<string, number> = {
-  teal: 0, maroon: 1, navy: 2, purple: 3, brown: 4, 'dark-gray': 5, magenta: 6,
-};
-const POSE_ROW: Record<string, number> = {
-  idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
-};
-const SLOT_COLORS = ['teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta'];
-
-/** One frame of the balaclava sprite sheet via CSS background.
- *  clipBottom trims the ground-shadow row built into the sprite art (~18%).
- */
+/** Render the same measured, isolated pose window used by gameplay. */
 function CharSprite({
-  color, pose = 'idle', size = 48, flipped = false, clipBottom = true,
+  color, pose = 'idle', size = 48, flipped = false,
 }: {
   color: string; pose?: string; size?: number; flipped?: boolean; clipBottom?: boolean;
 }) {
-  const col    = COLOR_COL[color] ?? 0;
-  const row    = POSE_ROW[pose]   ?? 0;
-  const scale  = size / CELL_W;
-  const sheetW = SHEET_W * scale;
-  const sheetH = SHEET_H * scale;
-  const posX   = -(col * CELL_W * scale);
-  const posY   = -(row * CELL_H * scale);
-  // Clip only the bottommost shadow pixels; an 82% crop cut off the character's feet
-  const height = Math.round(CELL_H * scale * (clipBottom ? 0.94 : 1));
+  const safeColor = (CHARACTER_COLORS as readonly string[]).includes(color)
+    ? color as CharacterColor
+    : 'teal';
+  const safePose = (CHARACTER_POSES as readonly string[]).includes(pose)
+    ? pose as CharacterPose
+    : 'idle';
+  const frame = getCharacterFrameRect(safeColor, safePose);
+  const scale = size / CHARACTER_CELL_WIDTH;
 
   return (
     <div className="au-menu-character-sprite" style={{
-      width: size, height,
-      backgroundImage: 'url(/sprites/characters.png?v=4)',
-      backgroundSize: `${sheetW}px ${sheetH}px`,
-      backgroundPosition: `${posX}px ${posY}px`,
+      width: size,
+      height: frame.height * scale,
+      backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+      backgroundSize: `${CHARACTER_SHEET_WIDTH * scale}px ${CHARACTER_SHEET_HEIGHT * scale}px`,
+      backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
       backgroundRepeat: 'no-repeat',
       imageRendering: 'pixelated',
       transform: flipped ? 'scaleX(-1)' : undefined,
@@ -138,7 +132,12 @@ function TitleBlock({ language, onSettingsClick }: {
 }) {
   return (
     <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 62 }}>
-      <div style={{ position: 'absolute', right: 0, top: 0 }}>
+      <div style={{
+        position: 'fixed',
+        top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+        right: 'max(12px, env(safe-area-inset-right, 0px))',
+        zIndex: 20,
+      }}>
         <SettingsButton
           label={language === 'en' ? 'Settings' : 'Настройки'}
           onClick={onSettingsClick}
