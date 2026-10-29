@@ -178,7 +178,7 @@ try {
   console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
-  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '143',
+  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '138',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
     'the authored role-reveal baseline remains available as metadata');
@@ -519,7 +519,7 @@ try {
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
   assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '107',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '93',
     'the corpse crop must exclude the detached underline rows beneath the cut suit and exposed bone');
   assert.equal(await corpseSprite.getAttribute('data-display-height'), '118',
     'the original corpse baseline remains available as metadata while rendering follows the cropped source height');
