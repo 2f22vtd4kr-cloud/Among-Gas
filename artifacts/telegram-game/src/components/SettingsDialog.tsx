@@ -114,6 +114,10 @@ export default function SettingsDialog({
         aria-labelledby="ag-settings-title"
         style={{
           width: 'min(100%, 370px)',
+          boxSizing: 'border-box',
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
           padding: '22px 20px 18px',
           borderRadius: 20,
           border: '1px solid rgba(157,205,214,.28)',
