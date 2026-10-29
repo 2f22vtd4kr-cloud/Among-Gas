@@ -1005,7 +1005,16 @@ export class LobbyManager {
     if (!player || player.isBot || lobby.phase !== 'ROAMING') return false;
     if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
     lobby.gameplayReadySlots.add(slot);
-    return this.refreshGameplayReady(lobby);
+    const wasReady = lobby.gameplayReady === true;
+    const ready = this.refreshGameplayReady(lobby);
+    if (ready && !wasReady) {
+      // Clients keep their loading overlay and input lock until this broadcast.
+      const packet = Buffer.from([0x24, 0x01]);
+      for (const connectedPlayer of lobby.players.values()) {
+        if (connectedPlayer.ws.readyState === /* OPEN */ 1) connectedPlayer.ws.send(packet);
+      }
+    }
+    return ready;
   }
 
   /** Recompute readiness on action/tick boundaries so disconnects cannot stall a round. */
