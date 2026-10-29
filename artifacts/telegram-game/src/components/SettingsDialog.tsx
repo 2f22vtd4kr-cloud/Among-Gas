@@ -69,10 +69,10 @@ const DRAG_SHORT_LABELS: Record<GameplayControlId, string> = {
   map: 'MAP', tasks: 'TASK', settings: 'SET',
 };
 const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
-  joystick: 52, emergency: 80, taskAction: 100, killReport: 100, sabotage: 42, repair: 100,
+  joystick: 52, emergency: 70, taskAction: 84, killReport: 84, sabotage: 38, repair: 90,
 };
 const DRAG_SAFE_HALF_HEIGHT: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
-  joystick: 52, emergency: 24, taskAction: 24, killReport: 40, sabotage: 42, repair: 24,
+  joystick: 52, emergency: 20, taskAction: 20, killReport: 38, sabotage: 38, repair: 20,
 };
 const ACTUAL_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], { width: number; height: number }> = {
   joystick: { width: 104, height: 104 },
@@ -116,10 +116,10 @@ function resolveNonOverlappingPosition(
     // A small safety gap accounts for borders and preview/gameplay scaling.
     const horizontalClearance =
       DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] +
-      DRAG_SAFE_HALF_WIDTH[other] + 12;
+      DRAG_SAFE_HALF_WIDTH[other] + 8;
     const verticalClearance =
       DRAG_SAFE_HALF_HEIGHT[id as keyof typeof DRAG_SAFE_HALF_HEIGHT] +
-      DRAG_SAFE_HALF_HEIGHT[other] + 12;
+      DRAG_SAFE_HALF_HEIGHT[other] + 8;
     return dx >= horizontalClearance || dy >= verticalClearance;
   });
 
