@@ -53,7 +53,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
+import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
@@ -953,6 +953,7 @@ export default function GameMap() {
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
+    const narrowOccluders = buildNarrowShadowOccluders(grid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -1511,7 +1512,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
