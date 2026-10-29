@@ -210,6 +210,47 @@ export default function GameMap() {
   const [spriteLoaded, setSpriteLoaded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const leaveDialogRef = useRef<HTMLElement>(null);
+  const leaveCancelRef = useRef<HTMLButtonElement>(null);
+  const leaveFocusReturnRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!leaveConfirmOpen) return;
+    leaveFocusReturnRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    leaveCancelRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setLeaveConfirmOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = leaveDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !leaveDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !leaveDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      const previous = leaveFocusReturnRef.current;
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [leaveConfirmOpen]);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -1765,38 +1806,7 @@ export default function GameMap() {
       )}
 
       {loaded && <Joystick keysRef={keysRef} />}
-      {loaded && !killAnimation && (
-        <button
-          type="button"
-          aria-label={en ? 'Leave match' : 'Покинуть матч'}
-          title={en ? 'Leave match' : 'Покинуть матч'}
-          onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); setLeaveConfirmOpen(true); }}
-          style={{
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 60px)',
-            right: 'max(12px, env(safe-area-inset-right, 0px))',
-            zIndex: 70,
-            minHeight: 44,
-            padding: '0 9px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 7,
-            borderRadius: 12,
-            color: '#fff1ef',
-            background: 'linear-gradient(180deg, rgba(100,33,42,.97), rgba(53,13,21,.97))',
-            border: '1px solid rgba(255,144,144,.52)',
-            boxShadow: '0 3px 12px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.08)',
-            fontSize: 13,
-            fontWeight: 800,
-            fontFamily: 'system-ui, sans-serif',
-            touchAction: 'manipulation',
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>←</span>
-          {en ? 'Leave' : 'Выйти'}
-        </button>
-      )}
+
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
         <SettingsButton
           label={en ? 'Settings' : 'Настройки'}
@@ -1809,7 +1819,15 @@ export default function GameMap() {
           }}
         />
       )}
-      <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog
+        open={settingsOpen && !killAnimation}
+        onClose={() => setSettingsOpen(false)}
+        showLeaveMatch={loaded && meeting === null && !killAnimation}
+        onLeaveMatch={() => {
+          setSettingsOpen(false);
+          setLeaveConfirmOpen(true);
+        }}
+      />
 
       {leaveConfirmOpen && !killAnimation && (
         <div
@@ -1826,7 +1844,9 @@ export default function GameMap() {
             background: 'rgba(3,8,13,.78)', backdropFilter: 'blur(8px)',
           }}
         >
-          <section style={{
+          <section
+            ref={leaveDialogRef}
+            style={{
             width: 'min(100%, 360px)', boxSizing: 'border-box',
             padding: '22px 20px 18px', borderRadius: 20,
             border: '1px solid rgba(255,145,145,.3)',
@@ -1841,7 +1861,7 @@ export default function GameMap() {
               {en ? 'You will disconnect from the current match and return to the main menu.' : 'Вы отключитесь от текущего матча и вернётесь в главное меню.'}
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" onClick={() => setLeaveConfirmOpen(false)} style={{
+              <button ref={leaveCancelRef} type="button" onClick={() => setLeaveConfirmOpen(false)} style={{
                 flex: 1, minHeight: 46, borderRadius: 11,
                 border: '1px solid rgba(180,205,214,.28)',
                 background: 'rgba(5,15,23,.55)', color: '#eaf4f5',
@@ -2115,8 +2135,8 @@ export default function GameMap() {
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
-          // Keep the action prompt opposite the movement control and clear of the player sprite.
-          position: 'fixed', bottom: 'clamp(150px, 22vh, 210px)',
+          // Reserve a complete vertical lane above the kill/report action row on short portrait screens.
+          position: 'fixed', bottom: 'clamp(218px, 31vh, 260px)',
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
