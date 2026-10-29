@@ -709,10 +709,13 @@ try {
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
     'dragged task action Y position must be applied to the gameplay HUD');
 
-  // Persisted layout survives a reload, not merely the current React session.
+  // Persisted layout survives a fresh page load. Return to a stable lobby mock
+  // before reloading, because the gameplay mock intentionally navigates to /game.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).waitFor({ state: 'visible', timeout: 15_000 });
-  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
+  const settingsButtonAfterReload = page.getByRole('button', { name: /^(Настройки|Settings)$/ });
+  await settingsButtonAfterReload.waitFor({ state: 'visible', timeout: 15_000 });
+  await settingsButtonAfterReload.click();
   const reloadedSettings = page.locator('[role="dialog"]');
   await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
@@ -745,17 +748,18 @@ try {
   // Reset is a draft operation; Cancel must not alter the saved layout.
   await reloadedSettings.getByTestId('control-layout-reset').click();
   await reloadedSettings.getByTestId('control-layout-cancel').click();
-  movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
-  assert.ok(movedSettingsBox, 'gameplay control remains available after cancelling layout edits');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+  await settingsButtonAfterReload.click();
+  const cancelledSettings = page.locator('[role="dialog"]');
+  await cancelledSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
+  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
+  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
     'Cancel must preserve the previously saved X position');
-  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
+  assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.32)) < 3,
     'Cancel must preserve the previously saved Y position');
-
-  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
-  const resetSettings = page.locator('[role="dialog"]');
-  await resetSettings.getByTestId('control-layout-reset').click();
-  await resetSettings.getByTestId('control-layout-save').click();
+  await cancelledSettings.getByTestId('control-layout-reset').click();
+  await cancelledSettings.getByTestId('control-layout-save').click();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
@@ -768,7 +772,7 @@ try {
     };
   });
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const restrictedSettings = page.locator('[role="dialog"]');
   await restrictedSettings.getByRole('button', { name: 'English' }).click();
   await restrictedSettings.getByTestId('joystick-side-left').click();
