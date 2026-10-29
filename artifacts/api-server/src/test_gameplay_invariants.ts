@@ -133,6 +133,8 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   assert.equal(manager.isGameplayReady(lobby), false, 'second client is still loading');
   assert.equal(manager.markGameplayReady(lobby, 1), true, 'gameplay unlocks after every connected human is ready');
   assert.equal(manager.isGameplayReady(lobby), true);
+  lobby.phase = 'MEETING';
+  assert.equal(manager.isGameplayReady(lobby), true, 'readiness persists so discussion and voting RPCs remain available');
   manager.disposeLobby(lobby);
 }
 
