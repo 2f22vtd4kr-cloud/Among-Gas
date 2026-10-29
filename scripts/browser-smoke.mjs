@@ -583,6 +583,13 @@ try {
     });
   }
   // Per-control layout is adjustable, saved, applied to gameplay, and resettable.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas');
+    return !!canvas &&
+      canvas.style.width === window.innerWidth + 'px' &&
+      canvas.style.height === window.innerHeight + 'px';
+  }, undefined, { timeout: 3_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
   await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
