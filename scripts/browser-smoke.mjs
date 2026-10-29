@@ -205,12 +205,13 @@ try {
   const hudSelectors = [
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
-    page.getByRole('button', { name: /Покинуть матч/ }),
     page.getByRole('button', { name: /тревога/i }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
+  assert.equal(await page.getByRole('button', { name: /Покинуть матч/ }).count(), 0,
+    'Leave Match must not occupy a permanent gameplay HUD position');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
-  assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
+  assert.ok(hudBoxes.every(Boolean), 'primary gameplay controls must be measurable on a 320px viewport');
   for (let i = 0; i < hudBoxes.length; i++) {
     for (let j = i + 1; j < hudBoxes.length; j++) {
       const a = hudBoxes[i];
@@ -223,13 +224,19 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
 
-  // Leaving a live match is explicit and cancellable before it disconnects.
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  // Leaving must be available from Settings, not as a permanent gameplay button.
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const gameplaySettings = page.getByRole('dialog', { name: 'Настройки' });
+  await gameplaySettings.waitFor({ state: 'visible' });
+  const leaveFromSettings = gameplaySettings.getByRole('button', { name: 'Выйти из матча…' });
+  await leaveFromSettings.waitFor({ state: 'visible' });
+  await leaveFromSettings.click();
   const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
   await leaveDialog.waitFor({ state: 'visible' });
   await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
   await leaveDialog.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  await gameplaySettings.waitFor({ state: 'visible' });
+  await gameplaySettings.getByRole('button', { name: 'Выйти из матча…' }).click();
   await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
   // Return to a predictable fixture for the rest of the visual smoke suite.
