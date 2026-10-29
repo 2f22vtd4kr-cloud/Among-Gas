@@ -644,12 +644,12 @@ try {
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
   await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(previewBox.x + previewBox.width * 0.88, previewBox.y + previewBox.height * 0.32, { steps: 8 });
+  await page.mouse.move(previewBox.x + previewBox.width * 0.68, previewBox.y + previewBox.height * 0.32, { steps: 8 });
   await page.mouse.up();
   await layoutSettings.getByTestId('control-layout-save').click();
   const movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
   assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 3,
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
     'dragged task action X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
     'dragged task action Y position must be applied to the gameplay HUD');
