@@ -64,7 +64,7 @@ export function SettingsButton({
   );
 }
 
-const DRAGGABLE_CONTROL_IDS: GameplayControlId[] = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'];
+const DRAGGABLE_CONTROL_IDS = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'] as const;
 const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
   joystick: 52, emergency: 80, taskAction: 100, killReport: 100, sabotage: 42, repair: 100,
 };
