@@ -1,6 +1,15 @@
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { useLanguage } from '../lib/language';
-import { setJoystickSide, useGameSettings, type JoystickSide } from '../lib/gameSettings';
+import {
+  CONTROL_LABELS,
+  defaultControlPosition,
+  resetControlLayout,
+  setControlPosition,
+  setJoystickSide,
+  useGameSettings,
+  type GameplayControlId,
+  type JoystickSide,
+} from '../lib/gameSettings';
 
 export function SettingsButton({
   label,
@@ -82,12 +91,15 @@ export default function SettingsDialog({
   onLeaveMatch?: () => void;
 }) {
   const { language, setLanguage } = useLanguage();
-  const { joystickSide } = useGameSettings();
+  const { joystickSide, controlLayout } = useGameSettings();
+  const [selectedControl, setSelectedControl] = useState<GameplayControlId>('joystick');
   const closeRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const en = language === 'en';
+  const selectedPosition = controlLayout[selectedControl] ?? defaultControlPosition(selectedControl, joystickSide);
+  const controlOptions = Object.entries(CONTROL_LABELS) as Array<[GameplayControlId, { en: string; ru: string }]>;
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
@@ -246,6 +258,83 @@ export default function SettingsDialog({
               </button>
             ))}
           </div>
+        </fieldset>
+
+        <fieldset style={{ border: 0, padding: 0, margin: '20px 0 0' }}>
+          <legend style={{ padding: 0, marginBottom: 5, color: 'rgba(226,239,241,.78)', fontSize: 14 }}>
+            {en ? 'Custom gameplay controls' : 'Расположение игровых кнопок'}
+          </legend>
+          <p style={{ margin: '0 0 10px', color: 'rgba(220,237,239,.58)', font: '12px/1.4 system-ui, sans-serif' }}>
+            {en
+              ? 'Choose a control, then adjust its position. Changes save automatically for this device.'
+              : 'Выберите элемент и настройте его положение. Изменения сохраняются автоматически на этом устройстве.'}
+          </p>
+          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.8)', font: '12px/1.4 system-ui, sans-serif' }}>
+            {en ? 'Control' : 'Элемент управления'}
+            <select
+              data-testid="control-layout-select"
+              value={selectedControl}
+              onChange={event => setSelectedControl(event.target.value as GameplayControlId)}
+              style={{
+                boxSizing: 'border-box', display: 'block', width: '100%', minHeight: 42,
+                marginTop: 5, padding: '8px 10px', borderRadius: 10,
+                border: '1px solid rgba(167,193,203,.28)', background: 'rgba(5,15,23,.7)',
+                color: '#eaf4f5', font: '14px system-ui, sans-serif',
+              }}
+            >
+              {controlOptions.map(([id, label]) => (
+                <option key={id} value={id}>{en ? label.en : label.ru}</option>
+              ))}
+            </select>
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.85)', font: '12px/1.4 system-ui, sans-serif' }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>{en ? 'Horizontal position' : 'По горизонтали'}</span>
+              <strong>{selectedPosition.x}%</strong>
+            </span>
+            <input
+              data-testid="control-layout-x"
+              type="range"
+              min={5}
+              max={95}
+              step={1}
+              value={selectedPosition.x}
+              onChange={event => setControlPosition(selectedControl, { ...selectedPosition, x: Number(event.target.value) })}
+              style={{ display: 'block', width: '100%', margin: '8px 0 0', accentColor: '#5bdccd', touchAction: 'pan-y' }}
+            />
+          </label>
+
+          <label style={{ display: 'block', marginBottom: 12, color: 'rgba(226,239,241,.85)', font: '12px/1.4 system-ui, sans-serif' }}>
+            <span style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+              <span>{en ? 'Vertical position' : 'По вертикали'}</span>
+              <strong>{selectedPosition.y}%</strong>
+            </span>
+            <input
+              data-testid="control-layout-y"
+              type="range"
+              min={5}
+              max={95}
+              step={1}
+              value={selectedPosition.y}
+              onChange={event => setControlPosition(selectedControl, { ...selectedPosition, y: Number(event.target.value) })}
+              style={{ display: 'block', width: '100%', margin: '8px 0 0', accentColor: '#5bdccd', touchAction: 'pan-y' }}
+            />
+          </label>
+
+          <button
+            type="button"
+            data-testid="control-layout-reset"
+            onClick={resetControlLayout}
+            style={{
+              width: '100%', minHeight: 40, padding: '8px 12px', borderRadius: 10,
+              border: '1px solid rgba(167,193,203,.22)', background: 'rgba(5,15,23,.5)',
+              color: 'rgba(226,238,241,.85)', fontFamily: 'inherit', fontSize: 13,
+              fontWeight: 700, cursor: 'pointer',
+            }}
+          >
+            {en ? 'Reset all control positions' : 'Сбросить расположение кнопок'}
+          </button>
         </fieldset>
 
         {showLeaveMatch && onLeaveMatch && (
