@@ -129,7 +129,7 @@ async function main() {
     // The server holds all gameplay until each connected human confirms that
     // its map and character atlas are loaded, matching the production client.
     for (const player of players) send(player, [0x23]);
-    await sleep(60);
+    await Promise.all(players.map(player => waitFor(player, b => b[0] === 0x24 && b[1] === 0x01, 2_000)));
 
     console.log('--- Reject a forged movement teleport and return an authoritative correction ---');
     // Allow the server's 12ms packet interval guard to elapse after game start.
