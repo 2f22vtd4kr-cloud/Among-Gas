@@ -1005,16 +1005,7 @@ export class LobbyManager {
     if (!player || player.isBot || lobby.phase !== 'ROAMING') return false;
     if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
     lobby.gameplayReadySlots.add(slot);
-    const wasReady = lobby.gameplayReady === true;
-    const ready = this.refreshGameplayReady(lobby);
-    if (ready && !wasReady) {
-      // Clients keep their loading overlay and input lock until this broadcast.
-      const packet = Buffer.from([0x24, 0x01]);
-      for (const connectedPlayer of lobby.players.values()) {
-        if (connectedPlayer.ws.readyState === /* OPEN */ 1) connectedPlayer.ws.send(packet);
-      }
-    }
-    return ready;
+    return this.refreshGameplayReady(lobby);
   }
 
   /** Recompute readiness on action/tick boundaries so disconnects cannot stall a round. */
@@ -1033,9 +1024,18 @@ export class LobbyManager {
     );
     // Bot-only headless simulations have no connected human sockets and
     // must exercise the same gameplay loops without a browser readiness packet.
+    const wasReady = lobby.gameplayReady === true;
     lobby.gameplayReady = connectedHumans.length === 0
       ? lobby.players.size > 0 && Array.from(lobby.players.values()).every(player => player.isBot)
       : connectedHumans.every(player => lobby.gameplayReadySlots!.has(player.slot));
+    if (lobby.gameplayReady && !wasReady && connectedHumans.length > 0) {
+      // Also handles the case where an unready client disconnects during load.
+      // Clients keep their loading overlay and input lock until this broadcast.
+      const packet = Buffer.from([0x24, 0x01]);
+      for (const connectedPlayer of lobby.players.values()) {
+        if (connectedPlayer.ws.readyState === /* OPEN */ 1) connectedPlayer.ws.send(packet);
+      }
+    }
     return lobby.gameplayReady;
   }
 
