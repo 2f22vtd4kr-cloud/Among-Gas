@@ -164,6 +164,27 @@ async function main() {
     for (const { player } of crewmates) {
       await waitFor(player, b => b[0] === 0x16 && b[1] === 0x01 && b[2] === 0x01 && b[3] === impostor.slot);
     }
+    console.log('--- Verify solo bots remain frozen until map and sprite readiness ---');
+    const soloHost = await connect(90004, 'SoloReadiness');
+    players.push(soloHost);
+    send(soloHost, [0x10, 0x06, 4]);
+    await waitFor(soloHost, b => b[0] === 0x1A, 5_000);
+    await waitFor(soloHost, b => b[0] === 0xFF, 2_000); // initial authoritative spawn positions
+    const spawnDeltaCount = soloHost.msgs.filter(b => b[0] === 0xFF).length;
+    await sleep(700);
+    assert.equal(
+      soloHost.msgs.filter(b => b[0] === 0xFF).length,
+      spawnDeltaCount,
+      'solo bots must not emit movement deltas while the human is still loading the map',
+    );
+    send(soloHost, [0x23]);
+    await waitFor(soloHost, b => b[0] === 0x24 && b[1] === 0x01, 2_000);
+    await sleep(1_500);
+    assert.ok(
+      soloHost.msgs.filter(b => b[0] === 0xFF).length > spawnDeltaCount,
+      'bot movement deltas must resume after the human acknowledges decoded map and sprites',
+    );
+
     console.log('--- Allow a fresh socket to replace an existing lobby session ---');
     const previousHost = await connect(90101, 'ReconnectHost');
     players.push(previousHost);
