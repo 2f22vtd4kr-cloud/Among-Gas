@@ -299,3 +299,28 @@
 
 .au-lobby-scroll { justify-content: center; overflow: hidden; }
 @media (max-height: 640px) and (orientation: landscape) { .au-lobby-scroll { height: 100dvh; min-height: 100dvh; justify-content: flex-start; overflow: auto; } }
+
+
+/* Keep the label column generous on narrow phones instead of wrapping menu actions. */
+@media (max-width: 360px) {
+  .au-btn-icon {
+    box-sizing: border-box;
+    width: 58px;
+    flex: 0 0 58px;
+    min-width: 0;
+    padding: 2px;
+  }
+
+  .au-btn-label {
+    min-width: 0;
+    font-size: clamp(14px, 4.25vw, 16px);
+    letter-spacing: 0.025em;
+    padding: 6px 5px;
+    line-height: 1.12;
+    overflow-wrap: anywhere;
+  }
+
+  .au-btn {
+    min-height: 58px;
+  }
+}
