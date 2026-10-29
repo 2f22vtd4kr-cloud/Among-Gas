@@ -1475,7 +1475,8 @@ export default function GameMap() {
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
         const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
-        const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py });
+        // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
+        const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
         if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
           fogCanvas.width = cw;
