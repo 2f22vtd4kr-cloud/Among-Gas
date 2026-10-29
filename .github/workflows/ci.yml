@@ -41,6 +41,9 @@ jobs:
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
+      - name: Verify client movement cannot cross thin collision walls
+        run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-player-movement.ts
+
       - name: Typecheck and build API/frontend
         run: pnpm run build
 
