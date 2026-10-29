@@ -56,6 +56,14 @@ assert.ok(
   const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
   assert.equal(corpseFrames.length, 7, 'all seven balaclava colors have a corpse pose');
   assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 7, 'each color has its own corpse atlas column');
+  assert.equal(getCharacterFrameRect('teal', 'idle').height, 138,
+    'idle crop ends before the detached under-foot scanlines');
+  assert.equal(corpseFrames[0].height, 93,
+    'corpse crop keeps the exposed bone and cut suit but excludes detached under-foot scanlines');
+  assert.match(getCharacterClipPath('idle') ?? '', /79%/,
+    'idle leg-gap clipping starts before horizontal atlas strokes enter the foot gap');
+  assert.match(getCharacterClipPath('dead-body') ?? '', /66%/,
+    'corpse leg-gap clipping starts before detached strokes enter the leg gap');
   for (const frame of corpseFrames) {
     assert.equal(frame.row, CHARACTER_POSES.indexOf('dead-body'));
     assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes detached underline rows and keeps the source pixels unstretched');
