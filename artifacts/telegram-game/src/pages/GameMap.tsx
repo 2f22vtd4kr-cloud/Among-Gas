@@ -154,6 +154,7 @@ function CharSpriteUI({
       data-sprite-row={frame.row}
       data-source-y={frame.y}
       data-source-height={frame.height}
+      data-display-height={frame.displayHeight}
       style={{
         width: size, height, flexShrink: 0, overflow: 'hidden',
         backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
