@@ -131,6 +131,9 @@ const ARRIVAL_SQ = 25 * 25;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
+  private discussionMeeting: Lobby['meeting'] = null;
+  private nextDiscussionChatAtMs = 0;
+  private discussionMessageSent = false;
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -168,11 +171,52 @@ export abstract class BotAgent {
 
     if (lobby.phase === 'MEETING') {
       const meeting = lobby.meeting;
-      if (!meeting || !meeting.votingOpen) return;
+      if (!meeting) return;
+      if (!meeting.votingOpen) {
+        this.discuss(lobby, self, manager, meeting);
+        return;
+      }
       if (meeting.votes.has(self.slot)) return; // already voted
       const target = this.chooseVote(lobby, self);
       manager.castVote(lobby, self.slot, target);
     }
+  }
+
+  /** Lightweight, zero-API-cost discussion behaviour with a spatial clue. */
+  private discuss(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    meeting: NonNullable<Lobby['meeting']>,
+  ): void {
+    if (this.discussionMeeting !== meeting) {
+      this.discussionMeeting = meeting;
+      this.discussionMessageSent = false;
+      // Stagger bot messages so the discussion reads like turn-taking, not a burst.
+      this.nextDiscussionChatAtMs = Date.now() + 500 + (self.slot % 5) * 650;
+    }
+    if (this.discussionMessageSent || Date.now() < this.nextDiscussionChatAtMs) return;
+
+    const body = meeting.bodySlot === NO_TARGET ? undefined : lobby.players.get(meeting.bodySlot);
+    let message: string;
+    if (body && Number.isFinite(body.corpseX) && Number.isFinite(body.corpseY)) {
+      const nearest = Array.from(lobby.players.values())
+        .filter(player => player.alive && player.slot !== body.slot)
+        .map(player => ({
+          player,
+          distance: Math.hypot(player.x - body.corpseX!, player.y - body.corpseY!),
+        }))
+        .sort((a, b) => a.distance - b.distance)[0];
+      if (nearest && nearest.player.slot !== self.slot && nearest.distance < 360) {
+        message = `Based on positions, ${nearest.player.username} was close to the body. What were you doing there?`;
+      } else {
+        message = 'I am trying to work out who was near the body. Did anyone see anything?';
+      }
+    } else {
+      message = 'I was keeping to my tasks. What did everyone see before the meeting?';
+    }
+    this.discussionMessageSent = true;
+    manager.sendMeetingChat(lobby, self.slot, message);
   }
 
   // ── Shared movement helpers ─────────────────────────────────────────────
