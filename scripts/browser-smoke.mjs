@@ -606,32 +606,10 @@ try {
       fullPage: true,
     });
   }
-  assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
-
-  console.log(JSON.stringify({
-    ok: true,
-    viewport: '390×844, DPR 2 (mobile)',
-    checks: [
-      'language and joystick preferences persist through Settings; right-side default verified',
-      'obsolete Telegram subtitle is absent',
-      'custom map rendered',
-      'victim-only full-screen kill animation is triggered correctly', 
-      'tactical map opens and closes',
-      'tactical map freezes movement',
-      'two-step Clean Filters task completes and resets correctly',
-      'in-range impostor kill action is enabled',
-      'dropped corpse remains reportable independently of the ghost',
-      'meeting chat is available in discussion and voting with vote controls',
-      'all five sabotage choices render in the impostor panel',
-      'responsive layout at 320×568, 844×390, and 1365×768',
-      'no uncaught browser page errors',
-    ],
-  }, null, 2));
-} finally {
   // Restricted WebViews may reject localStorage writes; settings still need to update in memory.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Настройки' }).click();
-  const blockedSettings = page.getByRole('dialog', { name: 'Настройки' });
+  await page.getByRole('button', { name: /Settings|Настройки/ }).click();
+  const blockedSettings = page.getByRole('dialog', { name: /Settings|Настройки/ });
   await page.evaluate(() => {
     window.__originalStorageSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = function(key, value) {
@@ -656,5 +634,27 @@ try {
     }));
     localStorage.setItem('amongGas.language', 'en');
   });
+  assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
+
+  console.log(JSON.stringify({
+    ok: true,
+    viewport: '390×844, DPR 2 (mobile)',
+    checks: [
+      'language and joystick preferences persist through Settings; right-side default verified',
+      'obsolete Telegram subtitle is absent',
+      'custom map rendered',
+      'victim-only full-screen kill animation is triggered correctly', 
+      'tactical map opens and closes',
+      'tactical map freezes movement',
+      'two-step Clean Filters task completes and resets correctly',
+      'in-range impostor kill action is enabled',
+      'dropped corpse remains reportable independently of the ghost',
+      'meeting chat is available in discussion and voting with vote controls',
+      'all five sabotage choices render in the impostor panel',
+      'responsive layout at 320×568, 844×390, and 1365×768',
+      'no uncaught browser page errors',
+    ],
+  }, null, 2));
+} finally {
   await browser.close();
 }
