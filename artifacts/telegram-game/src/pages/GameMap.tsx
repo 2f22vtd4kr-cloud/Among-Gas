@@ -1073,7 +1073,7 @@ export default function GameMap() {
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
             const taskLabel = taskRu(def.name, languageRef.current);
-            ctx.strokeText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
+            ctx.strokeText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
             ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
           }
@@ -1809,7 +1809,7 @@ export default function GameMap() {
               touchAction: 'manipulation',
             }}
           >
-            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : (en ? '🗺 MAP' : '🗺 КАРТА')}
+            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : <><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 5 }}><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M9 3v15m6-12v15" stroke="currentColor" strokeWidth="1.5"/></svg>{en ? 'MAP' : 'КАРТА'}</>}
           </button>
         </div>
       )}
@@ -2030,7 +2030,7 @@ export default function GameMap() {
               cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
-            🕳️ {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
+            {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
           </button>
         </div>
       )}
@@ -2283,7 +2283,7 @@ export default function GameMap() {
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}
             >
-              🛑 {en ? 'Report' : 'Доложить'}
+              {en ? 'Report' : 'Доложить'}
             </button>
           )}
         </div>
@@ -2335,7 +2335,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(255,60,60,0.35)',
             }}
           >
-            🔧 {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
+            {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
           </button>
         </div>
       )}
@@ -2426,7 +2426,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : (en ? '🚨 Emergency' : '🚨 Тревога')}
+            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : <><img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Emergency' : 'Тревога'}</>}
           </button>
         </div>
       )}
@@ -2442,8 +2442,8 @@ export default function GameMap() {
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
           {voteResult.ejectedSlot === NO_TARGET
-            ? (en ? '🗳️ Nobody ejected' : '🗳️ Никто не исключён')
-            : `🗳️ ${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
+            ? (en ? 'Nobody ejected' : 'Никто не исключён')
+            : `${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
         </div>
       )}
 
@@ -2486,7 +2486,7 @@ export default function GameMap() {
             <div style={{
               color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
             }}>
-              👻 {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
+              {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
             </div>
           )}
 
@@ -2695,7 +2695,7 @@ export default function GameMap() {
                 alignItems: 'center', justifyContent: 'center',
                 background: isImpWin ? '#aa2233' : '#225599',
                 borderRight: '2px solid rgba(0,0,0,0.22)', fontSize: 22,
-              }}>🚪</div>
+              }}><img src={`${import.meta.env.BASE_URL}au-assets/eject.png`} alt="" aria-hidden="true" style={{ width: 36, height: 36, objectFit: 'contain' }} /></div>
               <div style={{
                 flex: 1, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
@@ -2723,7 +2723,7 @@ export default function GameMap() {
           letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
-          👻 {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
+          {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
         </div>
       )}
 
