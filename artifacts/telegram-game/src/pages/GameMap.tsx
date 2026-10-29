@@ -53,7 +53,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildShadowGrid, computeVisibilityPolygon } from '../game/visibility';
+import { buildShadowGrid, buildSmoothShadowGrid, computeVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
@@ -850,6 +850,7 @@ export default function GameMap() {
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
+    const smoothShadowGrid = buildSmoothShadowGrid(shadowGrid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -1392,7 +1393,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
+        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, smoothShadowGrid);
 
         if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
           fogCanvas.width = cw;
