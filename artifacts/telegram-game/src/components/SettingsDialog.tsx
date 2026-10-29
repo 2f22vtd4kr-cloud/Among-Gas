@@ -74,13 +74,13 @@ const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], numbe
 const DRAG_SAFE_HALF_HEIGHT: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
   joystick: 52, emergency: 24, taskAction: 24, killReport: 40, sabotage: 42, repair: 24,
 };
-const PREVIEW_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], { width: number; height: number }> = {
-  joystick: { width: 40, height: 40 },
-  emergency: { width: 32, height: 22 },
-  taskAction: { width: 72, height: 22 },
-  killReport: { width: 72, height: 31 },
-  sabotage: { width: 36, height: 32 },
-  repair: { width: 72, height: 22 },
+const ACTUAL_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], { width: number; height: number }> = {
+  joystick: { width: 104, height: 104 },
+  emergency: { width: 140, height: 40 },
+  taskAction: { width: 168, height: 40 },
+  killReport: { width: 168, height: 76 },
+  sabotage: { width: 76, height: 76 },
+  repair: { width: 180, height: 40 },
 };
 
 function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {
@@ -175,7 +175,15 @@ export default function SettingsDialog({
   const { joystickSide, controlLayout } = useGameSettings();
   const [selectedControl, setSelectedControl] = useState<GameplayControlId>('joystick');
   const [draftLayout, setDraftLayout] = useState<ControlLayout>({});
-  const [isLandscapePreview, setIsLandscapePreview] = useState(() => typeof window !== 'undefined' && window.innerWidth > window.innerHeight);
+  const [viewportSize, setViewportSize] = useState(() => typeof window !== 'undefined'
+    ? { width: Math.max(1, window.innerWidth), height: Math.max(1, window.innerHeight) }
+    : { width: 390, height: 844 });
+  const isLandscapePreview = viewportSize.width > viewportSize.height;
+  const previewMaxWidth = isLandscapePreview ? 300 : 150;
+  const previewMaxHeight = isLandscapePreview ? 160 : 300;
+  const previewWidth = Math.min(previewMaxWidth, previewMaxHeight * viewportSize.width / viewportSize.height);
+  const previewHeight = previewWidth * viewportSize.height / viewportSize.width;
+  const previewScale = previewWidth / viewportSize.width;
   const previewRef = useRef<HTMLDivElement>(null);
   const draggingControlRef = useRef<GameplayControlId | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -189,7 +197,10 @@ export default function SettingsDialog({
 
   useEffect(() => {
     if (!open) return;
-    const updateOrientation = () => setIsLandscapePreview(window.innerWidth > window.innerHeight);
+    const updateOrientation = () => setViewportSize({
+      width: Math.max(1, window.innerWidth),
+      height: Math.max(1, window.innerHeight),
+    });
     updateOrientation();
     window.addEventListener('resize', updateOrientation);
     return () => window.removeEventListener('resize', updateOrientation);
@@ -396,9 +407,10 @@ export default function SettingsDialog({
             aria-label={en ? 'Drag controls in this preview' : 'Перетаскивайте элементы в этой области'}
             style={{
               position: 'relative',
-              width: isLandscapePreview ? 'min(100%, 300px)' : 'min(100%, 150px)',
-              aspectRatio: isLandscapePreview ? '844 / 390' : '390 / 844',
-              maxHeight: isLandscapePreview ? 160 : 300,
+              width: previewWidth,
+              height: previewHeight,
+              maxWidth: '100%',
+              maxHeight: previewMaxHeight,
               margin: '0 auto 12px', overflow: 'hidden', borderRadius: 13, border: '1px solid rgba(167,193,203,.3)',
               background: 'linear-gradient(180deg, rgba(10,22,31,.98), rgba(17,48,55,.94))',
               touchAction: 'none', userSelect: 'none', marginBottom: 12,
@@ -418,7 +430,11 @@ export default function SettingsDialog({
             {controlOptions.map(([id, label]) => {
               const position = draftLayout[id] ?? controlLayout[id] ?? defaultControlPosition(id, joystickSide);
               const selected = selectedControl === id;
-              const previewDimensions = PREVIEW_CONTROL_DIMENSIONS[id as keyof typeof PREVIEW_CONTROL_DIMENSIONS];
+              const actualDimensions = ACTUAL_CONTROL_DIMENSIONS[id as keyof typeof ACTUAL_CONTROL_DIMENSIONS];
+              const previewDimensions = {
+                width: Math.max(1, Math.round(actualDimensions.width * previewScale)),
+                height: Math.max(1, Math.round(actualDimensions.height * previewScale)),
+              };
               return (
                 <button
                   key={id}
