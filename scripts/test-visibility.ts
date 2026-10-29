@@ -9,7 +9,7 @@ import {
   ROWS,
   type Grid,
 } from '@workspace/shared/collisionMap';
-import { buildShadowGrid, buildSmoothShadowGrid, computeVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -35,6 +35,14 @@ const px = (wallCol - 1) * CELL_X + CELL_X * 0.5;
 const py = wallRow * CELL_Y + CELL_Y * 0.5;
 const polygon = computeVisibilityPolygon(px, py, CELL_X * 10, obstacleGrid);
 const eastRay = polygon[360]; // angle 0
+const roundedPolygon = smoothVisibilityPolygon(polygon, { x: px, y: py });
+assert.equal(roundedPolygon.length, polygon.length, 'shadow smoothing keeps the same angular ray count');
+assert.ok(roundedPolygon.every((point, index) =>
+  Math.hypot(point.x - px, point.y - py) <= Math.hypot(polygon[index].x - px, polygon[index].y - py) + 1e-6
+), 'visual smoothing must never extend sight beyond the original wall/radius hit');
+assert.ok(roundedPolygon.some((point, index) =>
+  Math.hypot(point.x - px, point.y - py) < Math.hypot(polygon[index].x - px, polygon[index].y - py) - 1e-4
+), 'a grid-step corner should produce a rounded-in contour instead of hard stair-step edges');
 assert.ok(Math.abs(eastRay.y - py) < 1e-6, 'the east boundary ray is horizontal');
 assert.ok(
   Math.abs(eastRay.x - wallCol * CELL_X) < 1e-5,
@@ -49,9 +57,6 @@ propGrid[propA] = 1;
 propGrid[propB] = 1;
 for (let col = 20; col < 50; col++) propGrid[20 * COLS + col] = 1;
 const shadowGrid = buildShadowGrid(propGrid);
-const smoothShadowGrid = buildSmoothShadowGrid(shadowGrid);
-assert.equal(smoothShadowGrid.length, COLS * ROWS * 16,
-  'visual occlusion mask is upsampled fourfold without changing movement collision');
 assert.equal(propGrid[propA], 1, 'small prop remains solid for movement collision');
 assert.equal(propGrid[propB], 1, 'small prop collision cells are not mutated');
 assert.equal(shadowGrid[propA], 0, 'small isolated prop does not cast a hard shadow');
@@ -73,9 +78,6 @@ assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a visio
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
-const smoothRealShadowGrid = buildSmoothShadowGrid(realShadowGrid);
-assert.equal(realGrid.length, COLS * ROWS, 'authoritative collision stays at its original resolution');
-assert.equal(smoothRealShadowGrid.length, COLS * ROWS * 16, 'visual occlusion uses a higher-resolution mask');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
 const upperAtriumLeftBench = 9 * COLS + 48;
@@ -90,13 +92,16 @@ assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vis
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
+const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(
-  350 * (MAP_W / 1040),
-  150 * (MAP_H / 580),
+  realOrigin.x,
+  realOrigin.y,
   NORMAL_VISION_RADIUS_PX,
-  realGrid,
+  realShadowGrid,
 );
+const roundedRealPolygon = smoothVisibilityPolygon(realPolygon, realOrigin);
 assert.equal(realPolygon.length, 720, 'custom map returns a full visibility polygon');
+assert.equal(roundedRealPolygon.length, realPolygon.length, 'custom map shadow smoothing preserves the complete polygon');
 assert.ok(IMPOSTOR_VISION_RADIUS_PX > NORMAL_VISION_RADIUS_PX, 'impostors have farther base-game vision');
 assert.ok(LIGHTS_CREWMATE_VISION_RADIUS_PX < NORMAL_VISION_RADIUS_PX, 'Lights reduces crewmate vision');
 
