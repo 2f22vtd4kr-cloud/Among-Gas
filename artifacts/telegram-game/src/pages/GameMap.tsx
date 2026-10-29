@@ -125,9 +125,9 @@ const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
 
 function CharSpriteUI({
-  color, pose = 'idle', size = 64, flipped = false,
+  color, pose = 'idle', size = 64, flipped = false, sheetSrc,
 }: {
-  color: string; pose?: string; size?: number; flipped?: boolean;
+  color: string; pose?: string; size?: number; flipped?: boolean; sheetSrc?: string;
 }) {
   const safePose: CharacterPose = (CHARACTER_POSES as readonly string[]).includes(pose)
     ? pose as CharacterPose
@@ -155,7 +155,7 @@ function CharSpriteUI({
       data-source-height={frame.height}
       style={{
         width: size, height, flexShrink: 0, overflow: 'hidden',
-        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+        backgroundImage: `url(${sheetSrc ?? CHARACTER_SHEET_PATH})`,
         backgroundSize: `${bgW}px ${bgH}px`,
         backgroundPosition: `${posX}px ${posY}px`,
         backgroundRepeat: 'no-repeat',
@@ -208,6 +208,7 @@ export default function GameMap() {
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
+  const [spriteDataUrl, setSpriteDataUrl] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Network ───────────────────────────────────────────────────────────────
@@ -747,6 +748,17 @@ export default function GameMap() {
         }
       }
       octx.putImageData(id, 0, 0);
+      // CSS-based kill/reveal sprites must use the same cleaned pixels as the
+      // canvas renderer; otherwise the original atlas underlines reappear in
+      // the death sequence even after the gameplay sprites are fixed.
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = oc.width;
+      exportCanvas.height = oc.height;
+      const exportCtx = exportCanvas.getContext('2d');
+      if (exportCtx) {
+        exportCtx.drawImage(oc, 0, 0);
+        setSpriteDataUrl(exportCanvas.toDataURL('image/png'));
+      }
       spriteImgRef.current = oc;
       setSpriteLoaded(true);
     };
@@ -1526,7 +1538,7 @@ export default function GameMap() {
               animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
-              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
             </div>
             <div className="ag-kill-victim" style={{
               position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
@@ -1537,13 +1549,13 @@ export default function GameMap() {
                 // Keep the complete authored balaclava sprite visible during the strike.
                 animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
               </div>
               <div className="ag-kill-victim-lower" role="img" aria-label={en ? 'Balaclava corpse with exposed bone' : 'Тело с открытой костью'} style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} sheetSrc={spriteDataUrl ?? undefined} />
               </div>
             </div>
             <div className="ag-kill-slash" style={{
@@ -2585,6 +2597,7 @@ export default function GameMap() {
                   color={isImp ? 'maroon' : 'teal'}
                   pose={isImp ? 'mask' : 'idle'}
                   size={170}
+                  sheetSrc={spriteDataUrl ?? undefined}
                 />
               </div>
 
