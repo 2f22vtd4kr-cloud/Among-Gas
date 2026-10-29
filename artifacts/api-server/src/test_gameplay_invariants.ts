@@ -697,6 +697,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     makePlayer(slot, 'crewmate', 0, 0).player,
   );
   const lobby = makeLobby(players);
+  lobby.phase = 'WAITING';
   manager.startGame(lobby, 2);
   const positions = [...lobby.players.values()].map(p => ({ x: p.x, y: p.y }));
   assert.equal(new Set(positions.map(p => `${p.x},${p.y}`)).size, positions.length,
