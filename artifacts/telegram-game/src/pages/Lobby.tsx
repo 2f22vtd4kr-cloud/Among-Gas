@@ -254,8 +254,8 @@ export default function Lobby() {
     return (
       <div className="lobby-bg au-lobby-scroll" style={{
         minHeight: '100dvh', display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        padding: '24px 20px', position: 'relative', overflow: 'hidden',
+        alignItems: 'center',
+        padding: '24px 20px', position: 'relative',
       }}>
         <GasParticles />
 
@@ -389,8 +389,8 @@ export default function Lobby() {
   return (
     <div className="lobby-bg au-lobby-scroll" style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
-      alignItems: 'center', justifyContent: 'center',
-      padding: '24px 20px 16px', position: 'relative', overflow: 'hidden',
+      alignItems: 'center',
+      padding: '24px 20px 16px', position: 'relative',
     }}>
       <GasParticles />
 
