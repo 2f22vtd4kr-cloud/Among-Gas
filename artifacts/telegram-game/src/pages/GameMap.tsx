@@ -213,6 +213,9 @@ export default function GameMap() {
   const leaveDialogRef = useRef<HTMLElement>(null);
   const leaveCancelRef = useRef<HTMLButtonElement>(null);
   const leaveFocusReturnRef = useRef<HTMLElement | null>(null);
+  const mapDialogRef = useRef<HTMLDivElement>(null);
+  const mapCloseRef = useRef<HTMLButtonElement>(null);
+  const mapFocusReturnRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (!leaveConfirmOpen) return;
@@ -360,6 +363,44 @@ export default function GameMap() {
     // Prevent the keyboard and joystick from moving the player behind the modal.
     keysRef.current.clear();
     pendingSentRef.current.length = 0;
+  }, [showMiniMap]);
+
+  useEffect(() => {
+    if (!showMiniMap) return;
+    mapFocusReturnRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    mapCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowMiniMap(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = mapDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !mapDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !mapDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      const previous = mapFocusReturnRef.current;
+      if (previous?.isConnected) previous.focus();
+    };
   }, [showMiniMap]);
   const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
@@ -1743,7 +1784,7 @@ export default function GameMap() {
       )}
 
       {showMiniMap && loaded && myRole !== null && meeting === null && (
-        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
+        <div ref={mapDialogRef} data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
           onClick={() => setShowMiniMap(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 75,
@@ -1763,7 +1804,7 @@ export default function GameMap() {
                   {myRole === 'crewmate' ? (en ? 'Your unfinished tasks are marked in yellow' : 'Ваши незавершённые задания отмечены жёлтым') : (en ? 'Map overview' : 'Обзор карты')}
                 </div>
               </div>
-              <button onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
+              <button ref={mapCloseRef} onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
                 width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
                 background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
               }}>×</button>
