@@ -53,14 +53,22 @@ assert.ok(
 const propGrid = new Uint8Array(COLS * ROWS) as Grid;
 const propA = 2 * COLS + 2;
 const propB = 2 * COLS + 3;
+const propC = 3 * COLS + 2;
+const propD = 3 * COLS + 3;
 propGrid[propA] = 1;
 propGrid[propB] = 1;
+propGrid[propC] = 1;
+propGrid[propD] = 1;
 for (let col = 20; col < 50; col++) propGrid[20 * COLS + col] = 1;
 const shadowGrid = buildShadowGrid(propGrid);
 assert.equal(propGrid[propA], 1, 'small prop remains solid for movement collision');
 assert.equal(propGrid[propB], 1, 'small prop collision cells are not mutated');
+assert.equal(propGrid[propC], 1, 'the lower row of a small prop remains solid for movement');
+assert.equal(propGrid[propD], 1, 'the lower-right prop cell remains solid for movement');
 assert.equal(shadowGrid[propA], 0, 'small isolated prop does not cast a hard shadow');
 assert.equal(shadowGrid[propB], 0, 'all cells of the small prop are non-occluding');
+assert.equal(shadowGrid[propC], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
+assert.equal(shadowGrid[propD], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
 assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a vision occluder');
 
  // Collision and vision are separate contracts: the same small prop blocks
