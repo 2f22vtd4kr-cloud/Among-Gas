@@ -1019,9 +1019,11 @@ export class LobbyManager {
     const connectedHumans = Array.from(lobby.players.values()).filter(
       player => !player.isBot && player.ws.readyState === /* OPEN */ 1,
     );
-    lobby.gameplayReady = connectedHumans.length > 0 && connectedHumans.every(
-      player => lobby.gameplayReadySlots!.has(player.slot),
-    );
+    // Bot-only headless simulations have no connected human sockets and
+    // must exercise the same gameplay loops without a browser readiness packet.
+    lobby.gameplayReady = connectedHumans.length === 0
+      ? lobby.players.size > 0 && Array.from(lobby.players.values()).every(player => player.isBot)
+      : connectedHumans.every(player => lobby.gameplayReadySlots!.has(player.slot));
     return lobby.gameplayReady;
   }
 
