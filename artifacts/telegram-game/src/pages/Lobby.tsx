@@ -252,7 +252,7 @@ export default function Lobby() {
   // ── In a room ─────────────────────────────────────────────────────────────
   if (isInRoom) {
     return (
-      <div className="lobby-bg" style={{
+      <div className="lobby-bg au-lobby-scroll" style={{
         minHeight: '100dvh', display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         padding: '24px 20px', position: 'relative', overflow: 'hidden',
@@ -387,7 +387,7 @@ export default function Lobby() {
 
   // ── Main menu (not in room) ───────────────────────────────────────────────
   return (
-    <div className="lobby-bg" style={{
+    <div className="lobby-bg au-lobby-scroll" style={{
       minHeight: '100dvh', display: 'flex', flexDirection: 'column',
       alignItems: 'center', justifyContent: 'center',
       padding: '24px 20px 16px', position: 'relative', overflow: 'hidden',
