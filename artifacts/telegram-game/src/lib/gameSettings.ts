@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 export type JoystickSide = 'left' | 'right';
 export type GameplayControlId =
@@ -155,7 +155,7 @@ export function resetControlLayout(): void {
 export function customControlPositionStyle(
   id: GameplayControlId,
   controlLayout: ControlLayout,
-): Record<string, string> {
+): CSSProperties {
   const point = controlLayout[id];
   if (!point) return {};
   return {
