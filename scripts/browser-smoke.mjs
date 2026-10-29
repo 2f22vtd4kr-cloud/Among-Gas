@@ -489,7 +489,7 @@ try {
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
   assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '112',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '105',
     'the corpse crop must exclude the detached underline rows beneath the cut suit and exposed bone');
   assert.equal(await corpseSprite.getAttribute('data-display-height'), '118',
     'cropping stray pixels must not shrink the corpse display scale');
