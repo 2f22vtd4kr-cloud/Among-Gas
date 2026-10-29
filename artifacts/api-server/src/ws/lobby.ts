@@ -1010,6 +1010,9 @@ export class LobbyManager {
 
   /** Recompute readiness on action/tick boundaries so disconnects cannot stall a round. */
   isGameplayReady(lobby: Lobby): boolean {
+    // Once unlocked, the ready state persists through meetings so chat/votes
+    // continue to work while movement and kills are separately phase-gated.
+    if (lobby.phase === 'MEETING') return lobby.gameplayReady === true;
     return this.refreshGameplayReady(lobby);
   }
 
