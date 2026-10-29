@@ -61,6 +61,7 @@ assert.ok(
     assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes detached underline rows and keeps the source pixels unstretched');
   }
   assert.match(getCharacterClipPath('idle') ?? '', /polygon/, 'idle pose masks stray strokes in the leg gap');
+assert.match(getCharacterClipPath('mask') ?? '', /polygon/, 'impostor role pose masks stray strokes in the leg gap');
   assert.match(getCharacterClipPath('dead-body') ?? '', /polygon/, 'corpse pose masks stray strokes while preserving the bone');
   for (const color of CHARACTER_COLORS) {
     for (const pose of CHARACTER_POSES) {
