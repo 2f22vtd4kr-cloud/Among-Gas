@@ -334,9 +334,9 @@ export default function SettingsDialog({
               position: 'absolute', inset: '0 0 auto', height: '24%', display: 'flex',
               alignItems: 'flex-start', justifyContent: 'space-between', padding: '7px 8px',
               boxSizing: 'border-box', borderBottom: '1px dashed rgba(255,255,255,.25)',
-              color: 'rgba(220,237,239,.5)', font: '10px system-ui, sans-serif', pointerEvents: 'none',
+              color: 'rgba(220,237,239,.5)', font: '8px system-ui, sans-serif', whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              <span>{en ? 'MAP · TASKS · SETTINGS' : 'КАРТА · ЗАДАНИЯ · НАСТРОЙКИ'}</span>
+              <span>{en ? 'MAP · TASKS · SET' : 'КАРТА · ЗАД. · НАСТР.'}</span>
               <span>{en ? 'Fixed' : 'Фиксировано'}</span>
             </div>
             {controlOptions.map(([id, label]) => {
@@ -369,7 +369,7 @@ export default function SettingsDialog({
                   style={{
                     position: 'absolute', left: `${position.x}%`, top: `${Math.max(25, position.y)}%`,
                     transform: 'translate(-50%, -50%)', minWidth: id === 'joystick' ? 54 : 42,
-                    minHeight: id === 'joystick' ? 54 : 36, maxWidth: 94, padding: '5px 7px',
+                    minHeight: id === 'joystick' ? 54 : 36, maxWidth: 72, padding: '5px 5px',
                     borderRadius: id === 'joystick' ? 999 : 9, border: `2px solid ${selected ? '#62e8d8' : 'rgba(200,225,230,.5)'}`,
                     background: selected ? 'rgba(26,130,121,.95)' : 'rgba(17,37,48,.94)',
                     boxShadow: selected ? '0 0 0 3px rgba(98,232,216,.16)' : '0 2px 5px rgba(0,0,0,.28)',
