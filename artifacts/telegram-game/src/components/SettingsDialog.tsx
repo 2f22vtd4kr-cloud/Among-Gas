@@ -71,6 +71,9 @@ const DRAG_SHORT_LABELS: Record<GameplayControlId, string> = {
 const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
   joystick: 52, emergency: 80, taskAction: 100, killReport: 100, sabotage: 42, repair: 100,
 };
+const DRAG_SAFE_HALF_HEIGHT: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
+  joystick: 52, emergency: 24, taskAction: 24, killReport: 40, sabotage: 42, repair: 24,
+};
 
 function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {
   const viewportWidth = typeof window === 'undefined' ? 390 : Math.max(1, window.innerWidth);
@@ -79,6 +82,56 @@ function constrainDragPosition(id: GameplayControlId, position: ControlPosition)
     x: Math.round(Math.max(margin, Math.min(100 - margin, position.x))),
     y: Math.round(Math.max(25, Math.min(95, position.y))),
   };
+}
+
+/** Keep controls apart using their actual gameplay hit-area estimates, while allowing a fallback on tiny screens. */
+function resolveNonOverlappingPosition(
+  id: GameplayControlId,
+  proposed: ControlPosition,
+  layout: ControlLayout,
+  joystickSide: JoystickSide,
+): ControlPosition {
+  const viewportWidth = typeof window === 'undefined' ? 390 : Math.max(1, window.innerWidth);
+  const viewportHeight = typeof window === 'undefined' ? 844 : Math.max(1, window.innerHeight);
+  const others = DRAGGABLE_CONTROL_IDS.filter(other => other !== id);
+  const positionFor = (other: (typeof DRAGGABLE_CONTROL_IDS)[number]) =>
+    layout[other] ?? defaultControlPosition(other, joystickSide);
+
+  const fits = (candidate: ControlPosition) => others.every(other => {
+    const point = positionFor(other);
+    const dx = Math.abs(candidate.x - point.x) * viewportWidth / 100;
+    const dy = Math.abs(candidate.y - point.y) * viewportHeight / 100;
+    const horizontalClearance =
+      DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] +
+      DRAG_SAFE_HALF_WIDTH[other];
+    const verticalClearance =
+      DRAG_SAFE_HALF_HEIGHT[id as keyof typeof DRAG_SAFE_HALF_HEIGHT] +
+      DRAG_SAFE_HALF_HEIGHT[other];
+    return dx >= horizontalClearance || dy >= verticalClearance;
+  });
+
+  const safeProposed = constrainDragPosition(id, proposed);
+  if (fits(safeProposed)) return safeProposed;
+
+  // Search nearest screen-space offsets first. This makes dragging near a
+  // control gently move the selected control to a free spot instead of stacking
+  // hit targets on top of each other.
+  const directions = [
+    [0, -1], [1, 0], [0, 1], [-1, 0],
+    [1, -1], [1, 1], [-1, 1], [-1, -1],
+  ] as const;
+  for (let offsetPx = 8; offsetPx <= 400; offsetPx += 8) {
+    for (const [dx, dy] of directions) {
+      const candidate = constrainDragPosition(id, {
+        x: safeProposed.x + dx * offsetPx / viewportWidth * 100,
+        y: safeProposed.y + dy * offsetPx / viewportHeight * 100,
+      });
+      if (fits(candidate)) return candidate;
+    }
+  }
+  // If the viewport has no feasible free position, retain the clamped choice;
+  // the editor remains usable instead of trapping the control at a random edge.
+  return safeProposed;
 }
 
 const optionStyle = (selected: boolean): CSSProperties => ({
@@ -298,8 +351,8 @@ export default function SettingsDialog({
           </legend>
           <p style={{ margin: '0 0 10px', color: 'rgba(220,237,239,.58)', font: '12px/1.4 system-ui, sans-serif' }}>
             {en
-              ? 'Drag a control to where you want it. Keep controls below the fixed top HUD, then press Save.'
-              : 'Перетащите элемент в нужное место. Оставляйте элементы ниже верхней панели и нажмите «Сохранить».'}
+              ? 'Drag a control to where you want it. Controls move away from each other when space allows; keep them below the fixed top HUD, then press Save.'
+              : 'Перетащите элемент в нужное место. Кнопки стараются не перекрываться; держите их ниже верхней панели и нажмите «Сохранить».'}
           </p>
           <label style={{ display: 'block', marginBottom: 9, color: 'rgba(226,239,241,.8)', font: '12px/1.4 system-ui, sans-serif' }}>
             {en ? 'Selected control' : 'Выбранный элемент'}
@@ -363,7 +416,10 @@ export default function SettingsDialog({
                     if (!dragging || !bounds || bounds.width <= 0 || bounds.height <= 0) return;
                     const x = Math.round(Math.max(5, Math.min(95, ((event.clientX - bounds.left) / bounds.width) * 100)));
                     const y = Math.round(Math.max(25, Math.min(95, ((event.clientY - bounds.top) / bounds.height) * 100)));
-                    setDraftLayout(previous => ({ ...previous, [dragging]: constrainDragPosition(dragging, { x, y }) }));
+                    setDraftLayout(previous => ({
+                      ...previous,
+                      [dragging]: resolveNonOverlappingPosition(dragging, { x, y }, previous, joystickSide),
+                    }));
                   }}
                   onPointerUp={() => { draggingControlRef.current = null; }}
                   onPointerCancel={() => { draggingControlRef.current = null; }}
