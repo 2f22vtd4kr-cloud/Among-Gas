@@ -16,53 +16,46 @@ import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
 import './lobby.css';
 
-// ── Sprite sheet constants (mirrors characterSprites.ts) ─────────────────────
-const SHEET_W = 1123;
-const SHEET_H = 1401;
-const COLS    = 7;
-const ROWS_S  = 9;
-const CELL_W  = SHEET_W / COLS;   // ≈ 160.43
-const CELL_H  = SHEET_H / ROWS_S; // ≈ 155.67
+// All lobby, gameplay, and kill sprites share the same high-resolution vector atlas.
+import {
+  CHARACTER_COLORS,
+  CHARACTER_CELL_WIDTH,
+  CHARACTER_SHEET_WIDTH,
+  CHARACTER_SHEET_HEIGHT,
+  CHARACTER_SHEET_PATH,
+  getCharacterFrameRect,
+  type CharacterColor,
+  type CharacterPose,
+} from '@/game/characterSprites';
 
-const COLOR_COL: Record<string, number> = {
-  teal: 0, maroon: 1, navy: 2, purple: 3, brown: 4, 'dark-gray': 5, magenta: 6,
-};
-const POSE_ROW: Record<string, number> = {
-  idle: 0, 'walk-1': 1, 'walk-2': 2, 'run-lean': 3, ghost: 4,
-  mask: 5, 'hold-item': 6, 'dead-body': 7, 'sit-crouch': 8,
-};
-const SLOT_COLORS = ['teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta'];
+const SLOT_COLORS = CHARACTER_COLORS;
 
-/** One frame of the balaclava sprite sheet via CSS background.
- *  clipBottom trims the ground-shadow row built into the sprite art (~18%).
- */
+/** Render one precisely measured vector-atlas cell. Shadow ellipses are separate game art. */
 function CharSprite({
-  color, pose = 'idle', size = 48, flipped = false, clipBottom = true,
+  color, pose = 'idle', size = 48, flipped = false,
 }: {
-  color: string; pose?: string; size?: number; flipped?: boolean; clipBottom?: boolean;
+  color: CharacterColor; pose?: CharacterPose; size?: number; flipped?: boolean;
 }) {
-  const col    = COLOR_COL[color] ?? 0;
-  const row    = POSE_ROW[pose]   ?? 0;
-  const scale  = size / CELL_W;
-  const sheetW = SHEET_W * scale;
-  const sheetH = SHEET_H * scale;
-  const posX   = -(col * CELL_W * scale);
-  const posY   = -(row * CELL_H * scale);
-  // Clip only the bottommost shadow pixels; an 82% crop cut off the character's feet
-  const height = Math.round(CELL_H * scale * (clipBottom ? 0.94 : 1));
-
+  const frame = getCharacterFrameRect(color, pose);
+  const scale = size / CHARACTER_CELL_WIDTH;
   return (
-    <div className="au-menu-character-sprite" style={{
-      width: size, height,
-      backgroundImage: 'url(/sprites/characters.png?v=4)',
-      backgroundSize: `${sheetW}px ${sheetH}px`,
-      backgroundPosition: `${posX}px ${posY}px`,
-      backgroundRepeat: 'no-repeat',
-      imageRendering: 'pixelated',
-      transform: flipped ? 'scaleX(-1)' : undefined,
-      flexShrink: 0,
-      overflow: 'hidden',
-    }} />
+    <div
+      className="au-menu-character-sprite"
+      data-pose={pose}
+      data-sprite-row={frame.row}
+      style={{
+        width: size,
+        height: frame.height * scale,
+        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+        backgroundSize: `${CHARACTER_SHEET_WIDTH * scale}px ${CHARACTER_SHEET_HEIGHT * scale}px`,
+        backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
+        backgroundRepeat: 'no-repeat',
+        imageRendering: 'auto',
+        transform: flipped ? 'scaleX(-1)' : undefined,
+        flexShrink: 0,
+        overflow: 'hidden',
+      }}
+    />
   );
 }
 
@@ -137,7 +130,11 @@ function TitleBlock({ language, onSettingsClick }: {
   language: AppLanguage; onSettingsClick: () => void;
 }) {
   return (
-    <div style={{ textAlign: 'center', position: 'relative', zIndex: 1, marginBottom: 18, paddingTop: 62 }}>
+    <div style={{
+      width: 'min(100%, 340px)', boxSizing: 'border-box',
+      textAlign: 'center', position: 'relative', zIndex: 1,
+      marginBottom: 18, paddingTop: 'calc(env(safe-area-inset-top, 0px) + 50px)',
+    }}>
       <div style={{ position: 'absolute', right: 0, top: 0 }}>
         <SettingsButton
           label={language === 'en' ? 'Settings' : 'Настройки'}
@@ -146,8 +143,8 @@ function TitleBlock({ language, onSettingsClick }: {
       </div>
       <h1 className="ag-title" style={{ marginBottom: 8 }}>Among Gas</h1>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 22, minHeight: 62 }}>
-        <CharSprite color="teal" pose="walk-1" size={52} clipBottom={false} />
-        <CharSprite color="maroon" pose="walk-1" size={52} flipped clipBottom={false} />
+        <CharSprite color="teal" pose="walk-1" size={52} />
+        <CharSprite color="maroon" pose="walk-1" size={52} flipped />
       </div>
     </div>
   );
