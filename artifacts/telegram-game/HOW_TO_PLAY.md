@@ -2,7 +2,7 @@
 
 Among Gas keeps its own balaclava characters and custom gas-station map. The rules are inspired by the social-deduction format of Among Us, but task locations and some actions are specific to this map.
 
-![Among Gas gameplay screenshot](../../screenshots/game_current.jpg)
+![Among Gas gameplay on a phone](screenshots/gameplay-small-portrait.webp)
 
 ## The goal
 
@@ -36,7 +36,7 @@ Among Gas keeps its own balaclava characters and custom gas-station map. The rul
 
 ## Map and controls
 
-![Among Gas map and visual reference](../../screenshots/game_outline_fix.jpg)
+![Among Gas desktop gameplay](screenshots/gameplay-desktop.webp)
 
 - Use **Map** to open or close the map overlay. Close it to return to movement.
 - Use **Tasks** to show or hide your task list.
@@ -44,11 +44,13 @@ Among Gas keeps its own balaclava characters and custom gas-station map. The rul
 - To arrange controls on a touch device, drag each control in the preview area, keep it below the fixed top HUD, then choose **Save positions**. Use **Reset** to return to the defaults.
 - Settings are saved on the device when browser storage is available.
 
+![Settings and drag-to-place control editor](screenshots/settings-default.webp)
+
 ## Meetings and chat
 
 When a body is reported or an emergency meeting is called, normal movement and gameplay actions pause for the meeting. First comes **Discussion**, when players can chat; then **Voting**, when votes are accepted. Use the countdown to see which phase is active. The meeting closes when its server-controlled timer and vote flow finish.
 
-Bots can now post short, position-aware discussion messages and cast votes. Their statements are simple local heuristics, not a connected large language model, so treat them as clues rather than proof.
+Bots post short discussion messages based on the meeting type and their assigned role, and cast votes only when voting opens. They do not have a history of witnessed player movements, so they avoid making location-based accusations. Their statements are simple local heuristics, not a connected large language model, so treat them as conversation starters rather than proof.
 
 ## Quick troubleshooting
 
