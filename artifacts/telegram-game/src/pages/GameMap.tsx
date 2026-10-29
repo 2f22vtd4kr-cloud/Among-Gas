@@ -779,7 +779,8 @@ export default function GameMap() {
       setLoaded(true);
     };
     img.onerror = () => { if (!cancelled) setError(true); };
-    img.src = `${import.meta.env.BASE_URL}map-hires.png`;
+    // Prefer the smaller WebP map asset on mobile; the PNG remains in the repo for compatibility and editing.
+    img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
     if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
