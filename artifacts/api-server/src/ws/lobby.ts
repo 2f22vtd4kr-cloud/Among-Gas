@@ -430,6 +430,8 @@ export class LobbyManager {
   private _eventListener: ((event: LobbyEvent) => void) | null = null;
   /** Per-user rate limit for meeting chat, matching the base clone's 500ms cap. */
   private _chatLastSentAt = new Map<number, number>();
+  /** Socket identities retired by a successful session transition. */
+  private _supersededSockets = new WeakSet<WebSocket>();
 
   /** Install (or clear, with null) a listener for structured lifecycle events. */
   setEventListener(fn: ((event: LobbyEvent) => void) | null): void {
@@ -497,6 +499,11 @@ export class LobbyManager {
     if (!lobby) return true; // authenticated connection not yet assigned to a room
     const slot = lobby.userIdToSlot.get(tgUserId);
     return slot !== undefined && lobby.players.get(slot)?.ws === ws;
+  }
+
+  /** True only for an old socket explicitly retired during session replacement. */
+  isSupersededSocket(ws: WebSocket): boolean {
+    return this._supersededSockets.has(ws);
   }
 
   // ── Bot slot management ──────────────────────────────────────────────────
@@ -724,8 +731,13 @@ export class LobbyManager {
     const remainingLobby = this.removePlayer(tgUserId, previousWs);
     if (remainingLobby) this.broadcastRoomUpdate(remainingLobby);
 
-    if (previousWs && previousWs !== replacementWs && previousWs.readyState === 1) {
-      previousWs.close(1000, 'Replaced by a newer session');
+    if (previousWs && previousWs !== replacementWs) {
+      // Mark before close(): already-queued message events must not act as the
+      // same Telegram user after the replacement socket takes over.
+      this._supersededSockets.add(previousWs);
+      if (previousWs.readyState === 1) {
+        previousWs.close(1000, 'Replaced by a newer session');
+      }
     }
   }
 
@@ -811,8 +823,11 @@ export class LobbyManager {
       const previousWs = existing.ws;
       existing.ws = ws;
       this.userToLobbyMap.set(tgUserId, lobby.code);
-      if (previousWs !== ws && previousWs.readyState === 1) {
-        previousWs.close(1000, 'Replaced by a newer session');
+      if (previousWs !== ws) {
+        this._supersededSockets.add(previousWs);
+        if (previousWs.readyState === 1) {
+          previousWs.close(1000, 'Replaced by a newer session');
+        }
       }
       logger.info(`[Lobby] Rejoin ${lobby.code} — ${username} (slot=${slot})`);
       return lobby;
