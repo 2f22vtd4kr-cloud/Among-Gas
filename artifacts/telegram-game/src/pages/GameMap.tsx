@@ -653,10 +653,15 @@ export default function GameMap() {
     const dpr = getRenderDpr();
     const w = window.innerWidth;
     const h = window.innerHeight;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    canvas.style.width  = `${w}px`;
-    canvas.style.height = `${h}px`;
+    const pixelWidth = Math.round(w * dpr);
+    const pixelHeight = Math.round(h * dpr);
+    // Assigning canvas.width/height clears the entire backing store even when
+    // dimensions are unchanged. Mobile browsers can emit resize bursts while
+    // the joystick is dragged; avoid needless resets that look like camera jumps.
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    if (canvas.style.width !== `${w}px`) canvas.style.width = `${w}px`;
+    if (canvas.style.height !== `${h}px`) canvas.style.height = `${h}px`;
   }, []);
 
   useEffect(() => {
@@ -1366,7 +1371,7 @@ export default function GameMap() {
   return (
     <div
       onPointerDown={unlockSfx}
-      style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', overscrollBehavior: 'none', touchAction: 'none', background: '#3d4e5e' }}
     >
       {killAnimation && (
         <div
