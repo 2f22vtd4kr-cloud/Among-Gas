@@ -194,7 +194,8 @@ assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 10Hz tick rate');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
-assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, shadowGrid\)/, 'GameMap must apply the shadow grid to vision without changing movement collision');
+assert.match(gameMapSource, /const smoothShadowGrid = buildSmoothShadowGrid\(shadowGrid\)/, 'GameMap must build a higher-resolution visual occlusion mask');
+assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, smoothShadowGrid\)/, 'GameMap must use smoothed vision geometry without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
