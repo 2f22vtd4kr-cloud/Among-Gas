@@ -175,6 +175,7 @@ export default function SettingsDialog({
   const { joystickSide, controlLayout } = useGameSettings();
   const [selectedControl, setSelectedControl] = useState<GameplayControlId>('joystick');
   const [draftLayout, setDraftLayout] = useState<ControlLayout>({});
+  const [isLandscapePreview, setIsLandscapePreview] = useState(() => typeof window !== 'undefined' && window.innerWidth > window.innerHeight);
   const previewRef = useRef<HTMLDivElement>(null);
   const draggingControlRef = useRef<GameplayControlId | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -185,6 +186,14 @@ export default function SettingsDialog({
   const controlOptions = DRAGGABLE_CONTROL_IDS.map(id => [id, CONTROL_LABELS[id]] as [GameplayControlId, { en: string; ru: string }]);
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+    const updateOrientation = () => setIsLandscapePreview(window.innerWidth > window.innerHeight);
+    updateOrientation();
+    window.addEventListener('resize', updateOrientation);
+    return () => window.removeEventListener('resize', updateOrientation);
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -386,7 +395,10 @@ export default function SettingsDialog({
             data-testid="control-layout-preview"
             aria-label={en ? 'Drag controls in this preview' : 'Перетаскивайте элементы в этой области'}
             style={{
-              position: 'relative', width: 'min(100%, 150px)', aspectRatio: '390 / 844', maxHeight: 300,
+              position: 'relative',
+              width: isLandscapePreview ? 'min(100%, 300px)' : 'min(100%, 150px)',
+              aspectRatio: isLandscapePreview ? '844 / 390' : '390 / 844',
+              maxHeight: isLandscapePreview ? 160 : 300,
               margin: '0 auto 12px', overflow: 'hidden', borderRadius: 13, border: '1px solid rgba(167,193,203,.3)',
               background: 'linear-gradient(180deg, rgba(10,22,31,.98), rgba(17,48,55,.94))',
               touchAction: 'none', userSelect: 'none', marginBottom: 12,
