@@ -270,7 +270,14 @@ try {
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
+  const chatTextbox = page.getByRole('textbox', { name: 'Сообщение в обсуждении' });
+  await chatTextbox.waitFor({ state: 'visible' });
+  await chatTextbox.focus();
+  const typedMessage = 'wasd WASD qwerty 123';
+  await page.keyboard.type(typedMessage);
+  assert.equal(await chatTextbox.inputValue(), typedMessage,
+    'keyboard movement bindings must never prevent W/A/S/D or other letters in chat input');
+  await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
   await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
@@ -339,9 +346,9 @@ try {
     'the corpse must render from one isolated atlas pose, not synthesized layers');
   assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
-  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '2100',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '300',
     'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
