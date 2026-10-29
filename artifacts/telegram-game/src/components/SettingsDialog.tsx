@@ -65,6 +65,18 @@ export function SettingsButton({
 }
 
 const DRAGGABLE_CONTROL_IDS: GameplayControlId[] = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'];
+const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
+  joystick: 52, emergency: 80, taskAction: 100, killReport: 100, sabotage: 42, repair: 100,
+};
+
+function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {
+  const viewportWidth = typeof window === 'undefined' ? 390 : Math.max(1, window.innerWidth);
+  const margin = (DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] ?? 22) / viewportWidth * 100;
+  return {
+    x: Math.round(Math.max(margin, Math.min(100 - margin, position.x))),
+    y: Math.round(Math.max(25, Math.min(95, position.y))),
+  };
+}
 
 const optionStyle = (selected: boolean): CSSProperties => ({
   minHeight: 54,
@@ -114,7 +126,7 @@ export default function SettingsDialog({
     const draft: ControlLayout = {};
     DRAGGABLE_CONTROL_IDS.forEach(id => {
       const position = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
-      draft[id] = { x: position.x, y: Math.max(25, position.y) };
+      draft[id] = constrainDragPosition(id, position);
     });
     setDraftLayout(draft);
     draggingControlRef.current = null;
@@ -346,7 +358,7 @@ export default function SettingsDialog({
                     if (!dragging || !bounds || bounds.width <= 0 || bounds.height <= 0) return;
                     const x = Math.round(Math.max(5, Math.min(95, ((event.clientX - bounds.left) / bounds.width) * 100)));
                     const y = Math.round(Math.max(25, Math.min(95, ((event.clientY - bounds.top) / bounds.height) * 100)));
-                    setDraftLayout(previous => ({ ...previous, [dragging]: { x, y } as ControlPosition }));
+                    setDraftLayout(previous => ({ ...previous, [dragging]: constrainDragPosition(dragging, { x, y }) }));
                   }}
                   onPointerUp={() => { draggingControlRef.current = null; }}
                   onPointerCancel={() => { draggingControlRef.current = null; }}
@@ -374,7 +386,7 @@ export default function SettingsDialog({
               onClick={() => {
                 resetControlLayout();
                 const defaults: ControlLayout = {};
-                controlOptions.forEach(([id]) => { const point = defaultControlPosition(id, joystickSide); defaults[id] = { x: point.x, y: Math.max(25, point.y) }; });
+                controlOptions.forEach(([id]) => { const point = defaultControlPosition(id, joystickSide); defaults[id] = constrainDragPosition(id, point); });
                 setDraftLayout(defaults);
               }}
               style={{
@@ -390,7 +402,7 @@ export default function SettingsDialog({
               type="button"
               data-testid="control-layout-save"
               onClick={() => {
-                controlOptions.forEach(([id]) => { const point = draftLayout[id] ?? defaultControlPosition(id, joystickSide); setControlPosition(id, { x: point.x, y: Math.max(25, point.y) }); });
+                controlOptions.forEach(([id]) => { const point = draftLayout[id] ?? defaultControlPosition(id, joystickSide); setControlPosition(id, constrainDragPosition(id, point)); });
                 onClose();
               }}
               style={{
