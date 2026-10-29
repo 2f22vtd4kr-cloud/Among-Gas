@@ -741,6 +741,52 @@ try {
   }
   await landscapePage.close();
 
+  // A compact portrait viewport must keep the preview proportional and all
+  // controls within bounds without overlap.
+  const smallPhonePage = await browser.newPage({
+    viewport: { width: 320, height: 568 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  smallPhonePage.on('pageerror', error => failures.push(error.message));
+  await smallPhonePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await smallPhonePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await smallPhonePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
+  const smallPhoneSettings = smallPhonePage.locator('[role="dialog"]');
+  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const smallPhonePreview = smallPhoneSettings.getByTestId('control-layout-preview');
+  const smallPhonePreviewBox = await smallPhonePreview.boundingBox();
+  const smallPhoneFixedHud = await smallPhoneSettings.getByTestId('control-layout-fixed-hud').boundingBox();
+  assert.ok(smallPhonePreviewBox && smallPhoneFixedHud, 'small-phone control preview and fixed HUD are visible');
+  assert.ok(Math.abs(smallPhonePreviewBox.width / smallPhonePreviewBox.height - 320 / 568) < 0.03,
+    'small-phone control preview must preserve the actual viewport aspect ratio');
+  const smallPhoneControls = await smallPhonePreview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < smallPhoneControls.length; i++) {
+    const control = smallPhoneControls[i];
+    assert.ok(control.left >= smallPhonePreviewBox.x - 1 && control.right <= smallPhonePreviewBox.x + smallPhonePreviewBox.width + 1,
+      `small-phone control must stay within horizontal bounds: ${control.id}`);
+    assert.ok(control.top >= smallPhoneFixedHud.y + smallPhoneFixedHud.height - 1 &&
+      control.bottom <= smallPhonePreviewBox.y + smallPhonePreviewBox.height + 1,
+      `small-phone control must stay below the fixed HUD and above the bottom edge: ${control.id}`);
+    for (let j = i + 1; j < smallPhoneControls.length; j++) {
+      const other = smallPhoneControls[j];
+      const overlaps = control.left < other.right && control.right > other.left &&
+        control.top < other.bottom && control.bottom > other.top;
+      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${control.id} / ${other.id}`);
+    }
+  }
+  await smallPhonePage.close();
+
   // Exercise real mobile touch/pointer delivery, including pointer capture,
   // instead of relying on mouse events for a touch-first control editor.
   const touchSession = await page.context().newCDPSession(page);
