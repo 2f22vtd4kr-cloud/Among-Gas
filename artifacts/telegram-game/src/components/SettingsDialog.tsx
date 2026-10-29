@@ -3,7 +3,6 @@ import { useLanguage } from '../lib/language';
 import {
   CONTROL_LABELS,
   defaultControlPosition,
-  resetControlLayout,
   setControlPosition,
   setJoystickSide,
   useGameSettings,
@@ -388,7 +387,6 @@ export default function SettingsDialog({
               type="button"
               data-testid="control-layout-reset"
               onClick={() => {
-                resetControlLayout();
                 const defaults: ControlLayout = {};
                 controlOptions.forEach(([id]) => { const point = defaultControlPosition(id, joystickSide); defaults[id] = constrainDragPosition(id, point); });
                 setDraftLayout(defaults);
@@ -400,7 +398,20 @@ export default function SettingsDialog({
                 fontWeight: 700, cursor: 'pointer',
               }}
             >
-              {en ? 'Reset' : 'Сбросить'}
+              {en ? 'Reset preview' : 'Сбросить просмотр'}
+            </button>
+            <button
+              type="button"
+              data-testid="control-layout-cancel"
+              onClick={onClose}
+              style={{
+                flex: 1, minHeight: 42, padding: '8px 10px', borderRadius: 10,
+                border: '1px solid rgba(167,193,203,.22)', background: 'rgba(5,15,23,.5)',
+                color: 'rgba(226,238,241,.85)', fontFamily: 'inherit', fontSize: 12,
+                fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Cancel' : 'Отмена'}
             </button>
             <button
               type="button"
@@ -410,7 +421,7 @@ export default function SettingsDialog({
                 onClose();
               }}
               style={{
-                flex: 2, minHeight: 42, padding: '8px 12px', borderRadius: 10,
+                flex: 1.3, minHeight: 42, padding: '8px 8px', borderRadius: 10,
                 border: '1px solid rgba(91,221,205,.9)', background: 'linear-gradient(180deg, #208e83, #155c59)',
                 color: '#f2fffd', fontFamily: 'inherit', fontSize: 13, fontWeight: 800, cursor: 'pointer',
               }}
