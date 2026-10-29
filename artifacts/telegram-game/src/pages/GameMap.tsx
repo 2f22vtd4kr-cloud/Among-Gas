@@ -1726,7 +1726,7 @@ export default function GameMap() {
                 display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
                 background: showTaskList ? 'rgba(106,79,18,0.96)' : 'rgba(10,22,34,0.92)',
                 border: '1px solid rgba(241,196,15,0.62)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
-                fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap', backdropFilter: 'blur(8px)',
+                fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
                 touchAction: 'manipulation',
               }}
             >
