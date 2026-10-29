@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
-import { useGameSettings } from '../lib/gameSettings';
+import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { useLanguage } from '../lib/language';
 
 const BASE_RADIUS = 52;
@@ -13,7 +13,7 @@ interface JoystickProps {
 }
 
 export default function Joystick({ keysRef }: JoystickProps) {
-  const { joystickSide } = useGameSettings();
+  const { joystickSide, controlLayout } = useGameSettings();
   const { language } = useLanguage();
   const baseRef = useRef<HTMLDivElement>(null);
   const knobRef = useRef<HTMLDivElement>(null);
@@ -114,6 +114,7 @@ export default function Joystick({ keysRef }: JoystickProps) {
         bottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
         left: joystickSide === 'left' ? 'max(24px, env(safe-area-inset-left, 0px))' : 'auto',
         right: joystickSide === 'right' ? 'max(24px, env(safe-area-inset-right, 0px))' : 'auto',
+        ...customControlPositionStyle('joystick', controlLayout),
         width: BASE_RADIUS * 2,
         height: BASE_RADIUS * 2,
         borderRadius: '50%',

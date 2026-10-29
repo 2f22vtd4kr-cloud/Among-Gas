@@ -62,6 +62,12 @@ try {
   await page.getByRole('button', { name: 'Настройки' }).click();
   await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   const lobbySettings = page.locator('[role="dialog"]');
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-reset',
+    'Settings must keep reverse keyboard navigation inside the modal');
+  await page.keyboard.press('Tab');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть настройки',
+    'Settings must wrap forward keyboard navigation back to its first focus target');
   assert.equal(await lobbySettings.getByTestId('joystick-side-right').getAttribute('aria-pressed'), 'true',
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
@@ -79,8 +85,52 @@ try {
     }),
   );
   assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
-  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.88,
-    `menu characters must not be vertically cropped (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
+  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.80,
+    `original pose crops must retain a substantial visible silhouette (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
+
+  // Protect the recognizable balaclava identity at source-pixel level, not just suit color.
+  const balaclavaFacePixels = await page.evaluate(async () => {
+    const sprite = new Image();
+    sprite.src = `/sprites/characters.png?identity-check=${Date.now()}`;
+    await sprite.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = sprite.naturalWidth;
+    canvas.height = sprite.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not inspect original character atlas pixels');
+    context.drawImage(sprite, 0, 0);
+
+    const darkRatio = (box) => {
+      const pixels = context.getImageData(box.x, box.y, box.width, box.height).data;
+      let opaque = 0;
+      let dark = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const [r, g, b, alpha] = pixels.slice(i, i + 4);
+        if (alpha <= 200) continue;
+        opaque++;
+        if (Math.max(r, g, b) < 45) dark++;
+      }
+      return opaque ? dark / opaque : 0;
+    };
+
+    return {
+      width: sprite.naturalWidth,
+      height: sprite.naturalHeight,
+      leftEye: darkRatio({ x: 78, y: 48, width: 16, height: 14 }),
+      rightEye: darkRatio({ x: 109, y: 46, width: 16, height: 15 }),
+      eyeBridge: darkRatio({ x: 96, y: 47, width: 11, height: 14 }),
+      maskFabric: darkRatio({ x: 57, y: 43, width: 10, height: 15 }),
+    };
+  });
+  assert.equal(balaclavaFacePixels.width, 1123, 'legacy balaclava atlas width must remain measured');
+  assert.equal(balaclavaFacePixels.height, 1401, 'legacy balaclava atlas height must remain measured');
+  assert.ok(balaclavaFacePixels.leftEye > 0.85, 'the left black eye opening must remain visible in the balaclava');
+  assert.ok(balaclavaFacePixels.rightEye > 0.80, 'the separate right black eye opening must remain visible in the balaclava');
+  assert.ok(
+    balaclavaFacePixels.eyeBridge < Math.min(balaclavaFacePixels.leftEye, balaclavaFacePixels.rightEye) * 0.5,
+    'the two eye openings must remain visually separate rather than becoming one continuous visor',
+  );
+  assert.ok(balaclavaFacePixels.maskFabric < 0.10, 'the eye apertures must not consume the striped mask fabric');
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
 
@@ -150,10 +200,11 @@ try {
   const hudSelectors = [
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
-    page.getByRole('button', { name: /Покинуть матч/ }),
     page.getByRole('button', { name: /тревога/i }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
+  assert.equal(await page.getByRole('button', { name: 'Покинуть матч' }).count(), 0,
+    'Leave Match must not occupy a permanent, high-emphasis gameplay HUD slot');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
   assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
   for (let i = 0; i < hudBoxes.length; i++) {
@@ -168,13 +219,17 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
 
-  // Leaving a live match is explicit and cancellable before it disconnects.
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  // Leaving is discoverable inside Settings, not permanently rendered over gameplay.
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const settingsWithLeave = page.getByRole('dialog', { name: 'Настройки' });
+  await settingsWithLeave.waitFor({ state: 'visible' });
+  await settingsWithLeave.getByTestId('settings-leave-match').click();
   const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
   await leaveDialog.waitFor({ state: 'visible' });
   await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
   await leaveDialog.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('dialog', { name: 'Настройки' }).getByTestId('settings-leave-match').click();
   await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
   // Return to a predictable fixture for the rest of the visual smoke suite.
@@ -257,6 +312,14 @@ try {
   assert.deepEqual(after, before, 'the player must not move behind the open tactical map');
   await mapDialog.getByRole('button', { name: 'Закрыть карту' }).click();
   await mapDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: /КАРТА/ }).click();
+  await mapDialog.waitFor({ state: 'visible' });
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть карту',
+    'opening the tactical map must move focus into the dialog');
+  await page.keyboard.press('Escape');
+  await mapDialog.waitFor({ state: 'hidden' });
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-expanded')), 'false',
+    'closing the tactical map must restore focus to its trigger');
 
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
@@ -418,10 +481,10 @@ try {
     'the corpse must render from one isolated atlas pose, not synthesized layers');
   assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
-  assert.equal(await corpseSprite.getAttribute('data-source-y'), '2100',
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '300',
-    'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
+    'the legacy PNG crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
@@ -434,6 +497,13 @@ try {
     0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation',
   );
+
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.getByRole('alert', { name: 'Анимация убийства' }).waitFor({ state: 'visible', timeout: 5_000 });
+  await page.getByRole('alert', { name: 'Анимация убийства' }).waitFor({ state: 'hidden', timeout: 1_000 });
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
 
   // Inspect the post-death ghost presentation as well as the transient kill sequence.
   await page.goto(`${origin}/?mock=ghost`, { waitUntil: 'domcontentloaded' });
@@ -556,6 +626,61 @@ try {
       fullPage: true,
     });
   }
+  // Per-control layout is adjustable, saved, applied to gameplay, and resettable.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector('canvas');
+    return !!canvas &&
+      canvas.style.width === window.innerWidth + 'px' &&
+      canvas.style.height === window.innerHeight + 'px';
+  }, undefined, { timeout: 3_000 });
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const layoutSettings = page.locator('[role="dialog"]');
+  await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
+  const layoutX = layoutSettings.getByTestId('control-layout-x');
+  const layoutY = layoutSettings.getByTestId('control-layout-y');
+  await layoutX.focus();
+  for (let i = 0; i < 5; i++) await layoutX.press('ArrowLeft');
+  await layoutY.focus();
+  for (let i = 0; i < 6; i++) await layoutY.press('ArrowRight');
+  assert.equal(await layoutX.inputValue(), '88', 'custom control X setting must be adjustable');
+  assert.equal(await layoutY.inputValue(), '12', 'custom control Y setting must be adjustable');
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  const movedSettingsBox = await page.getByRole('button', { name: 'Настройки' }).boundingBox();
+  assert.ok(movedSettingsBox, 'settings control remains available at its saved custom position');
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 2,
+    'saved settings X position must be applied to the gameplay HUD');
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.12) < 2,
+    'saved settings Y position must be applied to the gameplay HUD');
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+
+  // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'amongGas.settings' || key === 'amongGas.language') {
+        throw new DOMException('Blocked by test', 'QuotaExceededError');
+      }
+      return setItem.call(this, key, value);
+    };
+  });
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const restrictedSettings = page.locator('[role="dialog"]');
+  await restrictedSettings.getByRole('button', { name: 'English' }).click();
+  await restrictedSettings.getByTestId('joystick-side-left').click();
+  assert.equal(await restrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'in-memory joystick choice must update even if localStorage writes fail');
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const reopenedRestrictedSettings = page.getByRole('dialog', { name: 'Settings' });
+  assert.equal(await reopenedRestrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'in-memory joystick choice must stay in sync across mounted UI');
+  await reopenedRestrictedSettings.getByRole('button', { name: 'English' }).waitFor({ state: 'visible' });
+  await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
+
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({

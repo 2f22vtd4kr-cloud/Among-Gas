@@ -11,12 +11,12 @@ import { useState, useEffect } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
 import { useLocation } from 'wouter';
 import { haptic } from '@/lib/haptics';
-import { sfx, startMenuMusic, stopMenuMusic } from '@/lib/sfx';
+import { sfx, startMenuMusic, stopMenuMusic, unlockSfx } from '@/lib/sfx';
 import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
 import './lobby.css';
 
-// All lobby, gameplay, and kill sprites share the same high-resolution vector atlas.
+// Lobby, gameplay, and kill sprites share the original measured balaclava PNG atlas.
 import {
   CHARACTER_COLORS,
   CHARACTER_CELL_WIDTH,
@@ -30,7 +30,7 @@ import {
 
 const SLOT_COLORS = CHARACTER_COLORS;
 
-/** Render one precisely measured vector-atlas cell. Shadow ellipses are separate game art. */
+/** Render one measured original sprite pose. Ground shadows remain separate game art. */
 function CharSprite({
   color, pose = 'idle', size = 48, flipped = false,
 }: {
@@ -50,7 +50,7 @@ function CharSprite({
         backgroundSize: `${CHARACTER_SHEET_WIDTH * scale}px ${CHARACTER_SHEET_HEIGHT * scale}px`,
         backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
         backgroundRepeat: 'no-repeat',
-        imageRendering: 'auto',
+        imageRendering: 'pixelated',
         transform: flipped ? 'scaleX(-1)' : undefined,
         flexShrink: 0,
         overflow: 'hidden',
@@ -165,6 +165,7 @@ export default function Lobby() {
   useEffect(() => {
     const unlock = () => {
       startMenuMusic();
+      unlockSfx();
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
     };

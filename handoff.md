@@ -1623,3 +1623,58 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Branch: `fix/mobile-movement-chat-sprites-ui`.
 - PR: #23. Duplicate PR #24 is closed.
 - No runtime configuration, secrets, or deployment were changed.
+
+### 2026-10-29 — Follow-up audit and repair PR #25
+
+**Verified starting state**
+- Confirmed live `main` was `bc3c51d6609f18bc7bce7bd694831d8dfbcc4d0c`, the merge commit for PR #23.
+- Created isolated branch `fix/gameplay-visual-fidelity-audit` and opened PR #25: https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/25.
+- No Replit environment or deployment was changed.
+
+**Implemented in the follow-up**
+- Restored the previous `characters.png` atlas path, original nine pose definitions, and measured crop windows from Git history. The runtime loader no longer selects the newer visor-style SVG atlas. Cache URL bumped to force WebView refresh.
+- Moved Leave Match out of the permanent gameplay HUD into the in-game Settings dialog; the confirmation flow remains intact. Settings, Leave, and tactical-map dialogs now trap focus, support Escape where appropriate, and restore focus to their trigger.
+- Added per-control viewport-relative positioning preferences for joystick, map, task list, Settings, emergency, task action, kill/report, sabotage, and repair controls. Positions save automatically and are clamped to estimated control dimensions and safe-area insets; a reset action restores defaults.
+- Made language and joystick preferences continue working in the current session if WebView localStorage writes fail.
+- Added conservative smoothing of vision polygons: it may shrink rays at discontinuities but never extends visibility beyond the original collision-derived hit. Movement still uses the unmodified collision grid.
+- Predecode the existing kill sound after the first trusted menu/game gesture and use a decoded Web Audio buffer for later kill events when ready. A real device is still required to measure actual output latency.
+- Reduced the blocking kill overlay to a short 150 ms hold when the user requests reduced motion.
+- Improved narrow-screen lobby button geometry and added browser regression coverage for the new flows.
+
+**Verification state**
+- `node scripts/verify-map-mechanics.mjs`, `scripts/test-visibility.ts`, and `scripts/test-player-movement.ts` passed on CI run #311.
+- That run then failed in the TypeScript/JSX build because custom style spreads had been inserted outside several JSX style objects. The syntax was repaired on the branch; the subsequent CI run is the merge gate. Do not treat the failed run as validation or merge until a later run passes every required step.
+- The remaining unresolved physical-device requirements are camera/player jitter under real iOS Safari/Telegram WebView, audio output latency on iOS/Android, and full visual review of CI screenshots at native gameplay scale.
+- The original Among Us client collision algorithm remains unavailable for direct source verification. Keep Among Gas movement collision authoritative and separate from visual shadow smoothing; do not claim the original internal algorithm was replicated.
+- A Vercel bot reported its optional deployment preview was rate-limited by the provider. This patch has not attempted to redeploy or alter Vercel configuration.
+
+**Next actions**
+- Inspect the latest PR #25 CI run, fix any remaining failures, and rerun until the exact head commit passes build, gameplay, WebSocket, auth, browser, and simulation checks.
+- Inspect the freshly uploaded visual-QA screenshots for Settings, restored balaclava sprites, kill/corpse composition, HUD placement, and vision shadows. Merge only after review and green CI.
+- Continue the larger audit after this focused repair: audio volume preferences, repeated collision/camera probes under latency and orientation changes, stronger character-identity screenshot assertions, and physical iOS/Android Telegram WebView testing.
+
+
+### 2026-10-29 — Final verification for PR #25
+
+**Verified exact revision**
+- PR #25 head `d62bfb78cf85f26430fc67c9024cc3fd4a557aa1` passed GitHub Actions run #316 (`40871633905`).
+- All CI steps succeeded: map mechanics, visibility/shadow tests, thin-wall movement regression, production TypeScript/build, game invariants, Telegram HMAC authentication, live WebSocket lobby and sabotage authorization, mobile Playwright browser smoke, screenshot artifact upload, and 100-game headless multiplayer simulation.
+- Simulation result: 100 games, 0 timeouts, 60 crewmate wins, 40 impostor wins, 52.1s average match duration, 4m53s wall-clock.
+- The run's visual-QA artifact is `among-gas-visual-qa` (artifact ID `12896157882`); the production static build artifact is `telegram-game-static-build` (artifact ID `12895324773`). The lobby, Settings, portrait gameplay, lights-vision, corpse/report, and kill-scene screenshots were opened and inspected.
+- The browser smoke's sprite-crop geometry threshold is kept above 0.80: the measured legacy walk pose is naturally shorter than the SVG atlas cell, but a severely clipped/collapsed menu sprite must still fail the visual geometry check.
+
+**Remaining limitations**
+- No physical iPhone/Android Telegram WebView was available. Camera jitter and audible output latency therefore remain unverified on real hardware, despite the automated test pass and mobile Chromium coverage.
+- The kill-audio change primes a decoded buffer after a trusted gesture; only real-device measurement can conclusively verify the report of event-to-audible-output delay.
+- The public original Among Us client collision implementation is not available for direct source comparison. Among Gas's gameplay collision remains unchanged by visual shadow smoothing.
+- Settings still do not offer separate master/music/effects volume sliders (identified as a P3 product gap in this audit). Architecture refactoring of the large `GameMap.tsx` and deeper combined-state HUD tests remain follow-up work.
+
+
+### 2026-10-29 — Final validation after balaclava pixel-identity regression checks
+
+- Final pre-documentation source/test head: `9e417f6b1f789ea1f8bb2763af1df4c44a72446f`.
+- GitHub Actions run #326 (`40873859815`) passed every step on that exact head, including the added PNG/eye-opening identity guard, production build, map/visibility tests, gameplay invariants, Telegram HMAC authentication, live WebSocket lobby/sabotage/session replacement, browser smoke, QA screenshot upload, and multiplayer simulation.
+- Final simulation summary: 100 matches, 0 timeouts, 70 crew wins, 30 impostor wins, mean duration 43.2 seconds, 14 average tasks completed, 1.1 kills/game, and 3m34s total wall-clock.
+- Final QA screenshots and built static client are available from run #326: https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/40873859815. Artifacts: `among-gas-visual-qa` ID `12896534266`; `telegram-game-static-build` ID `12896519573`.
+- The screenshot artifact was extracted and inspected: the lobby Settings gear is centered at native touch size; the restored character atlas shows the original separate eye openings and striped face; the victim strike scene retains the standing attack pose; the corpse still has the exposed bone; and the portrait HUD shows no permanent Leave Match control.
+- The next commit only updates this handoff log; source and test code is unchanged from the passing #326 head. GitHub Actions is rerun for the exact final commit before merge.

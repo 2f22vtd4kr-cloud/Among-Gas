@@ -102,6 +102,43 @@ export function computeVisibilityPolygon(
 }
 
 /**
+ * Smooth visual occlusion only by locally averaging ray distances. A smoothed
+ * ray is never allowed to extend beyond its original hit distance, so this can
+ * round stair-step silhouettes without opening new lines of sight through walls.
+ * The movement grid and the visibility ray hits remain unchanged.
+ */
+export function smoothVisibilityPolygon(
+  points: readonly VisionPoint[],
+  origin: VisionPoint,
+  windowRadius = 3,
+): VisionPoint[] {
+  if (points.length < 3 || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) {
+    return [...points];
+  }
+  const radius = Math.max(1, Math.min(8, Math.floor(windowRadius)));
+  const distances = points.map(point => Math.hypot(point.x - origin.x, point.y - origin.y));
+
+  return points.map((point, index) => {
+    const distance = distances[index];
+    if (distance <= 0) return point;
+    let sum = 0;
+    let samples = 0;
+    for (let offset = -radius; offset <= radius; offset++) {
+      const wrapped = (index + offset + points.length) % points.length;
+      sum += distances[wrapped];
+      samples++;
+    }
+    const smoothedDistance = Math.min(distance, sum / samples);
+    const dx = (point.x - origin.x) / distance;
+    const dy = (point.y - origin.y) / distance;
+    return {
+      x: origin.x + dx * smoothedDistance,
+      y: origin.y + dy * smoothedDistance,
+    };
+  });
+}
+
+/**
  * Build a vision-only occlusion grid from collision data.
  *
  * The movement mask is intentionally more inclusive than the vision mask:

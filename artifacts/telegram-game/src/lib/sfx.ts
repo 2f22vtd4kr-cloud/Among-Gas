@@ -5,6 +5,42 @@
 const cache = new Map<string, HTMLAudioElement>();
 let audioContext: AudioContext | null = null;
 let lastFootstepAt = 0;
+let decodedKillBuffer: AudioBuffer | null = null;
+let decodedKillLoad: Promise<void> | null = null;
+
+function preloadDecodedKill(ctx: AudioContext): Promise<void> {
+  if (decodedKillBuffer) return Promise.resolve();
+  if (decodedKillLoad) return decodedKillLoad;
+  decodedKillLoad = fetch('/au-sounds/kill.wav')
+    .then(response => {
+      if (!response.ok) throw new Error(`Kill sound preload failed: HTTP ${response.status}`);
+      return response.arrayBuffer();
+    })
+    .then(bytes => ctx.decodeAudioData(bytes))
+    .then(buffer => { decodedKillBuffer = buffer; })
+    .catch(() => {
+      // The regular HTMLAudio path remains available if Web Audio decoding fails.
+    })
+    .finally(() => { decodedKillLoad = null; });
+  return decodedKillLoad;
+}
+
+function playDecodedKill(volume: number, ctx: AudioContext): boolean {
+  if (!decodedKillBuffer) return false;
+  try {
+    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+    const source = ctx.createBufferSource();
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(Math.min(1, Math.max(0, volume)), ctx.currentTime);
+    source.buffer = decodedKillBuffer;
+    source.connect(gain);
+    gain.connect(ctx.destination);
+    source.start(ctx.currentTime);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -21,7 +57,10 @@ function getAudioContext(): AudioContext | null {
 /** Call from a real pointer/key gesture to unlock Web Audio in mobile browsers. */
 export function unlockSfx(): void {
   const ctx = getAudioContext();
-  if (ctx?.state === 'suspended') void ctx.resume().catch(() => {});
+  if (!ctx) return;
+  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
+  // The first trusted menu/game gesture primes the kill buffer before a match event needs it.
+  void preloadDecodedKill(ctx);
 }
 
 /** Original procedural soft bootstep; no external copyrighted audio asset needed. */
@@ -103,6 +142,11 @@ function playCue(key: 'sabotage' | 'vent', volume: number): void {
 }
 
 export function sfx(key: string, volume = 1): void {
+  if (key === 'kill') {
+    const ctx = getAudioContext();
+    if (ctx && playDecodedKill(volume, ctx)) return;
+    if (ctx) void preloadDecodedKill(ctx);
+  }
   if (key === 'footstep') {
     playFootstep(volume);
     return;

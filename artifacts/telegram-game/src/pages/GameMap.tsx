@@ -53,12 +53,12 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildShadowGrid, computeVisibilityPolygon } from '../game/visibility';
+import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
-import { useGameSettings } from '../lib/gameSettings';
+import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -195,7 +195,7 @@ const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
   const { language } = useLanguage();
-  const { joystickSide } = useGameSettings();
+  const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
   useEffect(() => { languageRef.current = language; }, [language]);
   const en = language === 'en';
@@ -210,6 +210,50 @@ export default function GameMap() {
   const [spriteLoaded, setSpriteLoaded] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const leaveDialogRef = useRef<HTMLElement>(null);
+  const leaveCancelRef = useRef<HTMLButtonElement>(null);
+  const leaveFocusReturnRef = useRef<HTMLElement | null>(null);
+  const mapDialogRef = useRef<HTMLDivElement>(null);
+  const mapCloseRef = useRef<HTMLButtonElement>(null);
+  const mapFocusReturnRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!leaveConfirmOpen) return;
+    leaveFocusReturnRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    leaveCancelRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setLeaveConfirmOpen(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = leaveDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !leaveDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !leaveDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      const previous = leaveFocusReturnRef.current;
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [leaveConfirmOpen]);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -240,7 +284,8 @@ export default function GameMap() {
     if (lastKill.victimSlot === mySlot) {
       setKillAnimation(lastKill);
       sfx('kill', 0.72);
-      const timer = window.setTimeout(() => setKillAnimation(null), 1700);
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+      const timer = window.setTimeout(() => setKillAnimation(null), reducedMotion ? 150 : 1700);
       return () => window.clearTimeout(timer);
     }
     if (lastKill.attackerSlot === mySlot) {
@@ -318,6 +363,44 @@ export default function GameMap() {
     // Prevent the keyboard and joystick from moving the player behind the modal.
     keysRef.current.clear();
     pendingSentRef.current.length = 0;
+  }, [showMiniMap]);
+
+  useEffect(() => {
+    if (!showMiniMap) return;
+    mapFocusReturnRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    mapCloseRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setShowMiniMap(false);
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = mapDialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !mapDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !mapDialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      const previous = mapFocusReturnRef.current;
+      if (previous?.isConnected) previous.focus();
+    };
   }, [showMiniMap]);
   const [chatDraft, setChatDraft] = useState('');
   useEffect(() => {
@@ -1351,7 +1434,8 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const visiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
+        const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py });
 
         if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
           fogCanvas.width = cw;
@@ -1583,6 +1667,7 @@ export default function GameMap() {
         <>
           <div style={{
             position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
+            ...customControlPositionStyle('tasks', controlLayout),
           }}>
             <button
               onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
@@ -1680,6 +1765,7 @@ export default function GameMap() {
       {loaded && myRole !== null && meeting === null && (
         <div style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
+          ...customControlPositionStyle('map', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
@@ -1698,7 +1784,7 @@ export default function GameMap() {
       )}
 
       {showMiniMap && loaded && myRole !== null && meeting === null && (
-        <div data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
+        <div ref={mapDialogRef} data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
           onClick={() => setShowMiniMap(false)}
           style={{
             position: 'fixed', inset: 0, zIndex: 75,
@@ -1718,7 +1804,7 @@ export default function GameMap() {
                   {myRole === 'crewmate' ? (en ? 'Your unfinished tasks are marked in yellow' : 'Ваши незавершённые задания отмечены жёлтым') : (en ? 'Map overview' : 'Обзор карты')}
                 </div>
               </div>
-              <button onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
+              <button ref={mapCloseRef} onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
                 width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
                 background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
               }}>×</button>
@@ -1765,38 +1851,7 @@ export default function GameMap() {
       )}
 
       {loaded && <Joystick keysRef={keysRef} />}
-      {loaded && !killAnimation && (
-        <button
-          type="button"
-          aria-label={en ? 'Leave match' : 'Покинуть матч'}
-          title={en ? 'Leave match' : 'Покинуть матч'}
-          onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); setLeaveConfirmOpen(true); }}
-          style={{
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 60px)',
-            right: 'max(12px, env(safe-area-inset-right, 0px))',
-            zIndex: 70,
-            minHeight: 44,
-            padding: '0 9px',
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 7,
-            borderRadius: 12,
-            color: '#fff1ef',
-            background: 'linear-gradient(180deg, rgba(100,33,42,.97), rgba(53,13,21,.97))',
-            border: '1px solid rgba(255,144,144,.52)',
-            boxShadow: '0 3px 12px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.08)',
-            fontSize: 13,
-            fontWeight: 800,
-            fontFamily: 'system-ui, sans-serif',
-            touchAction: 'manipulation',
-          }}
-        >
-          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>←</span>
-          {en ? 'Leave' : 'Выйти'}
-        </button>
-      )}
+
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
         <SettingsButton
           label={en ? 'Settings' : 'Настройки'}
@@ -1806,10 +1861,19 @@ export default function GameMap() {
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 35,
+            ...customControlPositionStyle('settings', controlLayout),
           }}
         />
       )}
-      <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog
+        open={settingsOpen && !killAnimation}
+        onClose={() => setSettingsOpen(false)}
+        showLeaveMatch={loaded && meeting === null && !killAnimation}
+        onLeaveMatch={() => {
+          setSettingsOpen(false);
+          setLeaveConfirmOpen(true);
+        }}
+      />
 
       {leaveConfirmOpen && !killAnimation && (
         <div
@@ -1826,7 +1890,9 @@ export default function GameMap() {
             background: 'rgba(3,8,13,.78)', backdropFilter: 'blur(8px)',
           }}
         >
-          <section style={{
+          <section
+            ref={leaveDialogRef}
+            style={{
             width: 'min(100%, 360px)', boxSizing: 'border-box',
             padding: '22px 20px 18px', borderRadius: 20,
             border: '1px solid rgba(255,145,145,.3)',
@@ -1841,7 +1907,7 @@ export default function GameMap() {
               {en ? 'You will disconnect from the current match and return to the main menu.' : 'Вы отключитесь от текущего матча и вернётесь в главное меню.'}
             </p>
             <div style={{ display: 'flex', gap: 10 }}>
-              <button type="button" onClick={() => setLeaveConfirmOpen(false)} style={{
+              <button ref={leaveCancelRef} type="button" onClick={() => setLeaveConfirmOpen(false)} style={{
                 flex: 1, minHeight: 46, borderRadius: 11,
                 border: '1px solid rgba(180,205,214,.28)',
                 background: 'rgba(5,15,23,.55)', color: '#eaf4f5',
@@ -2115,11 +2181,12 @@ export default function GameMap() {
       {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
       {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
         <div style={{
-          // Keep the action prompt opposite the movement control and clear of the player sprite.
-          position: 'fixed', bottom: 'clamp(150px, 22vh, 210px)',
+          // Reserve a complete vertical lane above the kill/report action row on short portrait screens.
+          position: 'fixed', bottom: 'clamp(218px, 31vh, 260px)',
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
+          ...customControlPositionStyle('taskAction', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
@@ -2145,6 +2212,7 @@ export default function GameMap() {
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
+          ...customControlPositionStyle('killReport', controlLayout),
         }}>
           {amIImpostor && (
             <button
@@ -2192,7 +2260,10 @@ export default function GameMap() {
 
       {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
-        <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}>
+        <div style={{
+          position: 'fixed', bottom: 130, left: 24, zIndex: 25,
+          ...customControlPositionStyle('sabotage', controlLayout),
+        }}>
           <button
             disabled={sabotageCooldownMs > 0}
             onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
@@ -2219,6 +2290,7 @@ export default function GameMap() {
       {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
+          ...customControlPositionStyle('repair', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
@@ -2308,6 +2380,7 @@ export default function GameMap() {
           // Reserve the Settings button's 44px hit area plus a 12px gap.
           right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
           zIndex: 35,
+          ...customControlPositionStyle('emergency', controlLayout),
         }}>
           <button
             disabled={emergencyMeetingUsed}
