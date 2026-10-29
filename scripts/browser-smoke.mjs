@@ -84,6 +84,23 @@ try {
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
 
+  // The main menu must not clip join controls in short landscape viewports.
+  await page.setViewportSize({ width: 844, height: 390 });
+  const scrollableLobby = page.locator('.au-lobby-scroll');
+  await scrollableLobby.waitFor({ state: 'visible' });
+  assert.equal(await scrollableLobby.evaluate(element => getComputedStyle(element).overflowY), 'auto',
+    'short landscape lobby content must be scrollable');
+  await scrollableLobby.evaluate(element => { element.scrollTop = element.scrollHeight; });
+  const menuFooter = page.getByText('v1.0 · AMONG GAS', { exact: true });
+  const footerBox = await menuFooter.boundingBox();
+  const joinCodeBox = await page.getByRole('button', { name: 'JOIN WITH CODE' }).boundingBox();
+  assert.ok(footerBox && footerBox.y >= 0 && footerBox.y + footerBox.height <= 390,
+    'the menu footer must be reachable within the short landscape viewport');
+  assert.ok(joinCodeBox && joinCodeBox.y >= 0 && joinCodeBox.y + joinCodeBox.height <= 390,
+    'the join-by-code control must be reachable within the short landscape viewport');
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
