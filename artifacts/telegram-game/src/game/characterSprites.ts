@@ -1,48 +1,82 @@
-// Original Among Gas vector character atlas.
-// Each pose occupies one clean 320×300 source cell in the high-resolution SVG.
-// Ground shadows are intentionally drawn by GameMap, not baked into the art.
-export const CHARACTER_SHEET_PATH = '/sprites/characters.svg?v=1';
+// Character sprite sheet: artifacts/telegram-game/public/sprites/characters.png
+// Pixel-art sheet, 1123×1401px, transparent-background PNG.
+//
+// The sheet has 7 color columns and 9 pose bands, but the pose bands are NOT
+// evenly spaced vertically. Dividing image height by 9 puts crop boundaries
+// through real pixels in the mask, held-item, corpse and crouch art. Use the
+// measured, non-overlapping windows below; each window contains its whole pose
+// plus its inter-row padding, and excludes pixels from adjacent poses.
+
+// Cache-busting version suffix. Bump this any time characters.png is
+// regenerated — browsers (especially mobile Telegram webviews) can
+// aggressively cache the previous PNG by URL even after a hard refresh,
+// which shows stale artwork (e.g. an old shadow) that isn't actually on
+// disk anymore. Appending ?v=N forces a fresh fetch.
+const SPRITE_SHEET_VERSION = 6;
+export const CHARACTER_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
 
 export const CHARACTER_SHEET_COLS = 7;
-export const CHARACTER_SHEET_ROWS = 9;
-export const CHARACTER_SHEET_WIDTH = 2240;
-export const CHARACTER_SHEET_HEIGHT = 2700;
+export const CHARACTER_SHEET_ROWS = 9;   // was incorrectly 8; sheet has 9 pose rows
+export const CHARACTER_SHEET_WIDTH = 1123;
+export const CHARACTER_SHEET_HEIGHT = 1401;
 export const CHARACTER_CELL_WIDTH = CHARACTER_SHEET_WIDTH / CHARACTER_SHEET_COLS;
 export const CHARACTER_CELL_HEIGHT = CHARACTER_SHEET_HEIGHT / CHARACTER_SHEET_ROWS;
 
 export const CHARACTER_COLORS = [
-  'teal',
-  'maroon',
-  'navy',
-  'purple',
-  'brown',
-  'dark-gray',
-  'magenta',
+  "teal",
+  "maroon",
+  "navy",
+  "purple",
+  "brown",
+  "dark-gray",
+  "magenta",
 ] as const;
 export type CharacterColor = (typeof CHARACTER_COLORS)[number];
 
 export const CHARACTER_POSES = [
-  'idle',
-  'walk-1',
-  'walk-2',
-  'run-lean',
-  'ghost',
-  'mask',
-  'hold-item',
-  'dead-body',
-  'sit-crouch',
+  "idle",
+  "walk-1",
+  "walk-2",
+  "run-lean",
+  "ghost",
+  "mask",
+  "hold-item",
+  "dead-body",       // row 7 — existing cut-body sprite with exposed bone
+  "sit-crouch",     // row 8 — was missing; caused row bleed ghost artifact
 ] as const;
 export type CharacterPose = (typeof CHARACTER_POSES)[number];
 
-/** Every SVG cell has a fixed intrinsic size: no guessed crop boundaries. */
+/**
+ * Vertical crop windows measured from the authored PNG. Bounds are between
+ * adjacent pose silhouettes, rather than uniform divisions of sheet height.
+ * [top, bottom) coordinates intentionally retain the blank padding around each
+ * silhouette so canvas sprites preserve their authored scale.
+ */
+const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number }> = [
+  // Crop just beyond each measured silhouette. The source sheet has stray
+  // ground/underline strokes in the otherwise transparent padding below poses;
+  // excluding that padding keeps those marks out of live and corpse sprites.
+  { top: 0, bottom: 153 },       // idle: visible pixels y=16–155
+  { top: 172, bottom: 310 },     // walk-1: y=188–312
+  { top: 327, bottom: 458 },     // walk-2: y=342–460
+  { top: 471, bottom: 620 },     // run-lean: y=481–622
+  { top: 636, bottom: 775 },     // ghost: y=650–777
+  { top: 795, bottom: 903 },     // mask: y=811–905
+  { top: 915, bottom: 1051 },    // hold-item: y=924–1053
+  { top: 1067, bottom: 1185 },   // dead-body: y=1080–1187
+  { top: 1198, bottom: 1334 },   // sit-crouch: y=1209–1336
+];
+
+/** Returns an isolated source window (px) for a given color and pose. */
 export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose) {
   const col = CHARACTER_COLORS.indexOf(color);
   const row = CHARACTER_POSES.indexOf(pose);
+  const window = POSE_ROW_WINDOWS[row];
   return {
     x: col * CHARACTER_CELL_WIDTH,
-    y: row * CHARACTER_CELL_HEIGHT,
+    y: window.top,
     width: CHARACTER_CELL_WIDTH,
-    height: CHARACTER_CELL_HEIGHT,
+    height: window.bottom - window.top,
     row,
   };
 }
