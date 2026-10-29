@@ -1321,8 +1321,14 @@ export default function GameMap() {
           const ghostDrift = rIsGhost
             ? Math.sin(ts / 335 + rp.slot * 1.1) * Math.max(1.5, rSpriteW * 0.06)
             : 0;
+          // Living characters visibly bounce on each step. This is draw-only:
+          // authoritative coordinates and collision are never modified.
+          const rWalkBob = rMoving
+            ? Math.abs(Math.sin((anim.animMs / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, rBaseSpriteH * 0.06)
+            : 0;
+          const rpGroundY = Math.round((anim.renderY - srcY) * scale);
           const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
-          const rpCY = Math.round((anim.renderY - srcY) * scale - ghostBob);
+          const rpCY = Math.round(rpGroundY - ghostBob - (rIsGhost ? 0 : rWalkBob));
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
@@ -1335,8 +1341,11 @@ export default function GameMap() {
             ctx.filter = `blur(${blurPx}px)`;
             ctx.globalAlpha = 0.55;
             ctx.fillStyle = '#000000';
+            const rShadowScale = rMoving
+              ? 1 - Math.min(0.24, rWalkBob / Math.max(1, rBaseSpriteH * 0.06) * 0.24)
+              : 1;
             ctx.beginPath();
-            ctx.ellipse(rpCX, rpCY + rSpriteH * 0.48, rSpriteW * 0.28, rSpriteH * 0.055, 0, 0, Math.PI * 2);
+            ctx.ellipse(rpCX, rpGroundY + rSpriteH * 0.48, rSpriteW * 0.28 * rShadowScale, rSpriteH * 0.055 * rShadowScale, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
             ctx.filter = 'none';
@@ -1395,6 +1404,10 @@ export default function GameMap() {
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
+      const localMoving = pose === 'walk-1' || pose === 'walk-2';
+      const localWalkBob = localMoving
+        ? Math.abs(Math.sin((ts / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, sH * 0.06)
+        : 0;
 
       // Ground shadow (ghosts float — no shadow). The local ghost uses the
       // same draw-only float/sway as remote ghosts, without affecting movement.
@@ -1412,15 +1425,18 @@ export default function GameMap() {
         ctx.filter = `blur(${blurPx}px)`;
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
+        const localShadowScale = localMoving
+          ? 1 - Math.min(0.24, localWalkBob / Math.max(1, sH * 0.06) * 0.24)
+          : 1;
         ctx.beginPath();
-        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28, sH * 0.055, 0, 0, Math.PI * 2);
+        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28 * localShadowScale, sH * 0.055 * localShadowScale, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         ctx.filter = 'none';
       }
 
       ctx.save();
-      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob);
+      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob - (amIGhostFrame ? 0 : localWalkBob));
       if (amIGhostFrame) {
         const ghostPulse = Math.sin(ts / 275 + (mySlotRef.current ?? 0) * 0.9);
         const ghostSway = Math.sin(ts / 390 + (mySlotRef.current ?? 0) * 0.7);
