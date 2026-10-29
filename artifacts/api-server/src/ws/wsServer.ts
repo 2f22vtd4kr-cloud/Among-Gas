@@ -253,6 +253,18 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         return;
       }
 
+      // ── 0x23: client gameplay-ready acknowledgement ───────────────────────
+      // Sent only after both the map texture and character atlas are decoded.
+      if (opcode === 0x23 && raw.length === 1) {
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) return;
+        const slot = lobby.userIdToSlot.get(tgUserId);
+        if (slot === undefined) return;
+        lobbyManager.markGameplayReady(lobby, slot);
+        return;
+      }
+
       // ── 0x11: Move Intent (C→S) ───────────────────────────────────────────
       // Layout: [0x11, wireX(Int16LE, 2 bytes), wireY(Int16LE, 2 bytes)]  = 5 bytes
       if (opcode === 0x11) {
@@ -262,8 +274,8 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby) return;
 
-        // Phase 4: movement only allowed while ROAMING (post role assignment).
-        if (lobby.phase !== 'ROAMING') return;
+        // Movement remains locked until all connected clients have rendered the map.
+        if (lobby.phase !== 'ROAMING' || !lobbyManager.isGameplayReady(lobby)) return;
 
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
@@ -318,7 +330,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const sub = raw.readUInt8(1);
         const tgUserId = ws.tgUserId!;
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
-        if (!lobby) return;
+        if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
 
@@ -359,7 +371,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const sub = raw.readUInt8(1);
         const tgUserId = ws.tgUserId!;
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
-        if (!lobby) return;
+        if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const attackerSlot = lobby.userIdToSlot.get(tgUserId);
         if (attackerSlot === undefined) return;
 
@@ -419,7 +431,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (raw.length !== 2) return;
         const tgUserId = ws.tgUserId!;
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
-        if (!lobby) return;
+        if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const reporterSlot = lobby.userIdToSlot.get(tgUserId);
         if (reporterSlot === undefined) return;
 
@@ -437,7 +449,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (raw.length !== 2) return;
         const tgUserId = ws.tgUserId!;
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
-        if (!lobby) return;
+        if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const voterSlot = lobby.userIdToSlot.get(tgUserId);
         if (voterSlot === undefined) return;
 

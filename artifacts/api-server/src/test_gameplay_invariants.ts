@@ -121,6 +121,23 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   };
 }
 
+// Startup readiness: the server must not release bots or accept gameplay until
+// every connected human client has finished loading the map and sprite atlas.
+{
+  const a = makePlayer(0, 'crewmate', 100, 100);
+  const b = makePlayer(1, 'impostor', 130, 100);
+  const lobby = makeLobby([a.player, b.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.isGameplayReady(lobby), false, 'new match is not ready before client acknowledgements');
+  assert.equal(manager.markGameplayReady(lobby, 0), false, 'one ready client cannot start gameplay alone');
+  assert.equal(manager.isGameplayReady(lobby), false, 'second client is still loading');
+  assert.equal(manager.markGameplayReady(lobby, 1), true, 'gameplay unlocks after every connected human is ready');
+  assert.equal(manager.isGameplayReady(lobby), true);
+  lobby.phase = 'MEETING';
+  assert.equal(manager.isGameplayReady(lobby), true, 'readiness persists so discussion and voting RPCs remain available');
+  manager.disposeLobby(lobby);
+}
+
 // 1. Tasks, vents and consoles must be valid interaction points on *this* map.
 assert.equal(TASK_DEFS.length, 11, 'expected five original and six ported base-game tasks');
 assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'task IDs must be unique');
@@ -266,6 +283,35 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   new CrewmateBot().roamingTick(ejectionLobby, ejectedReporter.player, ejectionManager);
   assert.equal(ejectionLobby.phase, 'ROAMING', 'an ejected ghost without a corpse must not trigger a fake report');
   ejectionManager.disposeLobby(ejectionLobby);
+}
+
+// Bots speak during the discussion window, without using omniscient global positions.
+{
+  const host = makePlayer(0, 'crewmate', 100, 100);
+  const botPlayer = makePlayer(1, 'crewmate', 130, 100);
+  const bodyPlayer = makePlayer(2, 'crewmate', 101, 100);
+  botPlayer.player.isBot = true;
+  bodyPlayer.player.alive = false;
+  bodyPlayer.player.corpseX = 100;
+  bodyPlayer.player.corpseY = 100;
+  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player]);
+  lobby.phase = 'MEETING';
+  lobby.meeting = {
+    reporterSlot: 0, bodySlot: 2, votes: new Map(), votingOpen: false,
+    discussionTimer: null, votingTimer: null,
+  };
+  const manager = new LobbyManager();
+  const bot = new CrewmateBot();
+  bot.tick(lobby, botPlayer.player, manager);
+  (bot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  bot.tick(lobby, botPlayer.player, manager);
+  const chatPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 1);
+  assert.ok(chatPacket, 'living bot contributes a discussion message to human clients');
+  const chatText = chatPacket!.toString('utf8');
+  assert.doesNotMatch(chatText, new RegExp(host.player.username), 'bot must not accuse a nearby player based on omniscient coordinates');
+  assert.match(chatText, /body was reported|did not witness/i, 'body discussion should use public meeting context without fabricated sightings');
+  assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
+  manager.disposeLobby(lobby);
 }
 
 // 6. Kills drop a body at the death location, rather than following the ghost.

@@ -9,7 +9,8 @@ import {
   ROWS,
   type Grid,
 } from '@workspace/shared/collisionMap';
-import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -49,19 +50,66 @@ assert.ok(
   'the east ray terminates at the near wall boundary, not through the obstacle',
 );
 
+// Every balaclava color has an authored dead-body frame. Crop windows trim
+// detached underline strokes; rendering uses native crop scale and a pose-specific gap mask.
+{
+  const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
+  assert.equal(corpseFrames.length, 7, 'all seven balaclava colors have a corpse pose');
+  assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 7, 'each color has its own corpse atlas column');
+  assert.equal(getCharacterFrameRect('teal', 'idle').height, 136,
+    'idle crop ends before the detached under-foot scanlines');
+  assert.equal(corpseFrames[0].height, 93,
+    'corpse crop keeps the exposed bone and cut suit but excludes detached under-foot scanlines');
+  assert.match(getCharacterClipPath('idle') ?? '', /79%/,
+    'idle leg-gap clipping starts before horizontal atlas strokes enter the foot gap');
+  assert.match(getCharacterClipPath('dead-body') ?? '', /66%/,
+    'corpse leg-gap clipping starts before detached strokes enter the leg gap');
+  for (const frame of corpseFrames) {
+    assert.equal(frame.row, CHARACTER_POSES.indexOf('dead-body'));
+    assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes detached underline rows and keeps the source pixels unstretched');
+  }
+  assert.match(getCharacterClipPath('idle') ?? '', /polygon/, 'idle pose masks stray strokes in the leg gap');
+assert.equal(getCharacterClipPath('mask'), undefined, 'mask prop must not be clipped as a full character sprite');
+  assert.match(getCharacterClipPath('dead-body') ?? '', /polygon/, 'corpse pose masks stray strokes while preserving the bone');
+  for (const color of CHARACTER_COLORS) {
+    for (const pose of CHARACTER_POSES) {
+      const frame = getCharacterFrameRect(color, pose);
+      assert.ok(frame.width > 0 && frame.height > 0 && frame.displayHeight >= frame.height,
+        `valid isolated sprite window for ${color}/${pose}`);
+    }
+  }
+}
+
 // Small isolated solid props stay collidable but do not create hard vision shadows.
 const propGrid = new Uint8Array(COLS * ROWS) as Grid;
 const propA = 2 * COLS + 2;
 const propB = 2 * COLS + 3;
+const propC = 3 * COLS + 2;
+const propD = 3 * COLS + 3;
 propGrid[propA] = 1;
 propGrid[propB] = 1;
+propGrid[propC] = 1;
+propGrid[propD] = 1;
 for (let col = 20; col < 50; col++) propGrid[20 * COLS + col] = 1;
 const shadowGrid = buildShadowGrid(propGrid);
 assert.equal(propGrid[propA], 1, 'small prop remains solid for movement collision');
 assert.equal(propGrid[propB], 1, 'small prop collision cells are not mutated');
+assert.equal(propGrid[propC], 1, 'the lower row of a small prop remains solid for movement');
+assert.equal(propGrid[propD], 1, 'the lower-right prop cell remains solid for movement');
 assert.equal(shadowGrid[propA], 0, 'small isolated prop does not cast a hard shadow');
 assert.equal(shadowGrid[propB], 0, 'all cells of the small prop are non-occluding');
+assert.equal(shadowGrid[propC], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
+assert.equal(shadowGrid[propD], 0, 'four-cell light-pole-sized footprints stay out of the coarse square occlusion grid');
 assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a vision occluder');
+const narrowOccluders = buildNarrowShadowOccluders(propGrid);
+assert.equal(narrowOccluders.length, 1, 'a four-cell 2×2 pole footprint becomes one narrow visual occluder');
+const pole = narrowOccluders[0];
+assert.equal(pole.x, 3 * CELL_X, 'narrow occluder is centered on the original prop');
+assert.equal(pole.y, 3 * CELL_Y, 'narrow occluder keeps the prop center in world coordinates');
+assert.ok(pole.radius < Math.min(CELL_X, CELL_Y) * 0.25, 'pole shadow geometry is narrower than a collision cell');
+const poleSight = computeVisibilityPolygon(CELL_X * 0.5, pole.y, CELL_X * 10, shadowGrid, narrowOccluders);
+assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
+  'the east ray stops at the narrow pole silhouette instead of a 2×2 square');
 
  // Collision and vision are separate contracts: the same small prop blocks
  // movement, but does not truncate the vision radius.
@@ -78,6 +126,9 @@ assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a visio
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
+const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
+assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
+assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
 const upperAtriumLeftBench = 9 * COLS + 48;
@@ -98,6 +149,7 @@ const realPolygon = computeVisibilityPolygon(
   realOrigin.y,
   NORMAL_VISION_RADIUS_PX,
   realShadowGrid,
+  realNarrowOccluders,
 );
 const roundedRealPolygon = smoothVisibilityPolygon(realPolygon, realOrigin);
 assert.equal(realPolygon.length, 720, 'custom map returns a full visibility polygon');
@@ -108,6 +160,7 @@ assert.ok(LIGHTS_CREWMATE_VISION_RADIUS_PX < NORMAL_VISION_RADIUS_PX, 'Lights re
 console.log(JSON.stringify({
   ok: true,
   rayCount: realPolygon.length,
+  narrowOccluderCount: realNarrowOccluders.length,
   crewVisionPx: NORMAL_VISION_RADIUS_PX,
   impostorVisionPx: IMPOSTOR_VISION_RADIUS_PX,
   lightsCrewVisionPx: LIGHTS_CREWMATE_VISION_RADIUS_PX,

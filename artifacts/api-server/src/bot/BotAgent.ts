@@ -131,6 +131,9 @@ const ARRIVAL_SQ = 25 * 25;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
+  private discussionMeeting: Lobby['meeting'] = null;
+  private nextDiscussionChatAtMs = 0;
+  private discussionMessageSent = false;
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -168,11 +171,47 @@ export abstract class BotAgent {
 
     if (lobby.phase === 'MEETING') {
       const meeting = lobby.meeting;
-      if (!meeting || !meeting.votingOpen) return;
+      if (!meeting) return;
+      if (!meeting.votingOpen) {
+        this.discuss(lobby, self, manager, meeting);
+        return;
+      }
       if (meeting.votes.has(self.slot)) return; // already voted
       const target = this.chooseVote(lobby, self);
       manager.castVote(lobby, self.slot, target);
     }
+  }
+
+  /** Lightweight, zero-API-cost discussion behaviour using only public meeting context. */
+  private discuss(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    meeting: NonNullable<Lobby['meeting']>,
+  ): void {
+    if (this.discussionMeeting !== meeting) {
+      this.discussionMeeting = meeting;
+      this.discussionMessageSent = false;
+      // Stagger bot messages so the discussion reads like turn-taking, not a burst.
+      this.nextDiscussionChatAtMs = Date.now() + 500 + (self.slot % 5) * 650;
+    }
+    if (this.discussionMessageSent || Date.now() < this.nextDiscussionChatAtMs) return;
+
+    // The server has access to every player's coordinates, but bots do not
+    // maintain a witnessed-player history. Do not infer accusations from the
+    // authoritative global positions: that would give bots omniscient evidence.
+    // Only use facts available to everyone from the meeting itself.
+    const hasBody = meeting.bodySlot !== NO_TARGET;
+    const message = hasBody
+      ? (self.role === 'impostor'
+          ? 'I was moving around the station. Did anyone actually see what happened?'
+          : 'A body was reported, but I did not witness the elimination. Did anyone see something useful?')
+      : (self.role === 'impostor'
+          ? 'I was moving around the station. Did anyone notice anything suspicious before the call?'
+          : 'I was focused on my tasks. Did anyone notice anything suspicious before the call?');
+
+    this.discussionMessageSent = true;
+    manager.sendMeetingChat(lobby, self.slot, message);
   }
 
   // ── Shared movement helpers ─────────────────────────────────────────────

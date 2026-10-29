@@ -49,6 +49,10 @@ try {
   const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
   await menuTitle.waitFor({ state: 'visible' });
   await menuSettingsButton.waitFor({ state: 'visible' });
+  assert.equal(await menuSettingsButton.locator('svg path').nth(0).getAttribute('d'), 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+    'the Settings gear inner ring must be centered on the 24×24 icon viewBox');
+  assert.equal(await menuSettingsButton.locator('svg path').nth(1).getAttribute('transform'), null,
+    'the Settings gear outer teeth must not be translated away from the centered inner ring');
   const menuTitleBox = await menuTitle.boundingBox();
   const menuSettingsBox = await menuSettingsButton.boundingBox();
   assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
@@ -63,7 +67,7 @@ try {
   await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   const lobbySettings = page.locator('[role="dialog"]');
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-reset',
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-save',
     'Settings must keep reverse keyboard navigation inside the modal');
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть настройки',
@@ -151,7 +155,38 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
 
+  const mapAssetTimings = [];
+  const mapAssetStartedAt = new Map();
+  page.on('request', request => {
+    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+      mapAssetStartedAt.set(request.url(), Date.now());
+    }
+  });
+  page.on('requestfinished', request => {
+    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+      mapAssetTimings.push({
+        asset: request.url().split('/').pop(),
+        durationMs: Date.now() - (mapAssetStartedAt.get(request.url()) ?? Date.now()),
+      });
+    }
+  });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
+    'cold gameplay load should prefer the compact WebP map asset');
+  console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
+  const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
+  assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
+  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '136',
+    'role reveal must crop detached black strokes below the idle character feet');
+  assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
+    'the authored role-reveal baseline remains available as metadata');
+  assert.equal(await roleRevealSprite.evaluate(el => el.style.transform), 'none',
+    'cropped role sprites must not be vertically stretched to compensate for removed pixels');
+  assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
+    'role sprites must mask detached lower-leg strokes without removing the feet');
+  await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const movementJoystick = page.locator('[data-joystick-side]');
@@ -207,6 +242,7 @@ try {
     'Leave Match must not occupy a permanent, high-emphasis gameplay HUD slot');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
   assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
+  console.log('HUD boxes at 320×568:', JSON.stringify(hudBoxes));
   for (let i = 0; i < hudBoxes.length; i++) {
     for (let j = i + 1; j < hudBoxes.length; j++) {
       const a = hudBoxes[i];
@@ -483,8 +519,10 @@ try {
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
   assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
-    'the legacy PNG crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '93',
+    'the corpse crop must exclude the detached underline rows beneath the cut suit and exposed bone');
+  assert.equal(await corpseSprite.getAttribute('data-display-height'), '118',
+    'the original corpse baseline remains available as metadata while rendering follows the cropped source height');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
@@ -636,25 +674,293 @@ try {
   }, undefined, { timeout: 3_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
-  await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
-  const layoutX = layoutSettings.getByTestId('control-layout-x');
-  const layoutY = layoutSettings.getByTestId('control-layout-y');
-  await layoutX.focus();
-  for (let i = 0; i < 5; i++) await layoutX.press('ArrowLeft');
-  await layoutY.focus();
-  for (let i = 0; i < 6; i++) await layoutY.press('ArrowRight');
-  assert.equal(await layoutX.inputValue(), '88', 'custom control X setting must be adjustable');
-  assert.equal(await layoutY.inputValue(), '12', 'custom control Y setting must be adjustable');
-  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
-  const movedSettingsBox = await page.getByRole('button', { name: 'Настройки' }).boundingBox();
-  assert.ok(movedSettingsBox, 'settings control remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 2,
-    'saved settings X position must be applied to the gameplay HUD');
-  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.12) < 2,
-    'saved settings Y position must be applied to the gameplay HUD');
-  await page.getByRole('button', { name: 'Настройки' }).click();
-  await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
-  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const preview = layoutSettings.getByTestId('control-layout-preview');
+  const previewBox = await preview.boundingBox();
+  const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
+  const dragBox = await dragHandle.boundingBox();
+  assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
+  const fixedHudLegend = layoutSettings.getByTestId('control-layout-fixed-hud');
+  assert.equal(await fixedHudLegend.evaluate(el => el.scrollWidth <= el.clientWidth),
+    true, 'fixed HUD legend must fit inside the preview at mobile width');
+  const previewControls = await preview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < previewControls.length; i++) {
+    for (let j = i + 1; j < previewControls.length; j++) {
+      const a = previewControls[i];
+      const b = previewControls[j];
+      const overlaps = a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+      assert.equal(overlaps, false, `default control preview must not overlap: ${a.id} / ${b.id}`);
+    }
+  }
+  // The editor preview must switch to a landscape aspect ratio and keep
+  // every default control below the fixed HUD and inside the available screen.
+  const landscapePage = await browser.newPage({
+    viewport: { width: 844, height: 390 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  landscapePage.on('pageerror', error => failures.push(error.message));
+  await landscapePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await landscapePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await landscapePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
+  const landscapeSettings = landscapePage.locator('[role="dialog"]');
+  await landscapeSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const landscapePreview = landscapeSettings.getByTestId('control-layout-preview');
+  const landscapePreviewBox = await landscapePreview.boundingBox();
+  const landscapeFixedHud = await landscapeSettings.getByTestId('control-layout-fixed-hud').boundingBox();
+  assert.ok(landscapePreviewBox && landscapeFixedHud, 'landscape control preview and fixed HUD are visible');
+  assert.ok(landscapePreviewBox.width / landscapePreviewBox.height > 1.8,
+    'control preview must use a landscape aspect ratio in landscape orientation');
+  const landscapeControls = await landscapePreview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < landscapeControls.length; i++) {
+    const control = landscapeControls[i];
+    assert.ok(control.left >= landscapePreviewBox.x - 1 && control.right <= landscapePreviewBox.x + landscapePreviewBox.width + 1,
+      `landscape control must stay within horizontal bounds: ${control.id}`);
+    assert.ok(control.top >= landscapeFixedHud.y + landscapeFixedHud.height - 1 &&
+      control.bottom <= landscapePreviewBox.y + landscapePreviewBox.height + 1,
+      `landscape control must stay below the fixed HUD and above the bottom edge: ${control.id}`);
+    for (let j = i + 1; j < landscapeControls.length; j++) {
+      const other = landscapeControls[j];
+      const overlaps = control.left < other.right && control.right > other.left &&
+        control.top < other.bottom && control.bottom > other.top;
+      assert.equal(overlaps, false, `landscape default controls must not overlap: ${control.id} / ${other.id}`);
+    }
+  }
+  await landscapePage.close();
+
+  // A compact portrait viewport must keep the preview proportional and all
+  // controls within bounds without overlap.
+  const smallPhonePage = await browser.newPage({
+    viewport: { width: 320, height: 568 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  smallPhonePage.on('pageerror', error => failures.push(error.message));
+  await smallPhonePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await smallPhonePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await smallPhonePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
+  const smallPhoneSettings = smallPhonePage.locator('[role="dialog"]');
+  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const smallPhonePreview = smallPhoneSettings.getByTestId('control-layout-preview');
+  const smallPhonePreviewBox = await smallPhonePreview.boundingBox();
+  const smallPhoneFixedHud = await smallPhoneSettings.getByTestId('control-layout-fixed-hud').boundingBox();
+  assert.ok(smallPhonePreviewBox && smallPhoneFixedHud, 'small-phone control preview and fixed HUD are visible');
+  assert.ok(Math.abs(smallPhonePreviewBox.width / smallPhonePreviewBox.height - 320 / 568) < 0.03,
+    'small-phone control preview must preserve the actual viewport aspect ratio');
+  const smallPhoneControls = await smallPhonePreview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < smallPhoneControls.length; i++) {
+    const control = smallPhoneControls[i];
+    assert.ok(control.left >= smallPhonePreviewBox.x - 1 && control.right <= smallPhonePreviewBox.x + smallPhonePreviewBox.width + 1,
+      `small-phone control must stay within horizontal bounds: ${control.id}`);
+    assert.ok(control.top >= smallPhoneFixedHud.y + smallPhoneFixedHud.height - 1 &&
+      control.bottom <= smallPhonePreviewBox.y + smallPhonePreviewBox.height + 1,
+      `small-phone control must stay below the fixed HUD and above the bottom edge: ${control.id}`);
+    for (let j = i + 1; j < smallPhoneControls.length; j++) {
+      const other = smallPhoneControls[j];
+      const overlaps = control.left < other.right && control.right > other.left &&
+        control.top < other.bottom && control.bottom > other.top;
+      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${control.id} / ${other.id}`);
+    }
+  }
+  await smallPhonePage.close();
+
+  // Exercise real mobile touch/pointer delivery, including pointer capture,
+  // instead of relying on mouse events for a touch-first control editor.
+  const touchSession = await page.context().newCDPSession(page);
+  const touchStart = {
+    x: dragBox.x + dragBox.width / 2,
+    y: dragBox.y + dragBox.height / 2,
+    id: 1,
+  };
+  const touchEnd = {
+    x: previewBox.x + previewBox.width * 0.68,
+    y: previewBox.y + previewBox.height * 0.62,
+    id: 1,
+  };
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touchStart] });
+  for (let step = 1; step <= 8; step++) {
+    await touchSession.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{
+        id: 1,
+        x: touchStart.x + (touchEnd.x - touchStart.x) * step / 8,
+        y: touchStart.y + (touchEnd.y - touchStart.y) * step / 8,
+      }],
+    });
+  }
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touchSession.detach();
+  await layoutSettings.getByTestId('control-layout-save').click();
+  let movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
+  assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+    'dragged task action X position must be applied to the gameplay HUD');
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
+    'dragged task action Y position must be applied to the gameplay HUD');
+
+  // Persisted layout survives a fresh page load. Return to a stable lobby mock
+  // before reloading, because the gameplay mock intentionally navigates to /game.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const settingsButtonAfterReload = page.getByRole('button', { name: /^(Настройки|Settings)$/ });
+  await settingsButtonAfterReload.waitFor({ state: 'visible', timeout: 15_000 });
+  await settingsButtonAfterReload.click();
+  const reloadedSettings = page.locator('[role="dialog"]');
+  await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
+  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
+  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
+    'saved task action X position must hydrate after reload');
+  assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
+    'saved task action Y position must hydrate after reload');
+
+  // Drag directly onto the joystick: the editor should find a nearby free spot.
+  const joystickHandle = reloadedSettings.getByTestId('control-drag-joystick');
+  const joystickHandleBox = await joystickHandle.boundingBox();
+  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(joystickHandleBox && taskHandleBox, 'overlap regression controls are visible');
+  await page.mouse.move(taskHandleBox.x + taskHandleBox.width / 2, taskHandleBox.y + taskHandleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(joystickHandleBox.x + joystickHandleBox.width / 2, joystickHandleBox.y + joystickHandleBox.height / 2, { steps: 8 });
+  await page.mouse.up();
+  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const currentJoystickBox = await joystickHandle.boundingBox();
+  assert.ok(nudgedTaskBox && currentJoystickBox, 'dragged control and joystick remain visible');
+  const previewOverlap =
+    nudgedTaskBox.x < currentJoystickBox.x + currentJoystickBox.width &&
+    nudgedTaskBox.x + nudgedTaskBox.width > currentJoystickBox.x &&
+    nudgedTaskBox.y < currentJoystickBox.y + currentJoystickBox.height &&
+    nudgedTaskBox.y + nudgedTaskBox.height > currentJoystickBox.y;
+  assert.equal(previewOverlap, false, 'dragging one control onto another must nudge it to a non-overlapping position');
+
+  // Reset is a draft operation; Cancel must not alter the saved layout.
+  await reloadedSettings.getByTestId('control-layout-reset').click();
+  await reloadedSettings.getByTestId('control-layout-cancel').click();
+  await settingsButtonAfterReload.click();
+  const cancelledSettings = page.locator('[role="dialog"]');
+  await cancelledSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
+  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
+  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
+    'Cancel must preserve the previously saved X position');
+  assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.62)) < 3,
+    'Cancel must preserve the previously saved Y position');
+  await cancelledSettings.getByTestId('control-layout-reset').click();
+  await cancelledSettings.getByTestId('control-layout-save').click();
+
+  // The loading overlay must remain until both the map and character atlas have
+  // completed image decoding, not merely until their network load events fire.
+  const decodePage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  decodePage.on('pageerror', error => failures.push(error.message));
+  await decodePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await decodePage.addInitScript(() => {
+    window.__pendingImageDecodes = [];
+    window.__releaseImageDecodes = () => {
+      for (const resolve of window.__pendingImageDecodes.splice(0)) resolve();
+    };
+    const originalDecode = HTMLImageElement.prototype.decode;
+    const pendingByImage = new WeakMap();
+    HTMLImageElement.prototype.decode = function () {
+      const source = this.currentSrc || this.src;
+      if (!source.includes('map-hires.webp') && !source.includes('characters.png')) {
+        return originalDecode.call(this);
+      }
+      if (!pendingByImage.has(this)) {
+        pendingByImage.set(this, new Promise(resolve => window.__pendingImageDecodes.push(resolve)));
+      }
+      return pendingByImage.get(this);
+    };
+  });
+  await decodePage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await decodePage.waitForFunction(() => window.__pendingImageDecodes.length >= 2, undefined, { timeout: 15_000 });
+  await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'visible' });
+  assert.equal(await decodePage.getByTestId('gameplay-loading-screen').isVisible(), true,
+    'gameplay must stay locked while map and sprite decode promises are unresolved');
+  await decodePage.evaluate(() => window.__releaseImageDecodes());
+  await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+  await decodePage.close();
+
+  // If WebP loading fails, the original PNG map must still render and unlock play.
+  const fallbackPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  fallbackPage.on('pageerror', error => failures.push(error.message));
+  let pngFallbackLoaded = false;
+  const mapAssetEvents = [];
+  fallbackPage.on('request', request => {
+    if (request.url().includes('map-hires.')) mapAssetEvents.push(`request ${request.url()}`);
+  });
+  fallbackPage.on('requestfailed', request => {
+    if (request.url().includes('map-hires.')) mapAssetEvents.push(`failed ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`);
+  });
+  fallbackPage.on('response', response => {
+    if (response.url().includes('map-hires.')) {
+      mapAssetEvents.push(`response ${response.status()} ${response.url()}`);
+      if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+    }
+  });
+  // Simulate a server-side WebP failure deterministically; the image's error
+  // handler must then request and decode the original PNG map.
+  await fallbackPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.includes('map-hires.webp')) {
+      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional WebP fallback test failure' });
+    }
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  const pngResponsePromise = fallbackPage.waitForResponse(
+    response => response.url().includes('map-hires.png') && response.ok(),
+    { timeout: 15_000 },
+  );
+  await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  // A missing locator is considered "hidden" by Playwright; require the actual
+  // game canvas before judging the loading screen or fallback behavior.
+  await fallbackPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await pngResponsePromise;
+  await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  assert.equal(pngFallbackLoaded, true,
+    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}; page errors: ${failures.join(' | ') || 'none'}`);
+  await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
@@ -667,7 +973,7 @@ try {
     };
   });
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const restrictedSettings = page.locator('[role="dialog"]');
   await restrictedSettings.getByRole('button', { name: 'English' }).click();
   await restrictedSettings.getByTestId('joystick-side-left').click();

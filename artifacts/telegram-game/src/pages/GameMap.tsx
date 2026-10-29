@@ -21,6 +21,8 @@ import {
   CHARACTER_COLORS,
   CHARACTER_POSES,
   getCharacterFrameRect,
+  getCharacterClipPath,
+  getCharacterClipNotch,
   type CharacterColor,
   type CharacterPose,
 } from '../game/characterSprites';
@@ -53,7 +55,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
+import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
@@ -124,6 +126,39 @@ function slotColor(slot: number): CharacterColor {
 const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
 
+function clipSpriteLegGap(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  pose: CharacterPose,
+) {
+  const notch = getCharacterClipNotch(pose);
+  if (!notch) return;
+  const leftStart = x + width * notch.leftLegStart;
+  const leftEnd = x + width * notch.leftLegEnd;
+  const rightStart = x + width * notch.rightLegStart;
+  const rightEnd = x + width * notch.rightLegEnd;
+  const top = y + height * notch.top;
+  const bottom = y + height;
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + width, y);
+  ctx.lineTo(x + width, top);
+  ctx.lineTo(rightEnd, top);
+  ctx.lineTo(rightEnd, bottom);
+  ctx.lineTo(rightStart, bottom);
+  ctx.lineTo(rightStart, top);
+  ctx.lineTo(leftEnd, top);
+  ctx.lineTo(leftEnd, bottom);
+  ctx.lineTo(leftStart, bottom);
+  ctx.lineTo(leftStart, top);
+  ctx.lineTo(x, top);
+  ctx.closePath();
+  ctx.clip();
+}
+
 function CharSpriteUI({
   color, pose = 'idle', size = 64, flipped = false,
 }: {
@@ -153,6 +188,7 @@ function CharSpriteUI({
       data-sprite-row={frame.row}
       data-source-y={frame.y}
       data-source-height={frame.height}
+      data-display-height={frame.displayHeight}
       style={{
         width: size, height, flexShrink: 0, overflow: 'hidden',
         backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
@@ -160,7 +196,9 @@ function CharSpriteUI({
         backgroundPosition: `${posX}px ${posY}px`,
         backgroundRepeat: 'no-repeat',
         imageRendering: 'pixelated',
-        transform: flipped ? 'scaleX(-1)' : undefined,
+        transformOrigin: 'top center',
+        transform: flipped ? 'scaleX(-1)' : 'none',
+        clipPath: getCharacterClipPath(safePose),
       }}
     />
   );
@@ -267,12 +305,12 @@ export default function GameMap() {
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
   const {
-    mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
+    phase, mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs, gameplayReady,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
     sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
   } = useGameState();
   const {
-    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep,
+    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep, markGameplayReady,
     triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
@@ -772,38 +810,97 @@ export default function GameMap() {
   // ── Load map image ─────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let triedPngFallback = false;
+    let completedSource = '';
     const img = new Image();
-    img.onload = () => {
+    const fallbackOrFail = () => {
       if (cancelled) return;
+      if (!triedPngFallback) {
+        triedPngFallback = true;
+        completedSource = '';
+        img.src = `${import.meta.env.BASE_URL}map-hires.png`;
+        return;
+      }
+      setError(true);
+    };
+    const finishDecodedLoad = async () => {
+      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
+      const source = img.currentSrc || img.src;
+      if (completedSource === source) return;
+      try {
+        // load fires before some browsers finish decoding. Do not release the
+        // gameplay-ready handshake until the map can be drawn without a decode stall.
+        if (typeof img.decode === 'function') await img.decode();
+      } catch {
+        if (!cancelled && (img.currentSrc || img.src) === source) fallbackOrFail();
+        return;
+      }
+      if (cancelled || (img.currentSrc || img.src) !== source) return;
+      completedSource = source;
       mapImgRef.current = img;
       setLoaded(true);
     };
-    img.onerror = () => { if (!cancelled) setError(true); };
-    img.src = `${import.meta.env.BASE_URL}map-hires.png`;
-    if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
+    img.onload = () => { void finishDecodedLoad(); };
+    img.onerror = fallbackOrFail;
+    // Prefer the smaller WebP map asset on mobile; fall back to PNG if loading or decoding fails.
+    img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
+    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
+
+  // Do not let bots or other players act against this client while its
+  // map-loading screen is still visible. The server starts gameplay only
+  // after every connected human client acknowledges both decoded assets.
+  const gameplayReadySentRef = useRef(false);
+  useEffect(() => {
+    if (phase !== 'playing' || myRole === null) {
+      gameplayReadySentRef.current = false;
+      return;
+    }
+    if (!loaded || !spriteLoaded || gameplayReadySentRef.current) return;
+    gameplayReadySentRef.current = true;
+    markGameplayReady();
+  }, [phase, myRole, loaded, spriteLoaded, markGameplayReady]);
 
   // ── Load the original vector sprite sheet ────────────────────────────────
   useEffect(() => {
     let cancelled = false;
+    let completedSource = '';
     const img = new Image();
-    img.onload = () => {
-      if (cancelled) return;
-      // Keep the clean SVG as the actual drawing source. Do not destructively
-      // threshold antialiased pixels or guess at crop padding: exact row/cell
-      // geometry lives in characterSprites.ts and shadows are rendered below.
+    const finishDecodedLoad = async () => {
+      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
+      const source = img.currentSrc || img.src;
+      if (completedSource === source) return;
+      try {
+        if (typeof img.decode === 'function') await img.decode();
+      } catch {
+        if (!cancelled) setError(true);
+        return;
+      }
+      if (cancelled || (img.currentSrc || img.src) !== source) return;
+      completedSource = source;
+      // Keep the authored character atlas intact; crop windows and draw scale
+      // are defined in characterSprites.ts and never threshold the source pixels.
       spriteImgRef.current = img;
       setSpriteLoaded(true);
     };
+    img.onload = () => { void finishDecodedLoad(); };
     img.onerror = () => { if (!cancelled) setError(true); };
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
-    if (img.complete && img.naturalWidth > 0) img.onload?.(new Event('load'));
+    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
   // ── Track held movement keys ──────────────────────────────────────────────
   const keysRef = useRef<Set<string>>(new Set());
+  const gameplayReadyRef = useRef(gameplayReady);
+  useEffect(() => {
+    gameplayReadyRef.current = gameplayReady;
+    if (!gameplayReady) {
+      keysRef.current.clear();
+      pendingSentRef.current.length = 0;
+    }
+  }, [gameplayReady]);
   useEffect(() => {
     if (!settingsOpen) return;
     keysRef.current.clear();
@@ -892,6 +989,7 @@ export default function GameMap() {
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
+    const narrowOccluders = buildNarrowShadowOccluders(grid);
     if (!isSpawnWalkable(grid)) {
       console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
     }
@@ -959,7 +1057,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
+      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -977,7 +1075,7 @@ export default function GameMap() {
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
-      if (sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
+      if (gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
         const wireX = toWire(px, MAP_W);
         const wireY = toWire(py, MAP_H);
         // Only send if position has changed in wire space
@@ -1058,9 +1156,9 @@ export default function GameMap() {
             ctx.strokeStyle = 'rgba(0,0,0,0.85)';
             ctx.lineWidth = Math.round(3 * dpr);
             const taskLabel = taskRu(def.name, languageRef.current);
-            ctx.strokeText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
+            ctx.strokeText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
+            ctx.fillText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
           }
           // Off-screen task compass: points towards the selected task (or the next
           // unfinished one). Coordinates are clamped in canvas pixels, so it works
@@ -1140,7 +1238,7 @@ export default function GameMap() {
               ctx.fillStyle = '#fff';
               ctx.font = `bold ${Math.round(11 * dpr)}px sans-serif`;
               ctx.textBaseline = 'middle';
-              ctx.fillText(done ? '✓' : '⚠', tx, ty);
+              ctx.fillText(done ? '✓' : '!', tx, ty);
               ctx.textBaseline = 'top';
               ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
               ctx.strokeStyle = 'rgba(0,0,0,0.85)';
@@ -1186,6 +1284,7 @@ export default function GameMap() {
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        clipSpriteLegGap(ctx, corpseX, corpseY, corpseW, corpseH, 'dead-body');
         ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
         ctx.restore();
       }
@@ -1307,8 +1406,14 @@ export default function GameMap() {
           const ghostDrift = rIsGhost
             ? Math.sin(ts / 335 + rp.slot * 1.1) * Math.max(1.5, rSpriteW * 0.06)
             : 0;
+          // Living characters visibly bounce on each step. This is draw-only:
+          // authoritative coordinates and collision are never modified.
+          const rWalkBob = rMoving
+            ? Math.abs(Math.sin((anim.animMs / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, rBaseSpriteH * 0.06)
+            : 0;
+          const rpGroundY = Math.round((anim.renderY - srcY) * scale);
           const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
-          const rpCY = Math.round((anim.renderY - srcY) * scale - ghostBob);
+          const rpCY = Math.round(rpGroundY - ghostBob - (rIsGhost ? 0 : rWalkBob));
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
@@ -1321,8 +1426,11 @@ export default function GameMap() {
             ctx.filter = `blur(${blurPx}px)`;
             ctx.globalAlpha = 0.55;
             ctx.fillStyle = '#000000';
+            const rShadowScale = rMoving
+              ? 1 - Math.min(0.24, rWalkBob / Math.max(1, rBaseSpriteH * 0.06) * 0.24)
+              : 1;
             ctx.beginPath();
-            ctx.ellipse(rpCX, rpCY + rSpriteH * 0.48, rSpriteW * 0.28, rSpriteH * 0.055, 0, 0, Math.PI * 2);
+            ctx.ellipse(rpCX, rpGroundY + rSpriteH * 0.48, rSpriteW * 0.28 * rShadowScale, rSpriteH * 0.055 * rShadowScale, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
             ctx.filter = 'none';
@@ -1346,6 +1454,7 @@ export default function GameMap() {
           if (anim.facingLeft) ctx.scale(-1, 1);
           ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+          clipSpriteLegGap(ctx, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH, rPose);
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
           ctx.imageSmoothingEnabled = true;
@@ -1381,6 +1490,10 @@ export default function GameMap() {
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
+      const localMoving = pose === 'walk-1' || pose === 'walk-2';
+      const localWalkBob = localMoving
+        ? Math.abs(Math.sin((ts / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, sH * 0.06)
+        : 0;
 
       // Ground shadow (ghosts float — no shadow). The local ghost uses the
       // same draw-only float/sway as remote ghosts, without affecting movement.
@@ -1398,15 +1511,18 @@ export default function GameMap() {
         ctx.filter = `blur(${blurPx}px)`;
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
+        const localShadowScale = localMoving
+          ? 1 - Math.min(0.24, localWalkBob / Math.max(1, sH * 0.06) * 0.24)
+          : 1;
         ctx.beginPath();
-        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28, sH * 0.055, 0, 0, Math.PI * 2);
+        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28 * localShadowScale, sH * 0.055 * localShadowScale, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
         ctx.filter = 'none';
       }
 
       ctx.save();
-      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob);
+      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob - (amIGhostFrame ? 0 : localWalkBob));
       if (amIGhostFrame) {
         const ghostPulse = Math.sin(ts / 275 + (mySlotRef.current ?? 0) * 0.9);
         const ghostSway = Math.sin(ts / 390 + (mySlotRef.current ?? 0) * 0.7);
@@ -1417,6 +1533,7 @@ export default function GameMap() {
       if (facingLeft) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+      clipSpriteLegGap(ctx, -sW / 2, -sH / 2, sW, sH, pose);
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
@@ -1434,8 +1551,9 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid);
-        const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py });
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders);
+        // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
+        const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
         if (fogCanvas.width !== cw || fogCanvas.height !== ch) {
           fogCanvas.width = cw;
@@ -1635,8 +1753,8 @@ export default function GameMap() {
           </div>
         </div>
       )}
-      {!loaded && !error && (
-        <div style={{
+      {(!loaded || !spriteLoaded || !gameplayReady) && !error && (
+        <div data-testid="gameplay-loading-screen" style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           color: '#8faabb', fontFamily: 'monospace', fontSize: 14, zIndex: 10,
@@ -1658,7 +1776,7 @@ export default function GameMap() {
         ref={canvasRef}
         style={{
           display: 'block', position: 'absolute', top: 0, left: 0,
-          opacity: loaded ? 1 : 0,
+          opacity: loaded && spriteLoaded && gameplayReady ? 1 : 0,
         }}
       />
 
@@ -1667,20 +1785,19 @@ export default function GameMap() {
         <>
           <div style={{
             position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
-            ...customControlPositionStyle('tasks', controlLayout),
           }}>
             <button
               onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
               aria-expanded={showTaskList}
               style={{
-                padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
+                display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
                 background: showTaskList ? 'rgba(106,79,18,0.96)' : 'rgba(10,22,34,0.92)',
                 border: '1px solid rgba(241,196,15,0.62)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
                 fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
                 touchAction: 'manipulation',
               }}
             >
-              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : (en ? '☷ TASKS' : '☷ ЗАДАНИЯ')}
+              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : <><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle' }}><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{en ? 'TASKS' : 'ЗАДАНИЯ'}</>}
             </button>
           </div>
 
@@ -1765,20 +1882,19 @@ export default function GameMap() {
       {loaded && myRole !== null && meeting === null && (
         <div style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
-          ...customControlPositionStyle('map', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
             aria-expanded={showMiniMap}
             style={{
-              padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
+              display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
               background: showMiniMap ? 'rgba(24,95,103,0.96)' : 'rgba(10,22,34,0.92)',
               border: '1px solid rgba(105,205,220,0.65)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
               fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
               touchAction: 'manipulation',
             }}
           >
-            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : (en ? '🗺 MAP' : '🗺 КАРТА')}
+            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : <><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 5 }}><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M9 3v15m6-12v15" stroke="currentColor" strokeWidth="1.5"/></svg>{en ? 'MAP' : 'КАРТА'}</>}
           </button>
         </div>
       )}
@@ -1861,7 +1977,6 @@ export default function GameMap() {
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
             right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 35,
-            ...customControlPositionStyle('settings', controlLayout),
           }}
         />
       )}
@@ -1979,7 +2094,7 @@ export default function GameMap() {
                 textDecoration: 'none',
               }}
             >
-              ✎ Edit Collision
+              Edit Collision
             </Link>
           )}
         </div>
@@ -1999,7 +2114,7 @@ export default function GameMap() {
               cursor: 'pointer', touchAction: 'manipulation',
             }}
           >
-            🕳️ {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
+            {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
           </button>
         </div>
       )}
@@ -2186,9 +2301,10 @@ export default function GameMap() {
           left: joystickSide === 'right' ? 16 : 'auto',
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
-          ...customControlPositionStyle('taskAction', controlLayout),
+          ...customControlPositionStyle('taskAction', controlLayout, joystickSide),
         }}>
           <button
+            data-testid="gameplay-task-action"
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
             style={{
               padding: '10px 24px', borderRadius: 10,
@@ -2200,7 +2316,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(60,140,255,0.35)',
             }}
           >
-            ⚙ {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
+            {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
           </button>
         </div>
       )}
@@ -2212,7 +2328,7 @@ export default function GameMap() {
         <div style={{
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
-          ...customControlPositionStyle('killReport', controlLayout),
+          ...customControlPositionStyle('killReport', controlLayout, joystickSide),
         }}>
           {amIImpostor && (
             <button
@@ -2235,7 +2351,7 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : (en ? '☠ Kill' : '☠ Убить')}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/kill_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Kill' : 'Убить'}</>}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
@@ -2252,7 +2368,7 @@ export default function GameMap() {
                 cursor: 'pointer', backdropFilter: 'blur(4px)',
               }}
             >
-              🛑 {en ? 'Report' : 'Доложить'}
+              {en ? 'Report' : 'Доложить'}
             </button>
           )}
         </div>
@@ -2262,7 +2378,7 @@ export default function GameMap() {
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
         <div style={{
           position: 'fixed', bottom: 130, left: 24, zIndex: 25,
-          ...customControlPositionStyle('sabotage', controlLayout),
+          ...customControlPositionStyle('sabotage', controlLayout, joystickSide),
         }}>
           <button
             disabled={sabotageCooldownMs > 0}
@@ -2281,7 +2397,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (en ? '⚡ Sabotage' : '⚡ Саботаж')}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Sabotage' : 'Саботаж'}</>}
           </button>
         </div>
       )}
@@ -2290,7 +2406,7 @@ export default function GameMap() {
       {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
-          ...customControlPositionStyle('repair', controlLayout),
+          ...customControlPositionStyle('repair', controlLayout, joystickSide),
         }}>
           <button
             onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
@@ -2304,7 +2420,7 @@ export default function GameMap() {
               boxShadow: '0 0 18px rgba(255,60,60,0.35)',
             }}
           >
-            🔧 {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
+            {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
           </button>
         </div>
       )}
@@ -2319,7 +2435,7 @@ export default function GameMap() {
           letterSpacing: '0.03em', borderRadius: 8,
           border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
         }}>
-          ⚠ {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
+          {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
           {sabotageDef.pads.length > 1 && (
             <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} {en ? 'fixed' : 'починено'})</span>
           )}
@@ -2376,11 +2492,11 @@ export default function GameMap() {
       {loaded && !amIDead && meeting === null && sabotage === null && (
         <div style={{
           position: 'fixed',
-          top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-          // Reserve the Settings button's 44px hit area plus a 12px gap.
-          right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
+          // Place the movable Emergency action below the fixed top HUD, even on narrow phones.
+          top: 'max(calc(env(safe-area-inset-top, 0px) + 144px), 25dvh)',
+          right: 'max(12px, env(safe-area-inset-right, 0px))',
           zIndex: 35,
-          ...customControlPositionStyle('emergency', controlLayout),
+          ...customControlPositionStyle('emergency', controlLayout, joystickSide),
         }}>
           <button
             disabled={emergencyMeetingUsed}
@@ -2395,7 +2511,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : (en ? '🚨 Emergency' : '🚨 Тревога')}
+            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : <><img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Emergency' : 'Тревога'}</>}
           </button>
         </div>
       )}
@@ -2411,8 +2527,8 @@ export default function GameMap() {
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
           {voteResult.ejectedSlot === NO_TARGET
-            ? (en ? '🗳️ Nobody ejected' : '🗳️ Никто не исключён')
-            : `🗳️ ${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
+            ? (en ? 'Nobody ejected' : 'Никто не исключён')
+            : `${playerName(voteResult.ejectedSlot)} ${en ? 'was ejected' : 'исключён'}`}
         </div>
       )}
 
@@ -2455,7 +2571,7 @@ export default function GameMap() {
             <div style={{
               color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
             }}>
-              👻 {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
+              {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
             </div>
           )}
 
@@ -2664,7 +2780,7 @@ export default function GameMap() {
                 alignItems: 'center', justifyContent: 'center',
                 background: isImpWin ? '#aa2233' : '#225599',
                 borderRight: '2px solid rgba(0,0,0,0.22)', fontSize: 22,
-              }}>🚪</div>
+              }}><img src={`${import.meta.env.BASE_URL}au-assets/eject.png`} alt="" aria-hidden="true" style={{ width: 36, height: 36, objectFit: 'contain' }} /></div>
               <div style={{
                 flex: 1, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
@@ -2692,7 +2808,7 @@ export default function GameMap() {
           letterSpacing: '0.05em', textTransform: 'uppercase', borderRadius: 8,
           border: '1px solid rgba(120,180,220,0.3)', backdropFilter: 'blur(6px)',
         }}>
-          👻 {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
+          {en ? 'You are dead — ghost mode' : 'Вы мертвы — режим призрака'}
         </div>
       )}
 

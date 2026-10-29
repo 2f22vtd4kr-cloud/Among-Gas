@@ -57,11 +57,11 @@ export function defaultControlPosition(
     case 'map': return { x: 12, y: 6 };
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
-    case 'emergency': return { x: 75, y: 6 };
-    case 'taskAction': return { x: oppositeSide, y: 72 };
-    case 'killReport': return { x: 50, y: 84 };
-    case 'sabotage': return { x: 16, y: 84 };
-    case 'repair': return { x: 50, y: 74 };
+    case 'emergency': return { x: 75, y: 33 };
+    case 'taskAction': return { x: 50, y: 62 };
+    case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 90 };
+    case 'sabotage': return { x: oppositeSide, y: 74 };
+    case 'repair': return { x: 88, y: 50 };
   }
 }
 
@@ -75,13 +75,24 @@ function sanitizePosition(value: unknown): ControlPosition | undefined {
   };
 }
 
-function sanitizeLayout(value: unknown): ControlLayout {
-  if (!value || typeof value !== 'object') return {};
-  const source = value as Partial<Record<GameplayControlId, unknown>>;
+function sanitizeLayout(value: unknown, joystickSide: JoystickSide): ControlLayout {
+  const source = value && typeof value === 'object'
+    ? value as Partial<Record<GameplayControlId, unknown>>
+    : {};
   const layout: ControlLayout = {};
   for (const id of CONTROL_IDS) {
+    // These controls are part of the protected top HUD, not user-draggable
+    // controls. Migrate any legacy custom coordinates back to responsive
+    // defaults so old saved layouts cannot place them over gameplay controls.
+    if (id === 'map' || id === 'tasks' || id === 'settings') {
+      layout[id] = defaultControlPosition(id, joystickSide);
+      continue;
+    }
     const point = sanitizePosition(source[id]);
-    if (point) layout[id] = point;
+    if (point) {
+      // Migrate movable controls out of the reserved top quarter.
+      layout[id] = { x: point.x, y: Math.max(25, point.y) };
+    }
   }
   return layout;
 }
@@ -95,9 +106,10 @@ function readStoredSettings(): GameSettings {
     const stored = window.localStorage.getItem(STORAGE_KEY);
     if (!stored) return { ...DEFAULT_SETTINGS, controlLayout: {} };
     const parsed = JSON.parse(stored) as Partial<GameSettings>;
+    const joystickSide: JoystickSide = parsed.joystickSide === 'left' ? 'left' : 'right';
     return {
-      joystickSide: parsed.joystickSide === 'left' ? 'left' : 'right',
-      controlLayout: sanitizeLayout(parsed.controlLayout),
+      joystickSide,
+      controlLayout: sanitizeLayout(parsed.controlLayout, joystickSide),
     };
   } catch {
     return { ...DEFAULT_SETTINGS, controlLayout: {} };
@@ -155,19 +167,19 @@ export function resetControlLayout(): void {
 export function customControlPositionStyle(
   id: GameplayControlId,
   controlLayout: ControlLayout,
+  joystickSide: JoystickSide = 'right',
 ): CSSProperties {
-  const point = controlLayout[id];
-  if (!point) return {};
+  const point = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
   const safeBounds: Record<GameplayControlId, { halfWidth: number; halfHeight: number }> = {
     joystick: { halfWidth: 52, halfHeight: 52 },
     map: { halfWidth: 50, halfHeight: 24 },
     tasks: { halfWidth: 54, halfHeight: 24 },
     settings: { halfWidth: 22, halfHeight: 22 },
-    emergency: { halfWidth: 80, halfHeight: 24 },
-    taskAction: { halfWidth: 100, halfHeight: 24 },
-    killReport: { halfWidth: 100, halfHeight: 40 },
-    sabotage: { halfWidth: 42, halfHeight: 42 },
-    repair: { halfWidth: 100, halfHeight: 24 },
+    emergency: { halfWidth: 70, halfHeight: 20 },
+    taskAction: { halfWidth: 84, halfHeight: 20 },
+    killReport: { halfWidth: 84, halfHeight: 38 },
+    sabotage: { halfWidth: 38, halfHeight: 38 },
+    repair: { halfWidth: 90, halfHeight: 20 },
   };
   const { halfWidth, halfHeight } = safeBounds[id];
   return {

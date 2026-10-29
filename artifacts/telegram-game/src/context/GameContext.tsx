@@ -119,6 +119,8 @@ export interface GameState {
   hostSlot: number;
   players: LobbyPlayer[];
   errorMessage: string | null;
+  /** Server-confirmed readiness after all connected human clients load assets. */
+  gameplayReady: boolean;
   /** Set by the server's 0x1A packet at game start. Never trust other clients. */
   myRole: PlayerRole | null;
   /** Fellow impostor slots — only populated when myRole === 'impostor'. */
@@ -159,6 +161,8 @@ export interface GameActions {
   createSolo: (botCount?: number) => void;
   joinRoom: (code: string) => void;
   startGame: () => void;
+  /** Tell the server the map and character atlas have both loaded. */
+  markGameplayReady: () => void;
   /** Send a 0x11 Move Intent packet (wire coords 0–32000). */
   sendMove: (wireX: number, wireY: number) => void;
   /** Send a 0x15 sub 0x01 Kill RPC (impostor only; server re-validates). */
@@ -193,6 +197,7 @@ const DEFAULT_STATE: GameState = {
   hostSlot: 0,
   players: [],
   errorMessage: null,
+  gameplayReady: false,
   myRole: null,
   impostorSlots: [],
   deadSlots: [],
@@ -219,6 +224,7 @@ const GameActionsCtx = createContext<GameActions>({
   createSolo: () => {},
   joinRoom: () => {},
   startGame: () => {},
+  markGameplayReady: () => {},
   sendMove: () => {},
   sendKill: () => {},
   reportBody: () => {},
@@ -663,6 +669,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     send([0x12]);
   }, [send]);
 
+  const markGameplayReady = useCallback(() => {
+    // Mock browser fixtures have no server to acknowledge readiness.
+    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true') {
+      setState(s => ({ ...s, gameplayReady: true }));
+      return;
+    }
+    send([0x23]);
+  }, [send]);
+
   const sendMove = useCallback((wireX: number, wireY: number) => {
     const buf = new Uint8Array(5);
     const view = new DataView(buf.buffer);
@@ -876,6 +891,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // disabled until the authoritative opening cooldown expires.
         setState(s => ({
           ...s, phase: 'playing', myRole, impostorSlots,
+          gameplayReady: false,
           deadSlots: [],
           lastKill: null,
           killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
@@ -892,6 +908,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           corpsePositions: [],
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
+        return;
+      }
+
+      // ── 0x24: all connected clients are ready for gameplay ───────────────
+      if (opcode === 0x24 && event.data.byteLength >= 2 && view.getUint8(1) === 0x01) {
+        setState(s => ({ ...s, gameplayReady: true }));
         return;
       }
 
@@ -1163,26 +1185,26 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   // the actual kill validation; this just drives the impostor's UI timer).
   useEffect(() => {
     if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
-    if (state.killCooldownMs <= 0) return;
+    if (!state.gameplayReady || state.killCooldownMs <= 0) return;
     const id = setInterval(() => {
       setState(s => ({ ...s, killCooldownMs: Math.max(0, s.killCooldownMs - 250) }));
     }, 250);
     return () => clearInterval(id);
-  }, [state.phase, state.myRole, state.killCooldownMs > 0]);
+  }, [state.phase, state.myRole, state.gameplayReady, state.killCooldownMs > 0]);
 
   // Client-side sabotage cooldown countdown display (server is authoritative
   // for the actual trigger validation; this just drives the impostor's UI timer).
   useEffect(() => {
     if (state.phase !== 'playing' || state.myRole !== 'impostor') return;
-    if (state.sabotageCooldownMs <= 0) return;
+    if (!state.gameplayReady || state.sabotageCooldownMs <= 0) return;
     const id = setInterval(() => {
       setState(s => ({ ...s, sabotageCooldownMs: Math.max(0, s.sabotageCooldownMs - 250) }));
     }, 250);
     return () => clearInterval(id);
-  }, [state.phase, state.myRole, state.sabotageCooldownMs > 0]);
+  }, [state.phase, state.myRole, state.gameplayReady, state.sabotageCooldownMs > 0]);
 
   const actions: GameActions = {
-    createRoom, createSolo, joinRoom, startGame, sendMove, sendKill,
+    createRoom, createSolo, joinRoom, startGame, markGameplayReady, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
     completeTaskStep, triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,

@@ -24,6 +24,7 @@ import {
   CHARACTER_SHEET_HEIGHT,
   CHARACTER_SHEET_PATH,
   getCharacterFrameRect,
+  getCharacterClipPath,
   type CharacterColor,
   type CharacterPose,
 } from '@/game/characterSprites';
@@ -51,7 +52,9 @@ function CharSprite({
         backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
         backgroundRepeat: 'no-repeat',
         imageRendering: 'pixelated',
-        transform: flipped ? 'scaleX(-1)' : undefined,
+        transformOrigin: 'top center',
+        transform: flipped ? 'scaleX(-1)' : 'none',
+        clipPath: getCharacterClipPath(pose),
         flexShrink: 0,
         overflow: 'hidden',
       }}
@@ -510,6 +513,20 @@ export default function Lobby() {
           </form>
         )}
       </div>
+
+      <a
+        href="https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/main/artifacts/telegram-game/HOW_TO_PLAY.md"
+        target="_blank"
+        rel="noreferrer"
+        className="au-btn-ghost"
+        style={{
+          zIndex: 1, position: 'relative', marginTop: 12, padding: '11px 18px',
+          textAlign: 'center', textDecoration: 'none', fontFamily: "'Fredoka One', sans-serif",
+          fontSize: 13, letterSpacing: '0.04em',
+        }}
+      >
+        {en ? 'HOW TO PLAY' : 'КАК ИГРАТЬ'}
+      </a>
 
       {/* Version footer */}
       <p style={{
