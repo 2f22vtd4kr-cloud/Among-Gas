@@ -923,20 +923,33 @@ try {
   });
   fallbackPage.on('pageerror', error => failures.push(error.message));
   let pngFallbackLoaded = false;
-  fallbackPage.on('response', response => {
-    if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+  const mapAssetEvents = [];
+  fallbackPage.on('request', request => {
+    if (request.url().includes('map-hires.')) mapAssetEvents.push(`request ${request.url()}`);
   });
-  // A single route handler avoids route-order ambiguity: force WebP to fail,
-  // while allowing the PNG fallback and all same-origin app requests through.
+  fallbackPage.on('requestfailed', request => {
+    if (request.url().includes('map-hires.')) mapAssetEvents.push(`failed ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`);
+  });
+  fallbackPage.on('response', response => {
+    if (response.url().includes('map-hires.')) {
+      mapAssetEvents.push(`response ${response.status()} ${response.url()}`);
+      if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+    }
+  });
+  // Simulate a server-side WebP failure deterministically; the image's error
+  // handler must then request and decode the original PNG map.
   await fallbackPage.route('**/*', route => {
     const url = route.request().url();
-    if (url.includes('map-hires.webp')) return route.abort();
+    if (url.includes('map-hires.webp')) {
+      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional WebP fallback test failure' });
+    }
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.equal(pngFallbackLoaded, true, 'failed WebP loading must fall back to the PNG map');
+  assert.equal(pngFallbackLoaded, true,
+    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}`);
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
