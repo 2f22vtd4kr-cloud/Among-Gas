@@ -307,8 +307,8 @@ export default function SettingsDialog({
             data-testid="control-layout-preview"
             aria-label={en ? 'Drag controls in this preview' : 'Перетаскивайте элементы в этой области'}
             style={{
-              position: 'relative', width: '100%', aspectRatio: '3 / 4', maxHeight: 300,
-              overflow: 'hidden', borderRadius: 13, border: '1px solid rgba(167,193,203,.3)',
+              position: 'relative', width: 'min(100%, 150px)', aspectRatio: '390 / 844', maxHeight: 300,
+              margin: '0 auto 12px', overflow: 'hidden', borderRadius: 13, border: '1px solid rgba(167,193,203,.3)',
               background: 'linear-gradient(180deg, rgba(10,22,31,.98), rgba(17,48,55,.94))',
               touchAction: 'none', userSelect: 'none', marginBottom: 12,
             }}
