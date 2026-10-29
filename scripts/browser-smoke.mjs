@@ -703,7 +703,7 @@ try {
   };
   const touchEnd = {
     x: previewBox.x + previewBox.width * 0.68,
-    y: previewBox.y + previewBox.height * 0.32,
+    y: previewBox.y + previewBox.height * 0.34,
     id: 1,
   };
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touchStart] });
@@ -724,7 +724,7 @@ try {
   assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
   assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
     'dragged task action X position must be applied to the gameplay HUD');
-  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.34) < 3,
     'dragged task action Y position must be applied to the gameplay HUD');
 
   // Persisted layout survives a fresh page load. Return to a stable lobby mock
@@ -741,7 +741,7 @@ try {
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
   assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
     'saved task action X position must hydrate after reload');
-  assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.32)) < 3,
+  assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.34)) < 3,
     'saved task action Y position must hydrate after reload');
 
   // Drag directly onto the joystick: the editor should find a nearby free spot.
@@ -774,7 +774,7 @@ try {
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
   assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
     'Cancel must preserve the previously saved X position');
-  assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.32)) < 3,
+  assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.34)) < 3,
     'Cancel must preserve the previously saved Y position');
   await cancelledSettings.getByTestId('control-layout-reset').click();
   await cancelledSettings.getByTestId('control-layout-save').click();
