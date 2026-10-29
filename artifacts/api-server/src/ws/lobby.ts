@@ -1681,7 +1681,8 @@ export class LobbyManager {
 
   private _tickDelta(): void {
     for (const lobby of this.lobbies.values()) {
-      if (lobby.phase === 'ROAMING') {
+      if (lobby.phase === 'ROAMING' && this.isGameplayReady(lobby)) {
+        // Loading time must not consume the opening kill/sabotage cooldowns.
         this._tickKillCooldowns(lobby);
         this._tickSabotageCooldown(lobby);
       }
