@@ -125,9 +125,9 @@ const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
 
 function CharSpriteUI({
-  color, pose = 'idle', size = 64, flipped = false, sheetSrc,
+  color, pose = 'idle', size = 64, flipped = false,
 }: {
-  color: string; pose?: string; size?: number; flipped?: boolean; sheetSrc?: string;
+  color: string; pose?: string; size?: number; flipped?: boolean;
 }) {
   const safePose: CharacterPose = (CHARACTER_POSES as readonly string[]).includes(pose)
     ? pose as CharacterPose
@@ -155,7 +155,7 @@ function CharSpriteUI({
       data-source-height={frame.height}
       style={{
         width: size, height, flexShrink: 0, overflow: 'hidden',
-        backgroundImage: `url(${sheetSrc ?? CHARACTER_SHEET_PATH})`,
+        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
         backgroundSize: `${bgW}px ${bgH}px`,
         backgroundPosition: `${posX}px ${posY}px`,
         backgroundRepeat: 'no-repeat',
@@ -208,8 +208,8 @@ export default function GameMap() {
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
-  const [spriteDataUrl, setSpriteDataUrl] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   // ── Network ───────────────────────────────────────────────────────────────
   const { sendMove } = useGameActions();
@@ -310,7 +310,9 @@ export default function GameMap() {
   const [trackedTaskId, setTrackedTaskId] = useState<number | null>(null);
   const miniMapOpenRef = useRef(false);
   const settingsOpenRef = useRef(false);
+  const leaveConfirmOpenRef = useRef(false);
   settingsOpenRef.current = settingsOpen;
+  leaveConfirmOpenRef.current = leaveConfirmOpen;
   useEffect(() => {
     miniMapOpenRef.current = showMiniMap;
     // Prevent the keyboard and joystick from moving the player behind the modal.
@@ -648,7 +650,7 @@ export default function GameMap() {
     return () => { document.head.removeChild(style); };
   }, []);
 
-  // ── Resize canvas ─────────────────────────────────────────────────────────
+  // ── Resize canvas ────────────────────────────────────────────────────────
   const sizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -657,9 +659,9 @@ export default function GameMap() {
     const h = window.innerHeight;
     const pixelWidth = Math.round(w * dpr);
     const pixelHeight = Math.round(h * dpr);
-    // Assigning canvas.width/height clears the entire backing store even when
-    // dimensions are unchanged. Mobile browsers can emit resize bursts while
-    // the joystick is dragged; avoid needless resets that look like camera jumps.
+    // A backing-store resize clears the buffer. Avoid touching it when dimensions
+    // did not change and ignore visualViewport toolbar-animation events: only
+    // the layout viewport/orientation should change the camera's visible frame.
     if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
     if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
     if (canvas.style.width !== `${w}px`) canvas.style.width = `${w}px`;
@@ -668,24 +670,16 @@ export default function GameMap() {
 
   useEffect(() => {
     sizeCanvas();
-    // Debounce: iOS Safari fires a burst of `resize` events with different
-    // innerWidth/innerHeight values while its dynamic toolbar (URL bar) is
-    // animating in/out — most visibly right after the page first loads and
-    // right after the user starts scrolling/dragging. Resizing the canvas
-    // buffer on every intermediate event thrashes canvas.width/height, which
-    // changes the render loop's srcW/srcH crop each time and reads as the
-    // whole map "shaking" even though the render loop itself is stable
-    // per-frame. Wait for the burst to settle before committing a resize.
     let timeoutId: number | undefined;
     const handleResize = () => {
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
-      timeoutId = window.setTimeout(sizeCanvas, 150);
+      timeoutId = window.setTimeout(sizeCanvas, 120);
     };
     window.addEventListener('resize', handleResize);
-    window.visualViewport?.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleResize);
     return () => {
       window.removeEventListener('resize', handleResize);
-      window.visualViewport?.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleResize);
       if (timeoutId !== undefined) window.clearTimeout(timeoutId);
     };
   }, [sizeCanvas]);
@@ -705,79 +699,22 @@ export default function GameMap() {
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
-  // ── Load sprite sheet ──────────────────────────────────────────────────────
+  // ── Load the original vector sprite sheet ────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     const img = new Image();
     img.onload = () => {
       if (cancelled) return;
-      const oc = new OffscreenCanvas(img.naturalWidth, img.naturalHeight);
-      const octx = oc.getContext('2d')!;
-      octx.drawImage(img, 0, 0);
-      // Pose windows isolate rows at measured boundaries; never clear guessed
-      // uniform-height stripes here, because several authored sprites cross them.
-      const id = octx.getImageData(0, 0, oc.width, oc.height);
-      const px = id.data;
-      for (let i = 0; i < px.length; i += 4) {
-        // Preserve authored alpha. Forcing every semi-transparent pixel to
-        // fully opaque turns anti-aliased sketch/scratch pixels into hard marks.
-        if (px[i + 3] <= 20) px[i + 3] = 0;
-      }
-
-      // The generated atlas includes stray dark ground strokes beneath
-      // several poses. Clear only dark pixels in the final transparent-padding
-      // band of each measured pose window; colored feet and suit pixels remain.
-      const poseWindows = [
-        [0, 153], [172, 310], [327, 458], [471, 620], [636, 775],
-        [795, 903], [915, 1051], [1067, 1185], [1198, 1334],
-      ] as const;
-      const cellW = oc.width / CHARACTER_COLORS.length;
-      for (const [top, bottom] of poseWindows) {
-        const bandStart = Math.max(top, bottom - 24);
-        for (let col = 0; col < CHARACTER_COLORS.length; col++) {
-          const xStart = Math.round(col * cellW);
-          const xEnd = Math.round((col + 1) * cellW);
-          for (let y = bandStart; y < bottom; y++) {
-            let runStart = -1;
-            const clearLongRun = (runEnd: number) => {
-              // Long horizontal ink streaks are artifacts; short runs form the
-              // legitimate bottom outline of the legs and must be retained.
-              if (runStart >= 0 && runEnd - runStart >= 12) {
-                for (let x = runStart; x < runEnd; x++) {
-                  px[(y * oc.width + x) * 4 + 3] = 0;
-                }
-              }
-              runStart = -1;
-            };
-            for (let x = xStart; x < xEnd; x++) {
-              const i = (y * oc.width + x) * 4;
-              const dark = px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180;
-              if (dark) {
-                if (runStart < 0) runStart = x;
-              } else clearLongRun(x);
-            }
-            clearLongRun(xEnd);
-          }
-        }
-      }
-      octx.putImageData(id, 0, 0);
-      // CSS-based kill/reveal sprites must use the same cleaned pixels as the
-      // canvas renderer; otherwise the original atlas underlines reappear in
-      // the death sequence even after the gameplay sprites are fixed.
-      const exportCanvas = document.createElement('canvas');
-      exportCanvas.width = oc.width;
-      exportCanvas.height = oc.height;
-      const exportCtx = exportCanvas.getContext('2d');
-      if (exportCtx) {
-        exportCtx.drawImage(oc, 0, 0);
-        setSpriteDataUrl(exportCanvas.toDataURL('image/png'));
-      }
-      spriteImgRef.current = oc;
+      // Keep the clean SVG as the actual drawing source. Do not destructively
+      // threshold antialiased pixels or guess at crop padding: exact row/cell
+      // geometry lives in characterSprites.ts and shadows are rendered below.
+      spriteImgRef.current = img;
       setSpriteLoaded(true);
     };
+    img.onerror = () => { if (!cancelled) setError(true); };
     img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
-    if (img.complete && img.naturalWidth > 0) img.onload!(new Event('load'));
-    return () => { cancelled = true; img.onload = null; };
+    if (img.complete && img.naturalWidth > 0) img.onload?.(new Event('load'));
+    return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
   // ── Track held movement keys ──────────────────────────────────────────────
@@ -788,10 +725,17 @@ export default function GameMap() {
     pendingSentRef.current.length = 0;
   }, [settingsOpen]);
   useEffect(() => {
+    if (!leaveConfirmOpen) return;
+    keysRef.current.clear();
+    pendingSentRef.current.length = 0;
+  }, [leaveConfirmOpen]);
+  useEffect(() => {
     const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
     const onDown  = (e: KeyboardEvent) => {
       unlockSfx();
-      if (settingsOpenRef.current) return;
+      const target = e.target instanceof HTMLElement ? e.target : null;
+      if (target?.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]')) return;
+      if (settingsOpenRef.current || leaveConfirmOpenRef.current) return;
       const k = e.key.toLowerCase();
       if (!tracked.has(k)) return;
       e.preventDefault();
@@ -875,6 +819,8 @@ export default function GameMap() {
     /** Wire-space position at last send (for delta filtering). */
     let lastSentWireX = -1;
     let lastSentWireY = -1;
+    let cameraX = playerStateRef.current.x;
+    let cameraY = playerStateRef.current.y;
 
     const frame = (ts: number) => {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
@@ -911,11 +857,17 @@ export default function GameMap() {
         } else {
           // Explicit server corrections (0x22) always win over local prediction,
           // even if their position happens to match an older item in send history.
+          const correctedX = fromWire(cWireX, MAP_W);
+          const correctedY = fromWire(cWireY, MAP_H);
           playerStateRef.current = {
             ...playerStateRef.current,
-            x: fromWire(cWireX, MAP_W),
-            y: fromWire(cWireY, MAP_H),
+            x: correctedX,
+            y: correctedY,
           };
+          if (force) {
+            cameraX = correctedX;
+            cameraY = correctedY;
+          }
           pending.length = 0;
         }
       }
@@ -964,8 +916,11 @@ export default function GameMap() {
       const srcW = (cw / dpr) / ZOOM;
       const srcH = (ch / dpr) / ZOOM;
 
-      const srcX = Math.max(0, Math.min(MAP_W - srcW, px - srcW / 2));
-      const srcY = Math.max(0, Math.min(MAP_H - srcH, py - srcH / 2));
+      const cameraBlend = 1 - Math.exp(-dtMs / 72);
+      cameraX += (px - cameraX) * cameraBlend;
+      cameraY += (py - cameraY) * cameraBlend;
+      const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
+      const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
 
       const scale = ZOOM * dpr;
 
@@ -1144,7 +1099,8 @@ export default function GameMap() {
         const corpseY = by - corpseH / 2;
 
         ctx.save();
-        ctx.imageSmoothingEnabled = false;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
         ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
         ctx.restore();
       }
@@ -1303,7 +1259,8 @@ export default function GameMap() {
             ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + rp.slot * 0.6));
           }
           if (anim.facingLeft) ctx.scale(-1, 1);
-          ctx.imageSmoothingEnabled = false;
+          ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
           ctx.imageSmoothingEnabled = true;
@@ -1373,7 +1330,8 @@ export default function GameMap() {
         ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + (mySlotRef.current ?? 0) * 0.6));
       }
       if (facingLeft) ctx.scale(-1, 1);
-      ctx.imageSmoothingEnabled = false;
+      ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
@@ -1551,7 +1509,7 @@ export default function GameMap() {
               animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
-              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
             </div>
             <div className="ag-kill-victim" style={{
               position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
@@ -1562,13 +1520,13 @@ export default function GameMap() {
                 // Keep the complete authored balaclava sprite visible during the strike.
                 animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
               </div>
               <div className="ag-kill-victim-lower" role="img" aria-label={en ? 'Balaclava corpse with exposed bone' : 'Тело с открытой костью'} style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} sheetSrc={spriteDataUrl ?? undefined} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
               </div>
             </div>
             <div className="ag-kill-slash" style={{
@@ -1805,6 +1763,37 @@ export default function GameMap() {
       )}
 
       {loaded && <Joystick keysRef={keysRef} />}
+      {loaded && !killAnimation && (
+        <button
+          type="button"
+          aria-label={en ? 'Leave match' : 'Покинуть матч'}
+          onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); setLeaveConfirmOpen(true); }}
+          style={{
+            position: 'fixed',
+            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+            left: 'max(12px, env(safe-area-inset-left, 0px))',
+            zIndex: 70,
+            minHeight: 44,
+            padding: '0 13px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 7,
+            borderRadius: 12,
+            color: '#fff1ef',
+            background: 'linear-gradient(180deg, rgba(100,33,42,.97), rgba(53,13,21,.97))',
+            border: '1px solid rgba(255,144,144,.52)',
+            boxShadow: '0 3px 12px rgba(0,0,0,.35), inset 0 1px rgba(255,255,255,.08)',
+            fontSize: 13,
+            fontWeight: 800,
+            fontFamily: 'system-ui, sans-serif',
+            touchAction: 'manipulation',
+          }}
+        >
+          <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>←</span>
+          {en ? 'Leave match' : 'Выйти'}
+        </button>
+      )}
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
         <SettingsButton
           label={en ? 'Settings' : 'Настройки'}
@@ -1818,6 +1807,59 @@ export default function GameMap() {
         />
       )}
       <SettingsDialog open={settingsOpen && !killAnimation} onClose={() => setSettingsOpen(false)} />
+
+      {leaveConfirmOpen && !killAnimation && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ag-leave-match-title"
+          onPointerDown={event => {
+            if (event.target === event.currentTarget) setLeaveConfirmOpen(false);
+          }}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 2200,
+            display: 'grid', placeItems: 'center',
+            padding: 'max(18px, env(safe-area-inset-top, 0px)) 18px max(18px, env(safe-area-inset-bottom, 0px))',
+            background: 'rgba(3,8,13,.78)', backdropFilter: 'blur(8px)',
+          }}
+        >
+          <section style={{
+            width: 'min(100%, 360px)', boxSizing: 'border-box',
+            padding: '22px 20px 18px', borderRadius: 20,
+            border: '1px solid rgba(255,145,145,.3)',
+            background: 'linear-gradient(165deg, #2c1b27 0%, #10151e 100%)',
+            boxShadow: '0 24px 70px rgba(0,0,0,.58)', color: '#f7eeee',
+            fontFamily: 'system-ui, sans-serif',
+          }}>
+            <h2 id="ag-leave-match-title" style={{ margin: '0 0 8px', fontSize: 22 }}>
+              {en ? 'Leave this match?' : 'Выйти из матча?'}
+            </h2>
+            <p style={{ margin: '0 0 20px', color: 'rgba(245,225,229,.72)', fontSize: 14, lineHeight: 1.5 }}>
+              {en ? 'You will disconnect from the current match and return to the main menu.' : 'Вы отключитесь от текущего матча и вернётесь в главное меню.'}
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button type="button" onClick={() => setLeaveConfirmOpen(false)} style={{
+                flex: 1, minHeight: 46, borderRadius: 11,
+                border: '1px solid rgba(180,205,214,.28)',
+                background: 'rgba(5,15,23,.55)', color: '#eaf4f5',
+                fontWeight: 800, touchAction: 'manipulation',
+              }}>
+                {en ? 'Stay' : 'Остаться'}
+              </button>
+              <button type="button" onClick={() => {
+                window.location.replace(new URL(import.meta.env.BASE_URL, window.location.origin).toString());
+              }} style={{
+                flex: 1, minHeight: 46, borderRadius: 11,
+                border: '1px solid rgba(255,145,145,.5)',
+                background: 'linear-gradient(180deg, #c94459, #76223b)', color: '#fff',
+                fontWeight: 900, touchAction: 'manipulation',
+              }}>
+                {en ? 'Leave match' : 'Выйти'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {/* ── Task progress bar — thin strip at top of screen (Phase 7) ──────── */}
       {loaded && myRole !== null && meeting === null && (
@@ -2372,6 +2414,12 @@ export default function GameMap() {
                 setChatDraft('');
               }} style={{ display: 'flex', gap: 8 }}>
                 <input
+                  type="text"
+                  inputMode="text"
+                  enterKeyHint="send"
+                  autoComplete="off"
+                  autoCapitalize="sentences"
+                  spellCheck
                   aria-label={en ? 'Meeting message' : 'Сообщение в обсуждении'}
                   value={chatDraft}
                   onChange={e => setChatDraft(e.target.value)}
@@ -2380,7 +2428,8 @@ export default function GameMap() {
                   style={{
                     flex: 1, minWidth: 0, padding: '12px 14px', borderRadius: 9,
                     color: '#fff', background: '#172230', border: '1px solid rgba(130,180,220,0.35)',
-                    fontSize: 14, outline: 'none',
+                    fontSize: 14, outline: 'none', userSelect: 'text', WebkitUserSelect: 'text',
+                    touchAction: 'manipulation',
                   }}
                 />
                 <button type="submit" disabled={!chatDraft.trim()} style={{
@@ -2610,7 +2659,7 @@ export default function GameMap() {
                   color={isImp ? 'maroon' : 'teal'}
                   pose={isImp ? 'mask' : 'idle'}
                   size={170}
-                  sheetSrc={spriteDataUrl ?? undefined}
+                 
                 />
               </div>
 
