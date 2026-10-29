@@ -90,6 +90,7 @@ export default function Joystick({ keysRef }: JoystickProps) {
     }
 
     function onTouchEnd(e: TouchEvent) {
+      if (activeTouch.current === null) return;
       for (let i = 0; i < e.changedTouches.length; i++) {
         if (e.changedTouches[i].identifier === activeTouch.current) {
           activeTouch.current = null;
@@ -99,15 +100,27 @@ export default function Joystick({ keysRef }: JoystickProps) {
       }
     }
 
+    // iOS can suspend a WebView or move focus without delivering touchend.
+    // Always release held movement on focus loss, backgrounding, and unmount.
+    const clearActiveTouch = () => {
+      activeTouch.current = null;
+      resetKnob();
+    };
+
     base.addEventListener('touchstart', onTouchStart, { passive: false });
     window.addEventListener('touchmove', onTouchMove, { passive: false });
-    window.addEventListener('touchend',  onTouchEnd,  { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: false });
     window.addEventListener('touchcancel', onTouchEnd, { passive: false });
+    window.addEventListener('blur', clearActiveTouch);
+    document.addEventListener('visibilitychange', clearActiveTouch);
     return () => {
+      clearActiveTouch();
       base.removeEventListener('touchstart', onTouchStart);
       window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend',  onTouchEnd);
+      window.removeEventListener('touchend', onTouchEnd);
       window.removeEventListener('touchcancel', onTouchEnd);
+      window.removeEventListener('blur', clearActiveTouch);
+      document.removeEventListener('visibilitychange', clearActiveTouch);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
