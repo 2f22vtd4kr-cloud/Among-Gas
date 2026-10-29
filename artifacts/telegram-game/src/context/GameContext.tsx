@@ -159,6 +159,8 @@ export interface GameActions {
   createSolo: (botCount?: number) => void;
   joinRoom: (code: string) => void;
   startGame: () => void;
+  /** Tell the server the map and character atlas have both loaded. */
+  markGameplayReady: () => void;
   /** Send a 0x11 Move Intent packet (wire coords 0–32000). */
   sendMove: (wireX: number, wireY: number) => void;
   /** Send a 0x15 sub 0x01 Kill RPC (impostor only; server re-validates). */
@@ -219,6 +221,7 @@ const GameActionsCtx = createContext<GameActions>({
   createSolo: () => {},
   joinRoom: () => {},
   startGame: () => {},
+  markGameplayReady: () => {},
   sendMove: () => {},
   sendKill: () => {},
   reportBody: () => {},
@@ -661,6 +664,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   const startGame = useCallback(() => {
     send([0x12]);
+  }, [send]);
+
+  const markGameplayReady = useCallback(() => {
+    send([0x23]);
   }, [send]);
 
   const sendMove = useCallback((wireX: number, wireY: number) => {
@@ -1182,7 +1189,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [state.phase, state.myRole, state.sabotageCooldownMs > 0]);
 
   const actions: GameActions = {
-    createRoom, createSolo, joinRoom, startGame, sendMove, sendKill,
+    createRoom, createSolo, joinRoom, startGame, markGameplayReady, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
     completeTaskStep, triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
