@@ -695,6 +695,52 @@ try {
       assert.equal(overlaps, false, `default control preview must not overlap: ${a.id} / ${b.id}`);
     }
   }
+  // The editor preview must switch to a landscape aspect ratio and keep
+  // every default control below the fixed HUD and inside the available screen.
+  const landscapePage = await browser.newPage({
+    viewport: { width: 844, height: 390 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  landscapePage.on('pageerror', error => failures.push(error.message));
+  await landscapePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await landscapePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await landscapePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
+  const landscapeSettings = landscapePage.locator('[role="dialog"]');
+  await landscapeSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const landscapePreview = landscapeSettings.getByTestId('control-layout-preview');
+  const landscapePreviewBox = await landscapePreview.boundingBox();
+  const landscapeFixedHud = await landscapeSettings.getByTestId('control-layout-fixed-hud').boundingBox();
+  assert.ok(landscapePreviewBox && landscapeFixedHud, 'landscape control preview and fixed HUD are visible');
+  assert.ok(landscapePreviewBox.width / landscapePreviewBox.height > 1.8,
+    'control preview must use a landscape aspect ratio in landscape orientation');
+  const landscapeControls = await landscapePreview.locator('button[data-testid^="control-drag-"]').evaluateAll(nodes =>
+    nodes.map(node => {
+      const rect = node.getBoundingClientRect();
+      return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+    }),
+  );
+  for (let i = 0; i < landscapeControls.length; i++) {
+    const control = landscapeControls[i];
+    assert.ok(control.left >= landscapePreviewBox.x - 1 && control.right <= landscapePreviewBox.x + landscapePreviewBox.width + 1,
+      `landscape control must stay within horizontal bounds: ${control.id}`);
+    assert.ok(control.top >= landscapeFixedHud.y + landscapeFixedHud.height - 1 &&
+      control.bottom <= landscapePreviewBox.y + landscapePreviewBox.height + 1,
+      `landscape control must stay below the fixed HUD and above the bottom edge: ${control.id}`);
+    for (let j = i + 1; j < landscapeControls.length; j++) {
+      const other = landscapeControls[j];
+      const overlaps = control.left < other.right && control.right > other.left &&
+        control.top < other.bottom && control.bottom > other.top;
+      assert.equal(overlaps, false, `landscape default controls must not overlap: ${control.id} / ${other.id}`);
+    }
+  }
+  await landscapePage.close();
+
   // Exercise real mobile touch/pointer delivery, including pointer capture,
   // instead of relying on mouse events for a touch-first control editor.
   const touchSession = await page.context().newCDPSession(page);
