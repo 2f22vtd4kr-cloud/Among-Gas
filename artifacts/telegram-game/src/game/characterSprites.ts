@@ -5,7 +5,7 @@
 // evenly spaced vertically. Dividing image height by 9 puts crop boundaries
 // through real pixels in the mask, held-item, corpse and crouch art. Use the
 // measured, non-overlapping windows below; each window contains its whole pose
-// plus its inter-row padding, and excludes pixels from adjacent poses.
+// and excludes detached strokes that cross the transparent gap between the legs.
 
 // Cache-busting version suffix. Bump this any time characters.png is
 // regenerated — browsers (especially mobile Telegram webviews) can
@@ -50,7 +50,7 @@ export type CharacterPose = (typeof CHARACTER_POSES)[number];
  * Vertical crop windows measured from the authored PNG. Bounds are between
  * adjacent pose silhouettes, rather than uniform divisions of sheet height.
  * [top, bottom) coordinates intentionally retain the blank padding around each
- * silhouette so canvas sprites preserve their authored scale.
+ * silhouette while rendered pixels keep their native scale.
  */
 const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeight: number }> = [
   // Crop just beyond each measured silhouette. The source sheet has stray
@@ -77,8 +77,22 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
     y: window.top,
     width: CHARACTER_CELL_WIDTH,
     height: window.bottom - window.top,
-    /** Original display height keeps the silhouette scale stable after stray padding is cropped. */
+    /** Original atlas baseline retained for diagnostics; rendering never stretches cropped pixels. */
     displayHeight: window.displayHeight,
     row,
   };
+}
+
+/**
+ * Clip stray horizontal atlas strokes from the transparent gap between the
+ * legs. The notch is pose-specific and stays outside the colored leg pixels.
+ */
+export function getCharacterClipPath(pose: CharacterPose): string | undefined {
+  if (pose === 'idle') {
+    return 'polygon(0 0, 100% 0, 100% 100%, 56% 100%, 56% 79%, 50% 79%, 50% 100%, 0 100%)';
+  }
+  if (pose === 'dead-body') {
+    return 'polygon(0 0, 100% 0, 100% 100%, 58% 100%, 58% 82%, 53% 82%, 53% 100%, 0 100%)';
+  }
+  return undefined;
 }
