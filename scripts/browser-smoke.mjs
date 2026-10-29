@@ -835,12 +835,14 @@ try {
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  await fallbackPage.route(url => url.href.includes('map-hires.webp'), route => route.abort());
+  let pngFallbackLoaded = false;
+  fallbackPage.on('response', response => {
+    if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+  });
+  await fallbackPage.route(/map-hires\\.webp/i, route => route.abort());
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.equal(await fallbackPage.evaluate(() => performance.getEntriesByType('resource')
-    .some(entry => /map-hires\\.png(?:$|\\?)/i.test(entry.name))), true,
-    'failed WebP loading must fall back to the PNG map');
+  assert.equal(pngFallbackLoaded, true, 'failed WebP loading must fall back to the PNG map');
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
