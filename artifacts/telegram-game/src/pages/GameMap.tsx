@@ -1773,9 +1773,8 @@ export default function GameMap() {
           onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); setLeaveConfirmOpen(true); }}
           style={{
             position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            // Keep the Leave action beside, not on top of, the existing map toggle.
-            left: 'calc(max(12px, env(safe-area-inset-left, 0px)) + 88px)',
+            top: 'calc(env(safe-area-inset-top, 0px) + 60px)',
+            right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 70,
             minHeight: 44,
             padding: '0 9px',
