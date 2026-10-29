@@ -650,10 +650,32 @@ try {
   const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
   const dragBox = await dragHandle.boundingBox();
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
-  await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(previewBox.x + previewBox.width * 0.68, previewBox.y + previewBox.height * 0.32, { steps: 8 });
-  await page.mouse.up();
+  // Exercise real mobile touch/pointer delivery, including pointer capture,
+  // instead of relying on mouse events for a touch-first control editor.
+  const touchSession = await page.context().newCDPSession(page);
+  const touchStart = {
+    x: dragBox.x + dragBox.width / 2,
+    y: dragBox.y + dragBox.height / 2,
+    id: 1,
+  };
+  const touchEnd = {
+    x: previewBox.x + previewBox.width * 0.68,
+    y: previewBox.y + previewBox.height * 0.32,
+    id: 1,
+  };
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [touchStart] });
+  for (let step = 1; step <= 8; step++) {
+    await touchSession.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{
+        id: 1,
+        x: touchStart.x + (touchEnd.x - touchStart.x) * step / 8,
+        y: touchStart.y + (touchEnd.y - touchStart.y) * step / 8,
+      }],
+    });
+  }
+  await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
   const movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
   assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
