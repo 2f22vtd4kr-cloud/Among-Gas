@@ -948,10 +948,18 @@ try {
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
+  const pngResponsePromise = fallbackPage.waitForResponse(
+    response => response.url().includes('map-hires.png') && response.ok(),
+    { timeout: 15_000 },
+  );
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  // A missing locator is considered "hidden" by Playwright; require the actual
+  // game canvas before judging the loading screen or fallback behavior.
+  await fallbackPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await pngResponsePromise;
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   assert.equal(pngFallbackLoaded, true,
-    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}`);
+    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}; page errors: ${failures.join(' | ') || 'none'}`);
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
