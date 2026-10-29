@@ -49,8 +49,10 @@ try {
   const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
   await menuTitle.waitFor({ state: 'visible' });
   await menuSettingsButton.waitFor({ state: 'visible' });
+  assert.equal(await menuSettingsButton.locator('svg path').nth(0).getAttribute('d'), 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
+    'the Settings gear inner ring must be centered on the 24×24 icon viewBox');
   assert.equal(await menuSettingsButton.locator('svg path').nth(1).getAttribute('transform'), null,
-    'the Settings gear must not offset its outer teeth away from the centered inner ring');
+    'the Settings gear outer teeth must not be translated away from the centered inner ring');
   const menuTitleBox = await menuTitle.boundingBox();
   const menuSettingsBox = await menuSettingsButton.boundingBox();
   assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
