@@ -150,10 +150,11 @@ try {
   const hudSelectors = [
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
-    page.getByRole('button', { name: /Покинуть матч/ }),
     page.getByRole('button', { name: /тревога/i }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
+  assert.equal(await page.getByRole('button', { name: 'Покинуть матч' }).count(), 0,
+    'Leave Match must not occupy a permanent, high-emphasis gameplay HUD slot');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
   assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
   for (let i = 0; i < hudBoxes.length; i++) {
@@ -168,13 +169,17 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
 
-  // Leaving a live match is explicit and cancellable before it disconnects.
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  // Leaving is discoverable inside Settings, not permanently rendered over gameplay.
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const settingsWithLeave = page.getByRole('dialog', { name: 'Настройки' });
+  await settingsWithLeave.waitFor({ state: 'visible' });
+  await settingsWithLeave.getByTestId('settings-leave-match').click();
   const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
   await leaveDialog.waitFor({ state: 'visible' });
   await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
   await leaveDialog.waitFor({ state: 'hidden' });
-  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.getByRole('dialog', { name: 'Настройки' }).getByTestId('settings-leave-match').click();
   await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
   await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
   // Return to a predictable fixture for the rest of the visual smoke suite.
@@ -418,10 +423,10 @@ try {
     'the corpse must render from one isolated atlas pose, not synthesized layers');
   assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
-  assert.equal(await corpseSprite.getAttribute('data-source-y'), '2100',
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '300',
-    'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
+    'the legacy PNG crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
@@ -556,6 +561,31 @@ try {
       fullPage: true,
     });
   }
+  // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
+  await page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === 'amongGas.settings' || key === 'amongGas.language') {
+        throw new DOMException('Blocked by test', 'QuotaExceededError');
+      }
+      return setItem.call(this, key, value);
+    };
+  });
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const restrictedSettings = page.getByRole('dialog', { name: 'Настройки' });
+  await restrictedSettings.getByRole('button', { name: 'English' }).click();
+  await restrictedSettings.getByTestId('joystick-side-left').click();
+  assert.equal(await restrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'in-memory joystick choice must update even if localStorage writes fail');
+  await page.getByRole('button', { name: 'Close settings' }).click();
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const reopenedRestrictedSettings = page.getByRole('dialog', { name: 'Settings' });
+  assert.equal(await reopenedRestrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'in-memory joystick choice must stay in sync across mounted UI');
+  await reopenedRestrictedSettings.getByRole('button', { name: 'English' }).waitFor({ state: 'visible' });
+  await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
+
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({
