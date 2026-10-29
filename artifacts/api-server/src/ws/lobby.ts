@@ -219,8 +219,12 @@ export interface SabotageState {
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
-  /** Wall-clock start time used to prevent bots from instantly killing at spawn. */
+  /** Wall-clock start time for match telemetry and initial cooldowns. */
   startedAtMs?: number;
+  /** Client slots that have loaded the map and character atlas for this round. */
+  gameplayReadySlots?: Set<number>;
+  /** True only after every connected human client has reported its assets ready. */
+  gameplayReady?: boolean;
   /** slot → player */
   players: Map<number, LobbyPlayer>;
   /** tgUserId → slot (fast reverse lookup) */
@@ -990,6 +994,37 @@ export class LobbyManager {
    *   the standard playerCount-based table. Ignored (clamped) if it doesn't
    *   fit the lobby's player count. Real games never pass this.
    */
+  /**
+   * Record that a human client has loaded the map and sprite atlas. Gameplay
+   * (including bot movement and kills) stays paused until every connected
+   * human has sent this acknowledgement. Disconnected players are naturally
+   * excluded from the readiness quorum.
+   */
+  markGameplayReady(lobby: Lobby, slot: number): boolean {
+    const player = lobby.players.get(slot);
+    if (!player || player.isBot || lobby.phase !== 'ROAMING') return false;
+    if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
+    lobby.gameplayReadySlots.add(slot);
+    return this.refreshGameplayReady(lobby);
+  }
+
+  /** Recompute readiness on action/tick boundaries so disconnects cannot stall a round. */
+  isGameplayReady(lobby: Lobby): boolean {
+    return this.refreshGameplayReady(lobby);
+  }
+
+  private refreshGameplayReady(lobby: Lobby): boolean {
+    if (lobby.phase !== 'ROAMING') return false;
+    if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
+    const connectedHumans = Array.from(lobby.players.values()).filter(
+      player => !player.isBot && player.ws.readyState === /* OPEN */ 1,
+    );
+    lobby.gameplayReady = connectedHumans.length > 0 && connectedHumans.every(
+      player => lobby.gameplayReadySlots!.has(player.slot),
+    );
+    return lobby.gameplayReady;
+  }
+
   startGame(lobby: Lobby, impostorCountOverride?: number): void {
     if (lobby.phase !== 'WAITING') return;
 
@@ -1063,6 +1098,8 @@ export class LobbyManager {
       player.lastMovementCorrectionAtMs = undefined;
     }
     lobby.startedAtMs = startedAtMs;
+    lobby.gameplayReadySlots = new Set<number>();
+    lobby.gameplayReady = false;
     lobby.phase = 'ROAMING';
     logger.info(
       `[Lobby] Game started in ${lobby.code} — ${players.length} players, ` +
@@ -1625,6 +1662,9 @@ export class LobbyManager {
   private _tickBots(): void {
     for (const lobby of this.lobbies.values()) {
       if (lobby.phase !== 'ROAMING' && lobby.phase !== 'MEETING') continue;
+      // Bots must not start walking, sabotaging or hunting while any connected
+      // human client is still showing its map-loading screen.
+      if (lobby.phase === 'ROAMING' && !this.isGameplayReady(lobby)) continue;
       for (const player of lobby.players.values()) {
         if (!player.isBot || !player.botAgent) continue;
         try {
