@@ -1596,3 +1596,25 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - Branch: `fix/session-replacement-guard`.
 - No runtime settings or environment variables changed.
+
+### 2026-10-29 — Mobile gameplay and UI reliability pass (Issue #22)
+
+**Done**
+- `artifacts/telegram-game/src/pages/GameMap.tsx` — global movement-key handling now ignores editable targets (`input`, `textarea`, `select`, `contenteditable`, and textbox roles), so WASD letters are not prevented while typing in chat. Added a visible, localized Leave Match control next to Settings. It confirms intent, clears transient held movement, and reloads the app so the existing WebSocket disconnect lifecycle returns the player to the lobby; no unsupported server-side leave opcode was invented.
+- `artifacts/telegram-game/src/pages/Lobby.tsx` — replaced the menu's independently calculated equal-height sprite crops with the shared measured atlas frame geometry from `src/game/characterSprites.ts`. Lobby and gameplay now use the same isolated row bounds and cache-busted sheet path. Positioned menu Settings against the safe-area viewport instead of the title block, preventing overlap/clipping on narrow mobile widths.
+- `artifacts/telegram-game/src/components/Joystick.tsx` — releases all held directions and resets the knob on blur, page visibility changes, touch cancellation, and component cleanup.
+- Created and assigned Issue #22, then implemented on branch `fix/mobile-gameplay-ui-issue-22`. No Replit project was opened, changed, or published.
+
+**Decisions & gotchas**
+- The existing canvas resize handler already debounces `window.resize` and `visualViewport.resize` and avoids resetting unchanged backing-buffer dimensions. Do not re-add a second resize strategy without reproducing a remaining issue.
+- The canvas-time sprite scaling cannot create new art detail. This pass fixes the known mismatch between lobby's uniform row math and the measured atlas bounds; replacing the authored source sheet with genuinely higher-detail art remains a separate asset-production decision and should preserve licensing/provenance.
+- Leave Match intentionally uses the existing page/WebSocket disconnect lifecycle because the protocol has no dedicated leave action. Confirm server disconnect cleanup and rejoin behavior in live browser QA before treating that path as device-verified.
+
+**Left off / next steps**
+- Run the repository CI workflow on the PR and inspect both the build result and generated visual-QA screenshots. Add any regression assertion exposed by CI.
+- Manually verify on iOS Safari / Telegram WebView: movement and wall sliding, camera stability through toolbar/viewport changes, text composition in meeting chat, Settings placement, Leave Match confirmation and rejoin, and all sprite poses. This environment has not performed an actual iPhone/Telegram session.
+- Sprite resolution remains 1123×1401; no canvas upscaling is claimed to improve source detail.
+
+**State to restore**
+- Branch: `fix/mobile-gameplay-ui-issue-22`.
+- No runtime configuration, Replit workflow, secrets, or deployment was changed.
