@@ -1070,6 +1070,37 @@ export default function GameMap() {
       // Vent positions remain active for proximity-gated controls, but we do not
       // paint synthetic black/white vent glyphs over the illustrated floor.
 
+      // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
+      // Use the dedicated row-7 Among Gas corpse sprite: it already contains
+      // the cut suit, exposed bone, wound and ground contact. Never synthesize
+      // a corpse by cropping an upright living character or drawing a fake bone.
+      ctx.save();
+      for (const body of corpsePositionsRef.current) {
+        const bx = Math.round((body.x - srcX) * scale);
+        const by = Math.round((body.y - srcY) * scale);
+        if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
+        const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
+        const sx = Math.ceil(rect.x);
+        const sy = Math.ceil(rect.y);
+        const sw = Math.floor(rect.x + rect.width) - sx;
+        const sh = Math.floor(rect.y + rect.height) - sy;
+        // Preserve the authored sprite's pixel aspect ratio. Its row window is
+        // shorter than the atlas average, so scale height with the source window
+        // instead of stretching a mixed corpse/crouch crop into a fake landscape.
+        const corpseW = Math.max(18, Math.round(PLAYER_DISPLAY_WIDTH * scale * 0.95));
+        const corpseH = Math.max(12, Math.round(
+          PLAYER_DISPLAY_HEIGHT * scale * (rect.height / CHARACTER_CELL_HEIGHT) * 0.95,
+        ));
+        const corpseX = bx - corpseW / 2;
+        const corpseY = by - corpseH / 2;
+
+        ctx.save();
+        ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
+        ctx.restore();
+      }
+      ctx.restore();
+
       // ── 2.9 Admin Table console marker ────────────────────────────────────
       ctx.save();
       ctx.textAlign = 'center';
