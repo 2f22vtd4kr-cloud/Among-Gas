@@ -155,19 +155,23 @@ export function smoothVisibilityPolygon(
     return [...points];
   }
   const radius = Math.max(1, Math.min(8, Math.floor(windowRadius)));
+  const sigma = Math.max(1, radius / 1.6);
   const distances = points.map(point => Math.hypot(point.x - origin.x, point.y - origin.y));
 
   return points.map((point, index) => {
     const distance = distances[index];
     if (distance <= 0) return point;
-    let sum = 0;
-    let samples = 0;
+    let weightedSum = 0;
+    let weightSum = 0;
     for (let offset = -radius; offset <= radius; offset++) {
       const wrapped = (index + offset + points.length) % points.length;
-      sum += distances[wrapped];
-      samples++;
+      const weight = Math.exp(-(offset * offset) / (2 * sigma * sigma));
+      weightedSum += distances[wrapped] * weight;
+      weightSum += weight;
     }
-    const smoothedDistance = Math.min(distance, sum / samples);
+    // Gaussian weights soften corners more naturally than a box average. Clamp
+    // to the original ray hit so smoothing can only darken, never leak through walls.
+    const smoothedDistance = Math.min(distance, weightedSum / weightSum);
     const dx = (point.x - origin.x) / distance;
     const dy = (point.y - origin.y) / distance;
     return {
