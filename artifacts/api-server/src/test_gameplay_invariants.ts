@@ -121,6 +121,21 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   };
 }
 
+// Startup readiness: the server must not release bots or accept gameplay until
+// every connected human client has finished loading the map and sprite atlas.
+{
+  const a = makePlayer(0, 'crewmate', 100, 100);
+  const b = makePlayer(1, 'impostor', 130, 100);
+  const lobby = makeLobby([a.player, b.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.isGameplayReady(lobby), false, 'new match is not ready before client acknowledgements');
+  assert.equal(manager.markGameplayReady(lobby, 0), false, 'one ready client cannot start gameplay alone');
+  assert.equal(manager.isGameplayReady(lobby), false, 'second client is still loading');
+  assert.equal(manager.markGameplayReady(lobby, 1), true, 'gameplay unlocks after every connected human is ready');
+  assert.equal(manager.isGameplayReady(lobby), true);
+  manager.disposeLobby(lobby);
+}
+
 // 1. Tasks, vents and consoles must be valid interaction points on *this* map.
 assert.equal(TASK_DEFS.length, 11, 'expected five original and six ported base-game tasks');
 assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'task IDs must be unique');
