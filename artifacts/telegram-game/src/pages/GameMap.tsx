@@ -125,9 +125,9 @@ const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
 const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
 
 function CharSpriteUI({
-  color, pose = 'idle', size = 64, flipped = false,
+  color, pose = 'idle', size = 64, flipped = false, sheetSrc,
 }: {
-  color: string; pose?: string; size?: number; flipped?: boolean;
+  color: string; pose?: string; size?: number; flipped?: boolean; sheetSrc?: string;
 }) {
   const safePose: CharacterPose = (CHARACTER_POSES as readonly string[]).includes(pose)
     ? pose as CharacterPose
@@ -155,7 +155,7 @@ function CharSpriteUI({
       data-source-height={frame.height}
       style={{
         width: size, height, flexShrink: 0, overflow: 'hidden',
-        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
+        backgroundImage: `url(${sheetSrc ?? CHARACTER_SHEET_PATH})`,
         backgroundSize: `${bgW}px ${bgH}px`,
         backgroundPosition: `${posX}px ${posY}px`,
         backgroundRepeat: 'no-repeat',
@@ -208,6 +208,7 @@ export default function GameMap() {
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
   const [spriteLoaded, setSpriteLoaded] = useState(false);
+  const [spriteDataUrl, setSpriteDataUrl] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   // ── Network ───────────────────────────────────────────────────────────────
@@ -234,19 +235,30 @@ export default function GameMap() {
 
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
   useEffect(() => {
-    if (!lastKill) return;
-    // The victim receives the blocking full-screen death sequence; the
-    // attacker gets the kill sound but can keep playing and moving.
-    if (lastKill.attackerSlot === mySlot && lastKill.victimSlot !== mySlot) {
+    if (!lastKill) return undefined;
+    // Victims see the blocking death sequence; attackers keep playing.
+    if (lastKill.victimSlot === mySlot) {
+      setKillAnimation(lastKill);
+      sfx('kill', 0.72);
+      const timer = window.setTimeout(() => setKillAnimation(null), 1700);
+      return () => window.clearTimeout(timer);
+    }
+    if (lastKill.attackerSlot === mySlot) {
       sfx('kill', 0.48);
       return;
     }
-    if (lastKill.victimSlot !== mySlot) return;
-    setKillAnimation(lastKill);
-    sfx('kill', 0.72);
-    const timer = window.setTimeout(() => setKillAnimation(null), 1700);
-    return () => window.clearTimeout(timer);
-  }, [lastKill, mySlot]);
+
+    // The server broadcasts kill events to the whole lobby. Give nearby
+    // bystanders an audible cue too, without leaking kills across the map.
+    const local = playerStateRef.current;
+    const attacker = lastKill.attackerSlot === null ? undefined : remotePlayersRef.current.get(lastKill.attackerSlot);
+    const victim = lastKill.victimSlot === null ? undefined : remotePlayersRef.current.get(lastKill.victimSlot);
+    const hearingRange = 520;
+    const nearby = [attacker, victim].some(player => player &&
+      Math.hypot(player.x - local.x, player.y - local.y) <= hearingRange);
+    if (nearby) sfx('kill', 0.34);
+    return undefined;
+  }, [lastKill, mySlot, remotePlayersRef]);
 
   const playerName = useCallback(
     (slot: number) => players.find(p => p.slot === slot)?.username ?? `Player ${slot}`,
@@ -643,10 +655,15 @@ export default function GameMap() {
     const dpr = getRenderDpr();
     const w = window.innerWidth;
     const h = window.innerHeight;
-    canvas.width  = Math.round(w * dpr);
-    canvas.height = Math.round(h * dpr);
-    canvas.style.width  = `${w}px`;
-    canvas.style.height = `${h}px`;
+    const pixelWidth = Math.round(w * dpr);
+    const pixelHeight = Math.round(h * dpr);
+    // Assigning canvas.width/height clears the entire backing store even when
+    // dimensions are unchanged. Mobile browsers can emit resize bursts while
+    // the joystick is dragged; avoid needless resets that look like camera jumps.
+    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+    if (canvas.style.width !== `${w}px`) canvas.style.width = `${w}px`;
+    if (canvas.style.height !== `${h}px`) canvas.style.height = `${h}px`;
   }, []);
 
   useEffect(() => {
@@ -702,17 +719,59 @@ export default function GameMap() {
       const id = octx.getImageData(0, 0, oc.width, oc.height);
       const px = id.data;
       for (let i = 0; i < px.length; i += 4) {
-        const a = px[i + 3];
-        if (a <= 20) {
-          px[i + 3] = 0;
-        } else {
-          px[i + 3] = 255;
-          if ((px[i] + px[i + 1] + px[i + 2]) / 3 < 80) {
-            px[i] = 0; px[i + 1] = 0; px[i + 2] = 0;
+        // Preserve authored alpha. Forcing every semi-transparent pixel to
+        // fully opaque turns anti-aliased sketch/scratch pixels into hard marks.
+        if (px[i + 3] <= 20) px[i + 3] = 0;
+      }
+
+      // The generated atlas includes stray dark ground strokes beneath
+      // several poses. Clear only dark pixels in the final transparent-padding
+      // band of each measured pose window; colored feet and suit pixels remain.
+      const poseWindows = [
+        [0, 153], [172, 310], [327, 458], [471, 620], [636, 775],
+        [795, 903], [915, 1051], [1067, 1185], [1198, 1334],
+      ] as const;
+      const cellW = oc.width / CHARACTER_COLORS.length;
+      for (const [top, bottom] of poseWindows) {
+        const bandStart = Math.max(top, bottom - 24);
+        for (let col = 0; col < CHARACTER_COLORS.length; col++) {
+          const xStart = Math.round(col * cellW);
+          const xEnd = Math.round((col + 1) * cellW);
+          for (let y = bandStart; y < bottom; y++) {
+            let runStart = -1;
+            const clearLongRun = (runEnd: number) => {
+              // Long horizontal ink streaks are artifacts; short runs form the
+              // legitimate bottom outline of the legs and must be retained.
+              if (runStart >= 0 && runEnd - runStart >= 12) {
+                for (let x = runStart; x < runEnd; x++) {
+                  px[(y * oc.width + x) * 4 + 3] = 0;
+                }
+              }
+              runStart = -1;
+            };
+            for (let x = xStart; x < xEnd; x++) {
+              const i = (y * oc.width + x) * 4;
+              const dark = px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180;
+              if (dark) {
+                if (runStart < 0) runStart = x;
+              } else clearLongRun(x);
+            }
+            clearLongRun(xEnd);
           }
         }
       }
       octx.putImageData(id, 0, 0);
+      // CSS-based kill/reveal sprites must use the same cleaned pixels as the
+      // canvas renderer; otherwise the original atlas underlines reappear in
+      // the death sequence even after the gameplay sprites are fixed.
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = oc.width;
+      exportCanvas.height = oc.height;
+      const exportCtx = exportCanvas.getContext('2d');
+      if (exportCtx) {
+        exportCtx.drawImage(oc, 0, 0);
+        setSpriteDataUrl(exportCanvas.toDataURL('image/png'));
+      }
       spriteImgRef.current = oc;
       setSpriteLoaded(true);
     };
@@ -1057,34 +1116,8 @@ export default function GameMap() {
         }
       }
 
-      // ── 2.8 Vent markers ──────────────────────────────────────────────────
-      // Positions are in Among Gas's own collision-checked map coordinate space.
-      ctx.save();
-      ctx.textAlign = 'center';
-      VENT_DEFS.forEach(vent => {
-        const vx = Math.round((vent.x - srcX) * scale);
-        const vy = Math.round((vent.y - srcY) * scale);
-        if (vx < -32 || vx > cw + 32 || vy < -32 || vy > ch + 32) return;
-        const radius = Math.max(5, Math.round(10 * dpr));
-        ctx.beginPath();
-        ctx.arc(vx, vy, radius + 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.56)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.ellipse(vx, vy, radius, radius * 0.62, 0, 0, Math.PI * 2);
-        ctx.fillStyle = '#34454e';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = 'rgba(170,220,230,0.9)';
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(vx - radius * 0.65, vy + radius * 0.08);
-        ctx.lineTo(vx + radius * 0.65, vy + radius * 0.08);
-        ctx.strokeStyle = 'rgba(10,20,26,0.95)';
-        ctx.lineWidth = Math.max(2, dpr * 2);
-        ctx.stroke();
-      });
-      ctx.restore();
+      // Vent positions remain active for proximity-gated controls, but we do not
+      // paint synthetic black/white vent glyphs over the illustrated floor.
 
       // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
       // Use the dedicated row-7 Among Gas corpse sprite: it already contains
@@ -1418,7 +1451,7 @@ export default function GameMap() {
   return (
     <div
       onPointerDown={unlockSfx}
-      style={{ position: 'fixed', inset: 0, overflow: 'hidden', background: '#3d4e5e' }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', overscrollBehavior: 'none', touchAction: 'none', background: '#3d4e5e' }}
     >
       {killAnimation && (
         <div
@@ -1518,7 +1551,7 @@ export default function GameMap() {
               animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
-              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
+              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
             </div>
             <div className="ag-kill-victim" style={{
               position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
@@ -1529,13 +1562,13 @@ export default function GameMap() {
                 // Keep the complete authored balaclava sprite visible during the strike.
                 animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} sheetSrc={spriteDataUrl ?? undefined} />
               </div>
               <div className="ag-kill-victim-lower" role="img" aria-label={en ? 'Balaclava corpse with exposed bone' : 'Тело с открытой костью'} style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
+                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} sheetSrc={spriteDataUrl ?? undefined} />
               </div>
             </div>
             <div className="ag-kill-slash" style={{
@@ -2577,6 +2610,7 @@ export default function GameMap() {
                   color={isImp ? 'maroon' : 'teal'}
                   pose={isImp ? 'mask' : 'idle'}
                   size={170}
+                  sheetSrc={spriteDataUrl ?? undefined}
                 />
               </div>
 

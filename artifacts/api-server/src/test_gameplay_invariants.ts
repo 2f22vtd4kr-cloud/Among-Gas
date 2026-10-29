@@ -690,4 +690,28 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   );
 }
 
-console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown and kill)');
+// 16. Spawn scatter must never silently stack players at the central fallback.
+{
+  const manager = new LobbyManager();
+  const players = Array.from({ length: 10 }, (_, slot) =>
+    makePlayer(slot, 'crewmate', 0, 0).player,
+  );
+  const lobby = makeLobby(players);
+  lobby.phase = 'WAITING';
+  manager.startGame(lobby, 2);
+  const positions = [...lobby.players.values()].map(p => ({ x: p.x, y: p.y }));
+  assert.equal(new Set(positions.map(p => `${p.x},${p.y}`)).size, positions.length,
+    'all players must receive distinct spawn coordinates');
+  for (const pos of positions) {
+    assertClientWalkable(pos.x, pos.y, 'scattered spawn');
+  }
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 30,
+        'spawn positions must keep players separated to avoid initial collision pileups');
+    }
+  }
+  manager.disposeLobby(lobby);
+}
+
+console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown, kill and spawn separation)');

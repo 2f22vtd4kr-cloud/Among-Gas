@@ -341,8 +341,8 @@ try {
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
   assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '131',
-    'the corpse source window must end before sit-crouch art begins');
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
+    'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });

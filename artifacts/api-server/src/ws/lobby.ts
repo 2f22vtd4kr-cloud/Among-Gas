@@ -76,14 +76,48 @@ const spawnGrid = buildCollisionGrid();
  * point; each candidate radius is validated against the collision grid,
  * falling back to the central spawn if no walkable candidate is found.
  */
-function computeSpawnPosition(index: number, total: number): { x: number; y: number } {
+function computeSpawnPosition(
+  index: number,
+  total: number,
+  occupied: readonly { x: number; y: number }[] = [],
+): { x: number; y: number } {
   if (total <= 1) return { x: SPAWN_X, y: SPAWN_Y };
-  const angle = (index / total) * Math.PI * 2 - Math.PI / 2;
-  for (const radius of [60, 40, 20]) {
-    const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
-    const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-    if (canMoveTo(spawnGrid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS)) return { x, y };
+  const baseAngle = (index / total) * Math.PI * 2 - Math.PI / 2;
+  // Try several angular/radial candidates instead of falling back immediately
+  // to the shared center. A rejected candidate must not stack multiple players
+  // on the same spawn pixel, where their first movement can repeatedly collide.
+  const radii = [60, 48, 72, 36, 84, 24, 96, 108];
+  const angleOffsets = [0, Math.PI / 12, -Math.PI / 12, Math.PI / 6, -Math.PI / 6, Math.PI / 4, -Math.PI / 4];
+  for (const offset of angleOffsets) {
+    for (const radius of radii) {
+      const angle = baseAngle + offset;
+      const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
+      const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
+      const feetY = y + FEET_OFFSET_Y;
+      const clear = canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) &&
+        canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) &&
+        canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS);
+      if (!clear) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      return { x, y };
+    }
   }
+  // The center is known walkable, but prefer the farthest safe candidate if
+  // a crowded/custom map exhausts the ideal ellipse candidates.
+  for (let radius = 12; radius <= 180; radius += 12) {
+    for (let step = 0; step < 24; step++) {
+      const angle = (step / 24) * Math.PI * 2;
+      const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
+      const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
+      const feetY = y + FEET_OFFSET_Y;
+      if (!canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) ||
+          !canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) ||
+          !canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS)) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      return { x, y };
+    }
+  }
+  // Last resort only: map geometry has no further separated walkable spawn.
   return { x: SPAWN_X, y: SPAWN_Y };
 }
 
@@ -992,8 +1026,10 @@ export class LobbyManager {
       .sort((a, b) => a - b);
 
     // Spread spawn positions + force inclusion in the next delta broadcast
+    const assignedSpawns: Array<{ x: number; y: number }> = [];
     players.forEach((p, i) => {
-      const pos = computeSpawnPosition(i, players.length);
+      const pos = computeSpawnPosition(i, players.length, assignedSpawns);
+      assignedSpawns.push(pos);
       p.x = pos.x;
       p.y = pos.y;
       p.lastBroadcastWireX = -100_000;
