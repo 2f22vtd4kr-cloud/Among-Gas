@@ -56,14 +56,14 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   // Crop just beyond each measured silhouette. The source sheet has stray
   // horizontal strokes through the otherwise transparent leg gap and below the feet;
   // the pose-specific notch removes the bridges while retaining the outer feet.
-  { top: 0, bottom: 143, displayHeight: 153 }, // idle: exclude detached horizontal strokes below the feet
+  { top: 0, bottom: 138, displayHeight: 153 }, // idle: stop at the authored foot outline, before detached underline pixels
   { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
   { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
   { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
   { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
   { top: 795, bottom: 896, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
   { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
-  { top: 1067, bottom: 1174, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, exclude detached underline pixels
+  { top: 1067, bottom: 1160, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, exclude detached underline pixels
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
@@ -100,10 +100,10 @@ export interface CharacterClipNotch {
  */
 export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
   if (pose === 'idle') {
-    return { leftLegStart: 0.31, leftLegEnd: 0.52, rightLegStart: 0.56, rightLegEnd: 0.73, top: 0.72 };
+    return { leftLegStart: 0.31, leftLegEnd: 0.52, rightLegStart: 0.56, rightLegEnd: 0.73, top: 0.79 };
   }
   if (pose === 'dead-body') {
-    return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.81 };
+    return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.66 };
   }
   return undefined;
 }
