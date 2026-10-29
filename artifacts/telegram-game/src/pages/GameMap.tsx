@@ -778,8 +778,17 @@ export default function GameMap() {
       mapImgRef.current = img;
       setLoaded(true);
     };
-    img.onerror = () => { if (!cancelled) setError(true); };
-    // Prefer the smaller WebP map asset on mobile; the PNG remains in the repo for compatibility and editing.
+    let triedPngFallback = false;
+    img.onerror = () => {
+      if (cancelled) return;
+      if (!triedPngFallback) {
+        triedPngFallback = true;
+        img.src = `${import.meta.env.BASE_URL}map-hires.png`;
+        return;
+      }
+      setError(true);
+    };
+    // Prefer the smaller WebP map asset on mobile; fall back to PNG if needed.
     img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
     if (img.complete && img.naturalWidth > 0) { mapImgRef.current = img; setLoaded(true); }
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
@@ -1666,7 +1675,7 @@ export default function GameMap() {
           </div>
         </div>
       )}
-      {!loaded && !error && (
+      {(!loaded || !spriteLoaded) && !error && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1689,7 +1698,7 @@ export default function GameMap() {
         ref={canvasRef}
         style={{
           display: 'block', position: 'absolute', top: 0, left: 0,
-          opacity: loaded ? 1 : 0,
+          opacity: loaded && spriteLoaded ? 1 : 0,
         }}
       />
 
