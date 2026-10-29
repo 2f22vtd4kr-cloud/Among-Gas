@@ -549,6 +549,10 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(originalHostSocket.closeCalls, 1, 'the replaced host socket is closed');
   assert.equal(manager.isCurrentSocket(91001, originalHostSocket.ws), false,
     'the previous socket loses ownership immediately, before its close handshake completes');
+  assert.equal(manager.isSupersededSocket(originalHostSocket.ws), true,
+    'the previous socket is explicitly retired against queued post-replacement packets');
+  assert.equal(manager.isSupersededSocket(replacementHostSocket.ws), false,
+    'the newly bound replacement socket is not marked stale');
   assert.equal(manager.isCurrentSocket(91001, replacementHostSocket.ws), true,
     'the new socket owns the replacement room');
   assert.equal(
@@ -590,6 +594,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(oldHostSocket.closeCalls, 1);
   assert.equal(manager.isCurrentSocket(92001, oldHostSocket.ws), false,
     'the old socket must not authorize queued actions after moving rooms');
+  assert.equal(manager.isSupersededSocket(oldHostSocket.ws), true,
+    'joining another room explicitly retires the previous socket');
   assert.equal(manager.isCurrentSocket(92001, movedSocket.ws), true);
   assert.equal(manager.getLobbyForUser(92001), targetLobby);
   assert.equal(targetLobby.players.get(1)?.ws, movedSocket.ws);
@@ -609,6 +615,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(oldSocket.closeCalls, 1);
   assert.equal(manager.isCurrentSocket(93001, oldSocket.ws), false,
     'reconnecting into the same room invalidates the older socket immediately');
+  assert.equal(manager.isSupersededSocket(oldSocket.ws), true,
+    'same-room reconnect explicitly retires the previous socket');
   assert.equal(manager.isCurrentSocket(93001, newSocket.ws), true);
   assert.equal(lobby.players.get(0)?.ws, newSocket.ws);
   assert.equal(manager.removePlayer(93001, oldSocket.ws), null);
