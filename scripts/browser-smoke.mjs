@@ -109,6 +109,37 @@ try {
   assert.equal(await movementJoystick.getAttribute('aria-label'), 'Джойстик движения',
     'the joystick accessible label must follow the selected Russian language');
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
+
+  // Pointer capture plus pointer-up must return the joystick to neutral. A lost
+  // touch must never leave a movement key held and keep nudging the player.
+  const initialJoystickBox = await movementJoystick.boundingBox();
+  assert.ok(initialJoystickBox, 'movement joystick must be measurable for pointer testing');
+  await page.mouse.move(initialJoystickBox.x + initialJoystickBox.width / 2, initialJoystickBox.y + initialJoystickBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(initialJoystickBox.x + initialJoystickBox.width / 2 + 38, initialJoystickBox.y + initialJoystickBox.height / 2, { steps: 4 });
+  await page.waitForFunction(() => {
+    const element = document.querySelector('[data-testid="joystick-knob"]');
+    return !!element && element.style.transform !== 'translate(-50%, -50%)';
+  });
+  await page.mouse.up();
+  await page.waitForFunction(() => {
+    const element = document.querySelector('[data-testid="joystick-knob"]');
+    return !!element && element.style.transform === 'translate(-50%, -50%)';
+  });
+
+  // Leaving a live match is explicit and cancellable before it disconnects.
+  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
+  await leaveDialog.waitFor({ state: 'visible' });
+  await leaveDialog.getByRole('button', { name: 'Остаться' }).click();
+  await leaveDialog.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Покинуть матч' }).click();
+  await page.getByRole('dialog', { name: 'Выйти из матча?' }).getByRole('button', { name: 'Выйти' }).click();
+  await page.waitForFunction(() => window.location.pathname === '/' && !new URLSearchParams(window.location.search).has('mock'));
+  // Return to a predictable fixture for the rest of the visual smoke suite.
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.waitForSelector('canvas', { timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
