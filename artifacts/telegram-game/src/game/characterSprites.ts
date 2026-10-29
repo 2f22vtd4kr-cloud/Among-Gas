@@ -56,14 +56,14 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   // Crop just beyond each measured silhouette. The source sheet has stray
   // ground/underline strokes in the otherwise transparent padding below poses;
   // excluding that padding keeps those marks out of live and corpse sprites.
-  { top: 0, bottom: 147, displayHeight: 153 }, // idle: trim detached underline pixels below the feet
+  { top: 0, bottom: 143, displayHeight: 153 }, // idle: exclude the detached horizontal strokes below the feet
   { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
   { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
   { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
   { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
   { top: 795, bottom: 896, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
   { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
-  { top: 1067, bottom: 1179, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, remove underline pixels
+  { top: 1067, bottom: 1172, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, exclude detached underline pixels
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
