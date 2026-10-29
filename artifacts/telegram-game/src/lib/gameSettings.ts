@@ -158,10 +158,22 @@ export function customControlPositionStyle(
 ): CSSProperties {
   const point = controlLayout[id];
   if (!point) return {};
+  const safeBounds: Record<GameplayControlId, { halfWidth: number; halfHeight: number }> = {
+    joystick: { halfWidth: 52, halfHeight: 52 },
+    map: { halfWidth: 50, halfHeight: 24 },
+    tasks: { halfWidth: 54, halfHeight: 24 },
+    settings: { halfWidth: 22, halfHeight: 22 },
+    emergency: { halfWidth: 80, halfHeight: 24 },
+    taskAction: { halfWidth: 100, halfHeight: 24 },
+    killReport: { halfWidth: 100, halfHeight: 40 },
+    sabotage: { halfWidth: 42, halfHeight: 42 },
+    repair: { halfWidth: 100, halfHeight: 24 },
+  };
+  const { halfWidth, halfHeight } = safeBounds[id];
   return {
     position: 'fixed',
-    left: `${point.x}%`,
-    top: `${point.y}%`,
+    left: `clamp(calc(env(safe-area-inset-left, 0px) + ${halfWidth}px), ${point.x}%, calc(100vw - env(safe-area-inset-right, 0px) - ${halfWidth}px))`,
+    top: `clamp(calc(env(safe-area-inset-top, 0px) + ${halfHeight}px), ${point.y}%, calc(100dvh - env(safe-area-inset-bottom, 0px) - ${halfHeight}px))`,
     right: 'auto',
     bottom: 'auto',
     transform: 'translate(-50%, -50%)',
