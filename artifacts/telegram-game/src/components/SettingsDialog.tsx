@@ -109,12 +109,13 @@ function resolveNonOverlappingPosition(
     const point = positionFor(other);
     const dx = Math.abs(candidate.x - point.x) * viewportWidth / 100;
     const dy = Math.abs(candidate.y - point.y) * viewportHeight / 100;
+    // A small safety gap accounts for borders and preview/gameplay scaling.
     const horizontalClearance =
       DRAG_SAFE_HALF_WIDTH[id as keyof typeof DRAG_SAFE_HALF_WIDTH] +
-      DRAG_SAFE_HALF_WIDTH[other];
+      DRAG_SAFE_HALF_WIDTH[other] + 12;
     const verticalClearance =
       DRAG_SAFE_HALF_HEIGHT[id as keyof typeof DRAG_SAFE_HALF_HEIGHT] +
-      DRAG_SAFE_HALF_HEIGHT[other];
+      DRAG_SAFE_HALF_HEIGHT[other] + 12;
     return dx >= horizontalClearance || dy >= verticalClearance;
   });
 
