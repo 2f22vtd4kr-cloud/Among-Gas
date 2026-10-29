@@ -1575,3 +1575,24 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **Decisions**
 - Preserve collision geometry, visibility polygon, wall occlusion, and vision radii; this pass changes presentation, not gameplay rules.
 - Keep VITE_ENABLE_GAME_MOCKS=true limited to the CI test process. It is not committed into production configuration.
+
+
+### 2026-10-29 — Fix WebSocket session replacement guard
+
+**Done**
+- Audited current `main` at `0178bfd42082c7b4491af39004cf8b6976ac8a3f`, including the recent socket-ownership change, movement authority, auth startup guard, gameplay tests, and current CI visual-QA screenshots.
+- Found a guard-order regression: an authenticated replacement socket was rejected before its CREATE/JOIN/SOLO request could reach the lobby code that replaces the previous socket.
+- Added explicit tracking for superseded WebSocket identities. An unbound new socket may send only room-transition requests; replaced sockets remain blocked even if an old frame was already queued.
+- Added a real WebSocket integration regression for replacing an active lobby host, room roster/host migration, and closing the old connection, plus unit assertions for retired socket identities.
+
+**Decisions & gotchas**
+- Do not weaken ownership checks for gameplay RPCs. Only CREATE_ROOM, JOIN_ROOM, and CREATE_SOLO can be processed by a newly authenticated socket that is not yet bound to the user's current lobby.
+- Main CI passed before this patch (run 40718956742). The new PR workflow must pass before this change is merged.
+- No Replit project was opened, reconfigured, started, or published; the user will run it independently.
+
+**Left off / next steps**
+- Review the PR diff and wait for the PR's full CI job, especially the live WebSocket lobby test and gameplay invariants. Merge only after validation succeeds.
+
+**State to restore**
+- Branch: `fix/session-replacement-guard`.
+- No runtime settings or environment variables changed.

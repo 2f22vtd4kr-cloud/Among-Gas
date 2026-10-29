@@ -9,7 +9,8 @@ function connect(id, username) {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(WS_URL);
     ws.binaryType = 'nodebuffer';
-    const state = { ws, slot: null, msgs: [] };
+    const state = { ws, slot: null, msgs: [], closed: false };
+    ws.on('close', () => { state.closed = true; });
     const timeout = setTimeout(() => reject(new Error(`auth handshake timeout for ${username}`)), 5000);
 
     ws.on('open', () => {
@@ -40,6 +41,21 @@ function connect(id, username) {
 function send(state, bytes) {
   assert.equal(state.ws.readyState, WebSocket.OPEN, 'socket must be open before sending');
   state.ws.send(Buffer.from(bytes));
+}
+
+function waitForClose(state, timeoutMs = 5000) {
+  if (state.closed || state.ws.readyState === WebSocket.CLOSED) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      state.ws.off('close', onClose);
+      reject(new Error(`timeout waiting for replaced socket to close`));
+    }, timeoutMs);
+    const onClose = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    state.ws.once('close', onClose);
+  });
 }
 
 function waitFor(state, predicate, timeoutMs = 5000) {
@@ -143,7 +159,43 @@ async function main() {
     for (const { player } of crewmates) {
       await waitFor(player, b => b[0] === 0x16 && b[1] === 0x01 && b[2] === 0x01 && b[3] === impostor.slot);
     }
-    console.log('PASS: authenticated WebSocket lobby, slot allocation, role secrecy boundary, sabotage authorization and broadcast');
+    console.log('--- Allow a fresh socket to replace an existing lobby session ---');
+    const previousHost = await connect(90101, 'ReconnectHost');
+    players.push(previousHost);
+    send(previousHost, [0x10, 0x01]);
+    await waitFor(previousHost, b => b[0] === 0x10 && b[1] === 0x05);
+    const previousRoomUpdate = await waitFor(
+      previousHost, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === 1,
+    );
+    const previousRoomCode = previousRoomUpdate.slice(4, 10).toString('ascii').trim();
+
+    const remainingGuest = await connect(90102, 'ReconnectGuest');
+    players.push(remainingGuest);
+    send(remainingGuest, [0x10, 0x02, ...Buffer.from(previousRoomCode, 'ascii')]);
+    await waitFor(remainingGuest, b => b[0] === 0x10 && b[1] === 0x05);
+    await waitFor(remainingGuest, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === 2);
+    remainingGuest.msgs.length = 0;
+
+    const replacementHost = await connect(90101, 'ReconnectHost');
+    players.push(replacementHost);
+    send(replacementHost, [0x10, 0x01]);
+    await waitFor(replacementHost, b => b[0] === 0x10 && b[1] === 0x05);
+    const replacementRoomUpdate = await waitFor(
+      replacementHost, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === 1,
+    );
+    const replacementRoomCode = replacementRoomUpdate.slice(4, 10).toString('ascii').trim();
+    assert.notEqual(replacementRoomCode, previousRoomCode,
+      'a new connection may create a replacement room even while the previous socket is still active');
+
+    const oldRoomRoster = await waitFor(
+      remainingGuest, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === 1,
+    );
+    assert.equal(oldRoomRoster[3], 1,
+      'the old room must migrate host ownership to its remaining guest');
+    await waitForClose(previousHost);
+    assert.equal(previousHost.closed, true, 'the replaced WebSocket must close');
+
+    console.log('PASS: authenticated WebSocket lobby, slot allocation, role secrecy boundary, sabotage authorization, and session replacement');
   } finally {
     for (const player of players) {
       try { player.ws.close(); } catch {}
