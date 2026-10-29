@@ -430,6 +430,21 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],
   },
+  // Combined HUD regression fixture: tasks and a reportable body are present simultaneously.
+  'task-report-ready': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      myTasks: [{ taskId: 4, completedSteps: 0 }],
+      globalTaskProgress: 0,
+      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 32, y: PLAYER_SPAWN.y + 65 }],
+    },
+    remotePlayers: [
+      { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 },
+      { slot: 2, x: PLAYER_SPAWN.x - 90, y: PLAYER_SPAWN.y + 60 },
+      { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
+    ],
+  },
   // Phase 6 — meeting just started, discussion window (no voting yet).
   'meeting-discussion': {
     state: {

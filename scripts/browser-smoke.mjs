@@ -66,9 +66,42 @@ try {
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
   await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
+  assert.equal(await lobbySettings.getByRole('slider').count(), 3, 'Settings must expose master, music, and effect volumes');
+  for (let i = 0; i < 5; i++) {
+    await page.keyboard.press('Tab');
+    assert.equal(await lobbySettings.evaluate(dialog => dialog.contains(document.activeElement)), true,
+      'Tab navigation must stay inside Settings');
+  }
+  await page.keyboard.press('Shift+Tab');
+  assert.equal(await lobbySettings.evaluate(dialog => dialog.contains(document.activeElement)), true,
+    'Shift+Tab navigation must stay inside Settings');
+  await page.keyboard.press('Escape');
+  await lobbySettings.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === 'Настройки',
+    null, { timeout: 3000 });
+  await menuSettingsButton.click();
+  await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
+  await lobbySettings.getByRole('button', { name: 'Customize button positions' }).click();
+  const controlPreview = lobbySettings.locator('[aria-label="Draggable game control layout preview"]');
+  await controlPreview.waitFor({ state: 'visible' });
+  assert.equal(await controlPreview.locator('[data-control-id]').count(), 11,
+    'the layout editor must allow independently moving every gameplay control');
+  const taskPreviewControl = controlPreview.locator('[data-control-id="task"]');
+  const taskPreviewBox = await taskPreviewControl.boundingBox();
+  const previewBox = await controlPreview.boundingBox();
+  assert.ok(taskPreviewBox && previewBox, 'the control preview and task button must be measurable');
+  await page.mouse.move(taskPreviewBox.x + taskPreviewBox.width / 2, taskPreviewBox.y + taskPreviewBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(previewBox.x + previewBox.width * 0.30, previewBox.y + previewBox.height * 0.59, { steps: 4 });
+  await page.mouse.up();
+  await lobbySettings.getByRole('button', { name: 'Save positions' }).click();
+  const savedTaskPosition = await page.evaluate(() => JSON.parse(localStorage.getItem('amongGas.settings') || '{}').controlLayout?.task);
+  assert.ok(savedTaskPosition && Math.abs(savedTaskPosition.x - 0.30) < 0.06,
+    'the per-control position editor must persist the dragged position');
+  await lobbySettings.getByRole('button', { name: 'Close control layout editor' }).click();
   await lobbySettings.getByTestId('joystick-side-left').click();
   await page.getByRole('button', { name: 'Close settings' }).click();
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
@@ -288,6 +321,22 @@ try {
   assert.equal(await openingKillButton.isEnabled(), false,
     'the opening kill cooldown must disable the Kill action even when a target is in range');
 
+  // Task + Report must not overlap when both actions are reachable at once.
+  for (const size of [{ width: 320, height: 568 }, { width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    await page.setViewportSize(size);
+    await page.goto(`${origin}/?mock=task-report-ready`, { waitUntil: 'domcontentloaded' });
+    await waitForRoleRevealToFinish(page);
+    await page.getByTestId('task-action').waitFor({ state: 'visible', timeout: 10000 });
+    await page.getByTestId('report-action').waitFor({ state: 'visible', timeout: 10000 });
+    const taskBox = await page.getByTestId('task-action').boundingBox();
+    const reportBox = await page.getByTestId('report-action').boundingBox();
+    assert.ok(taskBox && reportBox, 'both task and report controls must be measurable at every viewport');
+    assert.ok(taskBox.x + taskBox.width <= reportBox.x || reportBox.x + reportBox.width <= taskBox.x ||
+      taskBox.y + taskBox.height <= reportBox.y || reportBox.y + reportBox.height <= taskBox.y,
+      `task prompt must not overlap Report at ${size.width}×${size.height}`);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+
   // Dropped bodies are distinct from the ghost's moving sprite and remain reportable.
   await page.goto(`${origin}/?mock=report-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
@@ -307,9 +356,8 @@ try {
     'fog-of-war must preserve the map beneath the lit area',
   );
 
-  // The local player is camera-centered; verify that the balaclava sprite's
-  // teal suit pixels are actually present in the rendered canvas, not just
-  // that the canvas element exists or has an opaque background.
+  // The canvas pixel probe confirms a player is drawn; the source assertion below
+  // separately guards the requested balaclava art identity.
   const localPlayerSuitPixels = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return 0;
@@ -327,6 +375,8 @@ try {
     }
     return count;
   });
+  assert.equal(await page.locator('canvas').getAttribute('data-character-atlas'), '/sprites/characters.png?v=6',
+    'gameplay must load the original textured balaclava atlas instead of the replacement SVG art');
   assert.ok(localPlayerSuitPixels > 20,
     `local balaclava player sprite must be visible in the rendered canvas (teal pixels=${localPlayerSuitPixels})`);
 
@@ -418,9 +468,9 @@ try {
     'the corpse must render from one isolated atlas pose, not synthesized layers');
   assert.equal(await corpseSprite.getAttribute('data-pose'), 'dead-body');
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
-  assert.equal(await corpseSprite.getAttribute('data-source-y'), '2100',
+  assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '300',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '118',
     'the corpse crop must retain the cut suit and exposed bone while excluding stray strokes beneath the pose');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
@@ -578,5 +628,33 @@ try {
     ],
   }, null, 2));
 } finally {
+  // Restricted WebViews may reject localStorage writes; settings still need to update in memory.
+  await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const blockedSettings = page.getByRole('dialog', { name: 'Настройки' });
+  await page.evaluate(() => {
+    window.__originalStorageSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(key, value) {
+      if (key === 'amongGas.settings' || key === 'amongGas.language') {
+        throw new DOMException('blocked in browser regression', 'QuotaExceededError');
+      }
+      return window.__originalStorageSetItem.call(this, key, value);
+    };
+  });
+  await blockedSettings.getByTestId('joystick-side-left').click();
+  assert.equal(await blockedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
+    'joystick selection must update when persistence throws');
+  await blockedSettings.getByRole('button', { name: 'English' }).click();
+  await page.getByRole('heading', { name: 'Settings' }).waitFor();
+  assert.equal(await page.evaluate(() => document.documentElement.lang), 'en',
+    'language selection must update when persistence throws');
+  await page.evaluate(() => {
+    Storage.prototype.setItem = window.__originalStorageSetItem;
+    localStorage.setItem('amongGas.settings', JSON.stringify({
+      joystickSide: 'left', controlLayout: { joystick: { x: 0.20, y: 0.83 } },
+      masterVolume: 1, musicVolume: 1, effectsVolume: 1,
+    }));
+    localStorage.setItem('amongGas.language', 'en');
+  });
   await browser.close();
 }
