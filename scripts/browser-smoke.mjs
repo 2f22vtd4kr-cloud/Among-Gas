@@ -79,8 +79,11 @@ try {
     }),
   );
   assert.ok(menuSpriteHeightRatios.length >= 5, 'the menu must render its character art and button icons');
-  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.88,
-    `menu characters must not be vertically cropped (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
+  // Pose windows are measured per sprite, so their heights legitimately vary;
+  // the shared atlas crop must still retain the complete silhouette rather than
+  // forcing every pose into the same uniform-height row.
+  assert.ok(Math.min(...menuSpriteHeightRatios) > 0.75,
+    `menu characters must retain their measured pose bounds (minimum rendered height/width=${Math.min(...menuSpriteHeightRatios).toFixed(2)})`);
   assert.equal(await page.getByText(/mini game for telegram/i).count(), 0,
     'the obsolete Telegram mini-game subtitle must not be shown');
 
@@ -108,6 +111,17 @@ try {
   });
   assert.equal(await movementJoystick.getAttribute('aria-label'), 'Джойстик движения',
     'the joystick accessible label must follow the selected Russian language');
+  const leaveMatchButton = page.getByRole('button', { name: 'Покинуть матч' });
+  const inGameSettingsButton = page.getByRole('button', { name: 'Настройки' });
+  await leaveMatchButton.waitFor({ state: 'visible' });
+  const leaveBox = await leaveMatchButton.boundingBox();
+  const settingsBox = await inGameSettingsButton.boundingBox();
+  assert.ok(leaveBox && settingsBox, 'Leave Match and Settings must be measurable');
+  assert.ok(
+    leaveBox.x + leaveBox.width <= settingsBox.x || settingsBox.x + settingsBox.width <= leaveBox.x ||
+      leaveBox.y + leaveBox.height <= settingsBox.y || settingsBox.y + settingsBox.height <= leaveBox.y,
+    'Leave Match and Settings must not overlap on a mobile viewport',
+  );
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
@@ -270,7 +284,13 @@ try {
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Обсуждение', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
+  const meetingChat = page.getByRole('textbox', { name: 'Сообщение в обсуждении' });
+  await meetingChat.waitFor({ state: 'visible' });
+  await meetingChat.click();
+  const typedChatText = 'wasd WASD 123 !?';
+  await meetingChat.pressSequentially(typedChatText);
+  assert.equal(await meetingChat.inputValue(), typedChatText,
+    'global movement shortcuts must not swallow WASD letters or punctuation while typing in chat');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
   await page.goto(`${origin}/?mock=meeting-voting`, { waitUntil: 'domcontentloaded' });
