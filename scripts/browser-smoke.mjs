@@ -561,6 +561,29 @@ try {
       fullPage: true,
     });
   }
+  // Per-control layout is adjustable, saved, applied to gameplay, and resettable.
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const layoutSettings = page.locator('[role="dialog"]');
+  await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
+  const layoutX = layoutSettings.getByTestId('control-layout-x');
+  const layoutY = layoutSettings.getByTestId('control-layout-y');
+  await layoutX.focus();
+  for (let i = 0; i < 5; i++) await layoutX.press('ArrowLeft');
+  await layoutY.focus();
+  for (let i = 0; i < 6; i++) await layoutY.press('ArrowDown');
+  assert.equal(await layoutX.inputValue(), '88', 'custom control X setting must be adjustable');
+  assert.equal(await layoutY.inputValue(), '12', 'custom control Y setting must be adjustable');
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  const movedSettingsBox = await page.getByRole('button', { name: 'Настройки' }).boundingBox();
+  assert.ok(movedSettingsBox, 'settings control remains available at its saved custom position');
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 2,
+    'saved settings X position must be applied to the gameplay HUD');
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.12) < 2,
+    'saved settings Y position must be applied to the gameplay HUD');
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
+  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
     const setItem = Storage.prototype.setItem;
@@ -573,7 +596,7 @@ try {
   });
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('button', { name: 'Настройки' }).click();
-  const restrictedSettings = page.getByRole('dialog', { name: 'Настройки' });
+  const restrictedSettings = page.locator('[role="dialog"]');
   await restrictedSettings.getByRole('button', { name: 'English' }).click();
   await restrictedSettings.getByTestId('joystick-side-left').click();
   assert.equal(await restrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
