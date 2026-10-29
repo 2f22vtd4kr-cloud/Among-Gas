@@ -48,7 +48,7 @@ export function SettingsButton({
     >
       <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" style={{ display: 'block', flexShrink: 0 }}>
         <path
-          d="M12 9.2a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
+          d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
           stroke="currentColor"
           strokeWidth="1.8"
         />
