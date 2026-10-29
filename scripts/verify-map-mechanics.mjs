@@ -198,8 +198,9 @@ assert.match(gameMapSource, /computeVisibilityPolygon\(px, py, visionRadius, sha
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
-assert.match(gameMapSource, /lastKill\.victimSlot !== mySlot/, 'Only the victim should receive the full-screen kill sequence');
+assert.match(gameMapSource, /if \(lastKill\.victimSlot === mySlot\) \{\s*setKillAnimation\(lastKill\)/, 'Only the victim should receive the full-screen kill sequence');
 assert.match(gameMapSource, /sfx\('footstep'/, 'Local walking must trigger footsteps');
+assert.match(gameMapSource, /const hearingRange = 520/, 'Nearby bystanders must hear kills within the local sound radius');
 assert.match(gameMapSource, /sfx\('taskComplete'/, 'Task completion must trigger its sound cue');
 assert.match(gameMapSource, /sfx\(meeting\.bodySlot === NO_TARGET \? 'meeting' : 'bodyReport'/, 'Body reports and emergency meetings must have distinct sound cues');
 assert.match(appSource, /VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="\/collision-editor"/, 'Collision editor route must require explicit opt-in even on dev preview servers');
