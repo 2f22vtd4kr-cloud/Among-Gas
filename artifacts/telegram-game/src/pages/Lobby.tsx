@@ -50,7 +50,7 @@ function CharSprite({
         backgroundSize: `${CHARACTER_SHEET_WIDTH * scale}px ${CHARACTER_SHEET_HEIGHT * scale}px`,
         backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
         backgroundRepeat: 'no-repeat',
-        imageRendering: 'auto',
+        imageRendering: 'pixelated',
         transform: flipped ? 'scaleX(-1)' : undefined,
         flexShrink: 0,
         overflow: 'hidden',
