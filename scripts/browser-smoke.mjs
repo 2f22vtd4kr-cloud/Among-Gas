@@ -127,6 +127,30 @@ try {
     return !!element && element.style.transform === 'translate(-50%, -50%)';
   });
 
+  // The HUD must remain tappable even on the narrowest supported portrait size.
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.waitForTimeout(150);
+  const hudSelectors = [
+    page.getByRole('button', { name: /КАРТА/ }),
+    page.getByRole('button', { name: /ЗАДАНИЯ/ }),
+    page.getByRole('button', { name: /Покинуть матч/ }),
+    page.getByRole('button', { name: /Тревога/ }),
+    page.getByRole('button', { name: 'Настройки' }),
+  ];
+  const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
+  assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
+  for (let i = 0; i < hudBoxes.length; i++) {
+    for (let j = i + 1; j < hudBoxes.length; j++) {
+      const a = hudBoxes[i]!;
+      const b = hudBoxes[j]!;
+      const overlaps = a.x < b.x + b.width && a.x + a.width > b.x &&
+        a.y < b.y + b.height && a.y + a.height > b.y;
+      assert.equal(overlaps, false, `gameplay controls ${i} and ${j} must not overlap at 320×568`);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(150);
+
   // Leaving a live match is explicit and cancellable before it disconnects.
   await page.getByRole('button', { name: 'Покинуть матч' }).click();
   const leaveDialog = page.getByRole('dialog', { name: 'Выйти из матча?' });
