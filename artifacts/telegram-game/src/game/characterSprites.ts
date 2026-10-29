@@ -61,7 +61,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
   { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
   { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
-  { top: 795, bottom: 897, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
+  { top: 795, bottom: 896, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
   { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
   { top: 1067, bottom: 1179, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, remove underline pixels
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
