@@ -677,15 +677,41 @@ try {
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
-  const movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
+  let movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
   assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
   assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
     'dragged task action X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
     'dragged task action Y position must be applied to the gameplay HUD');
+
+  // Persisted layout survives a reload, not merely the current React session.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Настройки' }).waitFor({ state: 'visible', timeout: 15_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
-  await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
-  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  const reloadedSettings = page.locator('[role="dialog"]');
+  await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
+  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
+  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
+    'saved task action X position must hydrate after reload');
+  assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.32)) < 3,
+    'saved task action Y position must hydrate after reload');
+
+  // Reset is a draft operation; Cancel must not alter the saved layout.
+  await reloadedSettings.getByTestId('control-layout-reset').click();
+  await reloadedSettings.getByTestId('control-layout-cancel').click();
+  movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
+  assert.ok(movedSettingsBox, 'gameplay control remains available after cancelling layout edits');
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+    'Cancel must preserve the previously saved X position');
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
+    'Cancel must preserve the previously saved Y position');
+
+  await page.getByRole('button', { name: 'Настройки' }).click();
+  const resetSettings = page.locator('[role="dialog"]');
+  await resetSettings.getByTestId('control-layout-reset').click();
+  await resetSettings.getByTestId('control-layout-save').click();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
