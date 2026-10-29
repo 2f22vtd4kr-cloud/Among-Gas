@@ -63,7 +63,7 @@ try {
   await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   const lobbySettings = page.locator('[role="dialog"]');
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-reset',
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-save',
     'Settings must keep reverse keyboard navigation inside the modal');
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть настройки',
