@@ -1769,14 +1769,16 @@ export default function GameMap() {
         <button
           type="button"
           aria-label={en ? 'Leave match' : 'Покинуть матч'}
+          title={en ? 'Leave match' : 'Покинуть матч'}
           onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); setLeaveConfirmOpen(true); }}
           style={{
             position: 'fixed',
             top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            left: 'max(12px, env(safe-area-inset-left, 0px))',
+            // Keep the Leave action beside, not on top of, the existing map toggle.
+            left: 'calc(max(12px, env(safe-area-inset-left, 0px)) + 88px)',
             zIndex: 70,
             minHeight: 44,
-            padding: '0 13px',
+            padding: '0 9px',
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1793,7 +1795,7 @@ export default function GameMap() {
           }}
         >
           <span aria-hidden="true" style={{ fontSize: 18, lineHeight: 1 }}>←</span>
-          {en ? 'Leave match' : 'Выйти'}
+          {en ? 'Leave' : 'Выйти'}
         </button>
       )}
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
