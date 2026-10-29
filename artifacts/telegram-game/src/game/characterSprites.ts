@@ -52,19 +52,19 @@ export type CharacterPose = (typeof CHARACTER_POSES)[number];
  * [top, bottom) coordinates intentionally retain the blank padding around each
  * silhouette so canvas sprites preserve their authored scale.
  */
-const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number }> = [
+const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeight: number }> = [
   // Crop just beyond each measured silhouette. The source sheet has stray
   // ground/underline strokes in the otherwise transparent padding below poses;
   // excluding that padding keeps those marks out of live and corpse sprites.
-  { top: 0, bottom: 153 },       // idle: visible pixels y=16–155
-  { top: 172, bottom: 310 },     // walk-1: y=188–312
-  { top: 327, bottom: 458 },     // walk-2: y=342–460
-  { top: 471, bottom: 620 },     // run-lean: y=481–622
-  { top: 636, bottom: 775 },     // ghost: y=650–777
-  { top: 795, bottom: 903 },     // mask: y=811–905
-  { top: 915, bottom: 1051 },    // hold-item: y=924–1053
-  { top: 1067, bottom: 1185 },   // dead-body: y=1080–1187
-  { top: 1198, bottom: 1334 },   // sit-crouch: y=1209–1336
+  { top: 0, bottom: 147, displayHeight: 153 }, // idle: trim detached underline pixels below the feet
+  { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
+  { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
+  { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
+  { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
+  { top: 795, bottom: 897, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
+  { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
+  { top: 1067, bottom: 1179, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, remove underline pixels
+  { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
 /** Returns an isolated source window (px) for a given color and pose. */
@@ -77,6 +77,8 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
     y: window.top,
     width: CHARACTER_CELL_WIDTH,
     height: window.bottom - window.top,
+    /** Original display height keeps the silhouette scale stable after stray padding is cropped. */
+    displayHeight: window.displayHeight,
     row,
   };
 }
