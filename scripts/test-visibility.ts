@@ -9,7 +9,7 @@ import {
   ROWS,
   type Grid,
 } from '@workspace/shared/collisionMap';
-import { buildShadowGrid, computeVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildShadowGrid, buildSmoothShadowGrid, computeVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -49,6 +49,9 @@ propGrid[propA] = 1;
 propGrid[propB] = 1;
 for (let col = 20; col < 50; col++) propGrid[20 * COLS + col] = 1;
 const shadowGrid = buildShadowGrid(propGrid);
+const smoothShadowGrid = buildSmoothShadowGrid(shadowGrid);
+assert.equal(smoothShadowGrid.length, COLS * ROWS * 16,
+  'visual occlusion mask is upsampled fourfold without changing movement collision');
 assert.equal(propGrid[propA], 1, 'small prop remains solid for movement collision');
 assert.equal(propGrid[propB], 1, 'small prop collision cells are not mutated');
 assert.equal(shadowGrid[propA], 0, 'small isolated prop does not cast a hard shadow');
@@ -70,6 +73,9 @@ assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a visio
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
+const smoothRealShadowGrid = buildSmoothShadowGrid(realShadowGrid);
+assert.equal(realGrid.length, COLS * ROWS, 'authoritative collision stays at its original resolution');
+assert.equal(smoothRealShadowGrid.length, COLS * ROWS * 16, 'visual occlusion uses a higher-resolution mask');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
 const upperAtriumLeftBench = 9 * COLS + 48;
