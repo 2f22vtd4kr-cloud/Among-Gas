@@ -178,7 +178,7 @@ try {
   console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
-  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '138',
+  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '132',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
     'the authored role-reveal baseline remains available as metadata');
