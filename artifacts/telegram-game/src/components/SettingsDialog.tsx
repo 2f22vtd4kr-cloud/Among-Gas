@@ -20,9 +20,13 @@ export function SettingsButton({
       style={{
         width: 44,
         height: 44,
+        boxSizing: 'border-box',
+        flex: '0 0 44px',
         display: 'grid',
         placeItems: 'center',
         padding: 0,
+        lineHeight: 0,
+        overflow: 'visible',
         borderRadius: 13,
         color: '#e7f2f4',
         background: 'linear-gradient(180deg, rgba(32,53,67,.96), rgba(14,27,37,.96))',
@@ -32,7 +36,7 @@ export function SettingsButton({
         ...style,
       }}
     >
-      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none">
+      <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" style={{ display: 'block', flexShrink: 0 }}>
         <path
           d="M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z"
           stroke="currentColor"
@@ -69,24 +73,61 @@ const optionStyle = (selected: boolean): CSSProperties => ({
 export default function SettingsDialog({
   open,
   onClose,
+  showLeaveMatch = false,
+  onLeaveMatch,
 }: {
   open: boolean;
   onClose: () => void;
+  showLeaveMatch?: boolean;
+  onLeaveMatch?: () => void;
 }) {
   const { language, setLanguage } = useLanguage();
   const { joystickSide } = useGameSettings();
   const closeRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const en = language === 'en';
+
+  useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
     closeRef.current?.focus();
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      if (!focusable?.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, onClose]);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      const previous = previousFocusRef.current;
+      if (previous?.isConnected) previous.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -109,6 +150,7 @@ export default function SettingsDialog({
       }}
     >
       <section
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="ag-settings-title"
@@ -205,6 +247,24 @@ export default function SettingsDialog({
             ))}
           </div>
         </fieldset>
+
+        {showLeaveMatch && onLeaveMatch && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(170,200,208,.16)' }}>
+            <button
+              type="button"
+              data-testid="settings-leave-match"
+              onClick={onLeaveMatch}
+              style={{
+                width: '100%', minHeight: 44, padding: '10px 14px', borderRadius: 11,
+                border: '1px solid rgba(255,145,145,.36)',
+                background: 'rgba(105,24,36,.3)', color: '#ffd9dc',
+                fontFamily: 'inherit', fontSize: 14, fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Leave match…' : 'Выйти из матча…'}
+            </button>
+          </div>
+        )}
       </section>
     </div>
   );
