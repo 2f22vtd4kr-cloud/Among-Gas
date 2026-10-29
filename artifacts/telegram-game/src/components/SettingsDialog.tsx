@@ -64,6 +64,8 @@ export function SettingsButton({
   );
 }
 
+const DRAGGABLE_CONTROL_IDS: GameplayControlId[] = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'];
+
 const optionStyle = (selected: boolean): CSSProperties => ({
   minHeight: 54,
   flex: 1,
@@ -104,15 +106,16 @@ export default function SettingsDialog({
   const onCloseRef = useRef(onClose);
   const en = language === 'en';
   const selectedPosition = controlLayout[selectedControl] ?? defaultControlPosition(selectedControl, joystickSide);
-  const controlOptions = Object.entries(CONTROL_LABELS) as Array<[GameplayControlId, { en: string; ru: string }]>;
+  const controlOptions = DRAGGABLE_CONTROL_IDS.map(id => [id, CONTROL_LABELS[id]] as [GameplayControlId, { en: string; ru: string }]);
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
 
   useEffect(() => {
     if (!open) return;
     const draft: ControlLayout = {};
-    (Object.keys(CONTROL_LABELS) as GameplayControlId[]).forEach(id => {
-      draft[id] = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
+    DRAGGABLE_CONTROL_IDS.forEach(id => {
+      const position = controlLayout[id] ?? defaultControlPosition(id, joystickSide);
+      draft[id] = { x: position.x, y: Math.max(25, position.y) };
     });
     setDraftLayout(draft);
     draggingControlRef.current = null;
@@ -319,8 +322,8 @@ export default function SettingsDialog({
               boxSizing: 'border-box', borderBottom: '1px dashed rgba(255,255,255,.25)',
               color: 'rgba(220,237,239,.5)', font: '10px system-ui, sans-serif', pointerEvents: 'none',
             }}>
-              <span>{en ? 'Fixed top HUD' : 'Верхняя панель'}</span>
-              <span>{en ? 'Reserved' : 'Зарезервировано'}</span>
+              <span>{en ? 'MAP · TASKS · SETTINGS' : 'КАРТА · ЗАДАНИЯ · НАСТРОЙКИ'}</span>
+              <span>{en ? 'Fixed' : 'Фиксировано'}</span>
             </div>
             {controlOptions.map(([id, label]) => {
               const position = draftLayout[id] ?? controlLayout[id] ?? defaultControlPosition(id, joystickSide);
@@ -372,7 +375,7 @@ export default function SettingsDialog({
               onClick={() => {
                 resetControlLayout();
                 const defaults: ControlLayout = {};
-                controlOptions.forEach(([id]) => { defaults[id] = defaultControlPosition(id, joystickSide); });
+                controlOptions.forEach(([id]) => { const point = defaultControlPosition(id, joystickSide); defaults[id] = { x: point.x, y: Math.max(25, point.y) }; });
                 setDraftLayout(defaults);
               }}
               style={{
@@ -388,7 +391,7 @@ export default function SettingsDialog({
               type="button"
               data-testid="control-layout-save"
               onClick={() => {
-                controlOptions.forEach(([id]) => setControlPosition(id, draftLayout[id] ?? defaultControlPosition(id, joystickSide));
+                controlOptions.forEach(([id]) => { const point = draftLayout[id] ?? defaultControlPosition(id, joystickSide); setControlPosition(id, { x: point.x, y: Math.max(25, point.y) }); });
                 onClose();
               }}
               style={{
