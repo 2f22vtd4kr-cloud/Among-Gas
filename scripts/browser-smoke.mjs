@@ -876,16 +876,18 @@ try {
     hasTouch: true,
   });
   fallbackPage.on('pageerror', error => failures.push(error.message));
-  await fallbackPage.route('**/*', route => {
-    const url = route.request().url();
-    if (url.startsWith(origin)) return route.continue();
-    return route.abort();
-  });
   let pngFallbackLoaded = false;
   fallbackPage.on('response', response => {
     if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
   });
-  await fallbackPage.route(/map-hires\.webp/i, route => route.abort());
+  // A single route handler avoids route-order ambiguity: force WebP to fail,
+  // while allowing the PNG fallback and all same-origin app requests through.
+  await fallbackPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.includes('map-hires.webp')) return route.abort();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   assert.equal(pngFallbackLoaded, true, 'failed WebP loading must fall back to the PNG map');
