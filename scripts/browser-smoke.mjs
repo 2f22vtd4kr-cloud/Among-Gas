@@ -636,10 +636,10 @@ try {
   }, undefined, { timeout: 3_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
-  await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
+  await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
   const preview = layoutSettings.getByTestId('control-layout-preview');
   const previewBox = await preview.boundingBox();
-  const dragHandle = layoutSettings.getByTestId('control-drag-settings');
+  const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
   const dragBox = await dragHandle.boundingBox();
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
   await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
@@ -647,12 +647,12 @@ try {
   await page.mouse.move(previewBox.x + previewBox.width * 0.88, previewBox.y + previewBox.height * 0.32, { steps: 8 });
   await page.mouse.up();
   await layoutSettings.getByTestId('control-layout-save').click();
-  const movedSettingsBox = await page.getByRole('button', { name: 'Настройки' }).boundingBox();
-  assert.ok(movedSettingsBox, 'settings control remains available at its saved custom position');
+  const movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
+  assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
   assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 3,
-    'dragged settings X position must be applied to the gameplay HUD');
+    'dragged task action X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
-    'dragged settings Y position must be applied to the gameplay HUD');
+    'dragged task action Y position must be applied to the gameplay HUD');
   await page.getByRole('button', { name: 'Настройки' }).click();
   await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
