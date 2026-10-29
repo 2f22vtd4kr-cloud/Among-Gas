@@ -57,7 +57,7 @@ export function defaultControlPosition(
     case 'map': return { x: 12, y: 6 };
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
-    case 'emergency': return { x: 75, y: 6 };
+    case 'emergency': return { x: 75, y: 26 };
     case 'taskAction': return { x: oppositeSide, y: 72 };
     case 'killReport': return { x: 50, y: 84 };
     case 'sabotage': return { x: 16, y: 84 };
@@ -81,7 +81,13 @@ function sanitizeLayout(value: unknown): ControlLayout {
   const layout: ControlLayout = {};
   for (const id of CONTROL_IDS) {
     const point = sanitizePosition(source[id]);
-    if (point) layout[id] = point;
+    if (point) {
+      // Map, task list and Settings stay in the fixed top HUD. Every movable
+      // gameplay control is migrated out of the reserved top quarter.
+      layout[id] = id === 'map' || id === 'tasks' || id === 'settings'
+        ? point
+        : { x: point.x, y: Math.max(25, point.y) };
+    }
   }
   return layout;
 }
