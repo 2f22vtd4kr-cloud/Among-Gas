@@ -761,6 +761,47 @@ try {
   await cancelledSettings.getByTestId('control-layout-reset').click();
   await cancelledSettings.getByTestId('control-layout-save').click();
 
+  // The loading overlay must remain until both the map and character atlas have
+  // completed image decoding, not merely until their network load events fire.
+  const decodePage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  decodePage.on('pageerror', error => failures.push(error.message));
+  await decodePage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await decodePage.addInitScript(() => {
+    window.__pendingImageDecodes = [];
+    window.__releaseImageDecodes = () => {
+      for (const resolve of window.__pendingImageDecodes.splice(0)) resolve();
+    };
+    const originalDecode = HTMLImageElement.prototype.decode;
+    const pendingByImage = new WeakMap();
+    HTMLImageElement.prototype.decode = function () {
+      const source = this.currentSrc || this.src;
+      if (!source.includes('map-hires.webp') && !source.includes('characters.png')) {
+        return originalDecode.call(this);
+      }
+      if (!pendingByImage.has(this)) {
+        pendingByImage.set(this, new Promise(resolve => window.__pendingImageDecodes.push(resolve)));
+      }
+      return pendingByImage.get(this);
+    };
+  });
+  await decodePage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await decodePage.waitForFunction(() => window.__pendingImageDecodes.length >= 2, undefined, { timeout: 15_000 });
+  await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'visible' });
+  assert.equal(await decodePage.getByTestId('gameplay-loading-screen').isVisible(), true,
+    'gameplay must stay locked while map and sprite decode promises are unresolved');
+  await decodePage.evaluate(() => window.__releaseImageDecodes());
+  await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+  await decodePage.close();
+
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
   await page.addInitScript(() => {
     const setItem = Storage.prototype.setItem;
