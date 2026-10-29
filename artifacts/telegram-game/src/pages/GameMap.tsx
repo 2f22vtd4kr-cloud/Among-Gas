@@ -1174,7 +1174,7 @@ export default function GameMap() {
               ctx.fillStyle = '#fff';
               ctx.font = `bold ${Math.round(11 * dpr)}px sans-serif`;
               ctx.textBaseline = 'middle';
-              ctx.fillText(done ? '✓' : '⚠', tx, ty);
+              ctx.fillText(done ? '✓' : '!', tx, ty);
               ctx.textBaseline = 'top';
               ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
               ctx.strokeStyle = 'rgba(0,0,0,0.85)';
@@ -2027,7 +2027,7 @@ export default function GameMap() {
                 textDecoration: 'none',
               }}
             >
-              ✎ Edit Collision
+              Edit Collision
             </Link>
           )}
         </div>
