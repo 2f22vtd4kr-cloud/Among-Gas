@@ -134,7 +134,7 @@ try {
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
     page.getByRole('button', { name: /Покинуть матч/ }),
-    page.getByRole('button', { name: /Тревога/ }),
+    page.getByRole('button', { name: /тревога/i }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
