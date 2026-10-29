@@ -151,19 +151,26 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
       // ── Phase 2+: game opcodes ────────────────────────────────────────────
       if (raw.length < 1) return;
 
-      // A replaced WebSocket may have gameplay messages queued before its close
-      // handshake completes. Do not resolve actions from userId alone: that ID
-      // may now belong to a different socket in a new room.
-      if (ws.tgUserId !== undefined && !lobbyManager.isCurrentSocket(ws.tgUserId, ws)) {
-        logger.info(
-          { userId: ws.tgUserId },
-          '[WS] Rejected message from a replaced player session',
-        );
-        if (ws.readyState === ws.OPEN) ws.close(1000, 'Replaced by a newer session');
-        return;
-      }
-
       const opcode = raw.readUInt8(0);
+      const subOpcode = raw.length >= 2 ? raw.readUInt8(1) : -1;
+      // A fresh authenticated socket is not the lobby's bound socket until it
+      // creates/joins a room. Permit only those intentional transition requests
+      // while it is unbound; all gameplay actions still require current ownership.
+      const isSessionTransition = opcode === 0x10 &&
+        (subOpcode === 0x01 || subOpcode === 0x02 || subOpcode === 0x06);
+
+      if (ws.tgUserId !== undefined) {
+        const superseded = lobbyManager.isSupersededSocket(ws);
+        const current = lobbyManager.isCurrentSocket(ws.tgUserId, ws);
+        if (superseded || (!current && !isSessionTransition)) {
+          logger.info(
+            { userId: ws.tgUserId, superseded, opcode, subOpcode },
+            '[WS] Rejected message from a replaced or unbound player session',
+          );
+          if (ws.readyState === ws.OPEN) ws.close(1000, 'Replaced by a newer session');
+          return;
+        }
+      }
 
       // ── 0x10: Lobby Control ───────────────────────────────────────────────
       if (opcode === 0x10) {
