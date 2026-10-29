@@ -10,6 +10,7 @@ import {
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -48,6 +49,25 @@ assert.ok(
   Math.abs(eastRay.x - wallCol * CELL_X) < 1e-5,
   'the east ray terminates at the near wall boundary, not through the obstacle',
 );
+
+// Every balaclava color has an authored dead-body frame. Crop windows trim
+// detached underline strokes while displayHeight preserves the intended sprite scale.
+{
+  const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
+  assert.equal(corpseFrames.length, 7, 'all seven balaclava colors have a corpse pose');
+  assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 7, 'each color has its own corpse atlas column');
+  for (const frame of corpseFrames) {
+    assert.equal(frame.row, CHARACTER_POSES.indexOf('dead-body'));
+    assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes the detached underline while preserving display scale');
+  }
+  for (const color of CHARACTER_COLORS) {
+    for (const pose of CHARACTER_POSES) {
+      const frame = getCharacterFrameRect(color, pose);
+      assert.ok(frame.width > 0 && frame.height > 0 && frame.displayHeight >= frame.height,
+        `valid isolated sprite window for ${color}/${pose}`);
+    }
+  }
+}
 
 // Small isolated solid props stay collidable but do not create hard vision shadows.
 const propGrid = new Uint8Array(COLS * ROWS) as Grid;
