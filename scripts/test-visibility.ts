@@ -9,7 +9,7 @@ import {
   ROWS,
   type Grid,
 } from '@workspace/shared/collisionMap';
-import { buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
@@ -88,8 +88,17 @@ assert.equal(propGrid[propD], 1, 'the lower-right prop cell remains solid for mo
 assert.equal(shadowGrid[propA], 0, 'small isolated prop does not cast a hard shadow');
 assert.equal(shadowGrid[propB], 0, 'all cells of the small prop are non-occluding');
 assert.equal(shadowGrid[propC], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
-assert.equal(shadowGrid[propD], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
+assert.equal(shadowGrid[propD], 0, 'four-cell light-pole-sized footprints stay out of the coarse square occlusion grid');
 assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a vision occluder');
+const narrowOccluders = buildNarrowShadowOccluders(propGrid);
+assert.equal(narrowOccluders.length, 1, 'a four-cell 2×2 pole footprint becomes one narrow visual occluder');
+const pole = narrowOccluders[0];
+assert.equal(pole.x, 3 * CELL_X, 'narrow occluder is centered on the original prop');
+assert.equal(pole.y, 3 * CELL_Y, 'narrow occluder keeps the prop center in world coordinates');
+assert.ok(pole.radius < Math.min(CELL_X, CELL_Y) * 0.25, 'pole shadow geometry is narrower than a collision cell');
+const poleSight = computeVisibilityPolygon(CELL_X * 0.5, pole.y, CELL_X * 10, shadowGrid, narrowOccluders);
+assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
+  'the east ray stops at the narrow pole silhouette instead of a 2×2 square');
 
  // Collision and vision are separate contracts: the same small prop blocks
  // movement, but does not truncate the vision radius.
