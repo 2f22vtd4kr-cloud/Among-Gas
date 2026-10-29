@@ -283,6 +283,28 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   ejectionManager.disposeLobby(ejectionLobby);
 }
 
+// Bots speak during the discussion window before they make their vote.
+{
+  const host = makePlayer(0, 'crewmate', 100, 100);
+  const botPlayer = makePlayer(1, 'crewmate', 130, 100);
+  botPlayer.player.isBot = true;
+  const lobby = makeLobby([host.player, botPlayer.player]);
+  lobby.phase = 'MEETING';
+  lobby.meeting = {
+    reporterSlot: 0, bodySlot: NO_TARGET, votes: new Map(), votingOpen: false,
+    discussionTimer: null, votingTimer: null,
+  };
+  const manager = new LobbyManager();
+  const bot = new CrewmateBot();
+  bot.tick(lobby, botPlayer.player, manager);
+  (bot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  bot.tick(lobby, botPlayer.player, manager);
+  assert.ok(host.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 1),
+    'living bot contributes a discussion message to human clients');
+  assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
+  manager.disposeLobby(lobby);
+}
+
 // 6. Kills drop a body at the death location, rather than following the ghost.
 {
   const vent = findVent(0)!;
