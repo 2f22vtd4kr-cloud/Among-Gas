@@ -153,20 +153,27 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(150);
 
+  const mapAssetTimings = [];
+  const mapAssetStartedAt = new Map();
+  page.on('request', request => {
+    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+      mapAssetStartedAt.set(request.url(), Date.now());
+    }
+  });
+  page.on('requestfinished', request => {
+    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+      mapAssetTimings.push({
+        asset: request.url().split('/').pop(),
+        durationMs: Date.now() - (mapAssetStartedAt.get(request.url()) ?? Date.now()),
+      });
+    }
+  });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  const mapTiming = await page.evaluate(() => performance.getEntriesByType('resource')
-    .filter(entry => /map-hires\\.(webp|png)(?:$|\\?)/i.test(entry.name))
-    .map(entry => ({
-      asset: entry.name.split('/').pop(),
-      durationMs: Math.round(entry.duration),
-      transferBytes: entry.transferSize,
-      decodedBytes: entry.decodedBodySize,
-    })));
-  assert.ok(mapTiming.some(entry => String(entry.asset).includes('map-hires.webp')),
+  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
     'cold gameplay load should prefer the compact WebP map asset');
-  console.log('Cold map asset resource timings:', JSON.stringify(mapTiming));
+  console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
   assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '143',
