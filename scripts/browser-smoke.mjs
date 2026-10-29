@@ -158,10 +158,12 @@ try {
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
-  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '143',
+  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '139',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
     'trimming sprite padding must preserve the authored role-reveal scale');
+  assert.equal(await roleRevealSprite.evaluate(el => (el as HTMLElement).style.transform), 'none',
+    'cropped role sprites must not be vertically stretched to compensate for removed pixels');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -495,7 +497,7 @@ try {
   assert.equal(await corpseSprite.getAttribute('data-sprite-row'), '7');
   assert.equal(await corpseSprite.getAttribute('data-source-y'), '1067',
     'the corpse source window must start before the entire authored row, without uniform-row clipping');
-  assert.equal(await corpseSprite.getAttribute('data-source-height'), '105',
+  assert.equal(await corpseSprite.getAttribute('data-source-height'), '101',
     'the corpse crop must exclude the detached underline rows beneath the cut suit and exposed bone');
   assert.equal(await corpseSprite.getAttribute('data-display-height'), '118',
     'cropping stray pixels must not shrink the corpse display scale');
