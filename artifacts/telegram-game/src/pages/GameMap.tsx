@@ -267,7 +267,7 @@ export default function GameMap() {
 
   // ── Multiplayer state (mirrored into refs for the rAF loop) ───────────────
   const {
-    phase, mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs,
+    phase, mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs, gameplayReady,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
     sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
   } = useGameState();
@@ -828,6 +828,14 @@ export default function GameMap() {
 
   // ── Track held movement keys ──────────────────────────────────────────────
   const keysRef = useRef<Set<string>>(new Set());
+  const gameplayReadyRef = useRef(gameplayReady);
+  useEffect(() => {
+    gameplayReadyRef.current = gameplayReady;
+    if (!gameplayReady) {
+      keysRef.current.clear();
+      pendingSentRef.current.length = 0;
+    }
+  }, [gameplayReady]);
   useEffect(() => {
     if (!settingsOpen) return;
     keysRef.current.clear();
@@ -983,7 +991,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
+      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -1001,7 +1009,7 @@ export default function GameMap() {
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
-      if (sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
+      if (gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
         const wireX = toWire(px, MAP_W);
         const wireY = toWire(py, MAP_H);
         // Only send if position has changed in wire space
@@ -1676,7 +1684,7 @@ export default function GameMap() {
           </div>
         </div>
       )}
-      {(!loaded || !spriteLoaded) && !error && (
+      {(!loaded || !spriteLoaded || !gameplayReady) && !error && (
         <div style={{
           position: 'absolute', inset: 0,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -1699,7 +1707,7 @@ export default function GameMap() {
         ref={canvasRef}
         style={{
           display: 'block', position: 'absolute', top: 0, left: 0,
-          opacity: loaded && spriteLoaded ? 1 : 0,
+          opacity: loaded && spriteLoaded && gameplayReady ? 1 : 0,
         }}
       />
 
