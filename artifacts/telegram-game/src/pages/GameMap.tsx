@@ -1075,7 +1075,7 @@ export default function GameMap() {
             const taskLabel = taskRu(def.name, languageRef.current);
             ctx.strokeText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
             ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(locked ? `🔒 ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
+            ctx.fillText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
           }
           // Off-screen task compass: points towards the selected task (or the next
           // unfinished one). Coordinates are clamped in canvas pixels, so it works
