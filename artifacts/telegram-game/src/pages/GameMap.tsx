@@ -738,12 +738,25 @@ export default function GameMap() {
           const xStart = Math.round(col * cellW);
           const xEnd = Math.round((col + 1) * cellW);
           for (let y = bandStart; y < bottom; y++) {
+            let runStart = -1;
+            const clearLongRun = (runEnd: number) => {
+              // Long horizontal ink streaks are artifacts; short runs form the
+              // legitimate bottom outline of the legs and must be retained.
+              if (runStart >= 0 && runEnd - runStart >= 12) {
+                for (let x = runStart; x < runEnd; x++) {
+                  px[(y * oc.width + x) * 4 + 3] = 0;
+                }
+              }
+              runStart = -1;
+            };
             for (let x = xStart; x < xEnd; x++) {
               const i = (y * oc.width + x) * 4;
-              if (px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180) {
-                px[i + 3] = 0;
-              }
+              const dark = px[i + 3] > 20 && px[i] + px[i + 1] + px[i + 2] < 180;
+              if (dark) {
+                if (runStart < 0) runStart = x;
+              } else clearLongRun(x);
             }
+            clearLongRun(xEnd);
           }
         }
       }
