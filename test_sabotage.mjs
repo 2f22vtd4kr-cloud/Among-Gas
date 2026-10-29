@@ -126,6 +126,11 @@ async function main() {
     const crew = crewmates[0].player;
     console.log('Impostor slot:', impostor.slot, 'Crewmate slots:', crewmates.map(x => x.player.slot));
 
+    // The server holds all gameplay until each connected human confirms that
+    // its map and character atlas are loaded, matching the production client.
+    for (const player of players) send(player, [0x23]);
+    await sleep(60);
+
     console.log('--- Reject a forged movement teleport and return an authoritative correction ---');
     // Allow the server's 12ms packet interval guard to elapse after game start.
     await sleep(25);
