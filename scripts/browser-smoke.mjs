@@ -49,6 +49,8 @@ try {
   const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
   await menuTitle.waitFor({ state: 'visible' });
   await menuSettingsButton.waitFor({ state: 'visible' });
+  assert.equal(await menuSettingsButton.locator('svg path').nth(1).getAttribute('transform'), null,
+    'the Settings gear must not offset its outer teeth away from the centered inner ring');
   const menuTitleBox = await menuTitle.boundingBox();
   const menuSettingsBox = await menuSettingsButton.boundingBox();
   assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
