@@ -58,7 +58,7 @@ import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/s
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
-import { useGameSettings } from '../lib/gameSettings';
+import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -195,7 +195,7 @@ const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
   const { language } = useLanguage();
-  const { joystickSide } = useGameSettings();
+  const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
   useEffect(() => { languageRef.current = language; }, [language]);
   const en = language === 'en';
@@ -1625,6 +1625,7 @@ export default function GameMap() {
         <>
           <div style={{
             position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
+            ...customControlPositionStyle('tasks', controlLayout),
           }}>
             <button
               onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
@@ -1722,6 +1723,7 @@ export default function GameMap() {
       {loaded && myRole !== null && meeting === null && (
         <div style={{
           position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
+          ...customControlPositionStyle('map', controlLayout),
         }}>
           <button
             onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
@@ -1818,6 +1820,7 @@ export default function GameMap() {
             right: 'max(12px, env(safe-area-inset-right, 0px))',
             zIndex: 35,
           }}
+            ...customControlPositionStyle('settings', controlLayout),
         />
       )}
       <SettingsDialog
@@ -2142,6 +2145,7 @@ export default function GameMap() {
           right: joystickSide === 'left' ? 16 : 'auto',
           zIndex: 25,
         }}>
+          ...customControlPositionStyle('taskAction', controlLayout),
           <button
             onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
             style={{
@@ -2167,6 +2171,7 @@ export default function GameMap() {
           position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
           display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
         }}>
+          ...customControlPositionStyle('killReport', controlLayout),
           {amIImpostor && (
             <button
               aria-label={killCooldownMs > 0
@@ -2213,7 +2218,10 @@ export default function GameMap() {
 
       {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
-        <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}>
+        <div style={{ position: 'fixed', bottom: 130, left: 24, zIndex: 25 }}><div style={{
+          position: 'fixed', bottom: 130, left: 24, zIndex: 25,
+          ...customControlPositionStyle('sabotage', controlLayout),
+        }}>
           <button
             disabled={sabotageCooldownMs > 0}
             onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
@@ -2241,6 +2249,7 @@ export default function GameMap() {
         <div style={{
           position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
         }}>
+          ...customControlPositionStyle('repair', controlLayout),
           <button
             onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
             style={{
@@ -2330,6 +2339,7 @@ export default function GameMap() {
           right: 'calc(max(12px, env(safe-area-inset-right, 0px)) + 56px)',
           zIndex: 35,
         }}>
+          ...customControlPositionStyle('emergency', controlLayout),
           <button
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
