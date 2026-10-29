@@ -54,8 +54,8 @@ export type CharacterPose = (typeof CHARACTER_POSES)[number];
  */
 const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeight: number }> = [
   // Crop just beyond each measured silhouette. The source sheet has stray
-  // ground/underline strokes in the otherwise transparent padding below poses;
-  // excluding that padding keeps those marks out of live and corpse sprites.
+  // horizontal strokes through the otherwise transparent leg gap and below the feet;
+  // the pose-specific notch removes the bridges while retaining the outer feet.
   { top: 0, bottom: 143, displayHeight: 153 }, // idle: exclude detached horizontal strokes below the feet
   { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
   { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
@@ -88,7 +88,7 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
  * legs. The notch is pose-specific and stays outside the colored leg pixels.
  */
 export function getCharacterClipPath(pose: CharacterPose): string | undefined {
-  if (pose === 'idle') {
+  if (pose === 'idle' || pose === 'mask') {
     return 'polygon(0 0, 100% 0, 100% 100%, 56% 100%, 56% 79%, 50% 79%, 50% 100%, 0 100%)';
   }
   if (pose === 'dead-body') {
