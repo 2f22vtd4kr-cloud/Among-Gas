@@ -21,6 +21,7 @@ import {
   CHARACTER_COLORS,
   CHARACTER_POSES,
   getCharacterFrameRect,
+  getCharacterClipPath,
   type CharacterColor,
   type CharacterPose,
 } from '../game/characterSprites';
@@ -163,6 +164,7 @@ function CharSpriteUI({
         imageRendering: 'pixelated',
         transformOrigin: 'top center',
         transform: flipped ? 'scaleX(-1)' : 'none',
+        clipPath: getCharacterClipPath(safePose),
       }}
     />
   );
