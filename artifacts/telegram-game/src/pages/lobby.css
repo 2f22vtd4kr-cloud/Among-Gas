@@ -299,3 +299,12 @@
 
 .au-lobby-scroll { justify-content: center; overflow: hidden; }
 @media (max-height: 640px) and (orientation: landscape) { .au-lobby-scroll { height: 100dvh; min-height: 100dvh; justify-content: flex-start; overflow: auto; } }
+
+
+/* Keep action labels on one readable line on narrow portrait phones. */
+@media (max-width: 360px) {
+  .au-btn-icon { width: 52px; padding: 2px; }
+  .au-btn-icon .au-menu-character-sprite { max-width: 42px; }
+  .au-btn-label { font-size: clamp(12px, 3.9vw, 14px); letter-spacing: 0.035em; padding: 5px 3px; white-space: nowrap; }
+  .au-panel { padding: 9px; }
+}

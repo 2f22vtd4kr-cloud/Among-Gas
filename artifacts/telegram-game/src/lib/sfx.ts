@@ -1,3 +1,5 @@
+import {getGameSettings} from './gameSettings';
+
 /**
  * Fire-and-forget sound-effect player. Never throws — if audio is blocked
  * or unsupported the calls are silently ignored.
@@ -25,7 +27,11 @@ export function unlockSfx(): void {
 }
 
 /** Original procedural soft bootstep; no external copyrighted audio asset needed. */
-function playFootstep(volume: number): void {
+function effectsGain():number{const {masterVolume,effectsVolume}=getGameSettings();return masterVolume*effectsVolume}
+function musicGain():number{const {masterVolume,musicVolume}=getGameSettings();return .18*masterVolume*musicVolume}
+function updateMenuMusicVolume():void{const track=cache.get('menuMusic');if(track)track.volume=musicGain()}
+function playFootstep(volume:number):void{
+  volume*=effectsGain();
   const ctx = getAudioContext();
   if (!ctx) return;
   const nowMs = performance.now();
@@ -68,6 +74,7 @@ function load(key: string, url: string): void {
 }
 
 function playCue(key: 'sabotage' | 'vent', volume: number): void {
+  volume *= effectsGain();
   const ctx = getAudioContext();
   if (!ctx) return;
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
@@ -115,7 +122,8 @@ export function sfx(key: string, volume = 1): void {
   if (!src) return;
   try {
     const clone = src.cloneNode(true) as HTMLAudioElement;
-    clone.volume = Math.min(1, Math.max(0, volume));
+    // Apply volume controls without delaying the gameplay event that requests playback.
+    clone.volume = Math.min(1, Math.max(0, volume * effectsGain()));
     clone.play().catch(() => {});
   } catch { /* ignore */ }
 }
@@ -132,15 +140,13 @@ load('uiSelect',        '/au-sounds/ui_select.wav');
 load('menuMusic',       '/au-sounds/menu_music.mp3');
 
 const menuTrack = cache.get('menuMusic');
-if (menuTrack) {
-  menuTrack.loop = true;
-  menuTrack.volume = 0.18;
-}
+if (menuTrack) { menuTrack.loop = true; menuTrack.volume = musicGain(); }
+if (typeof window !== 'undefined') window.addEventListener('among-gas-settings-change', updateMenuMusicVolume);
 
-/** Start quiet menu music only after a user gesture, respecting browser autoplay rules. */
+/** Start music only after a user gesture, respecting browser autoplay rules. */
 export function startMenuMusic(): void {
-  const track = cache.get('menuMusic');
-  if (track && track.paused) track.play().catch(() => {});
+  const track = cache.get('menuMusic'); if (!track) return;
+  track.volume = musicGain(); if (track.paused) track.play().catch(() => {});
 }
 
 export function stopMenuMusic(): void {

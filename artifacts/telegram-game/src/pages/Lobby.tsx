@@ -16,7 +16,7 @@ import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
 import './lobby.css';
 
-// All lobby, gameplay, and kill sprites share the same high-resolution vector atlas.
+// Lobby, gameplay, and kill animations share the original textured balaclava atlas.
 import {
   CHARACTER_COLORS,
   CHARACTER_CELL_WIDTH,
