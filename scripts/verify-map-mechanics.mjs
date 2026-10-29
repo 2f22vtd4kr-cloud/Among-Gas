@@ -200,11 +200,11 @@ assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(raw
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
-assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\\s*=\\s*`\\/sprites\\/characters\\.png\\?v=/,
+assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
   'Runtime character art must remain the measured balaclava PNG atlas');
 assert.match(characterSpritesSource, /POSE_ROW_WINDOWS/,
   'Original measured per-pose crop windows must remain in use');
-assert.doesNotMatch(characterSpritesSource, /CHARACTER_SHEET_PATH\\s*=\\s*`\\/sprites\\/characters\\.svg/,
+assert.doesNotMatch(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.svg/,
   'The visor-style SVG must not silently replace the requested balaclava artwork');
 assert.match(gameMapSource, /if \(lastKill\.victimSlot === mySlot\) \{\s*setKillAnimation\(lastKill\)/, 'Only the victim should receive the full-screen kill sequence');
 assert.match(gameMapSource, /sfx\('footstep'/, 'Local walking must trigger footsteps');

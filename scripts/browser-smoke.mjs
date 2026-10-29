@@ -100,7 +100,7 @@ try {
     if (!context) throw new Error('Could not inspect original character atlas pixels');
     context.drawImage(sprite, 0, 0);
 
-    const darkRatio = (box: { x: number; y: number; width: number; height: number }) => {
+    const darkRatio = (box) => {
       const pixels = context.getImageData(box.x, box.y, box.width, box.height).data;
       let opaque = 0;
       let dark = 0;
