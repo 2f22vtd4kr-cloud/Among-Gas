@@ -141,8 +141,8 @@ try {
   assert.ok(hudBoxes.every(Boolean), 'all primary gameplay controls must be measurable on a 320px viewport');
   for (let i = 0; i < hudBoxes.length; i++) {
     for (let j = i + 1; j < hudBoxes.length; j++) {
-      const a = hudBoxes[i]!;
-      const b = hudBoxes[j]!;
+      const a = hudBoxes[i];
+      const b = hudBoxes[j];
       const overlaps = a.x < b.x + b.width && a.x + a.width > b.x &&
         a.y < b.y + b.height && a.y + a.height > b.y;
       assert.equal(overlaps, false, `gameplay controls ${i} and ${j} must not overlap at 320×568`);
