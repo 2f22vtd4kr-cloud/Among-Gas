@@ -839,7 +839,7 @@ try {
   fallbackPage.on('response', response => {
     if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
   });
-  await fallbackPage.route(/map-hires\\.webp/i, route => route.abort());
+  await fallbackPage.route(/map-hires\.webp/i, route => route.abort());
   await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   assert.equal(pngFallbackLoaded, true, 'failed WebP loading must fall back to the PNG map');
