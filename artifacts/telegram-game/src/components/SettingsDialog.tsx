@@ -105,7 +105,6 @@ export default function SettingsDialog({
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const en = language === 'en';
-  const selectedPosition = controlLayout[selectedControl] ?? defaultControlPosition(selectedControl, joystickSide);
   const controlOptions = DRAGGABLE_CONTROL_IDS.map(id => [id, CONTROL_LABELS[id]] as [GameplayControlId, { en: string; ru: string }]);
 
   useEffect(() => { onCloseRef.current = onClose; }, [onClose]);
