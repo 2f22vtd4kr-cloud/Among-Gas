@@ -156,6 +156,12 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
+  assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
+  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '143',
+    'role reveal must crop detached black strokes below the idle character feet');
+  assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
+    'trimming sprite padding must preserve the authored role-reveal scale');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
