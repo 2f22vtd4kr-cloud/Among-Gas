@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { CELL_X, CELL_Y, COLS, ROWS } from '@workspace/shared/collisionMap';
-import { FEET_OFFSET_Y } from '@workspace/shared/coords';
+import { canMoveTo, CELL_X, CELL_Y, COLS, ROWS } from '@workspace/shared/collisionMap';
+import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 import { createInitialPlayerState, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
 
 // Regression for prediction/server disagreement: both endpoints are walkable,
@@ -21,11 +21,20 @@ const state = {
   y: feetY - FEET_OFFSET_Y,
 };
 const targetKeys = new Set(['d']);
-const result = stepPlayer(grid, state, targetKeys, 150);
+const frameMs = 200;
+const expectedEndpointX = startX + PLAYER_SPEED_PX_PER_SEC * frameMs / 1000;
+const feetWalkable = (x: number) =>
+  canMoveTo(grid, x, feetY, PLAYER_RADIUS) &&
+  canMoveTo(grid, x - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+  canMoveTo(grid, x + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
+const result = stepPlayer(grid, state, targetKeys, frameMs);
 
 assert.ok(startX < wallLeft, 'fixture must start before the wall');
-assert.ok(startX + 20 > wallLeft - 10, 'fixture movement must be large enough to reach the wall');
-assert.ok(result.x < wallLeft - 10,
+assert.ok(expectedEndpointX > wallLeft + CELL_X + PLAYER_HALF_WIDTH + PLAYER_RADIUS,
+  'fixture must travel completely past the wall cell');
+assert.equal(feetWalkable(expectedEndpointX), true,
+  'the destination endpoint is deliberately walkable; only the path crosses the wall');
+assert.ok(result.x < wallLeft - PLAYER_HALF_WIDTH,
   `client prediction must not cross the wall (start=${startX.toFixed(1)}, result=${result.x.toFixed(1)}, wall=${wallLeft.toFixed(1)})`);
 
 console.log('PASS: client prediction validates the full movement path against thin walls');
