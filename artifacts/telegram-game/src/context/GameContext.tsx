@@ -119,6 +119,8 @@ export interface GameState {
   hostSlot: number;
   players: LobbyPlayer[];
   errorMessage: string | null;
+  /** Server-confirmed readiness after all connected human clients load assets. */
+  gameplayReady: boolean;
   /** Set by the server's 0x1A packet at game start. Never trust other clients. */
   myRole: PlayerRole | null;
   /** Fellow impostor slots — only populated when myRole === 'impostor'. */
@@ -195,6 +197,7 @@ const DEFAULT_STATE: GameState = {
   hostSlot: 0,
   players: [],
   errorMessage: null,
+  gameplayReady: false,
   myRole: null,
   impostorSlots: [],
   deadSlots: [],
@@ -667,6 +670,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   }, [send]);
 
   const markGameplayReady = useCallback(() => {
+    // Mock browser fixtures have no server to acknowledge readiness.
+    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true') {
+      setState(s => ({ ...s, gameplayReady: true }));
+      return;
+    }
     send([0x23]);
   }, [send]);
 
@@ -883,6 +891,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         // disabled until the authoritative opening cooldown expires.
         setState(s => ({
           ...s, phase: 'playing', myRole, impostorSlots,
+          gameplayReady: false,
           deadSlots: [],
           lastKill: null,
           killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
@@ -899,6 +908,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           corpsePositions: [],
         }));
         console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
+        return;
+      }
+
+      // ── 0x24: all connected clients are ready for gameplay ───────────────
+      if (opcode === 0x24 && event.data.byteLength >= 2 && view.getUint8(1) === 0x01) {
+        setState(s => ({ ...s, gameplayReady: true }));
         return;
       }
 
