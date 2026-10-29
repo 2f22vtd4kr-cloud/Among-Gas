@@ -43,7 +43,7 @@ function commit(next:GameSettings):void{
 }
 export function setJoystickSide(joystickSide:JoystickSide):void{
  const current=getGameSettings();
- commit({...current,joystickSide,controlLayout:{...current.controlLayout,joystick:{...current.controlLayout.joystick,x:joystickSide==='left'?.20:.80}});
+ commit({...current,joystickSide,controlLayout:{...current.controlLayout,joystick:{...current.controlLayout.joystick,x:joystickSide === 'left' ? 0.20 : 0.80}});
 }
 export function setControlLayout(controlLayout:ControlLayout):void{
  const current=getGameSettings(),normalized=normalize({...current,controlLayout},current);
@@ -55,7 +55,7 @@ export function setControlPosition(id:ControlId,point:ControlPoint):void{
 }
 export function resetControlLayout():void{
  const current=getGameSettings(),layout=cloneLayout(DEFAULT_CONTROL_LAYOUT);
- layout.joystick.x=current.joystickSide==='left'?.20:.80;setControlLayout(layout);
+ layout.joystick.x=current.joystickSide === 'left' ? 0.20 : 0.80;setControlLayout(layout);
 }
 export function setAudioSettings(patch:Partial<AudioSettings>):void{
  const current=getGameSettings();
