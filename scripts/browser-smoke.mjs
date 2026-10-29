@@ -637,21 +637,22 @@ try {
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
   await layoutSettings.getByTestId('control-layout-select').selectOption('settings');
-  const layoutX = layoutSettings.getByTestId('control-layout-x');
-  const layoutY = layoutSettings.getByTestId('control-layout-y');
-  await layoutX.focus();
-  for (let i = 0; i < 5; i++) await layoutX.press('ArrowLeft');
-  await layoutY.focus();
-  for (let i = 0; i < 6; i++) await layoutY.press('ArrowRight');
-  assert.equal(await layoutX.inputValue(), '88', 'custom control X setting must be adjustable');
-  assert.equal(await layoutY.inputValue(), '12', 'custom control Y setting must be adjustable');
-  await page.getByRole('button', { name: 'Закрыть настройки' }).click();
+  const preview = layoutSettings.getByTestId('control-layout-preview');
+  const previewBox = await preview.boundingBox();
+  const dragHandle = layoutSettings.getByTestId('control-drag-settings');
+  const dragBox = await dragHandle.boundingBox();
+  assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
+  await page.mouse.move(dragBox.x + dragBox.width / 2, dragBox.y + dragBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(previewBox.x + previewBox.width * 0.88, previewBox.y + previewBox.height * 0.32, { steps: 8 });
+  await page.mouse.up();
+  await layoutSettings.getByTestId('control-layout-save').click();
   const movedSettingsBox = await page.getByRole('button', { name: 'Настройки' }).boundingBox();
   assert.ok(movedSettingsBox, 'settings control remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 2,
-    'saved settings X position must be applied to the gameplay HUD');
-  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.12) < 2,
-    'saved settings Y position must be applied to the gameplay HUD');
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.88) < 3,
+    'dragged settings X position must be applied to the gameplay HUD');
+  assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.32) < 3,
+    'dragged settings Y position must be applied to the gameplay HUD');
   await page.getByRole('button', { name: 'Настройки' }).click();
   await page.locator('[role="dialog"]').getByTestId('control-layout-reset').click();
   await page.getByRole('button', { name: 'Закрыть настройки' }).click();
