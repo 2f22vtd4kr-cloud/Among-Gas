@@ -38,7 +38,6 @@ function CharSprite({
 }) {
   const frame = getCharacterFrameRect(color, pose);
   const scale = size / CHARACTER_CELL_WIDTH;
-  const verticalScale = frame.displayHeight / frame.height;
   return (
     <div
       className="au-menu-character-sprite"
@@ -53,7 +52,7 @@ function CharSprite({
         backgroundRepeat: 'no-repeat',
         imageRendering: 'pixelated',
         transformOrigin: 'top center',
-        transform: `${flipped ? 'scaleX(-1) ' : ''}scaleY(${verticalScale})`,
+        transform: flipped ? 'scaleX(-1)' : 'none',
         flexShrink: 0,
         overflow: 'hidden',
       }}
