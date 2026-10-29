@@ -733,7 +733,7 @@ export default function GameMap() {
       ] as const;
       const cellW = oc.width / CHARACTER_COLORS.length;
       for (const [top, bottom] of poseWindows) {
-        const bandStart = Math.max(top, bottom - 12);
+        const bandStart = Math.max(top, bottom - 24);
         for (let col = 0; col < CHARACTER_COLORS.length; col++) {
           const xStart = Math.round(col * cellW);
           const xEnd = Math.round((col + 1) * cellW);
