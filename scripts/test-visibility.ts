@@ -10,7 +10,7 @@ import {
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
-import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
+import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -51,7 +51,7 @@ assert.ok(
 );
 
 // Every balaclava color has an authored dead-body frame. Crop windows trim
-// detached underline strokes while displayHeight preserves the intended sprite scale.
+// detached underline strokes; rendering uses native crop scale and a pose-specific gap mask.
 {
   const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
   assert.equal(corpseFrames.length, 7, 'all seven balaclava colors have a corpse pose');
@@ -60,6 +60,8 @@ assert.ok(
     assert.equal(frame.row, CHARACTER_POSES.indexOf('dead-body'));
     assert.ok(frame.height < frame.displayHeight, 'corpse crop excludes detached underline rows and keeps the source pixels unstretched');
   }
+  assert.match(getCharacterClipPath('idle') ?? '', /polygon/, 'idle pose masks stray strokes in the leg gap');
+  assert.match(getCharacterClipPath('dead-body') ?? '', /polygon/, 'corpse pose masks stray strokes while preserving the bone');
   for (const color of CHARACTER_COLORS) {
     for (const pose of CHARACTER_POSES) {
       const frame = getCharacterFrameRect(color, pose);
