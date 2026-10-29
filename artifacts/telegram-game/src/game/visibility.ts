@@ -14,8 +14,52 @@ const VISION_DIRECTIONS = Array.from({ length: VISION_RAY_COUNT }, (_, index) =>
   return { dx: Math.cos(angle), dy: Math.sin(angle) };
 });
 
-function isBlocked(grid: Grid, col: number, row: number): boolean {
-  return col < 0 || col >= COLS || row < 0 || row >= ROWS || grid[row * COLS + col] === 1;
+function isBlocked(
+  grid: Grid,
+  col: number,
+  row: number,
+  cols = COLS,
+  rows = ROWS,
+): boolean {
+  return col < 0 || col >= cols || row < 0 || row >= rows || grid[row * cols + col] === 1;
+}
+
+/**
+ * Upsample the visual occluder mask with bilinear boundary interpolation.
+ * Movement continues to use the original collision grid; this higher-resolution
+ * mask only removes the conspicuous cell-sized stair steps from vision edges.
+ */
+export function buildSmoothShadowGrid(shadowGrid: Grid): Grid {
+  if (shadowGrid.length !== COLS * ROWS) {
+    throw new RangeError(
+      `Shadow grid has ${shadowGrid.length} cells; expected ${COLS * ROWS}.`,
+    );
+  }
+
+  const scale = 4;
+  const width = COLS * scale;
+  const height = ROWS * scale;
+  const smooth = new Uint8Array(width * height);
+  const sample = (col: number, row: number): number => {
+    if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return 1;
+    return shadowGrid[row * COLS + col] === 1 ? 1 : 0;
+  };
+
+  for (let row = 0; row < height; row++) {
+    const y = (row + 0.5) / scale - 0.5;
+    const y0 = Math.floor(y);
+    const fy = y - y0;
+    for (let col = 0; col < width; col++) {
+      const x = (col + 0.5) / scale - 0.5;
+      const x0 = Math.floor(x);
+      const fx = x - x0;
+      const top = sample(x0, y0) * (1 - fx) + sample(x0 + 1, y0) * fx;
+      const bottom = sample(x0, y0 + 1) * (1 - fx) + sample(x0 + 1, y0 + 1) * fx;
+      smooth[row * width + col] = top * (1 - fy) + bottom * fy >= 0.5 ? 1 : 0;
+    }
+  }
+
+  return smooth as Grid;
 }
 
 /**
@@ -35,24 +79,36 @@ export function computeVisibilityPolygon(
     return [];
   }
 
+  const scale = grid.length === COLS * ROWS
+    ? 1
+    : grid.length === COLS * ROWS * 16
+      ? 4
+      : 0;
+  if (scale === 0) {
+    throw new RangeError(`Unsupported visibility grid size: ${grid.length} cells.`);
+  }
+  const cols = COLS * scale;
+  const rows = ROWS * scale;
+  const cellWidth = CELL_X / scale;
+  const cellHeight = CELL_Y / scale;
   const points: VisionPoint[] = [];
-  const startCol = Math.floor(px / CELL_X);
-  const startRow = Math.floor(py / CELL_Y);
+  const startCol = Math.floor(px / cellWidth);
+  const startRow = Math.floor(py / cellHeight);
 
   for (const { dx, dy } of VISION_DIRECTIONS) {
     const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
     const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
-    const deltaX = stepX === 0 ? Infinity : CELL_X / Math.abs(dx);
-    const deltaY = stepY === 0 ? Infinity : CELL_Y / Math.abs(dy);
+    const deltaX = stepX === 0 ? Infinity : cellWidth / Math.abs(dx);
+    const deltaY = stepY === 0 ? Infinity : cellHeight / Math.abs(dy);
 
     let col = startCol;
     let row = startRow;
     let maxX = stepX === 0
       ? Infinity
-      : ((stepX > 0 ? (col + 1) * CELL_X : col * CELL_X) - px) / dx;
+      : ((stepX > 0 ? (col + 1) * cellWidth : col * cellWidth) - px) / dx;
     let maxY = stepY === 0
       ? Infinity
-      : ((stepY > 0 ? (row + 1) * CELL_Y : row * CELL_Y) - py) / dy;
+      : ((stepY > 0 ? (row + 1) * cellHeight : row * cellHeight) - py) / dy;
     let hitDistance = radius;
 
     while (true) {
@@ -64,7 +120,7 @@ export function computeVisibilityPolygon(
       if (Math.abs(maxX - maxY) < 1e-7) {
         const nextCol = col + stepX;
         const nextRow = row + stepY;
-        if (isBlocked(grid, nextCol, row) || isBlocked(grid, col, nextRow)) {
+        if (isBlocked(grid, nextCol, row, cols, rows) || isBlocked(grid, col, nextRow, cols, rows)) {
           hitDistance = next;
           break;
         }
@@ -72,7 +128,7 @@ export function computeVisibilityPolygon(
         row = nextRow;
         maxX += deltaX;
         maxY += deltaY;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, cols, rows)) {
           hitDistance = next;
           break;
         }
@@ -80,7 +136,7 @@ export function computeVisibilityPolygon(
         col += stepX;
         const boundaryDistance = maxX;
         maxX += deltaX;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, cols, rows)) {
           hitDistance = boundaryDistance;
           break;
         }
@@ -88,7 +144,7 @@ export function computeVisibilityPolygon(
         row += stepY;
         const boundaryDistance = maxY;
         maxY += deltaY;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, cols, rows)) {
           hitDistance = boundaryDistance;
           break;
         }
