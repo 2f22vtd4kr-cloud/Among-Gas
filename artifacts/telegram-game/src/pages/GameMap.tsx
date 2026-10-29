@@ -655,8 +655,10 @@ export default function GameMap() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dpr = getRenderDpr();
-    const w = window.innerWidth;
-    const h = window.innerHeight;
+    // The document element represents the stable layout viewport; visualViewport
+    // can shrink and grow as mobile browser/Telegram chrome animates.
+    const w = document.documentElement.clientWidth || window.innerWidth;
+    const h = document.documentElement.clientHeight || window.innerHeight;
     const pixelWidth = Math.round(w * dpr);
     const pixelHeight = Math.round(h * dpr);
     // A backing-store resize clears the buffer. Avoid touching it when dimensions
