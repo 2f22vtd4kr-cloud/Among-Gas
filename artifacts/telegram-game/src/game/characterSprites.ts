@@ -84,21 +84,40 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
 }
 
 export interface CharacterClipNotch {
-  /** Normalized horizontal bounds of the transparent leg gap. */
-  left: number;
-  right: number;
-  /** Normalized vertical point where the gap begins. */
+  /** Normalized bounds of the left and right lower-leg silhouettes. */
+  leftLegStart: number;
+  leftLegEnd: number;
+  rightLegStart: number;
+  rightLegEnd: number;
+  /** Normalized vertical point where only the leg silhouettes remain. */
   top: number;
 }
 
 /**
- * Clip stray horizontal atlas strokes from the transparent gap between the
- * legs. The same normalized notch is shared by DOM and canvas renderers.
+ * The source atlas contains stray horizontal strokes below the torso. Keep the
+ * full upper silhouette but clip the lower region to the actual two leg shapes.
+ * The same normalized polygon is shared by DOM and canvas renderers.
  */
 export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
-  if (pose === 'idle' || pose === 'mask') return { left: 0.5, right: 0.56, top: 0.79 };
-  if (pose === 'dead-body') return { left: 0.53, right: 0.58, top: 0.82 };
+  if (pose === 'idle') {
+    return { leftLegStart: 0.31, leftLegEnd: 0.52, rightLegStart: 0.56, rightLegEnd: 0.73, top: 0.81 };
+  }
+  if (pose === 'dead-body') {
+    return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.81 };
+  }
   return undefined;
+}
+
+export function getCharacterClipPath(pose: CharacterPose): string | undefined {
+  const notch = getCharacterClipNotch(pose);
+  if (!notch) return undefined;
+  const leftStart = notch.leftLegStart * 100;
+  const leftEnd = notch.leftLegEnd * 100;
+  const rightStart = notch.rightLegStart * 100;
+  const rightEnd = notch.rightLegEnd * 100;
+  const top = notch.top * 100;
+  return `polygon(0 0, 100% 0, 100% ${top}%, ${rightEnd}% ${top}%, ${rightEnd}% 100%, ${rightStart}% 100%, ${rightStart}% ${top}%, ${leftEnd}% ${top}%, ${leftEnd}% 100%, ${leftStart}% 100%, ${leftStart}% ${top}%, 0 ${top}%)`;
+}
 }
 
 export function getCharacterClipPath(pose: CharacterPose): string | undefined {
