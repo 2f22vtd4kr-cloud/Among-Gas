@@ -160,7 +160,7 @@ function CharSpriteUI({
         backgroundSize: `${bgW}px ${bgH}px`,
         backgroundPosition: `${posX}px ${posY}px`,
         backgroundRepeat: 'no-repeat',
-        imageRendering: 'auto',
+        imageRendering: 'pixelated',
         transform: flipped ? 'scaleX(-1)' : undefined,
       }}
     />
