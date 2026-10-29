@@ -336,8 +336,8 @@ export default function SettingsDialog({
               boxSizing: 'border-box', borderBottom: '1px dashed rgba(255,255,255,.25)',
               color: 'rgba(220,237,239,.5)', font: '8px system-ui, sans-serif', whiteSpace: 'nowrap', pointerEvents: 'none',
             }}>
-              <span>{en ? 'MAP · TASKS · SET' : 'КАРТА · ЗАД. · НАСТР.'}</span>
-              <span>{en ? 'Fixed' : 'Фиксировано'}</span>
+              <span>{en ? 'MAP · TASKS · SET' : 'КАРТА · ЗАД · НАСТР'}</span>
+              <span>{en ? 'FIXED' : 'ФИКС'}</span>
             </div>
             {controlOptions.map(([id, label]) => {
               const position = draftLayout[id] ?? controlLayout[id] ?? defaultControlPosition(id, joystickSide);
