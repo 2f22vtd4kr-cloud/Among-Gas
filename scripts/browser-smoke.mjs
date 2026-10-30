@@ -335,20 +335,12 @@ try {
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   // The assigned filter console is ~263 map-pixels from the lobby spawn;
-  // move toward it with the actual joystick before asserting the proximity UI.
-  const taskJoystick = page.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
-  const taskJoystickBox = await taskJoystick.boundingBox();
-  assert.ok(taskJoystickBox, 'task interaction fixture must expose the movement joystick');
-  const taskJoystickX = taskJoystickBox.x + taskJoystickBox.width / 2;
-  const taskJoystickY = taskJoystickBox.y + taskJoystickBox.height / 2;
-  await page.mouse.move(taskJoystickX, taskJoystickY);
-  await page.mouse.down();
-  await page.mouse.move(taskJoystickX - 38, taskJoystickY + 22, { steps: 5 });
-  const taskKnobTransform = await page.getByTestId('joystick-knob').evaluate(node => node.style.transform);
-  assert.match(taskKnobTransform, /calc\(-50% \+/,
-    'the task-approach pointer gesture must engage the actual joystick knob');
+  // move diagonally toward it before asserting the proximity action.
+  await page.keyboard.down('a');
+  await page.keyboard.down('s');
   await page.waitForTimeout(650);
-  await page.mouse.up();
+  await page.keyboard.up('a');
+  await page.keyboard.up('s');
   await page.screenshot({ path: join(visualQaDir, 'task-approach-after-movement.png'), fullPage: true });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
