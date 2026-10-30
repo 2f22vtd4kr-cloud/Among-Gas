@@ -16,6 +16,8 @@ import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
 import {
   MAP_W, MAP_H,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
   toWire,
   DELTA_THRESHOLD_SQ,
   KILL_COOLDOWN_MS,
@@ -63,8 +65,8 @@ function generateCode(): string {
 // verifying that a candidate destination is actually connected to the main
 // walkable area (the collision grid has isolated 1-cell pockets — see
 // .agents/memory/ — that are locally walkable but unreachable from spawn).
-export const SPAWN_X = Math.round(350 * (MAP_W / 1040));
-export const SPAWN_Y = Math.round(150 * (MAP_H / 580));
+export const SPAWN_X = PLAYER_SPAWN_X;
+export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
 const spawnGrid = buildCollisionGrid();
