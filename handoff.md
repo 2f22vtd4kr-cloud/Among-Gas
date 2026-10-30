@@ -1726,3 +1726,30 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - PR #28 branch: `fix/settings-gear-centered-regression` — Settings gear geometry, role-reveal shadow, and browser regression tests.
 - PR #29 branch: `fix/replit-full-stack-runtime` — full Replit dev/production runtime and integration tests.
 - PR #28 is merged to `main` as `1a5b350d8ff19f2688743442fc0fb6d7a00b8004`. PR #29 has been reset/reapplied on top of that main head and remains open pending its new CI run. `main` contains the Settings geometry fix, role-reveal shadow, and their browser regressions; the Replit runtime fix is still on PR #29.
+
+
+### 2026-10-30 — Agent 5 platform and integrated QA audit
+
+**Done**
+- Registered Agent 5 in coordination issue #36 and created branch `audit/agent-5-platform-quality` from main SHA `a128d35242a5f98540fa4d02f415378113392b53`.
+- Verified open PR #35 and GitHub Actions run #41123658131. The workflow passed build, Replit production/development smoke, server gameplay invariants, Telegram HMAC auth, and live WebSocket lobby/sabotage checks; the mobile browser smoke step failed.
+- Identified the double-escaped player-slot regex in PR #35 at `scripts/browser-smoke.mjs:573`; reported it to Agent 4 and posted an integration review comment. Agent 4 retains implementation ownership.
+- Identified missing active-match reconnect/resume: client socket closes without retry; server removes disconnected players and rejects joins after WAITING. Registered as AG5-PLATFORM-001 for Agent 5 ownership.
+- Identified an autoscale/process-local state architecture risk: Replit target is autoscale while the authoritative LobbyManager and all lobby maps are process-local. Actual deployed replica count remains unverified.
+- Downloaded and inspected the CI visual QA artifact; it contains 12 Playwright captures across lobby, settings, role reveal, chat, tasks, mobile controls, and corpse/report states. These are CI browser captures, not a live Replit deployment inspection.
+- Aligned CI Node.js setup with the configured Replit Node.js 20 runtime and corrected the stack version in `replit.md`.
+
+**Decisions & gotchas**
+- Do not merge PR #35 until the voting identifier regex is corrected and the full browser smoke job passes.
+- Do not claim active-match reconnection works: it requires a server-side resume protocol and restoration of authoritative match state, not just a client reconnect loop.
+- Treat autoscale with in-memory lobbies as a release architecture risk until either single-instance deployment is enforced or shared state/coordination is implemented and tested.
+- Agent 5 owns CI/runtime config and connection lifecycle; avoid conflicting edits to Agent 1–4 map, movement, sprite, and gameplay implementation areas.
+
+**Left off / next steps**
+- Run CI on this branch to validate Node.js 20 compatibility; fix any actual compatibility failures rather than reverting to a non-Replit CI runtime.
+- Design and implement a reconnect/resume protocol with explicit coordination around shared GameContext and WebSocket files; add tests for lobby reconnect, active match reconnect, stale socket rejection, and app background/resume.
+- Determine Replit autoscale instance behavior and constrain deployment or introduce shared authoritative lobby state before multiplayer scale-out.
+- Continue security, protocol, session lifecycle, and whole-game cross-system audit; visually inspect the final integrated build after all agent PRs merge.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
