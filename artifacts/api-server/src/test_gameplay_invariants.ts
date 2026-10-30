@@ -317,6 +317,18 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'a rejected report must not mark an ejected ghost as a reported corpse');
   assert.equal(lobby.phase, 'ROAMING');
   manager.disposeLobby(lobby);
+
+  const distantReporter = makePlayer(2, 'crewmate', 100, 100);
+  const distantCorpse = makePlayer(3, 'crewmate', 900, 900);
+  distantCorpse.player.alive = false;
+  distantCorpse.player.corpseX = 900;
+  distantCorpse.player.corpseY = 900;
+  const distantLobby = makeLobby([distantReporter.player, distantCorpse.player]);
+  const distanceManager = new LobbyManager();
+  assert.equal(distanceManager.callMeeting(distantLobby, distantReporter.player.slot, distantCorpse.player.slot), false,
+    'server must reject reports when the caller is outside corpse interaction range');
+  assert.equal(distantLobby.phase, 'ROAMING');
+  distanceManager.disposeLobby(distantLobby);
 }
 
 // Bots speak during the discussion window, without using omniscient global positions.
