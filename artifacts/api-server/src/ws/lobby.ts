@@ -72,8 +72,8 @@ const spawnGrid = buildCollisionGrid();
 /**
  * Compute a spread spawn position for player `index` of `total`.
  * Players are placed evenly around an ellipse centered on the lobby spawn
- * point; each candidate radius is validated against the collision grid,
- * falling back to the central spawn if no walkable candidate is found.
+ * point; each candidate is validated against the exact shared player
+ * footprint. If no safe separated point exists, lobby start fails closed.
  */
 function computeSpawnPosition(
   index: number,
