@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "\${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA_INDEX="$ROOT_DIR/lib/db/src/schema/index.ts"
 
 # The current game server is intentionally in-memory and the Drizzle schema
@@ -12,7 +12,7 @@ if [[ ! -f "$SCHEMA_INDEX" ]] || ! grep -Eq '^[[:space:]]*export[[:space:]]+\*[[
   exit 0
 fi
 
-if [[ -z "\${DATABASE_URL:-}" ]]; then
+if [[ -z "${DATABASE_URL:-}" ]]; then
   echo "DATABASE_URL is required when Drizzle schema exports exist." >&2
   exit 1
 fi
