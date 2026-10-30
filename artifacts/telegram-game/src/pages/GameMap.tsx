@@ -606,6 +606,20 @@ export default function GameMap() {
   }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
+    const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+      new URLSearchParams(window.location.search).get('mock') === 'task-interaction';
+    if (taskMockActive) {
+      (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
+        stage: 'proximity-effect-start',
+        mockEnabled: import.meta.env.VITE_ENABLE_GAME_MOCKS,
+        query: window.location.search,
+        role: myRole,
+        meeting,
+        sabotage,
+        assignedTasks: myTasks,
+        player: playerStateRef.current,
+      };
+    }
     if (meeting !== null || myRole !== 'crewmate' ||
         sabotage?.systemId === SABOTAGE_COMMS) {
       nearestTaskRef.current = null;
