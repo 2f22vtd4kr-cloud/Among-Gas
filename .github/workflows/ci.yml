@@ -47,6 +47,59 @@ jobs:
       - name: Typecheck and build API/frontend
         run: pnpm run build
 
+      - name: Verify Replit single-origin production serving
+        run: |
+          set -euo pipefail
+          PORT=8080 NODE_ENV=production TELEGRAM_BOT_TOKEN=ci-placeholder-not-a-real-token node --enable-source-maps artifacts/api-server/dist/index.mjs >/tmp/among-gas-production.log 2>&1 &
+          api_pid=$!
+          cleanup() {
+            kill "$api_pid" 2>/dev/null || true
+            wait "$api_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS "http://127.0.0.1:8080/api/healthz" >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then cat /tmp/among-gas-production.log; exit 1; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:8080/" | grep -q '<div id="root">'
+          curl -fsS "http://127.0.0.1:8080/game" | grep -q '<div id="root">'
+          curl -fsS "http://127.0.0.1:8080/sprites/characters.png" -o /dev/null
+          curl -fsS "http://127.0.0.1:8080/api/healthz" | grep -q '"status":"ok"'
+
+      - name: Verify Replit development preview and WebSocket proxy
+        run: |
+          set -euo pipefail
+          VITE_ENABLE_GAME_MOCKS=true VITE_WS_URL=wss://invalid.example/api/ws bash scripts/replit-dev.sh >/tmp/among-gas-replit-dev.log 2>&1 &
+          stack_pid=$!
+          cleanup() {
+            trap - EXIT
+            kill -TERM "$stack_pid" 2>/dev/null || true
+            wait "$stack_pid" 2>/dev/null || true
+            for port in 5173 8080; do
+              for attempt in $(seq 1 10); do
+                alive=0
+                if [ "$port" = "5173" ]; then
+                  curl -fsS "http://127.0.0.1:5173/" >/dev/null 2>&1 && alive=1 || true
+                else
+                  curl -fsS "http://127.0.0.1:8080/api/healthz" >/dev/null 2>&1 && alive=1 || true
+                fi
+                if [ "$alive" -eq 0 ]; then break; fi
+                sleep 1
+              done
+              if [ "$alive" -ne 0 ]; then echo "Replit process tree left port $port running after shutdown" >&2; exit 1; fi
+            done
+          }
+          trap cleanup EXIT
+          ready=0
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:5173/api/healthz" >/dev/null; then ready=1; break; fi
+            if ! kill -0 "$stack_pid" 2>/dev/null; then cat /tmp/among-gas-replit-dev.log; exit 1; fi
+            sleep 1
+          done
+          if [ "$ready" -ne 1 ]; then cat /tmp/among-gas-replit-dev.log; exit 1; fi
+          curl -fsS "http://127.0.0.1:5173/" | grep -q '<div id="root">'
+          WS_URL=ws://127.0.0.1:5173/api/ws node test_sabotage.mjs
       - name: Archive production Telegram Mini App build for deployment verification
         uses: actions/upload-artifact@v4
         with:
