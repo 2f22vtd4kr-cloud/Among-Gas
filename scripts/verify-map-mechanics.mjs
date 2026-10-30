@@ -224,6 +224,10 @@ assert.ok(taskBlock, 'Could not parse TASK_DEFS');
 const tasks = [...taskBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\s\S]*?\.\.\.ref\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\}/g)]
   .map(m => ({ id: Number(m[1]), name: m[2], ...fromRef(Number(m[3]), Number(m[4])) }));
 assert.equal(tasks.length, 11, 'Expected the five existing Among Gas tasks plus six ported base-game tasks');
+assert.match(gameMapSource, /isPlayerPositionWalkable\(grid, x, y\)/,
+  'the task-interaction browser fixture must choose a position validated by the production collision footprint');
+assert.match(gameMapSource, /TASK_INTERACTION_RANGE_PX\s*-\s*8/,
+  'the task-interaction fixture must place the player inside the actual task interaction radius');
 tasks.forEach((task, index) => assert.equal(task.id, index, `Task IDs must be contiguous; ${task.name} has id ${task.id}`));
 const taskRange = Math.round(55 * mapW / 1040);
 const botTaskApproachRange = taskRange - 30; // CrewmateBot.nearestApproachPoint intentionally keeps a 30px margin.
