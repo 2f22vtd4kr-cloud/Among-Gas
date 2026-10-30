@@ -608,6 +608,7 @@ try {
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   assert.equal(
     await page.locator('[role="alert"][aria-label="Анимация убийства"], [role="alert"][aria-label="Kill animation"]').count(),
     0,
