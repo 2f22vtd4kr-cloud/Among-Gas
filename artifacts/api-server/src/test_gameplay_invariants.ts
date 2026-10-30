@@ -143,14 +143,17 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   manager.disposeLobby(lobby);
 }
 
-// The fountain is a large enclosed prop. Its outline was previously omitted
-// from the RLE walkability mask, allowing players and bots to walk through it.
+// The garden surrounding the statue is walkable; only the statue footprint
+// itself remains blocked by its small 2×2 RLE component.
 {
-  const fountainCenter = { x: 1735, y: 490 };
-  assert.equal(isPlayerPositionWalkable(grid, fountainCenter.x, fountainCenter.y), false,
-    'the central fountain interior must be blocked by the manual collision polygon');
-  assert.equal(isPlayerPositionWalkable(grid, 1450, 490), true,
-    'the open lobby floor west of the fountain must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1640, 449), true,
+    'the western path through the central garden must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1810, 449), true,
+    'the eastern path through the central garden must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1735, 449), false,
+    'the central statue footprint must remain blocked');
+  assert.equal(isPlayerPositionWalkable(grid, 1450, 449), true,
+    'the open lobby floor west of the garden must remain walkable');
 }
 
 // 1. Tasks, vents and consoles must be valid interaction points on *this* map.
