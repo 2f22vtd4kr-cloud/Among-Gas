@@ -9,6 +9,8 @@ const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
 
 const source = fs.readFileSync(dataPath, 'utf8');
+const mapSource = fs.readFileSync(path.join(root, 'lib/shared/src/collisionMap.ts'), 'utf8');
+const coords = fs.readFileSync(path.join(root, 'lib/shared/src/coords.ts'), 'utf8');
 const readNumber = (name: string) => {
   const match = source.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
   if (!match) throw new Error(`Missing collision constant ${name}`);
@@ -16,7 +18,7 @@ const readNumber = (name: string) => {
 };
 const cols = readNumber('COLS');
 const rows = readNumber('ROWS');
-const runsMatch = source.match(/export const RUNS(?::\\s*number\\[\\])?\\s*=\\s*\\[([\\s\\S]*?)\\]\\s*;/);
+const runsMatch = source.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 if (!runsMatch) throw new Error('Could not parse canonical collision RLE');
 const runs = runsMatch[1].split(',').map(value => Number(value.trim()));
 const grid = new Uint8Array(cols * rows);
@@ -35,8 +37,20 @@ if (cursor !== grid.length) throw new Error(`Collision RLE covers ${cursor}, exp
 const map = sharp(mapPath);
 const metadata = await map.metadata();
 if (!metadata.width || !metadata.height) throw new Error('Map image dimensions unavailable');
-const mapWidth = readNumber('MAP_W');
-const mapHeight = readNumber('MAP_H');
+const readMapNumber = (name: string) => {
+  const match = mapSource.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
+  if (!match) throw new Error(`Missing map constant ${name}`);
+  return Number(match[1]);
+};
+const readCoordNumber = (name: string) => {
+  const match = coords.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
+  if (!match) throw new Error(`Missing player constant ${name}`);
+  return Number(match[1]);
+};
+const mapWidth = readMapNumber('MAP_W');
+const mapHeight = readMapNumber('MAP_H');
+const playerRadius = readCoordNumber('PLAYER_RADIUS');
+const playerHalfWidth = readCoordNumber('PLAYER_HALF_WIDTH');
 if (metadata.width !== mapWidth || metadata.height !== mapHeight) {
   throw new Error(`Collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${metadata.width}x${metadata.height}`);
 }
@@ -54,16 +68,15 @@ for (let row = 0; row < rows; row++) {
 
 // Render the exact player footprint at the configured solo spawn: three
 // overlapping foot circles, with the visible-feet baseline highlighted.
-const coords = fs.readFileSync(path.join(root, 'lib/shared/src/coords.ts'), 'utf8');
 const spriteHeight = Math.round(36 * (mapWidth / 1652));
 const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
 const spawnX = Math.round(350 * mapWidth / 1040);
 const spawnY = Math.round(150 * mapHeight / 580);
 const feetY = spawnY + feetOffset;
 const footprint = [
-  `<circle cx="${spawnX}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
-  `<circle cx="${spawnX - 10}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${spawnX + 10}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
+  `<circle cx="${spawnX - playerHalfWidth}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX + playerHalfWidth}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
   `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
   `<text x="${spawnX + 16}" y="${spawnY - 12}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="4" paint-order="stroke">PLAYER SPAWN / FEET</text>`,
