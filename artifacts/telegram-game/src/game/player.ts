@@ -8,6 +8,7 @@
 
 import {
   isPlayerPositionWalkable,
+  isPlayerSpawnPositionClear,
   isPlayerPathWalkable,
   resolvePlayerMovement,
   clampPlayerPositionToMapBounds,
@@ -132,5 +133,5 @@ export function stepPlayer(
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
 export function isSpawnWalkable(grid: Grid): boolean {
-  return isPlayerPositionWalkable(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
+  return isPlayerSpawnPositionClear(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
 }
