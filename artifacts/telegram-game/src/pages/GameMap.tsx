@@ -2870,7 +2870,13 @@ export default function GameMap() {
                 alignItems: 'center', justifyContent: 'center',
                 background: isImpWin ? '#aa2233' : '#225599',
                 borderRight: '2px solid rgba(0,0,0,0.22)', fontSize: 22,
-              }}><img src={`${import.meta.env.BASE_URL}au-assets/eject.png`} alt="" aria-hidden="true" style={{ width: 36, height: 36, objectFit: 'contain' }} /></div>
+              }}>
+                <svg data-testid="gameover-lobby-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
+                  <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+                </svg>
+              </div>
               <div style={{
                 flex: 1, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
