@@ -1114,6 +1114,72 @@ try {
     await statePage.close();
   }
 
+  // Move the local player while the camera follows. The character's suit
+  // centroid should remain stable near canvas center instead of shaking or
+  // drifting as the map scrolls beneath it.
+  const cameraPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  cameraPage.on('pageerror', error => failures.push(error.message));
+  await cameraPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await cameraPage.goto(`${origin}/?mock=playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await cameraPage.waitForTimeout(350);
+  const readPlayerCentroid = () => cameraPage.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not sample the game canvas for camera stability');
+    const cx = Math.floor(canvas.width / 2);
+    const cy = Math.floor(canvas.height / 2);
+    const radius = 90;
+    const left = Math.max(0, cx - radius);
+    const top = Math.max(0, cy - radius);
+    const width = Math.min(radius * 2, canvas.width - left);
+    const height = Math.min(radius * 2, canvas.height - top);
+    const pixels = context.getImageData(left, top, width, height).data;
+    let count = 0;
+    let sumX = 0;
+    let sumY = 0;
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const [red, green, blue, alpha] = pixels.slice(i, i + 4);
+        if (alpha > 200 && green > 85 && green > red * 1.2 && blue > 65 && green > blue * 0.82) {
+          count++;
+          sumX += left + x;
+          sumY += top + y;
+        }
+      }
+    }
+    return { x: count ? sumX / count : cx, y: count ? sumY / count : cy, count, cx, cy };
+  });
+  await cameraPage.keyboard.down('ArrowRight');
+  await cameraPage.waitForTimeout(550);
+  const cameraSamples = [];
+  for (let i = 0; i < 6; i++) {
+    cameraSamples.push(await readPlayerCentroid());
+    await cameraPage.waitForTimeout(70);
+  }
+  await cameraPage.keyboard.up('ArrowRight');
+  assert.ok(cameraSamples.every(sample => sample.count > 20),
+    'the local player sprite must remain visible while the camera follows movement');
+  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - sample.cx)));
+  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.y - sample.cy)));
+  const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.x)) - Math.min(...cameraSamples.map(sample => sample.x));
+  const cameraSpreadY = Math.max(...cameraSamples.map(sample => sample.y)) - Math.min(...cameraSamples.map(sample => sample.y));
+  assert.ok(maxCameraOffsetX < 24 && maxCameraOffsetY < 24,
+    `camera must keep the moving player near viewport center (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
+  assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
+    `camera-following player centroid must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
+  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
+  await cameraPage.close();
+
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({
