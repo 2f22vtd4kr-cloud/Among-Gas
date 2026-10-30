@@ -188,6 +188,21 @@ export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): bool
   return isPlayerFootprintWalkableAtFeet(grid, x, y + FEET_OFFSET_Y);
 }
 
+/**
+ * Keep even wall-phasing ghosts inside the map's physical player-footprint
+ * bounds. The anchor may be offset from the feet, so clamping x/y to 0..MAP
+ * dimensions alone lets the foot base leave the map.
+ */
+export function clampPlayerPositionToMapBounds(x: number, y: number): [number, number] {
+  const horizontalMargin = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
+  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
+  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  return [
+    Math.max(horizontalMargin, Math.min(MAP_W - horizontalMargin, x)),
+    Math.max(minY, Math.min(maxY, y)),
+  ];
+}
+
 /** Checks the starting point and every point along a segment at <=2px spacing. */
 export function isPlayerPathWalkable(
   grid: Grid,
