@@ -1000,7 +1000,7 @@ export default function GameMap() {
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
-    const narrowOccluders = buildNarrowShadowOccluders(grid);
+    const narrowOccluders = buildNarrowShadowOccluders(grid, true);
     if (!isSpawnWalkable(grid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
