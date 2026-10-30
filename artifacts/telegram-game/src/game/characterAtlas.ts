@@ -60,15 +60,19 @@ function hslToRgb(hue: number, saturation: number, lightness: number): readonly 
   ];
 }
 
-/** True only for the saturated teal suit material, not visor/filter/outline pixels. */
-export function isRecolorableSuitPixel(red: number, green: number, blue: number, alpha: number): boolean {
+function isRecolorableSuitHsl(hue: number, saturation: number, lightness: number, alpha: number): boolean {
   if (alpha === 0) return false;
-  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
   // The pale breathing/filter disk shares a cyan hue with the suit but is
   // both much lighter and more neutral. Keep that hardware untouched.
   const filterLike = hue >= 174 && hue <= 183 && lightness >= 0.72;
   return !filterLike && hue >= SUIT_HUE_MIN && hue <= SUIT_HUE_MAX &&
     saturation >= SUIT_MIN_SATURATION && lightness >= 0.1 && lightness <= 0.95;
+}
+
+/** True only for the saturated teal suit material, not visor/filter/outline pixels. */
+export function isRecolorableSuitPixel(red: number, green: number, blue: number, alpha: number): boolean {
+  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
+  return isRecolorableSuitHsl(hue, saturation, lightness, alpha);
 }
 
 /**
@@ -82,9 +86,8 @@ export function recolorSuitPixel(
   alpha: number,
   palette: GeneratedCharacterPalette,
 ): Rgba {
-  if (!isRecolorableSuitPixel(red, green, blue, alpha)) return [red, green, blue, alpha];
-
-  const [, saturation, lightness] = rgbToHsl(red, green, blue);
+  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
+  if (!isRecolorableSuitHsl(hue, saturation, lightness, alpha)) return [red, green, blue, alpha];
   const nextSaturation = Math.max(0, Math.min(1, saturation * (palette.saturationScale ?? 1)));
   const nextLightness = Math.max(0.04, Math.min(
     0.96,
