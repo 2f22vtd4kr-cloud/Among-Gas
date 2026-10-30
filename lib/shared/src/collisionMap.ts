@@ -15,7 +15,17 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData.js';
-import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS } from './coords.js';
+import {
+  FEET_OFFSET_Y,
+  PLAYER_HALF_WIDTH,
+  PLAYER_RADIUS,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPAWN_MIN_X,
+  PLAYER_SPAWN_MAX_X,
+  PLAYER_SPAWN_MAX_FEET_Y,
+} from './coords.js';
+import { MANUAL_BLOCKED_POLYGONS } from './collisionOverrides.js';
 
 // Map now renders from a pre-upscaled static asset (public/map-hires.png).
 // MAP_W/MAP_H must match that asset's native pixel size exactly.
@@ -130,9 +140,78 @@ export const ZONES: Zone[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 let _cached: Grid | null = null;
 
+type PolygonPoint = readonly [number, number];
+type BlockedPolygon = { readonly id: string; readonly points: readonly PolygonPoint[] };
+
+function pointInPolygon(x: number, y: number, points: readonly PolygonPoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, yi] = points[i];
+    const [xj, yj] = points[j];
+    const crosses = (yi > y) !== (yj > y) &&
+      x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi;
+    if (crosses) inside = !inside;
+  }
+  return inside;
+}
+
+function orientation(a: PolygonPoint, b: PolygonPoint, c: PolygonPoint): number {
+  return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+}
+
+function segmentsIntersect(
+  a: PolygonPoint, b: PolygonPoint, c: PolygonPoint, d: PolygonPoint,
+): boolean {
+  const o1 = orientation(a, b, c);
+  const o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a);
+  const o4 = orientation(c, d, b);
+  return ((o1 <= 0 && o2 >= 0) || (o1 >= 0 && o2 <= 0)) &&
+    ((o3 <= 0 && o4 >= 0) || (o3 >= 0 && o4 <= 0));
+}
+
+function polygonIntersectsRect(
+  points: readonly PolygonPoint[],
+  minX: number, minY: number, maxX: number, maxY: number,
+): boolean {
+  const rectCorners: PolygonPoint[] = [
+    [minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY],
+  ];
+  if (rectCorners.some(([x, y]) => pointInPolygon(x, y, points))) return true;
+  if (points.some(([x, y]) => x >= minX && x <= maxX && y >= minY && y <= maxY)) return true;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i];
+    const b = points[(i + 1) % points.length];
+    for (let edge = 0; edge < 4; edge++) {
+      if (segmentsIntersect(a, b, rectCorners[edge], rectCorners[(edge + 1) % 4])) return true;
+    }
+  }
+  return false;
+}
+
+function applyManualBlockedPolygons(grid: Grid): void {
+  for (const polygon of MANUAL_BLOCKED_POLYGONS as readonly BlockedPolygon[]) {
+    for (let row = 0; row < ROWS; row++) {
+      for (let col = 0; col < COLS; col++) {
+        const minX = col * CELL_X;
+        const minY = row * CELL_Y;
+        if (polygonIntersectsRect(
+          polygon.points,
+          minX, minY,
+          minX + CELL_X,
+          minY + CELL_Y,
+        )) {
+          grid[row * COLS + col] = 1;
+        }
+      }
+    }
+  }
+}
+
 export function buildCollisionGrid(): Grid {
   if (_cached) return _cached;
   _cached = decodeRuns();
+  applyManualBlockedPolygons(_cached);
   return _cached;
 }
 
@@ -186,6 +265,42 @@ export function isPlayerFootprintWalkableAtFeet(grid: Grid, feetX: number, feetY
 /** Tests the shared foot footprint for a sprite-centre world position. */
 export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): boolean {
   return isPlayerFootprintWalkableAtFeet(grid, x, y + FEET_OFFSET_Y);
+}
+
+/**
+ * Spawn-only visual clearance. Unlike normal movement (which correctly uses
+ * the feet hitbox), initial spawn placement also ensures the complete visible
+ * sprite rectangle does not start inside a wall, map boundary, or manually
+ * traced large prop such as the central fountain.
+ */
+export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): boolean {
+  if (
+    x < PLAYER_SPAWN_MIN_X ||
+    x > PLAYER_SPAWN_MAX_X ||
+    y + FEET_OFFSET_Y > PLAYER_SPAWN_MAX_FEET_Y ||
+    !isPlayerPositionWalkable(grid, x, y)
+  ) return false;
+
+  const minX = x - PLAYER_SPRITE_HALF_WIDTH_PX;
+  const maxX = x + PLAYER_SPRITE_HALF_WIDTH_PX;
+  const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX;
+  const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX;
+  if (minX < 0 || maxX > MAP_W || minY < 0 || maxY > MAP_H) return false;
+
+  const minCol = Math.floor(minX / CELL_X);
+  const maxCol = Math.floor(maxX / CELL_X);
+  const minRow = Math.floor(minY / CELL_Y);
+  const maxRow = Math.floor(maxY / CELL_Y);
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      if (grid[row * COLS + col] === 1) return false;
+    }
+  }
+
+  for (const polygon of MANUAL_BLOCKED_POLYGONS as readonly BlockedPolygon[]) {
+    if (polygonIntersectsRect(polygon.points, minX, minY, maxX, maxY)) return false;
+  }
+  return true;
 }
 
 /**
