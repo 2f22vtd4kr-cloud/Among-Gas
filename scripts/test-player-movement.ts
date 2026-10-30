@@ -119,3 +119,23 @@ console.log('PASS: client prediction validates the full movement path against th
   assert.equal(blockedResult.animElapsedMs, 0,
     'blocked input must not accumulate walk-cycle animation time');
 }
+
+// Ordinary movement must still animate, while ghosts must bypass solid cells.
+{
+  const ordinary = stepPlayer(grid, createInitialPlayerState(), new Set(['d']), 48);
+  assert.ok(ordinary.x > createInitialPlayerState().x,
+    'a walkable movement input must advance the player');
+  assert.equal(ordinary.pose, 'walk-1',
+    'real displacement must continue to drive the walk animation');
+
+  const ghostState = {
+    ...createInitialPlayerState(),
+    x: wallLeft + 5,
+    y: feetY - FEET_OFFSET_Y,
+  };
+  const ghostResult = stepPlayer(grid, ghostState, new Set(['d']), 48, true);
+  assert.ok(ghostResult.x > ghostState.x,
+    'ghost movement must pass through a blocked collision cell');
+  assert.equal(ghostResult.pose, 'ghost',
+    'ghost movement must retain the dedicated ghost sprite pose');
+}
