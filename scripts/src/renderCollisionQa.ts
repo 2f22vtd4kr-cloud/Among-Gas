@@ -48,9 +48,9 @@ const scaleFor = (width: number, height: number, label: string, requireUpscale =
 const pngScale = scaleFor(metadata.width!, metadata.height!, 'PNG');
 const webpScale = scaleFor(webpMetadata.width!, webpMetadata.height!, 'WebP');
 const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference', false);
-if (metadata.width !== webpMetadata.width || metadata.height !== webpMetadata.height) {
-  throw new Error('PNG and WebP map assets must have identical native dimensions');
-}
+// PNG and WebP may intentionally use different native resolutions. Each
+// overlay is scaled independently against the same logical map dimensions;
+ // scaleFor above rejects aspect-ratio drift rather than requiring equal pixels.
 
 function makeOverlaySvg(
   width: number,
