@@ -1243,6 +1243,13 @@ try {
   }
   await cameraPage.mouse.up();
   const worldAfterMovement = await readWorldFingerprint();
+  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
+  console.log('Camera follow diagnostic:', JSON.stringify({
+    baseline: cameraBaseline,
+    samples: cameraSamples,
+    joystickSide: await joystick.getAttribute('data-joystick-side'),
+    viewport: cameraPage.viewportSize(),
+  }));
   const changedWorldSamples = worldBaseline.reduce((count, before, index) => {
     const after = worldAfterMovement[index];
     return count + (after && before.some((channel, channelIndex) => Math.abs(channel - after[channelIndex]) > 24) ? 1 : 0);
