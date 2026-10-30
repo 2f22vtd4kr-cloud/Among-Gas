@@ -41,8 +41,13 @@ const mapH = num(collisionMap, 'MAP_H');
 const cellX = mapW / cols;
 const cellY = mapH / rows;
 const spriteHeight = Math.round(36 * (mapW / 1652));
-const feetOffsetY = Math.round(spriteHeight * 0.25);
+const idleSpriteVisibleHeight = 136;
+const characterAtlasRowHeight = 1401 / 9;
+const feetOffsetY = Math.round(spriteHeight * (idleSpriteVisibleHeight / characterAtlasRowHeight) / 2);
 const playerRadius = num(coords, 'PLAYER_RADIUS');
+const playerHalfWidth = num(coords, 'PLAYER_HALF_WIDTH');
+assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
+assert.match(coords, /FEET_OFFSET_Y\s*=\s*Math\.round\(/);
 const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 assert.ok(wireRunsMatch, 'Could not parse RLE collision grid');
 const runs = wireRunsMatch[1].split(',').map(s => Number(s.trim())).filter(Number.isFinite);
@@ -64,15 +69,20 @@ const blocked = (x, y) => {
   return col < 0 || col >= cols || row < 0 || row >= rows || grid[row * cols + col] === 1;
 };
 // Mirror shared collisionMap.canMoveTo and the server's feet-offset check.
-const canPlayerMoveTo = (x, y) => {
-  const feetY = y + feetOffsetY;
-  if (blocked(x, feetY)) return false;
+const canCircleMoveTo = (cx, cy) => {
+  if (blocked(cx, cy)) return false;
   const samples = Math.max(8, Math.ceil((2 * Math.PI * playerRadius) / (Math.min(cellX, cellY) * 0.5)));
   for (let i = 0; i < samples; i++) {
     const angle = (i / samples) * Math.PI * 2;
-    if (blocked(x + Math.cos(angle) * playerRadius, feetY + Math.sin(angle) * playerRadius)) return false;
+    if (blocked(cx + Math.cos(angle) * playerRadius, cy + Math.sin(angle) * playerRadius)) return false;
   }
   return true;
+};
+const canPlayerMoveTo = (x, y) => {
+  const feetY = y + feetOffsetY;
+  return canCircleMoveTo(x, feetY) &&
+    canCircleMoveTo(x - playerHalfWidth, feetY) &&
+    canCircleMoveTo(x + playerHalfWidth, feetY);
 };
 const pointForCell = (col, row) => ({ x: (col + 0.5) * cellX, y: (row + 0.5) * cellY });
 const valid = new Uint8Array(cols * rows);
