@@ -1146,6 +1146,9 @@ try {
       } else {
         await waitForRoleRevealToFinish(statePage);
       }
+      if (fixture.startsWith('gameover-')) {
+        await statePage.getByTestId('gameover-lobby-icon').waitFor({ state: 'visible' });
+      }
       if (fixture === 'reveal-impostor') {
         const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
         assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
