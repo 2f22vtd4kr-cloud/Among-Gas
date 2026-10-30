@@ -16,6 +16,7 @@ A multi-artifact project centered on a Telegram game with a top-down map, backed
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string.
 - Production deployment also requires `TELEGRAM_BOT_TOKEN` configured as a Replit Secret; production startup deliberately refuses to run without it.
+- **Multiplayer deployment constraint:** the current authoritative `LobbyManager` stores all rooms and user-to-room mappings in process-local memory. Keep Replit Autoscale's maximum instance count at **1** in Publishing settings until shared lobby state and cross-instance coordination are implemented and tested. A Reserved VM is another suitable single-process deployment option; do not scale this build horizontally.
 - The Replit launcher unsets `VITE_WS_URL` so the client uses the same-origin `/api/ws` endpoint and Vite's WebSocket proxy. Set `VITE_WS_URL` only for a separately hosted static frontend.
 
 ## Stack
