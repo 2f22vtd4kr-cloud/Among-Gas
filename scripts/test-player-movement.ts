@@ -88,6 +88,44 @@ assert.ok(cornerSlide.x > cornerStart.x,
   'the resolver should preserve a clear horizontal slide at a blocked corner');
 assert.equal(cornerSlide.y, cornerStart.y,
   'x-first sliding must reject only the blocked vertical component');
+
+// Arbitrary server intents can have unequal components even though the
+// on-screen controls quantize to eight directions. Client and server must
+// still resolve the same x-first slide deterministically.
+{
+  const targetX = cornerStart.x + 3;
+  const targetY = cornerStart.y + 9;
+  const client = resolvePlayerMovement(cornerGrid, cornerStart.x, cornerStart.y, targetX, targetY);
+  assert.deepEqual(client, [targetX, cornerStart.y],
+    'client must prefer horizontal sliding even when the vertical intent is larger');
+  const server = validateMovementIntent({
+    x: cornerStart.x, y: cornerStart.y, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, targetX, targetY, 2_000, cornerGrid);
+  assert.deepEqual([server.x, server.y], [targetX, cornerStart.y],
+    'server must resolve the same unequal diagonal intent as the client');
+}
+
+// If the horizontal component is blocked at the current foot row, the same
+// resolver must preserve the vertical component without clipping the corner.
+{
+  const verticalStartX = cornerX - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3;
+  const verticalStartFeetY = cornerY + CELL_Y / 2;
+  const verticalStartY = verticalStartFeetY - FEET_OFFSET_Y;
+  const targetX = cornerX - 10;
+  const targetY = verticalStartY + 12;
+  const client = resolvePlayerMovement(cornerGrid, verticalStartX, verticalStartY, targetX, targetY);
+  assert.deepEqual(client, [verticalStartX, targetY],
+    'client must slide vertically when the horizontal component is blocked');
+  const server = validateMovementIntent({
+    x: verticalStartX, y: verticalStartY, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, targetX, targetY, 2_000, cornerGrid);
+  assert.deepEqual([server.x, server.y], [verticalStartX, targetY],
+    'server must preserve the same clear vertical slide');
+}
 {
   const delta = PLAYER_SPEED_PX_PER_SEC * 0.048 / Math.SQRT2;
   const serverSlide = validateMovementIntent({
