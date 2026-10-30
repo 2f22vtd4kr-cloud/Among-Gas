@@ -7,10 +7,15 @@
  *
  * Subclasses implement tick() and chooseVote().
  */
-import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, type Grid } from '@workspace/shared/collisionMap';
 import {
-  PLAYER_RADIUS,
-  PLAYER_HALF_WIDTH,
+  CELL_X, CELL_Y, COLS, ROWS,
+  buildCollisionGrid,
+  isPlayerFootprintWalkableAtFeet,
+  isPlayerPositionWalkable,
+  isPlayerPathWalkable,
+  type Grid,
+} from '@workspace/shared/collisionMap';
+import {
   FEET_OFFSET_Y,
   MAP_W,
   MAP_H,
@@ -26,13 +31,9 @@ export { NO_TARGET };
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
 
-/** Same three-point horizontal feet clearance used by human movement. */
+/** Same three-circle foot footprint used by client prediction and server authority. */
 function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
-  return (
-    canMoveTo(collision, feetX, feetY, PLAYER_RADIUS) &&
-    canMoveTo(collision, feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
-    canMoveTo(collision, feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
-  );
+  return isPlayerFootprintWalkableAtFeet(collision, feetX, feetY);
 }
 
 /**
@@ -105,19 +106,17 @@ function isSpawnReachable(feetX: number, feetY: number): boolean {
   return spawnReachability[row * COLS + col] === 1;
 }
 
-/** Ensure a candidate movement segment stays clear, not just its endpoint. */
+/** Use the exact same 2px swept footprint check as human prediction and server authority. */
 function canTraverse(from: Point, to: Point): boolean {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y);
-  const samples = Math.max(1, Math.ceil(distance / 8));
-  for (let i = 1; i <= samples; i++) {
-    const t = i / samples;
-    if (!canMoveToPlayer(
-      grid,
-      from.x + (to.x - from.x) * t,
-      from.y + (to.y - from.y) * t,
-    )) return false;
-  }
-  return true;
+  // Bot waypoints are stored in feet-space; the shared helper accepts the
+  // sprite anchor and applies the canonical feet offset internally.
+  return isPlayerPathWalkable(
+    grid,
+    from.x,
+    from.y - FEET_OFFSET_Y,
+    to.x,
+    to.y - FEET_OFFSET_Y,
+  );
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
@@ -311,7 +310,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        canMoveToPlayer(grid, x, y + FEET_OFFSET_Y) &&
+        isPlayerPositionWalkable(grid, x, y) &&
         isSpawnReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
@@ -346,7 +345,7 @@ export abstract class BotAgent {
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      canMoveToPlayer(grid, p.x, p.y + FEET_OFFSET_Y) &&
+      isPlayerPositionWalkable(grid, p.x, p.y) &&
       isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
 
     let result = target;

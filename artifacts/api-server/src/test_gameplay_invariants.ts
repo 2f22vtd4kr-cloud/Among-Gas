@@ -6,13 +6,21 @@
 import assert from 'node:assert/strict';
 import {
   buildCollisionGrid,
-  canMoveTo,
+  isPlayerPositionWalkable,
+  isPlayerSpawnPositionClear,
   MAP_W,
   MAP_H,
+  CELL_X,
+  CELL_Y,
+  COLS,
+  ROWS,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
   PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
   KILL_COOLDOWN_MS,
   NO_TARGET,
   toWire,
@@ -44,6 +52,7 @@ import {
 } from '@workspace/shared/sabotage';
 import {
   LobbyManager,
+  MAX_PLAYERS,
   buildCorpsePacket,
   type Lobby,
   type LobbyPlayer,
@@ -59,11 +68,7 @@ import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 const grid = buildCollisionGrid();
 
 function assertClientWalkable(x: number, y: number, label: string): void {
-  // Server collision checks the feet center; the client additionally checks
-  // two side points because the custom balaclava sprite is wider than its feet.
-  assert.equal(canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' center');
-  assert.equal(canMoveTo(grid, x - 10, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' left edge');
-  assert.equal(canMoveTo(grid, x + 10, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' right edge');
+  assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
 }
 
 function fakeSocket() {
@@ -136,6 +141,16 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   lobby.phase = 'MEETING';
   assert.equal(manager.isGameplayReady(lobby), true, 'readiness persists so discussion and voting RPCs remain available');
   manager.disposeLobby(lobby);
+}
+
+// The fountain is a large enclosed prop. Its outline was previously omitted
+// from the RLE walkability mask, allowing players and bots to walk through it.
+{
+  const fountainCenter = { x: 1735, y: 490 };
+  assert.equal(isPlayerPositionWalkable(grid, fountainCenter.x, fountainCenter.y), false,
+    'the central fountain interior must be blocked by the manual collision polygon');
+  assert.equal(isPlayerPositionWalkable(grid, 1450, 490), true,
+    'the open lobby floor west of the fountain must remain walkable');
 }
 
 // 1. Tasks, vents and consoles must be valid interaction points on *this* map.
@@ -423,6 +438,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 
     for (let tick = 0; tick < 400 && lobby.phase !== 'GAMEOVER'; tick++) {
       bot.roamingTick(lobby, worker.player, manager);
+      assertClientWalkable(worker.player.x, worker.player.y,
+        `living bot path remains collision-safe while approaching ${task.name} (tick ${tick})`);
     }
     assert.equal(
       lobby.phase,
@@ -739,7 +756,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 // 16. Spawn scatter must never silently stack players at the central fallback.
 {
   const manager = new LobbyManager();
-  const players = Array.from({ length: 10 }, (_, slot) =>
+  const players = Array.from({ length: MAX_PLAYERS }, (_, slot) =>
     makePlayer(slot, 'crewmate', 0, 0).player,
   );
   const lobby = makeLobby(players);
@@ -750,14 +767,158 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'all players must receive distinct spawn coordinates');
   for (const pos of positions) {
     assertClientWalkable(pos.x, pos.y, 'scattered spawn');
+    assert.equal(isPlayerSpawnPositionClear(grid, pos.x, pos.y), true,
+      'the complete visible sprite must spawn clear of blocked map geometry');
   }
   for (let i = 0; i < positions.length; i++) {
     for (let j = i + 1; j < positions.length; j++) {
-      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 30,
+      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 72,
         'spawn positions must keep players separated to avoid initial collision pileups');
     }
   }
   manager.disposeLobby(lobby);
+}
+
+
+// 15a. Diagonal corner contact and wall sliding share the same full-footprint
+// swept geometry as client prediction.
+{
+  const cornerGrid = new Uint8Array(COLS * ROWS);
+  const col = Math.floor(COLS / 2);
+  const row = Math.floor(ROWS / 2);
+  cornerGrid[row * COLS + col] = 1;
+  const wallLeft = col * CELL_X;
+  const wallTop = row * CELL_Y;
+  const startX = wallLeft - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3;
+  const startY = wallTop - FEET_OFFSET_Y - PLAYER_RADIUS - 3;
+  const delta = PLAYER_SPEED_PX_PER_SEC * 0.048 / Math.SQRT2;
+  assert.equal(isWalkableMovementPoint(cornerGrid, startX, startY), true);
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY,
+    startX + delta, startY + delta), false,
+    'the diagonal segment must detect the blocked corner');
+  const slide = validateMovementIntent({
+    x: startX, y: startY, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, startX + delta, startY + delta, 2_000, cornerGrid);
+  assert.equal(slide.corrected, true);
+  assert.ok(slide.x > startX, 'a clear horizontal slide should be preserved');
+  assert.equal(slide.y, startY, 'the rejected vertical component must not enter the corner');
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY, slide.x, slide.y), true);
+}
+
+
+ // 15b. Ghosts phase through walls but keep the complete sprite and feet inside map bounds.
+{
+  const minX = Math.max(PLAYER_SPRITE_HALF_WIDTH_PX, PLAYER_HALF_WIDTH + PLAYER_RADIUS);
+  const maxX = MAP_W - minX;
+  const minY = Math.max(0, PLAYER_SPRITE_HALF_HEIGHT_PX, PLAYER_RADIUS - FEET_OFFSET_Y);
+  const maxY = MAP_H - Math.max(PLAYER_SPRITE_HALF_HEIGHT_PX, FEET_OFFSET_Y + PLAYER_RADIUS);
+  const base = {
+    x: MAP_W - 20,
+    y: MAP_H / 2,
+    alive: false,
+    movementCreditPx: 49,
+    movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  };
+  const east = validateMovementIntent(base, MAP_W + 20, base.y, 2_000, grid);
+  assert.equal(east.accepted, true, 'ghost movement remains speed-budgeted and accepted');
+  assert.equal(east.corrected, true, 'east-edge ghost target must be clamped');
+  assert.equal(east.x, maxX, 'server east-edge clamp must retain the complete foot base');
+
+  const southBase = { ...base, x: MAP_W / 2, y: MAP_H - 20 };
+  const south = validateMovementIntent(southBase, southBase.x, MAP_H + 20, 2_000, grid);
+  assert.equal(south.corrected, true, 'south-edge ghost target must be clamped');
+  assert.equal(south.y, maxY, 'server south-edge clamp must retain the complete sprite and feet');
+  const west = validateMovementIntent({ ...base, x: 20 }, -20, base.y, 2_000, grid);
+  const north = validateMovementIntent({ ...base, y: 50 }, base.x, 20, 2_000, grid);
+  assert.equal(west.x, minX, 'server west-edge clamp must retain the complete sprite');
+  assert.equal(north.y, minY, 'server north-edge clamp must remain nonnegative for unsigned wire coordinates');
+
+  assert.ok(minX < maxX && minY < maxY, 'map must have non-empty safe ghost bounds');
+}
+
+
+
+// 17. Voting handles ties, skip majorities, duplicate/dead voters, and both
+// terminal ejection outcomes without accidentally ejecting a player.
+{
+  const createVotingFixture = (roles: Array<'crewmate' | 'impostor'>) => {
+    const players = roles.map((role, slot) =>
+      makePlayer(slot, role, MAP_W / 2, MAP_H / 2).player,
+    );
+    const lobby = makeLobby(players);
+    lobby.phase = 'MEETING';
+    lobby.meeting = {
+      reporterSlot: 0,
+      bodySlot: NO_TARGET,
+      votes: new Map(),
+      votingOpen: true,
+      discussionTimer: null,
+      votingTimer: null,
+    };
+    return { lobby, manager: new LobbyManager(), players };
+  };
+
+  // 2–2 tie: no one is ejected and play resumes.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    assert.equal(manager.castVote(lobby, 0, 1), true);
+    assert.equal(manager.castVote(lobby, 0, 2), false,
+      'a player cannot submit a second vote in the same meeting');
+    assert.equal(manager.castVote(lobby, 1, 2), true);
+    assert.equal(manager.castVote(lobby, 2, 1), true);
+    assert.equal(manager.castVote(lobby, 3, 2), true);
+    assert.equal(lobby.phase, 'ROAMING', 'a tied vote must resume roaming');
+    assert.equal(players[1].alive, true, 'a tied vote must not eject the first candidate');
+    assert.equal(players[2].alive, true, 'a tied vote must not eject the second candidate');
+    manager.disposeLobby(lobby);
+  }
+
+  // Skip majority: skip wins the tally; dead players cannot vote.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    players[3].alive = false;
+    assert.equal(manager.castVote(lobby, 3, 1), false,
+      'dead players cannot cast meeting votes');
+    assert.equal(manager.castVote(lobby, 0, NO_TARGET), true);
+    assert.equal(manager.castVote(lobby, 1, NO_TARGET), true);
+    assert.equal(manager.castVote(lobby, 2, 1), true);
+    assert.equal(lobby.phase, 'ROAMING', 'a skip majority must not eject anyone');
+    assert.equal(players[1].alive, true, 'skip majority must preserve the leading player');
+    manager.disposeLobby(lobby);
+  }
+
+  // Removing the final impostor is an immediate crewmate win.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    for (let voter = 0; voter < players.length; voter++) {
+      assert.equal(manager.castVote(lobby, voter, 0), true);
+    }
+    assert.equal(players[0].alive, false);
+    assert.equal(lobby.phase, 'GAMEOVER', 'ejecting the final impostor must end the round');
+    manager.disposeLobby(lobby);
+  }
+
+  // Ejecting a crewmate when impostors reach parity is an impostor win.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'impostor', 'crewmate', 'crewmate',
+    ]);
+    for (let voter = 0; voter < players.length; voter++) {
+      assert.equal(manager.castVote(lobby, voter, 2), true);
+    }
+    assert.equal(players[2].alive, false);
+    assert.equal(lobby.phase, 'GAMEOVER', 'impostor parity after ejection must end the round');
+    manager.disposeLobby(lobby);
+  }
 }
 
 console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown, kill and spawn separation)');

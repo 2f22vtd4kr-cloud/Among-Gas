@@ -1,13 +1,10 @@
 import {
-  canMoveTo,
+  isPlayerPositionWalkable,
+  isPlayerPathWalkable,
+  clampPlayerPositionToMapBounds,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import {
-  FEET_OFFSET_Y,
-  MAP_H,
-  MAP_W,
-  PLAYER_HALF_WIDTH,
-  PLAYER_RADIUS,
   PLAYER_SPEED_PX_PER_SEC,
 } from '@workspace/shared/coords';
 
@@ -23,7 +20,6 @@ export const MAX_MOVEMENT_CREDIT_MS = 120;
 export const MIN_MOVEMENT_PACKET_INTERVAL_MS = 12;
 export const MOVEMENT_POSITION_TOLERANCE_PX = 0.75;
 const CORRECTION_MIN_INTERVAL_MS = 40;
-const PATH_SAMPLE_SPACING_PX = 2;
 
 export interface MovementBudgetState {
   x: number;
@@ -49,15 +45,10 @@ export interface MovementDecision {
 }
 
 export function isWalkableMovementPoint(grid: Grid, x: number, y: number): boolean {
-  const feetY = y + FEET_OFFSET_Y;
-  return (
-    canMoveTo(grid, x, feetY, PLAYER_RADIUS) &&
-    canMoveTo(grid, x - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
-    canMoveTo(grid, x + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
-  );
+  return isPlayerPositionWalkable(grid, x, y);
 }
 
-/** Check the entire segment, not only its endpoint, to prevent walking through thin walls. */
+/** Server and client share the same complete-footprint segment test. */
 export function isMovementPathWalkable(
   grid: Grid,
   fromX: number,
@@ -65,15 +56,7 @@ export function isMovementPathWalkable(
   toX: number,
   toY: number,
 ): boolean {
-  const dx = toX - fromX;
-  const dy = toY - fromY;
-  const distance = Math.hypot(dx, dy);
-  const steps = Math.max(1, Math.ceil(distance / PATH_SAMPLE_SPACING_PX));
-  for (let step = 1; step <= steps; step++) {
-    const t = step / steps;
-    if (!isWalkableMovementPoint(grid, fromX + dx * t, fromY + dy * t)) return false;
-  }
-  return true;
+  return isPlayerPathWalkable(grid, fromX, fromY, toX, toY);
 }
 
 function correctionDue(state: MovementBudgetState, nowMs: number): boolean {
@@ -154,8 +137,7 @@ export function validateMovementIntent(
 
   // Ghosts skip wall collision but still obey map bounds and movement speed.
   if (!state.alive) {
-    nextX = Math.max(0, Math.min(MAP_W, nextX));
-    nextY = Math.max(0, Math.min(MAP_H, nextY));
+    [nextX, nextY] = clampPlayerPositionToMapBounds(nextX, nextY);
     corrected = nextX !== targetX || nextY !== targetY;
   } else if (!isMovementPathWalkable(grid, state.x, state.y, targetX, targetY)) {
     // Match the client's x-first wall sliding, but test every intermediate point

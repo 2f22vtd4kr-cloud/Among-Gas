@@ -288,7 +288,7 @@ export default function SettingsDialog({
         style={{
           width: 'min(100%, 370px)',
           boxSizing: 'border-box',
-          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 24px)',
+          maxHeight: 'calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 48px)',
           overflowY: 'auto',
           overscrollBehavior: 'contain',
           padding: '22px 20px 18px',

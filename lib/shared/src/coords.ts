@@ -22,11 +22,45 @@ export const MAP_W = 3224;
 export const MAP_H = 1858;
 
 /**
+ * Shared production spawn point on open main-lobby floor, west of the central
+ * fountain. The former ref(350,150) point sat in a narrow doorway where the
+ * visible sprite was wider than the opening and overlapped the wall.
+ */
+export const PLAYER_SPAWN_X = Math.round(450 * (MAP_W / 1040));
+export const PLAYER_SPAWN_Y = Math.round(150 * (MAP_H / 580));
+
+/** Spawn formation is confined to the main-lobby floor, not adjacent corridors. */
+export const PLAYER_SPAWN_MIN_X = Math.round(280 * (MAP_W / 1040));
+export const PLAYER_SPAWN_MAX_X = Math.round(710 * (MAP_W / 1040));
+export const PLAYER_SPAWN_MAX_FEET_Y = Math.round(200 * (MAP_H / 580));
+export const PLAYER_SPAWN_MIN_SEPARATION_PX = 72;
+
+/**
  * Player constants — must stay in sync with artifacts/telegram-game/src/game/player.ts.
  * Used by the server for collision validation with the same geometry as the client.
  */
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
-export const FEET_OFFSET_Y = Math.round(_SPRITE_H_MAP_PX * 0.25);
+/**
+ * The world position is the sprite's ground/foot anchor, not its visual
+ * centre. The idle atlas crop is 136px high from a 1401/9px cell; the
+ * rendered sprite is centred on its world point, so its visible feet sit
+ * half that cropped height below the centre. The former 25% offset put the
+ * collision footprint ~13 map-pixels above the visible feet and let players
+ * stand visibly inside wall edges.
+ */
+const IDLE_SPRITE_VISIBLE_HEIGHT = 136;
+const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
+export const FEET_OFFSET_Y = Math.round(
+  _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
+);
+/**
+ * Half-extents of the rendered idle sprite used by spawn footprint checks.
+ * Derived from the 1123×1401 atlas (7×9 cells) and 36px base display height
+ * at the 3224px map scale. The idle crop is 136px of a 1401/9px atlas
+ * row, yielding an approximately 72×61px visible sprite.
+ */
+export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
+export const PLAYER_SPRITE_HALF_HEIGHT_PX = 31;
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;

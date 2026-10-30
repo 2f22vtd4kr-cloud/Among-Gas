@@ -12,6 +12,7 @@ const num = (text, name) => {
 };
 const collisionData = read('lib/shared/src/collisionData.ts');
 const collisionMap = read('lib/shared/src/collisionMap.ts');
+const collisionOverrides = read('lib/shared/src/collisionOverrides.ts');
 const coords = read('lib/shared/src/coords.ts');
 const taskSource = read('lib/shared/src/tasks.ts');
 const ventSource = read('lib/shared/src/vents.ts');
@@ -41,8 +42,25 @@ const mapH = num(collisionMap, 'MAP_H');
 const cellX = mapW / cols;
 const cellY = mapH / rows;
 const spriteHeight = Math.round(36 * (mapW / 1652));
-const feetOffsetY = Math.round(spriteHeight * 0.25);
+const idleSpriteVisibleHeight = 136;
+const characterAtlasRowHeight = 1401 / 9;
+const feetOffsetY = Math.round(spriteHeight * (idleSpriteVisibleHeight / characterAtlasRowHeight) / 2);
 const playerRadius = num(coords, 'PLAYER_RADIUS');
+const playerHalfWidth = num(coords, 'PLAYER_HALF_WIDTH');
+const spriteHalfWidth = num(coords, 'PLAYER_SPRITE_HALF_WIDTH_PX');
+const spriteHalfHeight = num(coords, 'PLAYER_SPRITE_HALF_HEIGHT_PX');
+const spawnMinX = Math.round(280 * mapW / 1040);
+const spawnMaxX = Math.round(710 * mapW / 1040);
+const spawnMaxFeetY = Math.round(200 * mapH / 580);
+assert.match(coords, /PLAYER_SPAWN_MIN_X\s*=\s*Math\.round\(280 \*/);
+assert.match(coords, /PLAYER_SPAWN_MAX_X\s*=\s*Math\.round\(710 \*/);
+assert.match(coords, /PLAYER_SPAWN_MAX_FEET_Y\s*=\s*Math\.round\(200 \*/);
+assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
+assert.match(coords, /PLAYER_SPAWN_X\s*=\s*Math\.round\(450 \*/);
+assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
+assert.match(uiLobbySource, /gameQuery\.set\('mock', mock\)/,
+  'dev mock fixture identifiers must survive the lobby-to-game route transition');
+assert.match(coords, /FEET_OFFSET_Y\s*=\s*Math\.round\(/);
 const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 assert.ok(wireRunsMatch, 'Could not parse RLE collision grid');
 const runs = wireRunsMatch[1].split(',').map(s => Number(s.trim())).filter(Number.isFinite);
@@ -58,21 +76,85 @@ for (const run of runs) {
 }
 assert.equal(cursor, cols * rows, 'Collision RLE does not fill the grid');
 
+const polygonBlocks = [...collisionOverrides.matchAll(
+  /points:\s*\[((?:\s*\[\s*\d+\s*,\s*\d+\s*\]\s*,?)+)\s*\]/g,
+)].map(match =>
+  [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
+    .map(point => [Number(point[1]), Number(point[2])]),
+);
+assert.ok(polygonBlocks.length > 0, 'Manual collision overrides must define at least one obstacle polygon');
+const pointInPolygon = (x, y, points) => {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, yi] = points[i];
+    const [xj, yj] = points[j];
+    if ((yi > y) !== (yj > y) &&
+        x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi) inside = !inside;
+  }
+  return inside;
+};
+const orientation = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+const onSegment = (a, p, b) => p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]) &&
+  p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
+const segmentsIntersect = (a, b, c, d) => {
+  const o1 = orientation(a,b,c), o2 = orientation(a,b,d), o3 = orientation(c,d,a), o4 = orientation(c,d,b);
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+      ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return true;
+  return (o1 === 0 && onSegment(a,c,b)) || (o2 === 0 && onSegment(a,d,b)) ||
+    (o3 === 0 && onSegment(c,a,d)) || (o4 === 0 && onSegment(c,b,d));
+};
+const polygonIntersectsRect = (points, minX, minY, maxX, maxY) => {
+  const corners = [[minX,minY],[maxX,minY],[maxX,maxY],[minX,maxY]];
+  if (corners.some(([x,y]) => pointInPolygon(x,y,points))) return true;
+  if (points.some(([x,y]) => x >= minX && x <= maxX && y >= minY && y <= maxY)) return true;
+  for (let i=0;i<points.length;i++) {
+    const a=points[i], b=points[(i+1)%points.length];
+    for (let edge=0;edge<4;edge++) if (segmentsIntersect(a,b,corners[edge],corners[(edge+1)%4])) return true;
+  }
+  return false;
+};
+// Apply the same manual obstacle polygons as shared/collisionMap.ts before
+// checking reachability or the full visible spawn sprite.
+for (const points of polygonBlocks) {
+  for (let row=0;row<rows;row++) for (let col=0;col<cols;col++) {
+    const minX=col*cellX, minY=row*cellY;
+    if (polygonIntersectsRect(points,minX,minY,minX+cellX,minY+cellY)) grid[row*cols+col]=1;
+  }
+}
+
 const blocked = (x, y) => {
   const col = Math.floor(x / cellX);
   const row = Math.floor(y / cellY);
   return col < 0 || col >= cols || row < 0 || row >= rows || grid[row * cols + col] === 1;
 };
 // Mirror shared collisionMap.canMoveTo and the server's feet-offset check.
-const canPlayerMoveTo = (x, y) => {
-  const feetY = y + feetOffsetY;
-  if (blocked(x, feetY)) return false;
+const canCircleMoveTo = (cx, cy) => {
+  if (blocked(cx, cy)) return false;
   const samples = Math.max(8, Math.ceil((2 * Math.PI * playerRadius) / (Math.min(cellX, cellY) * 0.5)));
   for (let i = 0; i < samples; i++) {
     const angle = (i / samples) * Math.PI * 2;
-    if (blocked(x + Math.cos(angle) * playerRadius, feetY + Math.sin(angle) * playerRadius)) return false;
+    if (blocked(cx + Math.cos(angle) * playerRadius, cy + Math.sin(angle) * playerRadius)) return false;
   }
   return true;
+};
+const canPlayerMoveTo = (x, y) => {
+  const feetY = y + feetOffsetY;
+  return canCircleMoveTo(x, feetY) &&
+    canCircleMoveTo(x - playerHalfWidth, feetY) &&
+    canCircleMoveTo(x + playerHalfWidth, feetY);
+};
+const canSpawnAt = (x, y) => {
+  if (x < spawnMinX || x > spawnMaxX || y + feetOffsetY > spawnMaxFeetY) return false;
+  if (!canPlayerMoveTo(x, y)) return false;
+  const minX=x-spriteHalfWidth, maxX=x+spriteHalfWidth;
+  const minY=y-spriteHalfHeight, maxY=y+spriteHalfHeight;
+  if (minX<0 || maxX>mapW || minY<0 || maxY>mapH) return false;
+  for (let row=Math.floor(minY/cellY);row<=Math.floor(maxY/cellY);row++) {
+    for (let col=Math.floor(minX/cellX);col<=Math.floor(maxX/cellX);col++) {
+      if (grid[row*cols+col]===1) return false;
+    }
+  }
+  return !polygonBlocks.some(points => polygonIntersectsRect(points,minX,minY,maxX,maxY));
 };
 const pointForCell = (col, row) => ({ x: (col + 0.5) * cellX, y: (row + 0.5) * cellY });
 const valid = new Uint8Array(cols * rows);
@@ -86,9 +168,17 @@ for (let row = 0; row < rows; row++) {
     nodes.push({ col, row, ...point, index });
   }
 }
-const spawnX = Math.round(350 * mapW / 1040);
-const spawnY = Math.round(150 * mapH / 580);
-assert.ok(canPlayerMoveTo(spawnX, spawnY), 'Spawn position is not collision-walkable');
+const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X\s*=\s*Math\.round\((\d+)\s*\*/)?.[1]);
+const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y\s*=\s*Math\.round\((\d+)\s*\*/)?.[1]);
+assert.ok(Number.isFinite(spawnXRef) && Number.isFinite(spawnYRef), 'shared spawn formulas must be parseable');
+const spawnX = Math.round(spawnXRef * mapW / 1040);
+const spawnY = Math.round(spawnYRef * mapH / 580);
+assert.ok(canSpawnAt(spawnX, spawnY), 'Spawn sprite overlaps blocked geometry or leaves the main-lobby spawn region');
+const fountainCenter = { x: 1735, y: 490 };
+assert.equal(canPlayerMoveTo(fountainCenter.x, fountainCenter.y), false,
+  'The central fountain must be blocked by its hand-traced collision polygon');
+assert.equal(canPlayerMoveTo(1450, 490), true,
+  'The open lobby floor west of the fountain must remain walkable');
 let start = nodes[0];
 for (const node of nodes) {
   if ((node.x - spawnX) ** 2 + (node.y - spawnY) ** 2 <
@@ -99,7 +189,7 @@ const queue = [start];
 reachable[start.index] = 1;
 for (let head = 0; head < queue.length; head++) {
   const current = queue[head];
-  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
     const col = current.col + dc;
     const row = current.row + dr;
     if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
@@ -107,8 +197,9 @@ for (let head = 0; head < queue.length; head++) {
     if (!valid[index] || reachable[index]) continue;
     const next = pointForCell(col, row);
     let clear = true;
-    for (let step = 1; step < 10; step++) {
-      const t = step / 10;
+    const segmentSteps = Math.max(1, Math.ceil(Math.hypot(next.x - current.x, next.y - current.y) / 2));
+    for (let step = 0; step <= segmentSteps; step++) {
+      const t = step / segmentSteps;
       if (!canPlayerMoveTo(current.x + (next.x - current.x) * t,
                            current.y + (next.y - current.y) * t)) {
         clear = false;
@@ -135,6 +226,10 @@ assert.ok(taskBlock, 'Could not parse TASK_DEFS');
 const tasks = [...taskBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\s\S]*?\.\.\.ref\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\}/g)]
   .map(m => ({ id: Number(m[1]), name: m[2], ...fromRef(Number(m[3]), Number(m[4])) }));
 assert.equal(tasks.length, 11, 'Expected the five existing Among Gas tasks plus six ported base-game tasks');
+assert.match(gameMapSource, /isPlayerPositionWalkable\(grid, x, y\)/,
+  'the task-interaction browser fixture must choose a position validated by the production collision footprint');
+assert.match(gameMapSource, /TASK_INTERACTION_RANGE_PX\s*-\s*8/,
+  'the task-interaction fixture must place the player inside the actual task interaction radius');
 tasks.forEach((task, index) => assert.equal(task.id, index, `Task IDs must be contiguous; ${task.name} has id ${task.id}`));
 const taskRange = Math.round(55 * mapW / 1040);
 const botTaskApproachRange = taskRange - 30; // CrewmateBot.nearestApproachPoint intentionally keeps a 30px margin.
@@ -190,12 +285,12 @@ assert.match(sabotageSource, /NORMAL_VISION_RADIUS_PX\s*=\s*Math\.round\(260 \* 
 assert.match(sabotageSource, /IMPOSTOR_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* 1\.4\)/, 'Impostors must have longer base-game vision');
 assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round\(NORMAL_VISION_RADIUS_PX \* LIGHTS_VISION_SCALE\)/, 'Lights sabotage must reduce crew vision');
 assert.match(playerSource, /PLAYER_ANIM_INTERVAL_MS = 90/, 'Walking animation must run at a responsive ~11 fps rather than the previous ~7 fps');
-assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must update at 10Hz rather than 5Hz');
+assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must keep its verified 5Hz tick interval');
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
-assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 10Hz tick rate');
+assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
-assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(grid\)/, 'narrow props must use separate visual occlusion circles rather than square collision cells');
+assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(grid, true\)/, 'narrow props must use separate visual occlusion circles rather than square collision cells');
 assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
@@ -232,6 +327,10 @@ assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emerg
 
 console.log(JSON.stringify({
   ok: true,
+  feetAnchorOffsetPx: feetOffsetY,
+  spawnSpriteClearance: { halfWidthPx: spriteHalfWidth, halfHeightPx: spriteHalfHeight },
+  manualCollisionPolygons: polygonBlocks.length,
+  playerFootprint: { radiusPx: playerRadius, halfWidthPx: playerHalfWidth },
   collisionGrid: `${cols}×${rows}`,
   reachableCells: reachableNodes.length,
   taskCount: tasks.length,

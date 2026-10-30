@@ -185,9 +185,19 @@ export default function Lobby() {
     if (state.phase !== 'playing') return;
     // Test-only kill-screen fixtures need to carry this opt-in through the
     // lobby's route change. Production builds never enable game mocks.
-    const skipReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
-      && new URLSearchParams(window.location.search).get('skipReveal') === 'true';
-    navigate(skipReveal ? '/game?skipReveal=true' : '/game');
+    const mockEnabled = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true';
+    const incomingQuery = new URLSearchParams(window.location.search);
+    const gameQuery = new URLSearchParams();
+    // Dev-only visual fixtures must survive the lobby→game route transition;
+    // otherwise GameContext receives the mock state but GameMap loses the
+    // fixture key and silently starts from the production spawn.
+    if (mockEnabled) {
+      const mock = incomingQuery.get('mock');
+      if (mock) gameQuery.set('mock', mock);
+      if (incomingQuery.get('skipReveal') === 'true') gameQuery.set('skipReveal', 'true');
+    }
+    const suffix = gameQuery.toString();
+    navigate(suffix ? `/game?${suffix}` : '/game');
   }, [state.phase, navigate]);
 
   const isInRoom = state.roomCode !== null;

@@ -12,7 +12,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     env:
       PORT: 5173
       BASE_PATH: /
@@ -35,13 +35,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify collision-map gameplay coordinates
+      - name: Exhaustively verify real-map player footprint and reachable geometry
         run: node scripts/verify-map-mechanics.mjs
+
+      - name: Generate a non-production collision-analysis preview from the red-line reference
+        run: |
+          before=$(sha256sum lib/shared/src/collisionData.ts)
+          pnpm --filter @workspace/scripts exec tsx src/analyzeCollisionMap.ts
+          after=$(sha256sum lib/shared/src/collisionData.ts)
+          test "$before" = "$after" || { echo "Collision analyzer modified production collisionData.ts"; exit 1; }
 
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
-      - name: Verify client movement cannot cross thin collision walls
+      - name: Verify client/server movement collision agreement, thin walls, corners and bounds
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-player-movement.ts
 
       - name: Typecheck and build API/frontend
@@ -135,7 +142,7 @@ jobs:
           }
           node test_sabotage.mjs
 
-      - name: Prepare Playwright for mobile browser smoke tests
+      - name: Prepare Playwright for mobile and desktop browser smoke tests
         run: npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
 
       - name: Start Telegram Mini App and play a mobile UI smoke test
@@ -151,12 +158,21 @@ jobs:
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
 
+      - name: Render production-map collision overlay for visual QA
+        run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts
+
       - name: Upload gameplay visual QA screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: among-gas-visual-qa
-          path: ${{ runner.temp }}/among-gas-visual-qa/*.png
+          path: |
+            ${{ runner.temp }}/among-gas-visual-qa/*.png
+            artifacts/telegram-game/collision-qa-overlay.png
+            artifacts/telegram-game/collision-reference-overlay.png
+            attached_assets/IMG_2907_1783632830477.jpeg
+            artifacts/telegram-game/collision-qa-overlay-webp.png
+            lib/shared/src/collisionData.generated-preview.ts
           if-no-files-found: warn
           retention-days: 3
 

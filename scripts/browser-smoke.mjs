@@ -89,13 +89,49 @@ try {
   assert.equal(await lobbySettings.getByTestId('joystick-side-right').getAttribute('aria-pressed'), 'true',
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
+  const settingsBounds = await lobbySettings.boundingBox();
+  const settingsSave = lobbySettings.getByTestId('control-layout-save');
+  const viewport = page.viewportSize();
+  assert.ok(settingsBounds && viewport, 'Settings dialog must be measurable');
+  assert.ok(settingsBounds.y >= 0 && settingsBounds.y + settingsBounds.height <= viewport.height,
+    'Settings dialog must remain entirely inside the mobile viewport');
   await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
+  await settingsSave.scrollIntoViewIfNeeded();
+  const saveBounds = await settingsSave.boundingBox();
+  assert.ok(saveBounds && saveBounds.y >= settingsBounds.y &&
+    saveBounds.y + saveBounds.height <= settingsBounds.y + settingsBounds.height,
+    'Settings Save control must be reachable inside the scrollable dialog without clipping'); 
+  await page.screenshot({ path: join(visualQaDir, 'settings-save-visible.png'), fullPage: true });
   await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
   await lobbySettings.getByTestId('joystick-side-left').click();
   await page.getByRole('button', { name: 'Close settings' }).click();
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
+
+  // Preserve the three distinct waiting-room states for visual QA as well.
+  for (const [fixture, roomCode, filename] of [
+    ['lobby-host', 'XYZ789', 'lobby-host.png'],
+    ['lobby-solo', 'SOLO01', 'lobby-solo.png'],
+    ['lobby-guest', 'ABC123', 'lobby-guest.png'],
+  ]) {
+    const lobbyPage = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    lobbyPage.on('pageerror', error => failures.push(error.message));
+    await lobbyPage.route('**/*', route => {
+      const url = route.request().url();
+      if (url.startsWith(origin)) return route.continue();
+      return route.abort();
+    });
+    await lobbyPage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
+    await lobbyPage.getByText(roomCode, { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+    await lobbyPage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
+    await lobbyPage.close();
+  }
   const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
     nodes.map(node => {
       const rect = node.getBoundingClientRect();
@@ -302,6 +338,29 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.waitForFunction(
+    () => new URLSearchParams(window.location.search).get('mock') === 'task-interaction',
+    undefined,
+    { timeout: 5_000 },
+  );
+  // The mock fixture starts at the closest verified walkable point beside
+  // the assigned console so this checks proximity UI independently of movement.
+  await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
+  const taskDiagnostics = await page.evaluate(() => ({
+    taskFixturePosition: window.__AG_TASK_FIXTURE_POSITION ?? null,
+    taskDebug: window.__AG_TASK_DEBUG ?? null,
+    taskActionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    taskAction: (() => {
+      const element = document.querySelector('[data-testid="gameplay-task-action"]');
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { text: element.textContent, x: rect.x, y: rect.y, width: rect.width, height: rect.height, display: style.display, visibility: style.visibility, opacity: style.opacity };
+    })(),
+    roleReveal: document.querySelector('.ag-character-sprite[data-pose]')?.getAttribute('data-pose'),
+    bodyText: document.body.innerText.slice(-1200),
+  }));
+  console.log('Task interaction fixture diagnostics:', JSON.stringify(taskDiagnostics));
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
@@ -474,10 +533,11 @@ try {
   const chatTextbox = page.getByRole('textbox', { name: 'Сообщение в обсуждении' });
   await chatTextbox.waitFor({ state: 'visible' });
   await chatTextbox.focus();
-  const typedMessage = 'wasd WASD qwerty 123';
+  const typedMessage = 'abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 — !?@#$%&*()_+-=[]{};:,.<>/ ёжик';
   await page.keyboard.type(typedMessage);
   assert.equal(await chatTextbox.inputValue(), typedMessage,
-    'keyboard movement bindings must never prevent W/A/S/D or other letters in chat input');
+    'keyboard movement bindings must never drop Latin, Cyrillic, numeric, or punctuation input');
+  await page.screenshot({ path: join(visualQaDir, 'meeting-chat-typing.png'), fullPage: true });
   await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
@@ -557,14 +617,39 @@ try {
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
+  const corpseColorCoverage = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = `/sprites/characters.png?corpse-color-check=${Date.now()}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not inspect corpse sprite atlas');
+    context.drawImage(image, 0, 0);
+    const cellWidth = image.naturalWidth / 7;
+    return Array.from({ length: 7 }, (_, column) => {
+      const left = Math.floor(column * cellWidth);
+      const right = Math.ceil((column + 1) * cellWidth);
+      const pixels = context.getImageData(left, 1067, right - left, 93).data;
+      let opaque = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) opaque++;
+      return opaque;
+    });
+  });
+  assert.ok(corpseColorCoverage.every(count => count > 100),
+    `every player color must have an authored corpse/bone sprite row; alpha coverage=${corpseColorCoverage.join(',')}`);
+
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   assert.equal(
     await page.locator('[role="alert"][aria-label="Анимация убийства"], [role="alert"][aria-label="Kill animation"]').count(),
     0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation',
   );
+  await page.screenshot({ path: join(visualQaDir, 'kill-animation-attacker.png'), fullPage: true });
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
@@ -942,6 +1027,7 @@ try {
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'visible' });
   assert.equal(await decodePage.getByTestId('gameplay-loading-screen').isVisible(), true,
     'gameplay must stay locked while map and sprite decode promises are unresolved');
+  await decodePage.screenshot({ path: join(visualQaDir, 'loading-screen-before-ready.png'), fullPage: true });
   await decodePage.evaluate(() => window.__releaseImageDecodes());
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
@@ -1016,6 +1102,154 @@ try {
     'in-memory joystick choice must stay in sync across mounted UI');
   await reopenedRestrictedSettings.getByRole('button', { name: 'English' }).waitFor({ state: 'visible' });
   await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
+
+  // Capture major non-roaming gameplay states as CI visual artifacts.
+  // Each state gets an isolated browser context so timers and overlays cannot
+  // leak from one fixture into another.
+  const visualStateCases = [
+    ['reveal-impostor', 'role-reveal-impostor.png'],
+    ['task-playing', 'task-progress.png'],
+    ['corpse-all-colors', 'corpse-all-seven-colors.png'],
+    ['impostor-opening', 'impostor-opening-cooldown.png'],
+    ['kill-ready', 'kill-ready.png'],
+    ['meeting-discussion', 'meeting-discussion.png'],
+    ['meeting-voting', 'meeting-voting.png'],
+    ['meeting-result', 'meeting-result.png'],
+    ['gameover-crew', 'gameover-crew.png'],
+    ['gameover-impostor', 'gameover-impostor.png'],
+    ['sabotage-ready', 'sabotage-ready.png'],
+    ['sabotage-o2', 'sabotage-o2.png'],
+  ];
+  const visualViewports = [
+    { label: 'mobile', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    { label: 'desktop', viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false },
+  ];
+  for (const [fixture, filename] of visualStateCases) {
+    for (const viewport of visualViewports) {
+      const statePage = await browser.newPage({
+        viewport: viewport.viewport,
+        deviceScaleFactor: viewport.isMobile ? 2 : 1,
+        isMobile: viewport.isMobile,
+        hasTouch: viewport.hasTouch,
+      });
+      statePage.on('pageerror', error => failures.push(error.message));
+      await statePage.route('**/*', route => {
+        const url = route.request().url();
+        if (url.startsWith(origin)) return route.continue();
+        return route.abort();
+      });
+      await statePage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
+      await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+      await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+      if (fixture.startsWith('reveal-')) {
+        // Role-reveal fixtures deliberately keep the overlay visible for capture.
+        await statePage.getByText(/^(ваша роль|your role)$/i).waitFor({ state: 'visible', timeout: 15_000 });
+      } else {
+        await waitForRoleRevealToFinish(statePage);
+      }
+      if (fixture.startsWith('gameover-')) {
+        await statePage.getByTestId('gameover-lobby-icon').waitFor({ state: 'visible' });
+      }
+      if (fixture === 'reveal-impostor') {
+        const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
+        assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
+          'impostor role reveal must show a living character, not the corpse sprite');
+        const spriteClip = await revealSprite.evaluate(element => getComputedStyle(element).clipPath);
+        assert.ok(spriteClip.includes('49%') && spriteClip.includes('62%'),
+          `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
+      }
+      const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
+      await statePage.screenshot({ path: join(visualQaDir, viewportFilename), fullPage: true });
+      await statePage.close();
+    }
+  }
+
+  // Move the local player from the verified, open main-lobby spawn while the
+  // camera follows. Keep this separate from task-interaction: that fixture
+  // deliberately relocates the player beside task 4, where nearby geometry can
+  // constrain movement and is covered by the task/collision-specific checks.
+  // The character's suit centroid should remain stable near canvas center.
+  const cameraPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  cameraPage.on('pageerror', error => failures.push(error.message));
+  await cameraPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+  await cameraPage.waitForTimeout(350);
+  const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
+  const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not sample the world canvas for camera movement');
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const samples = [];
+    for (let y = 24; y < canvas.height; y += 24) {
+      for (let x = 24; x < canvas.width; x += 24) {
+        // Exclude the actual player screen region, not the canvas midpoint:
+        // near the north map edge the camera correctly clamps the player to ~40% height.
+        if (Math.abs(x - player.x) < 110 && Math.abs(y - player.y) < 110) continue;
+        const i = (y * canvas.width + x) * 4;
+        samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+      }
+    }
+    return samples;
+  }, { x: playerX, y: playerY });
+  const cameraBaseline = await readCameraTransform();
+  assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
+    Number.isFinite(cameraBaseline.screenY),
+  "the dev camera fixture must expose the player's actual rendered screen coordinates");
+  const worldBaseline = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
+  const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
+  const joystickBox = await joystick.boundingBox();
+  assert.ok(joystickBox, 'the movement joystick must be visible for camera-follow testing');
+  const joystickX = joystickBox.x + joystickBox.width / 2;
+  const joystickY = joystickBox.y + joystickBox.height / 2;
+  await cameraPage.mouse.move(joystickX, joystickY);
+  await cameraPage.mouse.down();
+  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  await cameraPage.waitForTimeout(550);
+  const cameraSamples = [];
+  for (let i = 0; i < 6; i++) {
+    const sample = await readCameraTransform();
+    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY),
+      'camera render diagnostics must remain available during movement');
+    cameraSamples.push(sample);
+    await cameraPage.waitForTimeout(70);
+  }
+  await cameraPage.mouse.up();
+  const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
+  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
+  console.log('Camera follow diagnostic:', JSON.stringify({
+    baseline: cameraBaseline,
+    samples: cameraSamples,
+    joystickSide: await joystick.getAttribute('data-joystick-side'),
+    viewport: cameraPage.viewportSize(),
+  }));
+  const changedWorldSamples = worldBaseline.reduce((count, before, index) => {
+    const after = worldAfterMovement[index];
+    return count + (after && before.some((channel, channelIndex) => Math.abs(channel - after[channelIndex]) > 24) ? 1 : 0);
+  }, 0);
+  const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
+  assert.ok(worldChangeRatio > 0.02,
+    `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
+  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
+  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
+  const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
+  const cameraSpreadY = Math.max(...cameraSamples.map(sample => sample.screenY)) - Math.min(...cameraSamples.map(sample => sample.screenY));
+  assert.ok(maxCameraOffsetX < 24 && maxCameraOffsetY < 24,
+    `camera must keep the moving player near its pre-movement screen position (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
+  assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
+    `camera-following player screen position must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
+  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
+  await cameraPage.close();
 
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 

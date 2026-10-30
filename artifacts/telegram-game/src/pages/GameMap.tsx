@@ -3,6 +3,7 @@ import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
+  isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
@@ -327,7 +328,8 @@ export default function GameMap() {
       return () => window.clearTimeout(timer);
     }
     if (lastKill.attackerSlot === mySlot) {
-      sfx('kill', 0.48);
+      // The attacker already played the cue on the trusted Kill-button
+      // gesture; do not replay it when the authoritative event returns.
       return;
     }
 
@@ -604,6 +606,18 @@ export default function GameMap() {
   }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
+    const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+      new URLSearchParams(window.location.search).get('mock') === 'task-interaction';
+    if (taskMockActive) {
+      (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
+        stage: 'proximity-effect-start',
+        role: myRole,
+        meeting,
+        sabotage,
+        assignedTasks: myTasks,
+        player: playerStateRef.current,
+      };
+    }
     if (meeting !== null || myRole !== 'crewmate' ||
         sabotage?.systemId === SABOTAGE_COMMS) {
       nearestTaskRef.current = null;
@@ -630,6 +644,20 @@ export default function GameMap() {
       }
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
+      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+          new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
+        const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+        (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
+          role: myRole,
+          meeting: meeting !== null,
+          assignedTasks: myTasksRef.current,
+          player: { x: myPos.x, y: myPos.y },
+          target: fixtureTask ? { x: fixtureTask.x, y: fixtureTask.y } : null,
+          distance: fixtureTask ? Math.hypot(fixtureTask.x - myPos.x, fixtureTask.y - myPos.y) : null,
+          range: TASK_INTERACTION_RANGE_PX,
+          best,
+        };
+      }
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -949,7 +977,10 @@ export default function GameMap() {
   }, []);
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
-  const playerStateRef = useRef(createInitialPlayerState());
+  const initialPlayerState = createInitialPlayerState();
+  // Task fixture placement is resolved against the real collision grid below.
+  // Production state always starts at the shared lobby spawn.
+  const playerStateRef = useRef(initialPlayerState);
 
   // Nearest vent is recomputed at low frequency; the server still checks range.
   const [nearestVentId, setNearestVentId] = useState<number | null>(null);
@@ -992,17 +1023,41 @@ export default function GameMap() {
     if (!canvas || !mapImg || !sprite) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    // Expose the actual render transform only to the opt-in dev camera fixture.
+    // Browser QA uses this to distinguish player drift from changing map pixels.
+    const cameraDebugEnabled = import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get('mock') === 'task-playing';
     const fogCanvas = document.createElement('canvas');
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
     const grid = buildCollisionGrid();
+    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+        new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
+      const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+      if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
+      let nearest: { x: number; y: number; distanceSq: number } | null = null;
+      const range = TASK_INTERACTION_RANGE_PX - 8;
+      for (let y = fixtureTask.y - range; y <= fixtureTask.y + range; y += 4) {
+        for (let x = fixtureTask.x - range; x <= fixtureTask.x + range; x += 4) {
+          const dx = fixtureTask.x - x;
+          const dy = fixtureTask.y - y;
+          const distanceSq = dx * dx + dy * dy;
+          if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
+          if (!isPlayerPositionWalkable(grid, x, y)) continue;
+          nearest = { x, y, distanceSq };
+        }
+      }
+      if (!nearest) throw new Error('Task interaction fixture has no walkable player position within interaction range');
+      playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
+      (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
+    }
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
-    const narrowOccluders = buildNarrowShadowOccluders(grid);
+    const narrowOccluders = buildNarrowShadowOccluders(grid, true);
     if (!isSpawnWalkable(grid)) {
-      console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
+      throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
     let rafId = 0;
@@ -1110,13 +1165,29 @@ export default function GameMap() {
       const srcW = (cw / dpr) / ZOOM;
       const srcH = (ch / dpr) / ZOOM;
 
-      const cameraBlend = 1 - Math.exp(-dtMs / 72);
+      // Keep camera lag below one character-footprint at full run speed.
+      // A 72ms time constant left the player visibly drifting ~30 map-pixels
+      // behind the viewport centre during sustained joystick movement.
+      // 16ms preserves sub-frame smoothing without making the camera feel detached.
+      const cameraBlend = 1 - Math.exp(-dtMs / 16);
       cameraX += (px - cameraX) * cameraBlend;
       cameraY += (py - cameraY) * cameraBlend;
       const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
       const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
 
       const scale = ZOOM * dpr;
+      if (cameraDebugEnabled) {
+        (window as Window & { __AG_CAMERA_DEBUG?: unknown }).__AG_CAMERA_DEBUG = {
+          playerX: px,
+          playerY: py,
+          cameraX,
+          cameraY,
+          screenX: (px - srcX) * scale,
+          screenY: (py - srcY) * scale,
+          canvasWidth: cw,
+          canvasHeight: ch,
+        };
+      }
 
       // ── 1. Clear + Map ───────────────────────────────────────────────────
       ctx.clearRect(0, 0, cw, ch);
@@ -2347,7 +2418,15 @@ export default function GameMap() {
                 ? (en ? `Kill cooldown ${Math.ceil(killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(killCooldownMs / 1000)} секунд`)
                 : (en ? 'Kill' : 'Убить')}
               disabled={killCooldownMs > 0 || nearestTarget === null}
-              onClick={() => { if (nearestTarget !== null) { haptic.tap(); sendKill(nearestTarget); } }}
+              onClick={() => {
+                if (nearestTarget !== null) {
+                  haptic.tap();
+                  // Start audio on the user's gesture instead of waiting for
+                  // the server round-trip and React's authoritative kill event.
+                  sfx('kill', 0.48);
+                  sendKill(nearestTarget);
+                }
+              }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
@@ -2791,7 +2870,13 @@ export default function GameMap() {
                 alignItems: 'center', justifyContent: 'center',
                 background: isImpWin ? '#aa2233' : '#225599',
                 borderRight: '2px solid rgba(0,0,0,0.22)', fontSize: 22,
-              }}><img src={`${import.meta.env.BASE_URL}au-assets/eject.png`} alt="" aria-hidden="true" style={{ width: 36, height: 36, objectFit: 'contain' }} /></div>
+              }}>
+                <svg data-testid="gameover-lobby-icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M10 17l5-5-5-5" />
+                  <path d="M15 12H3" />
+                  <path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6" />
+                </svg>
+              </div>
               <div style={{
                 flex: 1, display: 'flex',
                 alignItems: 'center', justifyContent: 'center',
@@ -2859,10 +2944,14 @@ export default function GameMap() {
               {/* Character floats subtly above its own animated ground shadow. */}
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
                 <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                  <div className="ag-role-reveal-character" style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}>
+                  <div
+                    className="ag-role-reveal-character"
+                    data-testid="role-reveal-character"
+                    style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}
+                  >
                     <CharSpriteUI
                       color={isImp ? 'maroon' : 'teal'}
-                      pose={isImp ? 'mask' : 'idle'}
+                      pose="idle"
                       size={170}
                     />
                   </div>

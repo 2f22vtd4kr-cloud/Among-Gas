@@ -436,6 +436,20 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       { slot: 3, x: PLAYER_SPAWN.x + 30, y: PLAYER_SPAWN.y + 140 },
     ],
   },
+  // Visual QA: every atlas color must have a matching dead-body sprite.
+  'corpse-all-colors': {
+    state: {
+      phase: 'playing', mySlot: 7, hostSlot: 7,
+      players: Array.from({ length: 8 }, (_, slot) => ({ slot, username: `Player${slot}` })),
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [0, 1, 2, 3, 4, 5, 6],
+      corpsePositions: Array.from({ length: 7 }, (_, slot) => ({
+        slot,
+        x: PLAYER_SPAWN.x + (slot - 3) * 54,
+        y: PLAYER_SPAWN.y + 90,
+      })),
+    },
+    remotePlayers: [],
+  },
   // Phase 6 — meeting just started, discussion window (no voting yet).
   'meeting-discussion': {
     state: {

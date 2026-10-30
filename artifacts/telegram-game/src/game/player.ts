@@ -6,12 +6,17 @@
 // and canvas concerns, matching the collisionMap.ts pattern.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { canMoveTo, MAP_W, MAP_H, type Grid } from './collisionMap';
 import {
-  FEET_OFFSET_Y,
-  PLAYER_HALF_WIDTH,
-  PLAYER_RADIUS,
+  isPlayerSpawnPositionClear,
+  isPlayerPathWalkable,
+  resolvePlayerMovement,
+  clampPlayerPositionToMapBounds,
+  type Grid,
+} from './collisionMap';
+import {
   PLAYER_SPEED_PX_PER_SEC,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
 import type { CharacterPose } from './characterSprites';
 
@@ -20,56 +25,22 @@ export { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 export const PLAYER_COLOR = 'teal' as const;
 
 // Collision is checked at the character's feet (bottom-center of sprite).
-// Movement speed, feet offset, radius, and horizontal clearance are shared
-// with the server so client prediction and authoritative validation stay in sync.
+// The world position is the sprite centre; shared collision geometry offsets
+// the footprint down to the visible feet baseline for both client and server.
 // 11 fps two-frame walk cycle: responsive at 200ms bot position updates without flicker.
 export const PLAYER_ANIM_INTERVAL_MS = 90;
 
-// ── Wide collision helpers (client-only) ─────────────────────────────────────
-// Tests three feet points: left, center, right. This gives the character a
-// wider effective hitbox horizontally without changing the vertical feel.
-
-function canMoveToWide(grid: Grid, cx: number, cy: number): boolean {
-  return (
-    canMoveTo(grid, cx,                      cy, PLAYER_RADIUS) &&
-    canMoveTo(grid, cx - PLAYER_HALF_WIDTH,  cy, PLAYER_RADIUS) &&
-    canMoveTo(grid, cx + PLAYER_HALF_WIDTH,  cy, PLAYER_RADIUS)
-  );
-}
-
-/** Sample the whole segment so local prediction cannot step over a thin wall
- * that the authoritative server correctly rejects. Both sides sample at 2px.
- */
-/** Public for regression coverage: a path can be blocked even when both endpoints are walkable. */
+// Public wrapper retained for the existing movement regression suite.
 export function isMovementPathWalkableWide(
   grid: Grid, x: number, y: number, nx: number, ny: number,
 ): boolean {
-  const distance = Math.hypot(nx - x, ny - y);
-  const steps = Math.max(1, Math.ceil(distance / 2));
-  for (let step = 1; step <= steps; step++) {
-    const t = step / steps;
-    if (!canMoveToWide(grid, x + (nx - x) * t, y + (ny - y) * t)) return false;
-  }
-  return true;
+  return isPlayerPathWalkable(grid, x, y, nx, ny);
 }
 
-function resolveMovementWide(
-  grid: Grid,
-  x: number,  y: number,
-  nx: number, ny: number,
-): [number, number] {
-  if (isMovementPathWalkableWide(grid, x, y, nx, ny)) return [nx, ny];
-  // Preserve the established x-first sliding order, but validate the entire
-  // axis segment so player prediction agrees with the server at wall corners.
-  if (isMovementPathWalkableWide(grid, x, y, nx, y)) return [nx, y];
-  if (isMovementPathWalkableWide(grid, x, y, x, ny)) return [x, ny];
-  return [x, y];
-}
-
-/** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
+/** Spawn point in open main-lobby floor — validated against the full visible sprite rectangle. */
 export const PLAYER_SPAWN = {
-  x: Math.round(350 * (MAP_W / 1040)),
-  y: Math.round(150 * (MAP_H / 580)),
+  x: PLAYER_SPAWN_X,
+  y: PLAYER_SPAWN_Y,
 };
 
 export interface PlayerState {
@@ -135,23 +106,22 @@ export function stepPlayer(
     const nx = x + (dx / len) * dist;
     const ny = y + (dy / len) * dist;
     if (ghost) {
-      // No collision — clamp to map bounds only.
-      x = Math.max(0, Math.min(MAP_W, nx));
-      y = Math.max(0, Math.min(MAP_H, ny));
+      // Ghosts phase through walls but their complete foot base stays inside the map.
+      [x, y] = clampPlayerPositionToMapBounds(nx, ny);
     } else {
-      // Collision is tested at the feet (offset down from sprite centre).
-      const [fx, fy] = resolveMovementWide(grid, x, y + FEET_OFFSET_Y, nx, ny + FEET_OFFSET_Y);
-      x = fx;
-      y = fy - FEET_OFFSET_Y;
+      [x, y] = resolvePlayerMovement(grid, x, y, nx, ny);
     }
   }
 
   const facingLeft = dx !== 0 ? dx < 0 : state.facingLeft;
 
-  const animElapsedMs = moving ? state.animElapsedMs + dtMs : 0;
+  // Input alone is not movement: pressing into a wall or map boundary must
+  // not animate a walk cycle or emit footsteps while the world position is fixed.
+  const actuallyMoving = x !== state.x || y !== state.y;
+  const animElapsedMs = actuallyMoving ? state.animElapsedMs + dtMs : 0;
   const pose: CharacterPose = ghost
     ? 'ghost'
-    : moving
+    : actuallyMoving
       ? Math.floor(animElapsedMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
         ? 'walk-1'
         : 'walk-2'
@@ -162,5 +132,5 @@ export function stepPlayer(
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
 export function isSpawnWalkable(grid: Grid): boolean {
-  return canMoveToWide(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y + FEET_OFFSET_Y);
+  return isPlayerSpawnPositionClear(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
 }

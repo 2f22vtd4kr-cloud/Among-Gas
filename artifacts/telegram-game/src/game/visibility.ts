@@ -202,6 +202,17 @@ const NON_OCCLUDING_REGIONS = [
   { minCol: 62, maxCol: 66, minRow: 8, maxRow: 11 },
 ] as const;
 
+// The small upper-atrium lamp is partly merged with the adjacent furniture
+// mask in the coarse collision grid. Keep its measured visual silhouette as
+// an explicit circle rather than losing it during connected-component filtering.
+const MANUAL_NARROW_OCCLUDERS: readonly VisualOccluderCircle[] = [
+  {
+    x: 62 * CELL_X,
+    y: 8 * CELL_Y,
+    radius: Math.min(CELL_X, CELL_Y) * 0.2,
+  },
+];
+
 function isNonOccludingFurniture(index: number): boolean {
   const row = Math.floor(index / COLS);
   const col = index - row * COLS;
@@ -218,7 +229,10 @@ function isNonOccludingFurniture(index: number): boolean {
  * as a wide shadow while still letting poles and similarly narrow props block
  * the sight rays behind their actual visual silhouette.
  */
-export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderCircle[] {
+export function buildNarrowShadowOccluders(
+  collisionGrid: Grid,
+  includeManualMapOccluders = false,
+): VisualOccluderCircle[] {
   if (collisionGrid.length !== COLS * ROWS) {
     throw new RangeError(
       `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`
@@ -249,7 +263,10 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
         queue.push(next);
       }
     }
-    if (component.length !== 4 || component.some(isNonOccludingFurniture)) continue;
+    // A prop is excluded as furniture only when its entire footprint is
+    // inside a known furniture region. A compact pole straddling that region's
+    // edge must retain its narrow silhouette occluder.
+    if (component.length !== 4 || component.every(isNonOccludingFurniture)) continue;
     const cols = component.map(index => index % COLS);
     const rows = component.map(index => Math.floor(index / COLS));
     const minCol = Math.min(...cols);
@@ -262,6 +279,15 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
       y: (minRow + 1) * CELL_Y,
       radius: Math.min(CELL_X, CELL_Y) * 0.2,
     });
+  }
+  // These manually measured circles belong only to the canonical map.
+  // Synthetic grids in unit tests must remain fully data-driven.
+  if (includeManualMapOccluders) {
+    for (const manual of MANUAL_NARROW_OCCLUDERS) {
+      if (!occluders.some(item => Math.hypot(item.x - manual.x, item.y - manual.y) < 1)) {
+        occluders.push(manual);
+      }
+    }
   }
   return occluders;
 }

@@ -16,16 +16,18 @@ import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
 import {
   MAP_W, MAP_H,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
+  PLAYER_SPAWN_MIN_SEPARATION_PX,
   toWire,
   DELTA_THRESHOLD_SQ,
-  FEET_OFFSET_Y, PLAYER_RADIUS,
   KILL_COOLDOWN_MS,
   MEETING_DISCUSSION_MS, MEETING_VOTING_MS,
   NO_TARGET,
 } from '@workspace/shared/coords';
 import {
   buildCollisionGrid,
-  canMoveTo,
+  isPlayerSpawnPositionClear,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -64,8 +66,8 @@ function generateCode(): string {
 // verifying that a candidate destination is actually connected to the main
 // walkable area (the collision grid has isolated 1-cell pockets — see
 // .agents/memory/ — that are locally walkable but unreachable from spawn).
-export const SPAWN_X = Math.round(350 * (MAP_W / 1040));
-export const SPAWN_Y = Math.round(150 * (MAP_H / 580));
+export const SPAWN_X = PLAYER_SPAWN_X;
+export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
 const spawnGrid = buildCollisionGrid();
@@ -73,52 +75,54 @@ const spawnGrid = buildCollisionGrid();
 /**
  * Compute a spread spawn position for player `index` of `total`.
  * Players are placed evenly around an ellipse centered on the lobby spawn
- * point; each candidate radius is validated against the collision grid,
- * falling back to the central spawn if no walkable candidate is found.
+ * point; each candidate is validated against the exact shared player
+ * footprint. If no safe separated point exists, lobby start fails closed.
  */
 function computeSpawnPosition(
   index: number,
   total: number,
   occupied: readonly { x: number; y: number }[] = [],
 ): { x: number; y: number } {
-  if (total <= 1) return { x: SPAWN_X, y: SPAWN_Y };
+  if (total <= 1) {
+    if (!isPlayerSpawnPositionClear(spawnGrid, SPAWN_X, SPAWN_Y)) {
+      throw new Error('Configured player spawn sprite overlaps blocked map geometry');
+    }
+    return { x: SPAWN_X, y: SPAWN_Y };
+  }
   const baseAngle = (index / total) * Math.PI * 2 - Math.PI / 2;
   // Try several angular/radial candidates instead of falling back immediately
   // to the shared center. A rejected candidate must not stack multiple players
   // on the same spawn pixel, where their first movement can repeatedly collide.
-  const radii = [60, 48, 72, 36, 84, 24, 96, 108];
-  const angleOffsets = [0, Math.PI / 12, -Math.PI / 12, Math.PI / 6, -Math.PI / 6, Math.PI / 4, -Math.PI / 4];
+  const radii = [96, 120, 144, 168, 192, 216, 240];
+  const angleOffsets = [
+    0, Math.PI / 12, -Math.PI / 12,
+    Math.PI / 6, -Math.PI / 6,
+    Math.PI / 4, -Math.PI / 4,
+    Math.PI / 3, -Math.PI / 3,
+  ];
   for (const offset of angleOffsets) {
     for (const radius of radii) {
       const angle = baseAngle + offset;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      const feetY = y + FEET_OFFSET_Y;
-      const clear = canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) &&
-        canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) &&
-        canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS);
-      if (!clear) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
       return { x, y };
     }
   }
-  // The center is known walkable, but prefer the farthest safe candidate if
-  // a crowded/custom map exhausts the ideal ellipse candidates.
-  for (let radius = 12; radius <= 180; radius += 12) {
-    for (let step = 0; step < 24; step++) {
-      const angle = (step / 24) * Math.PI * 2;
+  // Search the full lobby floor before refusing to start. The visual sprite
+  // rectangle must be clear, not merely the much smaller feet hitbox.
+  for (let radius = 12; radius <= 360; radius += 12) {
+    for (let step = 0; step < 48; step++) {
+      const angle = (step / 48) * Math.PI * 2;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      const feetY = y + FEET_OFFSET_Y;
-      if (!canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) ||
-          !canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) ||
-          !canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS)) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
       return { x, y };
     }
   }
-  // Last resort only: map geometry has no further separated walkable spawn.
-  return { x: SPAWN_X, y: SPAWN_Y };
+  throw new Error('No separated walkable spawn position found; refusing to spawn a player inside map geometry');
 }
 
 /** Impostor count by player count (GAME_SPEC.md §8; host setting UI is future work). */
@@ -139,7 +143,7 @@ export interface LobbyPlayer {
   tgUserId: number;
   username: string;
   ws: WebSocket;
-  /** Current pixel position (feet center — y includes FEET_OFFSET_Y). */
+  /** Current pixel position; collision is evaluated at the rendered feet baseline. */
   x: number;
   y: number;
   /** Wire-space position at the time of last 0xFF broadcast. */
