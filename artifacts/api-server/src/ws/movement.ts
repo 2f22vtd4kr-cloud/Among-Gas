@@ -1,11 +1,10 @@
 import {
   isPlayerPositionWalkable,
   isPlayerPathWalkable,
+  clampPlayerPositionToMapBounds,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import {
-  MAP_H,
-  MAP_W,
   PLAYER_SPEED_PX_PER_SEC,
 } from '@workspace/shared/coords';
 
@@ -138,8 +137,7 @@ export function validateMovementIntent(
 
   // Ghosts skip wall collision but still obey map bounds and movement speed.
   if (!state.alive) {
-    nextX = Math.max(0, Math.min(MAP_W, nextX));
-    nextY = Math.max(0, Math.min(MAP_H, nextY));
+    [nextX, nextY] = clampPlayerPositionToMapBounds(nextX, nextY);
     corrected = nextX !== targetX || nextY !== targetY;
   } else if (!isMovementPathWalkable(grid, state.x, state.y, targetX, targetY)) {
     // Match the client's x-first wall sliding, but test every intermediate point
