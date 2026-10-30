@@ -322,12 +322,20 @@ export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): bo
  * dimensions alone lets the foot base leave the map.
  */
 export function clampPlayerPositionToMapBounds(x: number, y: number): [number, number] {
-  const horizontalMargin = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
-  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
-  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  const horizontalMargin = Math.max(
+    PLAYER_SPRITE_HALF_WIDTH_PX,
+    PLAYER_HALF_WIDTH + PLAYER_RADIUS,
+  );
+  // Keep the visible sprite in-frame as well as its feet hitbox. In particular,
+  // y must never become negative: wire coordinates are unsigned on the socket.
+  const minY = Math.max(0, PLAYER_SPRITE_HALF_HEIGHT_PX, PLAYER_RADIUS - FEET_OFFSET_Y);
+  const bottomMargin = Math.max(
+    PLAYER_SPRITE_HALF_HEIGHT_PX,
+    FEET_OFFSET_Y + PLAYER_RADIUS,
+  );
   return [
     Math.max(horizontalMargin, Math.min(MAP_W - horizontalMargin, x)),
-    Math.max(minY, Math.min(maxY, y)),
+    Math.max(minY, Math.min(MAP_H - bottomMargin, y)),
   ];
 }
 
