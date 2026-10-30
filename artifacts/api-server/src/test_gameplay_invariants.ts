@@ -9,10 +9,15 @@ import {
   canMoveTo,
   MAP_W,
   MAP_H,
+  CELL_X,
+  CELL_Y,
+  COLS,
+  ROWS,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
   PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
   KILL_COOLDOWN_MS,
   NO_TARGET,
   toWire,
