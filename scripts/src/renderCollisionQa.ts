@@ -60,8 +60,8 @@ const webpMetadata = await sharp(webpPath).metadata();
 if (!webpMetadata.width || !webpMetadata.height) throw new Error('WebP map dimensions unavailable');
 const webpScaleX = webpMetadata.width / mapWidth;
 const webpScaleY = webpMetadata.height / mapHeight;
-if (!Number.isInteger(webpScaleX) || webpScaleX < 1 || webpScaleX !== webpScaleY) {
-  throw new Error(`WebP must be an integer isotropic upscale of the collision map; got ${webpMetadata.width}x${webpMetadata.height} for ${mapWidth}x${mapHeight}`);
+if (!Number.isFinite(webpScaleX) || webpScaleX < 1 || Math.abs(webpScaleX - webpScaleY) > 0.001) {
+  throw new Error(`WebP must be an isotropic upscale of the collision map; got ${webpMetadata.width}x${webpMetadata.height} for ${mapWidth}x${mapHeight}`);
 }
 const cellWidth = mapWidth / cols;
 const cellHeight = mapHeight / rows;
