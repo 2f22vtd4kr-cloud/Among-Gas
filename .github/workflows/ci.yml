@@ -36,6 +36,9 @@ jobs:
       - name: Assert CI runtime matches Replit
         run: node -e "if (process.versions.node.split('.')[0] !== '20') throw new Error('CI must match Replit Node.js 20 runtime')"
 
+      - name: Verify Replit post-merge hook skips an empty database schema
+        run: env -u DATABASE_URL bash scripts/post-merge.sh
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
