@@ -6,7 +6,6 @@
 import assert from 'node:assert/strict';
 import {
   buildCollisionGrid,
-  canMoveTo,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   MAP_W,
