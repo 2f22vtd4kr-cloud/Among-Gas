@@ -53,6 +53,13 @@ const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
 export const FEET_OFFSET_Y = Math.round(
   _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
 );
+/**
+ * Half-extents of the rendered idle sprite used by spawn footprint checks.
+ * Derived from the 1123×1401 atlas (7×9 cells) and 36px base display height
+ * at the 3224px map scale: the displayed bounds are 72×70px.
+ */
+export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
+export const PLAYER_SPRITE_HALF_HEIGHT_PX = 35;
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;
