@@ -1453,7 +1453,11 @@ export class LobbyManager {
 
     if (bodySlot !== NO_TARGET) {
       const body = lobby.players.get(bodySlot);
-      if (!body || body.alive) return false; // must reference an actual dead body
+      // Ejected players become ghosts but leave no reportable corpse. Require
+      // the immutable corpse coordinates created by a successful kill.
+      if (!body || body.alive || body.corpseX === undefined || body.corpseY === undefined) {
+        return false;
+      }
       if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
       body.bodyReported = true;
     } else {
