@@ -334,14 +334,9 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  // The assigned filter console is ~263 map-pixels from the lobby spawn;
-  // move diagonally toward it before asserting the proximity action.
-  await page.keyboard.down('a');
-  await page.keyboard.down('s');
-  await page.waitForTimeout(650);
-  await page.keyboard.up('a');
-  await page.keyboard.up('s');
-  await page.screenshot({ path: join(visualQaDir, 'task-approach-after-movement.png'), fullPage: true });
+  // The mock fixture starts at the closest verified walkable point beside
+  // the assigned console so this checks proximity UI independently of movement.
+  await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
