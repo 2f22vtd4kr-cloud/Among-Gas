@@ -20,7 +20,7 @@ A multi-artifact project centered on a Telegram game with a top-down map, backed
 
 ## Stack
 
-- pnpm workspaces, Node.js 24, TypeScript 5.9
+- pnpm workspaces, Node.js 20, TypeScript 5.9
 - API: Express 5
 - DB: PostgreSQL + Drizzle ORM
 - Validation: Zod (`zod/v4`), `drizzle-zod`
