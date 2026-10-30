@@ -35,6 +35,10 @@ try {
   await page.waitForTimeout(300);
 
   const requested = [...new Set(audioRequests)].sort();
+  assert.equal(audioRequests.filter(path => path === '/au-sounds/kill.wav').length, 1,
+    'the kill sound should be fetched once for Web Audio decoding, not fetched again by a fallback element');
+  assert.equal(audioRequests.filter(path => path === '/au-sounds/menu_music.mp3').length, 1,
+    'menu music should start once after the first trusted gesture');
   assert.deepEqual(requested, ['/au-sounds/kill.wav', '/au-sounds/menu_music.mp3'],
     'the first trusted gesture may prime only the latency-sensitive kill sound and start menu music');
   console.log('Audio preload budget passed:', requested.join(', '));
