@@ -1,116 +1,137 @@
 # Among Gas — Independent Gameplay Repair Audit
 
-**Date:** 2026-10-30  
+**Audit date:** 2026-10-30  
 **Repository:** `2f22vtd4kr-cloud/Among-Gas`  
-**Baseline:** `main` at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`  
+**Inspected baseline:** `main` at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`  
+**Patch PR:** [#33 — Fix map raster alignment and preserve balaclava sprite crops](https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/33)  
 **Patch branch:** `fix/map-sampling-and-sprite-scale-2026-10-30`  
-**Status:** Source corrections authored; automated CI and live-device verification pending. This is not a release sign-off.
+**Runtime patch commit:** `0728a959a38d26d6d503f6e16eeb23a71fb75381`  
+**Status:** Camera/raster registration fix and associated regressions pass full CI. Collision/visibility contour replacement remains an open engineering task. PR #33 is open; `main` is unchanged. This is not a full Replit/iPhone release sign-off.
 
-## 1. User evidence and scope
+## 1. User evidence and requested scope
 
-The supplied gameplay screenshot shows a player apparently misregistered against floor/wall art, an abrupt angular visibility reveal, and a small-looking character body near raised map geometry. The separate supplied image shows the intended balaclava character identity and authored cut-body/exposed-bone art.
+The supplied gameplay screenshot showed the player apparently standing over wall/structure art, a large angular light/visibility boundary, and a character that looked unusually small or cropped. The accompanying reference showed the intended balaclava model and the cut-body with exposed bone.
 
-Scope: spawn and collision registration, map/camera alignment, full character proportions in gameplay and kill scenes, visibility/shadow shape quality, and continued bug hunting. Preserve the repository's map illustration, balaclava atlas and manually authored gameplay geometry. Do not import third-party clone code or character art.
+The requested audit covers player spawn and collision alignment, map/camera registration, sprite crops during gameplay and kill scenes, visibility/shadow silhouettes, and further bug hunting. The repository's own map artwork, collision reference and balaclava atlas are the source of truth. No external clone code or replacement character assets were imported.
 
-## 2. Repository state verified before editing
+## 2. Repository baseline and earlier audit claims
 
-- GitHub reported `main` at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4` and zero open pull requests at inspection time.
-- The earlier audit file was not a completed release audit: its release gates remained unchecked. It also acknowledged that the 104×58 RLE map still produces square collision/visibility boundaries.
-- The repo contains a 3224×1858 canonical PNG, a separate higher-resolution WebP and a 1123×1401 seven-column/nine-pose balaclava atlas.
-- The supplied prior run narrative claimed `mapWorldRectToImagePixels()` had been implemented and verified. That function and its usage were absent from the checked `main` source.
+- The live public `main` branch was independently checked at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`. It had no open PRs at the beginning of this audit.
+- The previous Replit handoff text claimed that `mapWorldRectToImagePixels()` had already been implemented and browser-verified. That helper and its call site were absent from the checked `main` source. The reported fix was therefore not in the repository.
+- The project contains a canonical 3224×1858 PNG, a 6608×3808 WebP used preferentially by gameplay, a 1123×1401 seven-column/nine-pose balaclava atlas, and the original red-line collision reference.
+- The previous audit's own release gates were incomplete. In particular, it called out that the 104×58 collision raster and visibility grid still produce square/stair-step outlines.
 
-## 3. Confirmed source defects
+## 3. Confirmed defect and repair
 
-### 3.1 Camera sampled the WebP with world-space source coordinates
+### 3.1 Camera sampled the higher-resolution WebP using world-space pixels
 
-`GameMap.tsx` calculates `srcX/srcY/srcW/srcH` in canonical 3224×1858 world pixels, then passed them directly to `drawImage()`. The loader prefers `map-hires.webp` and falls back to the canonical-sized PNG. Using world coordinates directly as WebP source pixels samples a different scale than player positions, collision and visibility. This is a confirmed defect and a plausible primary cause of the apparent player-on-wall/camera registration failure.
+In the baseline `GameMap.tsx`, camera crop values `srcX/srcY/srcW/srcH` were calculated in canonical world coordinates (3224×1858) and passed directly as the source rectangle to `drawImage()`. The asset loader prefers `map-hires.webp` (6608×3808). The WebP's native source pixels therefore did not correspond to the world-space coordinates used by the player, collision and visibility systems. The PNG fallback happened to be identity-scaled, which concealed this problem when only the PNG was used.
 
-### 3.2 Sprite atlas crop contract — not a confirmed defect
+This is a confirmed render/world coordinate mismatch and explains why the player, walls and visibility reveal appeared misregistered in gameplay.
 
-The atlas supplies both a measured source crop and a separate diagnostic `displayHeight`. The existing browser suite explicitly requires role-reveal sprites to remain un-stretched (`transform: none`) while a clip path masks detached strokes below the feet. The prior hypothesis that `displayHeight` should scale the destination was incorrect and has been rolled back. The idle crop remains 136px; the cut-body/exposed-bone crop remains 93px. Whether the user's reported visible-leg clipping comes from an incorrect crop window, clip path, or the old map/background scale must be judged from post-transform screenshots. It is not marked fixed yet.
+### 3.2 Implemented correction
 
-### 3.3 Shared foot geometry
+- Added `lib/shared/src/mapImageTransform.ts`, which converts a world-space rectangle to the loaded image's native pixels using independent X and Y scale ratios.
+- Updated `GameMap.tsx` to use `mapImg.naturalWidth/naturalHeight` and pass the transformed crop to `drawImage()`.
+- Added camera diagnostics containing both the canonical world rectangle and the native image source rectangle.
+- The PNG remains identity-scaled; the WebP crop is now sampled using its actual native dimensions. Collision geometry, map art and spawn coordinates were not rewritten as part of this fix.
 
-The feet anchor and spawn bounds remain tied to the measured 136px idle crop (half-height 31px). They were intentionally restored after the above hypothesis was rejected; no expansion of the sprite footprint is retained.
+### 3.3 Character atlas findings — preserve the existing crop contract
 
-### 3.4 Square collision and visibility remain a separate known limitation
+The atlas has measured source windows and a separate `displayHeight` metadata field. Inspection of the existing browser test showed that role-reveal sprites are intentionally not vertically stretched (`transform: none`); a pose-specific clip path masks detached strokes while preserving the visible feet.
 
-The base collision and ray visibility data still use 104×58 cells (about 31×32 world pixels). The fountain is exact vector geometry, but most map contours are still raster-cell based. Smoothing the resulting ray distances cannot replace accurate source contours. This patch does not claim to fix every square collision edge or shadow.
+The earlier hypothesis that `displayHeight` should be used to stretch the destination was wrong and has been reverted. Current runtime rendering retains the original measured crops: idle height 136px and cut-body/exposed-bone height 93px. The shared feet offset and sprite half-height remain at their original 136px-crop-derived values. No sprite scale or movement footprint change remains in the patch.
 
-## 4. Patch authored
+A new regression test now checks all seven colors, all nine bounded pose windows, the idle crop and diagnostic height, the corpse crop and diagnostic height, and the shared feet anchor. The browser suite also checks the actual rendered role-reveal aspect ratio against the measured crop.
 
-- Add a pure world-rectangle → native-image-pixel transform using independent ratios from the actual loaded image dimensions.
-- Apply that transform before gameplay map `drawImage()`; extend opt-in camera diagnostics with image size and transformed source rect.
-- Add a regression that reads actual PNG/WebP metadata and verifies identity PNG scaling plus full-map and interior crop mapping for both assets.
-- Preserve the atlas's existing measured per-pose crop windows and no-vertical-stretch rendering contract, including the diagnostic `displayHeight` metadata. Add regression coverage for the seven colors, nine bounded pose crops, idle feet anchor and cut-body/exposed-bone source frame.
-- Add a pose-window / feet-anchor regression and wire both new checks into CI.
-- Preserve map art, atlas pixels, RLE base collision and the existing vector fountain.
+### 3.4 Player spawning
 
-## 5. Verification status
+No production spawn coordinate, hitbox, spacing constant or lobby spawn-selection algorithm was changed in the final patch. An intermediate attempt to stretch sprites caused the 15-player geometry verifier to fail; that stretch and an associated spawn-search experiment were both reverted. The final full CI run passed the original 15-slot spawn/reachability check with the original sprite footprint.
 
-| Check | Result at time of patch |
+## 4. Collision and visibility audit — still unresolved
+
+### 4.1 Current production mask
+
+The live movement grid remains 104×58 cells across a 3224×1858 world, approximately 31×32 world pixels per cell. The central fountain has a manually authored polygon override, but most walls and object boundaries are still raster-cell based. Visibility ray casting also steps through this coarse grid. Smoothing the final ray distances cannot recover outline detail that is absent from the source mask.
+
+The CI collision QA overlay was generated and visually inspected alongside the original red-line reference. It confirms that many current collision boundaries are blocky cell silhouettes, while the reference contains substantially finer traced outlines. The corresponding angular visibility/fog boundaries remain visible in the post-fix screenshots. The camera transform repair does not fix either of these geometry defects.
+
+### 4.2 Native-resolution exploratory mask
+
+A separate, non-production experiment was run against the original 1359×784 red-line reference. It reused the existing analyzer's red-pixel threshold, two-pixel dilation, border flood-fill, connected-component size classes and small-prop base-footprint rule, but retained the reference resolution rather than downsampling to 104×58.
+
+Exploratory result:
+- Candidate resolution: 1359×784 (about 2.37×2.37 world pixels per cell).
+- Candidate blocked pixels: 618,682 of 1,065,456 (58.1%).
+- Row-major binary RLE transitions: 14,925.
+- An 8-world-pixel lattice scan found 614 safe sprite-clear spawn anchors within the existing rectangular lobby spawn bounds.
+- A greedy farthest-point sample placed 15 candidate anchors with a minimum pair separation of about 102 world pixels.
+
+This is diagnostic evidence only. The prototype was not connected to client/server runtime, the existing radial spawn-selection policy was not replaced, and performance under 720-ray visibility casting was not benchmarked. A native-resolution grid must not be promoted until every doorway, narrow passage, prop base, manual override, task route, spawn position and client/server movement rule has been reviewed against the reference and measured in browser/mobile performance. The current production grid remains unchanged.
+
+### 4.3 Next collision work
+
+The next safe implementation path is to formalize the native-resolution candidate as a reproducible preview, compare its edges to the user's red-line reference, and benchmark it. Then decide whether to use high-resolution raster data or simplified vector contours for movement and visibility. Low/tall objects must be classified separately for movement blocking and shadow casting. Do not blanket-dilate the current grid or turn off fog to hide the silhouette problem.
+
+## 5. Verification results
+
+Runtime code at commit `0728a959a38d26d6d503f6e16eeb23a71fb75381` passed the full GitHub Actions workflow. Runs `41097773196` and `41097784231` both completed with `success`.
+
+| Check | Result |
 |---|---|
-| Main SHA and open PR inventory | Verified: `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`; zero open PRs |
-| Source review of map loader and draw path | Confirmed defect |
-| Source review of per-pose sprite sizing | Confirmed defect |
-| PNG/WebP transform regression | Added; CI pending |
-| Character atlas / shared feet-anchor regression | First CI attempt did not execute: `tsx` was invoked from a package that does not install it; test runner corrected in follow-up commit |
-| Workspace typecheck/build | Pending CI |
-| Spawn-clearance and reachability suite after foot geometry change | Pending CI |
-| Browser screenshots and transient kill-scene framing | Pending |
-| Full collision QA overlay / outline review | Pending |
-| 100-game simulation | Pending |
-| Physical iPhone/Telegram WebView | Not available in this session |
-| Vercel deployment | No Among Gas project appeared in the connected Vercel project context; no live Vercel run is claimed |
+| Current `main` baseline | Verified at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`; unchanged by this PR |
+| Confirmed world-to-WebP crop mismatch | Fixed in PR branch |
+| PNG/WebP source rectangle regression | Passed using actual 3224×1858 PNG and 6608×3808 WebP metadata |
+| Browser camera source-rectangle assertion | Passed: actual WebP dimensions and independent X/Y mapping checked |
+| Character atlas geometry test | Passed: seven colors, nine pose crops, idle foot anchor and cut-body crop |
+| Browser role-reveal crop geometry | Passed: actual rendered aspect ratio matches the measured source crop; no vertical stretching |
+| Typecheck and API/frontend build | Passed |
+| Map spawn-clearance and reachability verifier | Passed, including 15-player placement with existing production geometry |
+| Visibility and client/server movement tests | Passed |
+| API gameplay invariants, Telegram HMAC and live WebSocket role/sabotage tests | Passed |
+| Replit single-origin production serving and dev/WebSocket proxy checks | Passed in CI |
+| Mobile/desktop Playwright smoke suite | Passed |
+| Browser visual evidence | Captured and inspected for gameplay HUD, role reveal, camera movement, kill animation, corpse and all seven corpse colors |
+| Collision QA overlay | Generated and inspected; confirms coarse 104×58 cell boundaries remain |
+| 100-game headless multiplayer simulation | Passed: 100 games, 0 timeouts, 70 crew wins, 30 impostor wins, average 45.261s, 14.1 tasks, 1.2 kills and 0.5 meetings per game |
+| Physical iPhone/Android Telegram WebView | Not tested in this environment |
+| Interactive Replit workspace session | Not available; CI serving and WebSocket checks passed, but this is not the user's live Replit deployment |
+| Direct Vercel preview inspection | GitHub Vercel status checks report success, but direct deployment inspection returned a team-scope 403; no visual review of the Vercel-hosted preview is claimed |
 
-## 6. Outstanding defects that must not be marked fixed
+### 5.1 Visual evidence inspected
 
-1. Legacy 104×58 RLE walls remain coarse. A real fix needs native-resolution contours derived from the map and the original collision reference, validated against corridors, doorway widths, spawn clearance, reachability and full-map overlays. Blanket dilation is unacceptable because it can seal corridors.
-2. Visibility/fog boundaries still derive primarily from the coarse grid. Audit tall/low props and authored outlines rather than disabling occlusion or treating component-size heuristics as final geometry.
-3. Post-patch screenshots from an actual browser are still required. A successful typecheck/build is not visual proof.
-4. No physical iPhone/Android Telegram WebView was available. Test dynamic viewport changes, touch-cancel/lost pointer capture and long sessions on device.
-5. Do not merge or call the game Replit-ready until all CI release gates pass and the Replit preview is visually inspected.
+The CI visual artifact `among-gas-visual-qa` from run `41097773196` includes:
+- `gameplay-hud.png` — map art and character registration after the transform correction.
+- `camera-stability-after-move.png` and `camera-stability-diagnostic.png` — player remains screen-stable during camera follow.
+- `role-reveal-sprite-crop.png` — balaclava sprite with complete feet and intended crop proportions.
+- `kill-screen-victim.png`, `kill-animation-attacker.png`, and `corpse-all-seven-colors-mobile.png` — single cut-body/exposed-bone corpse crop and color coverage.
+- `collision-qa-overlay.png` and `collision-reference-overlay.png` — production 104×58 grid versus original red-line reference.
 
-## 7. Next actions
+These are CI browser captures and fixture-based visual checks, not a physical iPhone session or an interactive Replit deployment.
 
-- Run the PR checks; fix any spawn/collision regressions caused by the corrected idle foot anchor.
-- Inspect CI collision overlays against the original map reference, focusing on every doorway, planter/fountain and furniture edge.
-- Capture mobile portrait, compact landscape and desktop screenshots for idle, walking, ghost, dropped corpse and transient kill scenes. Verify feet, bone, proportions and camera registration.
-- Continue category-by-category map and gameplay bug hunting after registration is corrected. Record each reproduction, diagnosis, fix and evidence here before advancing.
-- Keep release status pending until the evidence exists.
+## 6. Remaining release blockers
 
+1. Square/stair-step movement collision and visibility boundaries need native-resolution contour review and implementation.
+2. The shadow/visibility system still uses the coarse movement grid for most occlusion; furniture, lamps, walls and low props need a deliberate height/outline classification.
+3. The native-resolution candidate requires a reproducible committed analyzer and performance/reachability testing before runtime use.
+4. The actual live Replit preview still needs to be opened and visually inspected by the project owner; this session could only verify the Replit serving/development workflows in CI.
+5. Physical Telegram WebView QA is still needed for viewport changes, safe areas, touch-cancel/lost-pointer handling, pause/resume and long-running sessions.
 
-## 2026-10-30 — CI harness correction
+## 7. Chronological investigation notes
 
-- First PR check: the PNG/WebP transform regression passed against the actual assets (PNG 3224×1858, WebP 6608×3808).
-- The character geometry test did not execute: the workflow invoked `tsx` from the `@workspace/telegram-game` package, which does not declare/install that runner. The failure was before test module evaluation, not a failed sprite/collision assertion.
-- Corrected the command to use the already-installed `tsx` from `@workspace/scripts` and added a package script for that invocation. Full CI must rerun; no subsequent gameplay checks have yet run.
+- **Baseline review:** Verified that the claimed map transform fix was not in `main`; traced the mismatch to world-space camera crops sampled directly from the larger WebP.
+- **First patch:** Added the image transform and a metadata-based PNG/WebP regression. The transform test passed in CI.
+- **Test harness correction:** The first character test command ran `tsx` from the wrong workspace. It was moved to the scripts workspace and then executed successfully.
+- **Sprite-height hypothesis:** A proposed vertical expansion based on `displayHeight` was rejected after reviewing the existing no-stretch browser contract. The implementation, shared foot geometry, and spawn experiments were reverted. This prevents a false sprite fix from altering collisions.
+- **Spawn verifier correction:** The verifier was updated to read the shared numeric idle-crop constant rather than duplicating an obsolete hardcoded assumption. The final check passes with the original 136px crop.
+- **Browser assertions strengthened:** Added actual camera world/source rectangle assertions and a measured role-sprite aspect-ratio assertion. Both pass in the latest CI run.
+- **Final automated verification:** Two complete CI runs for the crop-preserving runtime patch passed, including the 100-game simulation. The PR remains open and the `main` branch remains unchanged while collision/visibility work is outstanding.
 
+## 8. Immediate next steps
 
-## 2026-10-30 — Spawn-geometry verifier corrected
-
-- The second CI attempt passed both new regression tests, then stopped in `scripts/verify-map-mechanics.mjs` before map reachability was evaluated. Its old expectation hardcoded the former 136px cropped idle height and rejected the new authored 153px display height.
-- Updated the verifier to read the shared numeric `IDLE_SPRITE_VISIBLE_HEIGHT`, rather than duplicating the previous value. Kept `PLAYER_SPRITE_HALF_HEIGHT_PX` as a numeric literal for the existing source parser; the atlas test asserts that it remains the calculated ceiling (35px).
-- CI must rerun to determine whether any solo/multiplayer spawn candidate needs adjustment under the corrected feet position and sprite bounds.
-
-
-## 2026-10-30 — Full-match spawn capacity investigation
-
-- Latest CI run passed both new asset/sprite regressions but failed the exhaustive 15-player placement check at slot 12. The previous radial fallback sampled only 48 angles at 12px radius increments, which can miss small safe positions and makes sequential placement order-dependent.
-- Replaced that fallback in both the authoritative API lobby and the independent map verifier with a deterministic 8px lattice search inside the existing 600px spawn ellipse and existing shared spawn-area bounds. The chosen point maximizes nearest-player clearance with a mild preference for staying near the intended lobby spawn radius. The normal preferred ring placement remains unchanged when it succeeds.
-- No collision cells, foot hitbox, spawn zone boundaries, or minimum 72px inter-player separation were weakened. CI must confirm 15 valid positions, spawn-region safety and the remaining gameplay suites.
-
-
-## 2026-10-30 — Rejected sprite-height hypothesis and spawn rollback
-
-- Reviewing `scripts/browser-smoke.mjs` revealed an explicit existing contract: role-reveal character sprites must use `transform: none`, with the polygon clip path removing detached lower-atlas strokes while retaining the feet. The `displayHeight` field is diagnostic baseline metadata, not a destination scaling instruction.
-- Reverted the proposed vertical stretch in DOM, local, remote and corpse sprite rendering; restored the original 136px idle source crop and 31px vertical half-extent/feet anchor. The updated atlas regression now protects the actual crop dimensions, seven-color/nine-pose atlas bounds, idle baseline metadata and corpse exposed-bone crop.
-- The 15-player check failure was caused by this incorrect height expansion, not proof that the existing spawn search needed redesign. Reverted the 8px lattice fallback in both the API and verifier, and restored the previously validated radial candidate search. The test will rerun against the correct sprite geometry.
-- The map raster transform remains the independently confirmed defect and stays in the patch. Visible sprite-leg crop remains open pending post-transform browser screenshots and inspection of the actual role/kill render.
-
-
-## 2026-10-30 — Browser assertions strengthened
-
-- Added a mobile browser assertion that the role-reveal sprite's rendered aspect ratio matches the 136px measured idle crop (1123/7 source width), preventing CSS/background-size scaling from disguising vertical stretch.
-- Added camera diagnostics for both canonical world crop and native-image crop. The browser smoke test now verifies the actual gameplay render reports the 6608×3808 WebP and that X/Y source coordinates and dimensions are transformed using the independent measured ratios.
-- The crop-preserving commit's full CI is still in progress; this new browser coverage must also pass before merge.
+1. Commit the native-resolution analyzer as a non-production preview tool so another engineer can reproduce the candidate and its metrics.
+2. Inspect the candidate overlay against every room boundary, door, bed, bench, lamp, planter/fountain, task point and vent.
+3. Benchmark collision queries and the 720-ray visibility loop at the candidate resolution on mobile-class hardware.
+4. Design and test spawn selection against the candidate geometry without reducing the existing 72px minimum separation or weakening sprite clearance.
+5. Only after those checks pass, connect the new geometry to both client and server and rerun pathfinding, spawn, movement, visibility, task, kill, report, vent, sabotage and 100-game tests.
+6. Keep PR #33 unmerged until collision/visibility review and an actual Replit preview inspection are complete.
