@@ -299,6 +299,11 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
     'the packet token bucket must allow its configured burst and no more');
   assert.equal(floodWasLimited, true,
     'the independent packet token bucket must still reject an excessive burst');
+  const refilledPacket = validateMovementIntent(
+    floodState, floodStartX, floodY, 2_020, floodGrid,
+  );
+  assert.equal(refilledPacket.rateLimited, false,
+    'the packet token bucket must refill at its configured sustained rate');
 }
 
 // Delayed/duplicate ordinary 0xFF echoes cannot rollback newer prediction.
