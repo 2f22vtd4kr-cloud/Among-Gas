@@ -295,6 +295,8 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const pixelX = fromWire(wireX, MAP_W);
         const pixelY = fromWire(wireY, MAP_H);
         const decision = validateMovementIntent(player, pixelX, pixelY, Date.now(), collisionGrid);
+        player.movementPacketTokens = decision.movementPacketTokens;
+        player.movementPacketTokensUpdatedAtMs = decision.movementPacketTokensUpdatedAtMs;
         if (decision.rateLimited) return;
 
         player.movementCreditPx = decision.movementCreditPx;
