@@ -64,7 +64,10 @@ function hslToRgb(hue: number, saturation: number, lightness: number): readonly 
 export function isRecolorableSuitPixel(red: number, green: number, blue: number, alpha: number): boolean {
   if (alpha === 0) return false;
   const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
-  return hue >= SUIT_HUE_MIN && hue <= SUIT_HUE_MAX &&
+  // The pale breathing/filter disk shares a cyan hue with the suit but is
+  // both much lighter and more neutral. Keep that hardware untouched.
+  const filterLike = hue >= 174 && hue <= 183 && lightness >= 0.72;
+  return !filterLike && hue >= SUIT_HUE_MIN && hue <= SUIT_HUE_MAX &&
     saturation >= SUIT_MIN_SATURATION && lightness >= 0.1 && lightness <= 0.95;
 }
 
