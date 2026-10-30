@@ -3,6 +3,7 @@ import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, isPlayerPositionWalkable } fr
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
 import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
+import { resolvePlayerMovement } from '../artifacts/telegram-game/src/game/collisionMap.js';
 
 // Regression for prediction/server disagreement: both endpoints are walkable,
 // but the straight path crosses a thin wall. Local movement must not teleport
