@@ -14,7 +14,7 @@ type Hsl = readonly [hue: number, saturation: number, lightness: number];
 type Rgba = readonly [red: number, green: number, blue: number, alpha: number];
 
 const SUIT_HUE_MIN = 155;
-const SUIT_HUE_MAX = 190;
+const SUIT_HUE_MAX = 186;
 const SUIT_MIN_SATURATION = 0.3;
 
 export function rgbToHsl(red: number, green: number, blue: number): Hsl {
