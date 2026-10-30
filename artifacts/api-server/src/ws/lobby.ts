@@ -24,7 +24,6 @@ import {
 } from '@workspace/shared/coords';
 import {
   buildCollisionGrid,
-  canMoveTo,
   isPlayerPositionWalkable,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
@@ -137,7 +136,7 @@ export interface LobbyPlayer {
   tgUserId: number;
   username: string;
   ws: WebSocket;
-  /** Current pixel position (feet center — y includes FEET_OFFSET_Y). */
+  /** Current pixel position; collision is evaluated at the rendered feet baseline. */
   x: number;
   y: number;
   /** Wire-space position at the time of last 0xFF broadcast. */
