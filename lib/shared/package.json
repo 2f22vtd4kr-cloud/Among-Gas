@@ -28,6 +28,12 @@
       "import": "./src/collisionData.ts",
       "default": "./src/collisionData.ts"
     },
+    "./mapImageTransform": {
+      "types": "./dist/mapImageTransform.d.ts",
+      "workspace": "./src/mapImageTransform.ts",
+      "import": "./src/mapImageTransform.ts",
+      "default": "./src/mapImageTransform.ts"
+    },
     "./tasks": {
       "types": "./dist/tasks.d.ts",
       "workspace": "./src/tasks.ts",

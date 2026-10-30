@@ -41,14 +41,11 @@ export const PLAYER_SPAWN_MIN_SEPARATION_PX = 72;
  */
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
 /**
- * The world position is the sprite's ground/foot anchor, not its visual
- * centre. The idle atlas crop is 136px high from a 1401/9px cell; the
- * rendered sprite is centred on its world point, so its visible feet sit
- * half that cropped height below the centre. The former 25% offset put the
- * collision footprint ~13 map-pixels above the visible feet and let players
- * stand visibly inside wall edges.
+ * The idle source window is cropped to 136px to remove detached pixels, but
+ * the sprite is rendered at its measured 153px authored display height. Its
+ * feet therefore sit half that displayed height below the sprite centre.
  */
-const IDLE_SPRITE_VISIBLE_HEIGHT = 136;
+const IDLE_SPRITE_VISIBLE_HEIGHT = 153;
 const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
 export const FEET_OFFSET_Y = Math.round(
   _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
@@ -56,11 +53,13 @@ export const FEET_OFFSET_Y = Math.round(
 /**
  * Half-extents of the rendered idle sprite used by spawn footprint checks.
  * Derived from the 1123×1401 atlas (7×9 cells) and 36px base display height
- * at the 3224px map scale. The idle crop is 136px of a 1401/9px atlas
- * row, yielding an approximately 72×61px visible sprite.
+ * at the 3224px map scale. The idle frame is rendered at its authored
+ * 153px display height, yielding an approximately 72×69px visible sprite.
  */
 export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
-export const PLAYER_SPRITE_HALF_HEIGHT_PX = 31;
+export const PLAYER_SPRITE_HALF_HEIGHT_PX = Math.ceil(
+  _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
+);
 /** Spawn-only gap between the rendered sprite and traced wall/prop boundaries. */
 export const PLAYER_SPAWN_CLEARANCE_PX = 12;
 export const PLAYER_RADIUS = 4;
