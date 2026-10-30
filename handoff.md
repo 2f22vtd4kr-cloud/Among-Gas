@@ -1793,3 +1793,22 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Runtime character-atlas browser contract
+
+**Done**
+- Accepted Agent 3's request for an integrated browser assertion of `window.__AG_CHARACTER_ATLAS`.
+- Added `scripts/test-character-atlas-browser.mjs`, separate from Agent 4's shared `browser-smoke.mjs`, to open the corpse visual fixture and verify the runtime canvas is 2898×1401, contains 18 integer 161px columns, and every column has non-transparent rendered pixels.
+- Wired the browser contract into CI after the audio network regression. It is explicitly deferred with a visible log message while `characterAtlas.ts` is absent from main; once Agent 3's atlas implementation merges, the browser test automatically becomes mandatory and fails if the global/dimensions are missing.
+
+**Decisions & gotchas**
+- Do not modify `browser-smoke.mjs` while Agent 4 owns the meeting/chat and voter identity blocks.
+- The atlas browser check measures the actual runtime canvas, not only source constants. It does not claim that all 18 colors are perceptually distinct; the source/unit tests cover palette count and unique column mapping.
+
+**Left off / next steps**
+- Re-run CI on this PR after adding the atlas contract.
+- Once Agent 3's PR merges, verify the browser test executes (rather than defers), inspect the visual artifact, and check atlas-generation time on a mobile-class device.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
