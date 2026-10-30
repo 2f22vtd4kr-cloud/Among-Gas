@@ -2859,10 +2859,14 @@ export default function GameMap() {
               {/* Character floats subtly above its own animated ground shadow. */}
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
                 <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
-                  <div className="ag-role-reveal-character" style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}>
+                  <div
+                    className="ag-role-reveal-character"
+                    data-testid="role-reveal-character"
+                    style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}
+                  >
                     <CharSpriteUI
                       color={isImp ? 'maroon' : 'teal'}
-                      pose={isImp ? 'mask' : 'idle'}
+                      pose="idle"
                       size={170}
                     />
                   </div>
