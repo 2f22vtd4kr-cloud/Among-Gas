@@ -28,9 +28,13 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Keep CI aligned with .replit's nodejs-20 runtime.
+          node-version: 20
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+
+      - name: Assert CI runtime matches Replit
+        run: node -e "if (process.versions.node.split('.')[0] !== '20') throw new Error('CI must match Replit Node.js 20 runtime')"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
