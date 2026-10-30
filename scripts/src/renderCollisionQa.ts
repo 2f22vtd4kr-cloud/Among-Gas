@@ -73,6 +73,9 @@ for (let row = 0; row < rows; row++) {
 
 // Render the exact player footprint at the configured solo spawn: three
 // overlapping foot circles, with the visible-feet baseline highlighted.
+if (!coords.includes('IDLE_SPRITE_VISIBLE_HEIGHT = 136') || !coords.includes('CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9')) {
+  throw new Error('Player feet-anchor source constants changed; update collision QA overlay geometry');
+}
 const spriteHeight = Math.round(36 * (mapWidth / 1652));
 const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
 const spawnX = Math.round(350 * mapWidth / 1040);
@@ -81,7 +84,7 @@ const feetY = spawnY + feetOffset;
 const footprint = [
   `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
   `<circle cx="${spawnX - playerHalfWidth}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${spawnX + playerHalfWidth}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX + playerHalfWidth}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
   `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
   `<text x="${spawnX + 16}" y="${spawnY - 12}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="4" paint-order="stroke">PLAYER SPAWN / FEET</text>`,
