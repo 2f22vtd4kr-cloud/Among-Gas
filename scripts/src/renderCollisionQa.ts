@@ -8,6 +8,7 @@ const dataPath = path.join(root, 'lib/shared/src/collisionData.ts');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
+const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay-webp.png');
 
 const source = fs.readFileSync(dataPath, 'utf8');
 const mapSource = fs.readFileSync(path.join(root, 'lib/shared/src/collisionMap.ts'), 'utf8');
@@ -56,8 +57,11 @@ if (metadata.width !== mapWidth || metadata.height !== mapHeight) {
   throw new Error(`PNG collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${metadata.width}x${metadata.height}`);
 }
 const webpMetadata = await sharp(webpPath).metadata();
-if (webpMetadata.width !== mapWidth || webpMetadata.height !== mapHeight) {
-  throw new Error(`WebP collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${webpMetadata.width}x${webpMetadata.height}`);
+if (!webpMetadata.width || !webpMetadata.height) throw new Error('WebP map dimensions unavailable');
+const webpScaleX = webpMetadata.width / mapWidth;
+const webpScaleY = webpMetadata.height / mapHeight;
+if (!Number.isInteger(webpScaleX) || webpScaleX < 1 || webpScaleX !== webpScaleY) {
+  throw new Error(`WebP must be an integer isotropic upscale of the collision map; got ${webpMetadata.width}x${webpMetadata.height} for ${mapWidth}x${mapHeight}`);
 }
 const cellWidth = mapWidth / cols;
 const cellHeight = mapHeight / rows;
@@ -96,9 +100,17 @@ const footprint = [
 ].join('');
 const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${mapWidth}" height="${mapHeight}" viewBox="0 0 ${mapWidth} ${mapHeight}">${rects.join('')}${footprint}</svg>`);
 await map.composite([{ input: svg }]).png().toFile(outputPath);
+
+// The production WebP is intentionally a 2x raster for sharper downscaling
+// in the canvas renderer. Reuse the exact same map-coordinate overlay and let
+// SVG viewBox scaling place it at the WebP's native resolution.
+const webpSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${webpMetadata.width}" height="${webpMetadata.height}" viewBox="0 0 ${mapWidth} ${mapHeight}">${rects.join('')}${footprint}</svg>`);
+await sharp(webpPath).composite([{ input: webpSvg }]).png().toFile(outputWebpPath);
 console.log(JSON.stringify({
   output: outputPath,
+  outputWebp: outputWebpPath,
   map: `${mapWidth}x${mapHeight}`,
+  webp: `${webpMetadata.width}x${webpMetadata.height} (${webpScaleX}x)`,
   grid: `${cols}x${rows}`,
   blockedCells: grid.reduce((sum, cell) => sum + cell, 0),
   walkableCells: grid.reduce((sum, cell) => sum + (cell === 0 ? 1 : 0), 0),
