@@ -18,7 +18,7 @@ import './lobby.css';
 
 // Lobby, gameplay, and kill sprites share the cached runtime atlas built from the original PNG.
 import {
-  CHARACTER_COLORS,
+  getCharacterColorForSlot,
   CHARACTER_CELL_WIDTH,
   getCharacterFrameRect,
   getCharacterClipPath,
@@ -27,7 +27,6 @@ import {
 } from '@/game/characterSprites';
 import { loadCharacterAtlas } from '@/game/characterAtlas';
 
-const SLOT_COLORS = CHARACTER_COLORS;
 
 /** Render one measured pose from the shared palette atlas; ground shadows remain separate game art. */
 function CharSprite({
@@ -125,7 +124,7 @@ function translateLobbyError(message: string | null, en: boolean): string | null
 function PlayerRow({ slot, username, isHost, isMe, language }: {
   slot: number; username: string; isHost: boolean; isMe: boolean; language: AppLanguage;
 }) {
-  const color = SLOT_COLORS[slot % SLOT_COLORS.length];
+  const color = getCharacterColorForSlot(slot);
   return (
     <div className="au-player-row">
       <CharSprite color={color} pose="idle" size={26} />
