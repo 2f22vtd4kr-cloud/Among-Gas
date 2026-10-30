@@ -1702,3 +1702,27 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **Next state**
 - PR #27 remains the single implementation PR targeting `main`: https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/27.
 - Run the full CI workflow again on the documentation-finalized head, verify it is green, then merge only that exact head. Do not merge if any required check fails.
+
+### 2026-10-30 — Settings geometry, role-reveal shadow, and Replit runtime audit
+
+**Done**
+- Audited the merged `main` head `d95e6d36ab13fd11aa9029c1a8f7a8770340a5a8` against the user's fresh launch screenshot. Found the main-menu Settings SVG outer gear path was offset relative to its centered inner ring; the old browser check asserted path attributes instead of rendered geometry. PR #28 corrects the outer path and measures both path bounding-box centers in Playwright.
+- Inspected the CI visual-QA screenshots. The role-reveal sprite retained its feet, but its overlay had no ground-shadow element. PR #28 restores a separate oval shadow, a subtle character bob, inverse shadow compression, reduced-motion handling, and browser checks for shadow placement/animation.
+- Found `.replit` started only the API and `artifacts/api-server/src/app.ts` did not serve the built frontend. PR #29 adds a combined Vite/API Replit preview, same-origin HTTP/WebSocket proxying, and production static/SPA serving from the API process.
+- PR #29 adds CI integration checks for production frontend/static serving and the Replit development WebSocket proxy. Production startup intentionally requires `TELEGRAM_BOT_TOKEN`; CI uses a nonfunctional placeholder only for static-serving checks.
+
+**Decisions & gotchas**
+- The Settings gear geometry regression must remain a browser-level bounding-box assertion; checking SVG path strings or the absence of a transform is insufficient.
+- The role-reveal shadow is separate from the sprite and must remain below the feet. The sprite's clip-path masks detached lower-leg strokes; do not remove or stretch the actual feet.
+- Replit development runs Vite on port 5173 and the API on port 8080. Replit production runs the API as its single public service, serving `artifacts/telegram-game/dist/public`; set `TELEGRAM_BOT_TOKEN` as a Replit Secret for production.
+- Automated Playwright mobile Chromium screenshots are not a substitute for a real iPhone/Android Telegram WebView pass. No physical device test or actual Replit workspace launch has been performed in this session.
+
+**Left off / next steps**
+- PR #28: wait for the latest CI run on the role-reveal shadow + Settings geometry head; inspect the refreshed visual-QA artifact, then merge only if every required step including the 100-game simulation passes.
+- PR #29: wait for the latest CI run including Replit production serving, Vite WebSocket proxy, browser smoke, and 100-game simulation; update its base after PR #28 merges, rerun checks, then merge.
+- After both PRs merge, verify the exact `main` SHA and perform a real Replit workspace launch with the production Telegram bot token configured. Then test on actual iOS/Android Telegram WebViews.
+
+**State to restore**
+- PR #28 branch: `fix/settings-gear-centered-regression` — Settings gear geometry, role-reveal shadow, and browser regression tests.
+- PR #29 branch: `fix/replit-full-stack-runtime` — full Replit dev/production runtime and integration tests.
+- Neither PR has been merged by this entry. `main` remains at the verified starting head until CI and merge checks are complete.
