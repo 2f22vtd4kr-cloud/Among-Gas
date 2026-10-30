@@ -9,8 +9,6 @@
  */
 import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, isPlayerPathWalkable, type Grid } from '@workspace/shared/collisionMap';
 import {
-  PLAYER_RADIUS,
-  PLAYER_HALF_WIDTH,
   FEET_OFFSET_Y,
   MAP_W,
   MAP_H,
@@ -26,13 +24,9 @@ export { NO_TARGET };
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
 
-/** Same three-point horizontal feet clearance used by human movement. */
+/** Same three-circle foot footprint used by client prediction and server authority. */
 function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
-  return (
-    canMoveTo(collision, feetX, feetY, PLAYER_RADIUS) &&
-    canMoveTo(collision, feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
-    canMoveTo(collision, feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
-  );
+  return isPlayerFootprintWalkableAtFeet(collision, feetX, feetY);
 }
 
 /**
@@ -309,7 +303,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        canMoveToPlayer(grid, x, y + FEET_OFFSET_Y) &&
+        isPlayerPositionWalkable(grid, x, y) &&
         isSpawnReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
@@ -344,7 +338,7 @@ export abstract class BotAgent {
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      canMoveToPlayer(grid, p.x, p.y + FEET_OFFSET_Y) &&
+      isPlayerPositionWalkable(grid, p.x, p.y) &&
       isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
 
     let result = target;
