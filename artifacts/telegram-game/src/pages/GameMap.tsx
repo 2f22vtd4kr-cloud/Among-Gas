@@ -2465,6 +2465,9 @@ export default function GameMap() {
           ...customControlPositionStyle('sabotage', controlLayout, joystickSide),
         }}>
           <button
+            aria-label={sabotageCooldownMs > 0
+              ? (en ? `Sabotage cooldown ${Math.ceil(sabotageCooldownMs / 1000)} seconds` : `Перезарядка саботажа ${Math.ceil(sabotageCooldownMs / 1000)} секунд`)
+              : (en ? 'Sabotage' : 'Саботаж')}
             disabled={sabotageCooldownMs > 0}
             onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
             style={{
@@ -2583,6 +2586,9 @@ export default function GameMap() {
           ...customControlPositionStyle('emergency', controlLayout, joystickSide),
         }}>
           <button
+            aria-label={emergencyMeetingUsed
+              ? (en ? 'Emergency meeting already used' : 'Экстренное собрание уже использовано')
+              : (en ? 'Call emergency meeting' : 'Созвать экстренное собрание')}
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
             style={{
