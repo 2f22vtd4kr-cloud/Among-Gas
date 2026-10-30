@@ -1027,6 +1027,7 @@ try {
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'visible' });
   assert.equal(await decodePage.getByTestId('gameplay-loading-screen').isVisible(), true,
     'gameplay must stay locked while map and sprite decode promises are unresolved');
+  await decodePage.screenshot({ path: join(visualQaDir, 'loading-screen-before-ready.png'), fullPage: true });
   await decodePage.evaluate(() => window.__releaseImageDecodes());
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
