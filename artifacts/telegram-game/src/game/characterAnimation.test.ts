@@ -33,7 +33,6 @@ assert.equal(getCharacterShadowScale(maximumBob * 2, spriteHeight), 0.76,
 assert.equal(getCharacterWalkBobOffset(10, 0), 0);
 assert.equal(getCharacterShadowScale(10, 0), 1);
 
-console.log('Character animation regression passed: local/remote bob phase and grounded shadow scaling stay synchronized.');
 
 assert.ok(CHARACTER_SHADOW_WIDTH_RADIUS_RATIO > 0.3,
   'gameplay shadow must be wide enough to extend beyond the lower-leg gap');
@@ -41,3 +40,5 @@ assert.ok(CHARACTER_SHADOW_Y_OFFSET_RATIO - CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO
   'shadow oval must overlap the feet baseline so it does not look detached');
 assert.ok(CHARACTER_SHADOW_Y_OFFSET_RATIO + CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO > 0.5,
   'most of the oval must remain visible below the character feet');
+
+console.log('Character animation regression passed: local/remote bob phase and grounded shadow scaling stay synchronized.');
