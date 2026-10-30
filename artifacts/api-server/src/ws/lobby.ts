@@ -1102,6 +1102,9 @@ export class LobbyManager {
       player.movementCreditUpdatedAtMs = startedAtMs;
       player.lastMovementPacketAtMs = startedAtMs;
       player.lastMovementCorrectionAtMs = undefined;
+      // A restarted match begins with a fresh packet-flood token bucket.
+      player.movementPacketTokens = undefined;
+      player.movementPacketTokensUpdatedAtMs = startedAtMs;
     }
     lobby.startedAtMs = startedAtMs;
     lobby.gameplayReadySlots = new Set<number>();
