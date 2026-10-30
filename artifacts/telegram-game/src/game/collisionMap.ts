@@ -9,6 +9,7 @@ export {
   buildCollisionGrid,
   isPlayerPositionWalkable,
   isPlayerFootprintWalkableAtFeet,
+  clampPlayerPositionToMapBounds,
   isPlayerPathWalkable,
   resolvePlayerMovement,
   isBlocked,
