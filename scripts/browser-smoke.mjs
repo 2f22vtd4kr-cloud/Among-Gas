@@ -338,6 +338,11 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  await page.waitForFunction(
+    () => new URLSearchParams(window.location.search).get('mock') === 'task-interaction',
+    undefined,
+    { timeout: 5_000 },
+  );
   // The mock fixture starts at the closest verified walkable point beside
   // the assigned console so this checks proximity UI independently of movement.
   await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
