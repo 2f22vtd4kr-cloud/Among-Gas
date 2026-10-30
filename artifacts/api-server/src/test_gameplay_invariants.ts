@@ -766,6 +766,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'all players must receive distinct spawn coordinates');
   for (const pos of positions) {
     assertClientWalkable(pos.x, pos.y, 'scattered spawn');
+    assert.equal(isPlayerSpawnPositionClear(grid, pos.x, pos.y), true,
+      'the complete visible sprite must spawn clear of blocked map geometry');
   }
   for (let i = 0; i < positions.length; i++) {
     for (let j = i + 1; j < positions.length; j++) {
