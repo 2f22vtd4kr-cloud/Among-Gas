@@ -7,7 +7,6 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import {
-  isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   isPlayerPathWalkable,
   resolvePlayerMovement,
