@@ -7,6 +7,7 @@ import {
   ROWS,
   MAP_W,
   MAP_H,
+  MANUAL_BLOCKED_POLYGONS,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
@@ -17,7 +18,6 @@ import {
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
-import { MANUAL_BLOCKED_POLYGONS } from '@workspace/shared/collisionOverrides';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
