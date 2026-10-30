@@ -29,6 +29,7 @@ import {
   buildCollisionGrid,
   isPlayerSpawnPositionClear,
   KILL_RANGE_PX,
+  REPORT_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import {
@@ -1457,6 +1458,11 @@ export class LobbyManager {
       // the immutable corpse coordinates created by a successful kill.
       if (!body || body.alive || body.corpseX === undefined || body.corpseY === undefined) {
         return false;
+      }
+      const reportDx = reporter.x - body.corpseX;
+      const reportDy = reporter.y - body.corpseY;
+      if (reportDx * reportDx + reportDy * reportDy > REPORT_RANGE_PX * REPORT_RANGE_PX) {
+        return false; // the reporter must be within the authoritative corpse interaction radius
       }
       if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
       body.bodyReported = true;
