@@ -33,6 +33,8 @@ try {
     const cellWidth = 161;
     const columnPixelCounts = [];
     const columnSignatures = [];
+    const corpseRowPixelCounts = [];
+    const corpseRowSignatures = [];
     for (let column = 0; column < 18; column++) {
       const pixels = context.getImageData(column * cellWidth, 0, cellWidth, atlas.height).data;
       let opaquePixels = 0;
@@ -44,6 +46,19 @@ try {
       }
       columnPixelCounts.push(opaquePixels);
       columnSignatures.push(signature >>> 0);
+
+      // The authored dead-body row starts at source y=1067 and is 93px tall.
+      // Validate the generated palette columns too, not only the seven source colors.
+      const corpsePixels = context.getImageData(column * cellWidth, 1067, cellWidth, 93).data;
+      let corpseOpaque = 0;
+      let corpseSignature = 2166136261;
+      for (let offset = 0; offset < corpsePixels.length; offset++) {
+        const value = corpsePixels[offset];
+        if (offset % 4 === 3 && value > 0) corpseOpaque++;
+        corpseSignature = Math.imul(corpseSignature ^ value, 16777619);
+      }
+      corpseRowPixelCounts.push(corpseOpaque);
+      corpseRowSignatures.push(corpseSignature >>> 0);
     }
     return {
       width: atlas.width,
@@ -52,6 +67,8 @@ try {
       columns: atlas.width / cellWidth,
       nonEmptyColumns: columnPixelCounts.filter(count => count > 0).length,
       distinctColumns: new Set(columnSignatures).size,
+      corpseRowNonEmptyColumns: corpseRowPixelCounts.filter(count => count > 100).length,
+      corpseRowDistinctColumns: new Set(corpseRowSignatures).size,
       elapsedMs: Math.round(performance.now() - window.__AG_ATLAS_LOAD_STARTED_AT),
     };
   });
@@ -61,6 +78,10 @@ try {
   assert.equal(metrics.columns, 18, 'runtime canvas must contain eighteen palette columns');
   assert.equal(metrics.nonEmptyColumns, 18, 'every runtime palette column must contain rendered sprite pixels');
   assert.equal(metrics.distinctColumns, 18, 'every runtime palette column must render distinct pixel colors, not a duplicate teal column');
+  assert.equal(metrics.corpseRowNonEmptyColumns, 18,
+    'all eighteen generated colors must retain the authored corpse and exposed-bone row');
+  assert.equal(metrics.corpseRowDistinctColumns, 18,
+    'the corpse row must be recolored for all eighteen palette columns, not only the seven source colors');
   console.log('Runtime character atlas browser contract passed:', JSON.stringify(metrics));
 } finally {
   await browser.close();
