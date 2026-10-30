@@ -97,3 +97,25 @@ console.log('PASS: client prediction validates the full movement path against th
     diagonalGrid, fromX, fromFeetY, toX, toFeetY,
   ), false, 'a diagonal segment must not tunnel through a blocked cell');
 }
+
+// Pressing into a wall must not fake movement. The old input-driven animation
+// kept cycling walk poses and footstep audio even though collision held the
+// player at exactly the same coordinates.
+{
+  const blockedX = wallLeft - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 1;
+  const blockedFeetY = wallTop + CELL_Y / 2;
+  const blockedState = {
+    ...createInitialPlayerState(),
+    x: blockedX,
+    y: blockedFeetY - FEET_OFFSET_Y,
+    pose: 'idle' as const,
+    animElapsedMs: 0,
+  };
+  const blockedResult = stepPlayer(grid, blockedState, new Set(['d']), 48);
+  assert.equal(blockedResult.x, blockedState.x, 'the wall must block all horizontal displacement');
+  assert.equal(blockedResult.y, blockedState.y, 'a cardinal wall contact must not change vertical position');
+  assert.equal(blockedResult.pose, 'idle',
+    'a player held against a wall must not show a walking animation');
+  assert.equal(blockedResult.animElapsedMs, 0,
+    'blocked input must not accumulate walk-cycle animation time');
+}
