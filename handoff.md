@@ -1753,3 +1753,24 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Lazy-load noncritical audio assets
+
+**Done**
+- Inspected the production static build artifact from the PR #35 CI run: 23.8 MB total across 36 files, including a 9.7 MB PNG map fallback, 1.12 MB WebP map, 1.35 MB character atlas, and multiple multi-megabyte audio files.
+- Found that `artifacts/telegram-game/src/lib/sfx.ts` constructed every HTMLAudioElement with `preload='auto'` at module import, making all sound effects and menu/victory music eligible for download before gameplay.
+- Changed audio element construction to set `preload='none'` before assigning `src`. The existing explicit first-gesture kill-buffer decode and menu-music start remain unchanged.
+- Added `scripts/test-audio-preload.mjs` and wired it into CI to assert no audio assets are requested on lobby load, and that the first trusted gesture requests only the kill buffer and menu music.
+
+**Decisions & gotchas**
+- The 23.8 MB artifact size is not itself the initial network payload. The browser network regression is the authoritative check for eager audio requests.
+- Keep the latency-sensitive kill sound explicitly primed on the first trusted user gesture; do not eagerly preload every sound merely to reduce later playback delay.
+- Map WebP/PNG fallback and character-atlas loading remain separate asset-budget work owned by the relevant visual/performance owners.
+
+**Left off / next steps**
+- Run the new Playwright network regression and full CI on the updated PR #39 head.
+- Inspect network request timing and transferred bytes in a real Telegram WebView/Replit deployment when available.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
