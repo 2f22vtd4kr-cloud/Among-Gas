@@ -7,6 +7,8 @@ import assert from 'node:assert/strict';
 import {
   buildCollisionGrid,
   canMoveTo,
+  isPlayerPositionWalkable,
+  isPlayerSpawnPositionClear,
   MAP_W,
   MAP_H,
   CELL_X,
@@ -65,11 +67,7 @@ import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 const grid = buildCollisionGrid();
 
 function assertClientWalkable(x: number, y: number, label: string): void {
-  // Server collision checks the feet center; the client additionally checks
-  // two side points because the custom balaclava sprite is wider than its feet.
-  assert.equal(canMoveTo(grid, x, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' center');
-  assert.equal(canMoveTo(grid, x - 10, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' left edge');
-  assert.equal(canMoveTo(grid, x + 10, y + FEET_OFFSET_Y, PLAYER_RADIUS), true, label + ' right edge');
+  assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
 }
 
 function fakeSocket() {
@@ -142,6 +140,16 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   lobby.phase = 'MEETING';
   assert.equal(manager.isGameplayReady(lobby), true, 'readiness persists so discussion and voting RPCs remain available');
   manager.disposeLobby(lobby);
+}
+
+// The fountain is a large enclosed prop. Its outline was previously omitted
+// from the RLE walkability mask, allowing players and bots to walk through it.
+{
+  const fountainCenter = { x: 1735, y: 490 };
+  assert.equal(isPlayerPositionWalkable(grid, fountainCenter.x, fountainCenter.y), false,
+    'the central fountain interior must be blocked by the manual collision polygon');
+  assert.equal(isPlayerPositionWalkable(grid, 1450, 490), true,
+    'the open lobby floor west of the fountain must remain walkable');
 }
 
 // 1. Tasks, vents and consoles must be valid interaction points on *this* map.
@@ -761,7 +769,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   }
   for (let i = 0; i < positions.length; i++) {
     for (let j = i + 1; j < positions.length; j++) {
-      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 30,
+      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 72,
         'spawn positions must keep players separated to avoid initial collision pileups');
     }
   }
