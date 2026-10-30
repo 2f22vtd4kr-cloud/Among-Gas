@@ -62,6 +62,7 @@ import {
   isMovementPathWalkable,
   isWalkableMovementPoint,
   validateMovementIntent,
+  MOVEMENT_PACKET_BURST_CAPACITY,
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
@@ -708,8 +709,35 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(teleport.x, vent.x, 'a rejected teleport does not move the authoritative player');
   assert.equal(teleport.sendCorrection, true, 'a rejected target asks the server to correct prediction');
 
-  const tooSoon = validateMovementIntent(base, vent.x + 1, vent.y, 1_005, grid);
-  assert.equal(tooSoon.rateLimited, true, 'high-frequency movement packet spam is rate limited');
+  const closePacket = validateMovementIntent(base, vent.x + 1, vent.y, 1_005, grid);
+  assert.equal(closePacket.rateLimited, false,
+    'an ordered movement packet arriving inside 12ms must not be dropped solely due to arrival spacing');
+  assert.equal(closePacket.accepted, true,
+    'a close-arriving packet is accepted when its distance fits the elapsed movement credit');
+
+  // Packet floods are bounded independently from movement-distance validation.
+  let floodState = { ...base };
+  let acceptedFloodPackets = 0;
+  let floodLimited = false;
+  for (let packet = 0; packet < MOVEMENT_PACKET_BURST_CAPACITY + 2; packet++) {
+    const decision = validateMovementIntent(floodState, vent.x, vent.y, 1_000, grid);
+    if (decision.rateLimited) {
+      floodLimited = true;
+      break;
+    }
+    acceptedFloodPackets++;
+    floodState = {
+      ...floodState,
+      movementCreditPx: decision.movementCreditPx,
+      movementCreditUpdatedAtMs: decision.movementCreditUpdatedAtMs,
+      lastMovementPacketAtMs: decision.lastMovementPacketAtMs,
+      movementPacketTokens: decision.movementPacketTokens,
+      movementPacketTokensUpdatedAtMs: decision.movementPacketTokensUpdatedAtMs,
+    };
+  }
+  assert.equal(acceptedFloodPackets, MOVEMENT_PACKET_BURST_CAPACITY,
+    'the packet flood guard must allow exactly its configured initial burst');
+  assert.equal(floodLimited, true, 'excessive movement packet spam is rate limited');
 
   const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
   const legalStep = validateMovementIntent(base, vent.x + legalStepDistance, vent.y, 1_050, grid);
