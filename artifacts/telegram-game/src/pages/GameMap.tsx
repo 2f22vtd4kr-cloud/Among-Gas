@@ -28,6 +28,9 @@ import {
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
 import {
+  CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
+  CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
+  CHARACTER_SHADOW_Y_OFFSET_RATIO,
   getCharacterShadowScale,
   getCharacterWalkBobOffset,
 } from '../game/characterAnimation';
@@ -1524,7 +1527,13 @@ export default function GameMap() {
               ? getCharacterShadowScale(rWalkBob, rBaseSpriteH)
               : 1;
             ctx.beginPath();
-            ctx.ellipse(rpCX, rpGroundY + rSpriteH * 0.48, rSpriteW * 0.28 * rShadowScale, rSpriteH * 0.055 * rShadowScale, 0, 0, Math.PI * 2);
+            ctx.ellipse(
+              rpCX,
+              rpGroundY + rSpriteH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
+              rSpriteW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * rShadowScale,
+              rSpriteH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * rShadowScale,
+              0, 0, Math.PI * 2,
+            );
             ctx.fill();
             ctx.restore();
             ctx.filter = 'none';
@@ -1611,7 +1620,13 @@ export default function GameMap() {
           ? getCharacterShadowScale(localWalkBob, sH)
           : 1;
         ctx.beginPath();
-        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28 * localShadowScale, sH * 0.055 * localShadowScale, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          pCX,
+          pCY + sH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
+          sW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * localShadowScale,
+          sH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * localShadowScale,
+          0, 0, Math.PI * 2,
+        );
         ctx.fill();
         ctx.restore();
         ctx.filter = 'none';
