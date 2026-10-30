@@ -229,7 +229,10 @@ function isNonOccludingFurniture(index: number): boolean {
  * as a wide shadow while still letting poles and similarly narrow props block
  * the sight rays behind their actual visual silhouette.
  */
-export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderCircle[] {
+export function buildNarrowShadowOccluders(
+  collisionGrid: Grid,
+  includeManualMapOccluders = false,
+): VisualOccluderCircle[] {
   if (collisionGrid.length !== COLS * ROWS) {
     throw new RangeError(
       `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`
@@ -279,7 +282,7 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
   }
   // These manually measured circles belong only to the canonical map.
   // Synthetic grids in unit tests must remain fully data-driven.
-  if (collisionGrid === buildCollisionGrid()) {
+  if (includeManualMapOccluders) {
     for (const manual of MANUAL_NARROW_OCCLUDERS) {
       if (!occluders.some(item => Math.hypot(item.x - manual.x, item.y - manual.y) < 1)) {
         occluders.push(manual);
