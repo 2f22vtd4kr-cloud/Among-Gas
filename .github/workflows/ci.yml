@@ -41,8 +41,11 @@ jobs:
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
-      - name: Verify client movement cannot cross thin collision walls
+      - name: Verify client/server movement collision agreement, thin walls, corners and bounds
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-player-movement.ts
+
+      - name: Exhaustively verify real-map player footprint and reachable geometry
+        run: node scripts/verify-map-mechanics.mjs
 
       - name: Typecheck and build API/frontend
         run: pnpm run build
@@ -98,12 +101,17 @@ jobs:
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
 
+      - name: Render production-map collision overlay for visual QA
+        run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts
+
       - name: Upload gameplay visual QA screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: among-gas-visual-qa
-          path: ${{ runner.temp }}/among-gas-visual-qa/*.png
+          path: |
+            ${{ runner.temp }}/among-gas-visual-qa/*.png
+            artifacts/telegram-game/collision-qa-overlay.png
           if-no-files-found: warn
           retention-days: 3
 
