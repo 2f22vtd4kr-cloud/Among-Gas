@@ -49,10 +49,20 @@ try {
   const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
   await menuTitle.waitFor({ state: 'visible' });
   await menuSettingsButton.waitFor({ state: 'visible' });
-  assert.equal(await menuSettingsButton.locator('svg path').nth(0).getAttribute('d'), 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
-    'the Settings gear inner ring must be centered on the 24×24 icon viewBox');
-  assert.equal(await menuSettingsButton.locator('svg path').nth(1).getAttribute('transform'), null,
-    'the Settings gear outer teeth must not be translated away from the centered inner ring');
+  const gearGeometry = await menuSettingsButton.locator('svg').evaluate(svg => {
+    const [innerRing, outerTeeth] = svg.querySelectorAll('path');
+    const inner = innerRing.getBBox();
+    const outer = outerTeeth.getBBox();
+    const transform = new DOMMatrix(outerTeeth.getAttribute('transform') || undefined);
+    const outerCenter = transform.transformPoint(new DOMPoint(outer.x + outer.width / 2, outer.y + outer.height / 2));
+    return {
+      innerCenter: { x: inner.x + inner.width / 2, y: inner.y + inner.height / 2 },
+      outerCenter: { x: outerCenter.x, y: outerCenter.y },
+    };
+  });
+  assert.ok(Math.abs(gearGeometry.innerCenter.x - gearGeometry.outerCenter.x) < 0.25 &&
+    Math.abs(gearGeometry.innerCenter.y - gearGeometry.outerCenter.y) < 0.25,
+  `the Settings gear ring and teeth must share the same visual center; got ${JSON.stringify(gearGeometry)}`);
   const menuTitleBox = await menuTitle.boundingBox();
   const menuSettingsBox = await menuSettingsButton.boundingBox();
   assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
