@@ -1084,35 +1084,42 @@ try {
     ['sabotage-ready', 'sabotage-ready.png'],
     ['sabotage-o2', 'sabotage-o2.png'],
   ];
+  const visualViewports = [
+    { label: 'mobile', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+    { label: 'desktop', viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false },
+  ];
   for (const [fixture, filename] of visualStateCases) {
-    const statePage = await browser.newPage({
-      viewport: { width: 390, height: 844 },
-      deviceScaleFactor: 2,
-      isMobile: true,
-      hasTouch: true,
-    });
-    statePage.on('pageerror', error => failures.push(error.message));
-    await statePage.route('**/*', route => {
-      const url = route.request().url();
-      if (url.startsWith(origin)) return route.continue();
-      return route.abort();
-    });
-    await statePage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
-    await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-    await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
-    if (fixture.startsWith('reveal-')) {
-      // Role-reveal fixtures deliberately keep the overlay visible for capture.
-      await statePage.getByText(/^(ваша роль|your role)$/i).waitFor({ state: 'visible', timeout: 15_000 });
-    } else {
-      await waitForRoleRevealToFinish(statePage);
+    for (const viewport of visualViewports) {
+      const statePage = await browser.newPage({
+        viewport: viewport.viewport,
+        deviceScaleFactor: viewport.isMobile ? 2 : 1,
+        isMobile: viewport.isMobile,
+        hasTouch: viewport.hasTouch,
+      });
+      statePage.on('pageerror', error => failures.push(error.message));
+      await statePage.route('**/*', route => {
+        const url = route.request().url();
+        if (url.startsWith(origin)) return route.continue();
+        return route.abort();
+      });
+      await statePage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
+      await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+      await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+      if (fixture.startsWith('reveal-')) {
+        // Role-reveal fixtures deliberately keep the overlay visible for capture.
+        await statePage.getByText(/^(ваша роль|your role)$/i).waitFor({ state: 'visible', timeout: 15_000 });
+      } else {
+        await waitForRoleRevealToFinish(statePage);
+      }
+      if (fixture === 'reveal-impostor') {
+        const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
+        assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
+          'impostor role reveal must show a living character, not the corpse sprite');
+      }
+      const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
+      await statePage.screenshot({ path: join(visualQaDir, viewportFilename), fullPage: true });
+      await statePage.close();
     }
-    if (fixture === 'reveal-impostor') {
-      const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
-      assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
-        'impostor role reveal must show a living character, not the corpse sprite');
-    }
-    await statePage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
-    await statePage.close();
   }
 
   // Move the local player while the camera follows. The character's suit
