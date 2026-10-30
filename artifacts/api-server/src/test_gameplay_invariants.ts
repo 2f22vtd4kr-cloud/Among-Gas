@@ -19,6 +19,8 @@ import {
   FEET_OFFSET_Y,
   PLAYER_RADIUS,
   PLAYER_HALF_WIDTH,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
   KILL_COOLDOWN_MS,
   NO_TARGET,
   toWire,
@@ -806,12 +808,12 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 }
 
 
- // 15b. Ghosts phase through walls but remain inside the map's full foot-base bounds.
+ // 15b. Ghosts phase through walls but keep the complete sprite and feet inside map bounds.
 {
-  const minX = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
+  const minX = Math.max(PLAYER_SPRITE_HALF_WIDTH_PX, PLAYER_HALF_WIDTH + PLAYER_RADIUS);
   const maxX = MAP_W - minX;
-  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
-  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  const minY = Math.max(0, PLAYER_SPRITE_HALF_HEIGHT_PX, PLAYER_RADIUS - FEET_OFFSET_Y);
+  const maxY = MAP_H - Math.max(PLAYER_SPRITE_HALF_HEIGHT_PX, FEET_OFFSET_Y + PLAYER_RADIUS);
   const base = {
     x: MAP_W - 20,
     y: MAP_H / 2,
@@ -828,7 +830,11 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const southBase = { ...base, x: MAP_W / 2, y: MAP_H - 20 };
   const south = validateMovementIntent(southBase, southBase.x, MAP_H + 20, 2_000, grid);
   assert.equal(south.corrected, true, 'south-edge ghost target must be clamped');
-  assert.equal(south.y, maxY, 'server south-edge clamp must retain the feet circle');
+  assert.equal(south.y, maxY, 'server south-edge clamp must retain the complete sprite and feet');
+  const west = validateMovementIntent({ ...base, x: 20 }, -20, base.y, 2_000, grid);
+  const north = validateMovementIntent({ ...base, y: 50 }, base.x, -20, 2_000, grid);
+  assert.equal(west.x, minX, 'server west-edge clamp must retain the complete sprite');
+  assert.equal(north.y, minY, 'server north-edge clamp must remain nonnegative for unsigned wire coordinates');
 
   assert.ok(minX < maxX && minY < maxY, 'map must have non-empty safe ghost bounds');
 }
