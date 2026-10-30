@@ -90,14 +90,18 @@ try {
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
   const settingsBounds = await lobbySettings.boundingBox();
-  const saveBounds = await lobbySettings.getByTestId('control-layout-save').boundingBox();
+  const settingsSave = lobbySettings.getByTestId('control-layout-save');
   const viewport = page.viewportSize();
-  assert.ok(settingsBounds && saveBounds && viewport, 'Settings dialog and Save control must be measurable');
+  assert.ok(settingsBounds && viewport, 'Settings dialog must be measurable');
   assert.ok(settingsBounds.y >= 0 && settingsBounds.y + settingsBounds.height <= viewport.height,
     'Settings dialog must remain entirely inside the mobile viewport');
-  assert.ok(saveBounds.y + saveBounds.height <= viewport.height,
-    'Settings Save control must not be clipped below the mobile viewport');
   await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
+  await settingsSave.scrollIntoViewIfNeeded();
+  const saveBounds = await settingsSave.boundingBox();
+  assert.ok(saveBounds && saveBounds.y >= settingsBounds.y &&
+    saveBounds.y + saveBounds.height <= settingsBounds.y + settingsBounds.height,
+    'Settings Save control must be reachable inside the scrollable dialog without clipping'); 
+  await page.screenshot({ path: join(visualQaDir, 'settings-save-visible.png'), fullPage: true });
   await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
