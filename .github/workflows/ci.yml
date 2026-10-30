@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Keep only the newest CI run per PR/branch; parallel agents push frequently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
