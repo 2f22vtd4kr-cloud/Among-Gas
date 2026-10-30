@@ -15,6 +15,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData.js';
+import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS } from './coords.js';
 
 // Map now renders from a pre-upscaled static asset (public/map-hires.png).
 // MAP_W/MAP_H must match that asset's native pixel size exactly.
@@ -167,6 +168,56 @@ export function canMoveTo(
     if (isBlocked(grid, px, py)) return false;
   }
   return true;
+}
+
+/**
+ * Tests the complete horizontal foot base at the rendered sprite's ground
+ * anchor. Client prediction, server validation, and spawn placement must use
+ * this exact footprint so they cannot disagree about where a player can stand.
+ */
+export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): boolean {
+  const feetY = y + FEET_OFFSET_Y;
+  return (
+    canMoveTo(grid, x, feetY, PLAYER_RADIUS) &&
+    canMoveTo(grid, x - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+    canMoveTo(grid, x + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
+  );
+}
+
+/** Checks the starting point and every point along a segment at <=2px spacing. */
+export function isPlayerPathWalkable(
+  grid: Grid,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  sampleSpacingPx = 2,
+): boolean {
+  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const steps = Math.max(1, Math.ceil(distance / sampleSpacingPx));
+  for (let step = 0; step <= steps; step++) {
+    const t = step / steps;
+    if (!isPlayerPositionWalkable(
+      grid,
+      fromX + (toX - fromX) * t,
+      fromY + (toY - fromY) * t,
+    )) return false;
+  }
+  return true;
+}
+
+/** Shared x-first wall sliding used identically by client prediction and server authority. */
+export function resolvePlayerMovement(
+  grid: Grid,
+  x: number,
+  y: number,
+  nextX: number,
+  nextY: number,
+): [number, number] {
+  if (isPlayerPathWalkable(grid, x, y, nextX, nextY)) return [nextX, nextY];
+  if (isPlayerPathWalkable(grid, x, y, nextX, y)) return [nextX, y];
+  if (isPlayerPathWalkable(grid, x, y, x, nextY)) return [x, nextY];
+  return [x, y];
 }
 
 /**
