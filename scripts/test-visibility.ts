@@ -147,8 +147,8 @@ assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vis
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
-const statueRay=computeVisibilityPolygon(1450,430,500,realShadowGrid,realNarrowOccluders,true)[360];
-assert.ok(statueRay.x>1680&&statueRay.x<1695,'vision ray stops at the statue silhouette, not the decorative garden perimeter');
+const statueRay=computeVisibilityPolygon(1450,480,500,realShadowGrid,realNarrowOccluders,true)[360];
+assert.ok(statueRay.x>1728&&statueRay.x<1736,'vision ray stops at the narrow statue footprint, not the decorative garden perimeter');
 
 const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(
