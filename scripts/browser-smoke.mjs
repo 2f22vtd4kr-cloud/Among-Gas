@@ -567,8 +567,12 @@ try {
   // All five sabotage choices render in the impostor panel.
   await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
-  await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('button', { name: /Саботаж/ }).click();
+  const sabotageButton = page.getByRole('button', { name: /Саботаж/ });
+  await sabotageButton.waitFor({ state: 'visible', timeout: 10_000 });
+  const sabotageIconBox = await sabotageButton.locator('img').boundingBox();
+  assert.ok(sabotageIconBox && sabotageIconBox.width >= 64 && sabotageIconBox.height >= 64,
+    'Sabotage action must display the large original sabotage icon asset');
+  await sabotageButton.click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
   for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
     await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
