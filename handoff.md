@@ -1832,3 +1832,24 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Make the Replit post-merge hook safe without an unused database
+
+**Done**
+- Found that \`scripts/post-merge.sh\` unconditionally ran \`pnpm install\` and \`pnpm --filter db push\`, while the Drizzle schema index exports no tables and the API server does not use the DB package. This made every Replit post-merge depend on a database secret that does not currently back any game state.
+- Changed the hook to detect actual \`export * from\` schema entries first. With the current empty schema it logs a clear skip and exits successfully without requiring \`DATABASE_URL\` or reinstalling dependencies.
+- When real schema exports exist, the hook now requires \`DATABASE_URL\`, performs the frozen install, and invokes the exact \`@workspace/db\` package script.
+- Added a CI step that executes the post-merge hook with \`DATABASE_URL\` unset and verifies the current empty-schema path is safe.
+- Corrected \`replit.md\` to describe \`DATABASE_URL\` as migration-only rather than a runtime requirement.
+
+**Decisions & gotchas**
+- Once actual tables are exported from \`lib/db/src/schema/index.ts\`, CI will fail without a database URL in the post-merge-hook test. That is intentional: adding persistence requires adding a proper database migration/integration test and configuring the secret.
+- The empty-schema check uses the project's documented \`export * from './table'\` convention. If the schema export convention changes, update this guard and its CI check together.
+
+**Left off / next steps**
+- Verify the new post-merge hook CI step passes on the latest PR #39 head.
+- Keep the distinction clear: this hook no longer blocks the current ephemeral in-memory game, but it does not create session persistence or solve autoscale.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
