@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { CELL_X, CELL_Y, COLS, ROWS, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
-import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
 
 // Regression for prediction/server disagreement: both endpoints are walkable,
@@ -65,8 +65,39 @@ assert.equal(isMovementPathWalkableWide(
   cornerGrid, diagonalStart.x, diagonalStart.y, diagonalEnd.x, diagonalEnd.y,
 ), false, 'diagonal movement must not cut across a blocked corner cell');
 
+const cornerStart = {
+  ...createInitialPlayerState(),
+  x: cornerX - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3,
+  y: cornerY - FEET_OFFSET_Y - PLAYER_RADIUS - 3,
+};
+const cornerSlide = stepPlayer(cornerGrid, cornerStart, new Set(['d', 's']), 48);
+assert.ok(cornerSlide.x > cornerStart.x,
+  'the resolver should preserve a clear horizontal slide at a blocked corner');
+assert.equal(cornerSlide.y, cornerStart.y,
+  'x-first sliding must reject only the blocked vertical component');
+
 // Map-edge footprint is blocked even when the sprite centre remains inside.
 assert.equal(isPlayerPositionWalkable(grid, -1, worldY), false,
   'the full player footprint must not extend beyond the west map boundary');
 
-console.log('PASS: client/server collision agreement, thin walls, diagonal corners, and map edges');
+// Blocked input must not animate or generate footstep events. Movement is
+// determined by the resolved world delta, not by whether a key is held.
+{
+  const blockedX = wallLeft - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 1;
+  const blockedState = {
+    ...createInitialPlayerState(),
+    x: blockedX,
+    y: worldY,
+    pose: 'idle' as const,
+    animElapsedMs: 0,
+  };
+  const blockedResult = stepPlayer(grid, blockedState, new Set(['d']), 48);
+  assert.equal(blockedResult.x, blockedState.x);
+  assert.equal(blockedResult.y, blockedState.y);
+  assert.equal(blockedResult.pose, 'idle',
+    'holding into a wall must not animate a walk cycle');
+  assert.equal(blockedResult.animElapsedMs, 0,
+    'blocked input must not accumulate animation time');
+}
+
+console.log('PASS: client/server collision agreement, thin walls, diagonal corners, map edges and blocked-input animation');
