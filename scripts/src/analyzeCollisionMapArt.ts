@@ -1,4 +1,6 @@
-// Generates collision data from the actual artwork PNG (no red-line reference needed).
+// EXPERIMENTAL collision-data generator from the actual artwork PNG.
+// Its output must be reviewed against the collision QA overlay before use.
+// The canonical runtime data lives in lib/shared/src/collisionData.ts.
 //
 // Algorithm:
 //  1. Sample the 4 image corners to establish the "outside background" colour.
@@ -8,12 +10,15 @@
 //     low-luminance pixels (walls, furniture, machinery) are blocked.
 //  5. Flood-fill the walkable interior to split large room floors from small obstacle pockets.
 //  6. Downsample to the 104×58 logical grid by majority vote.
+ // NOTE: This image-colour heuristic is not a source of truth for narrow
+ // obstacles or isometric prop bases. Review its output visually and run the
+ // full reachable-footprint checks before replacing canonical collision data.
 import sharp from 'sharp';
 import { writeFileSync } from 'fs';
 
 const ROOT = new URL('../../', import.meta.url);
 const SRC  = new URL('artifacts/telegram-game/public/map-hires.png', ROOT).pathname;
-const OUT  = new URL('artifacts/telegram-game/src/game/collisionData.ts', ROOT).pathname;
+const OUT  = new URL('lib/shared/src/collisionData.ts', ROOT).pathname;
 
 const CELL = 10;
 const COLS = 104;
