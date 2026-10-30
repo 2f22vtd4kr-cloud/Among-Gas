@@ -33,14 +33,14 @@ assert.equal(getCharacterFrameRect('rose', 'idle').x, 17 * CHARACTER_CELL_WIDTH)
 
 for (const color of CHARACTER_COLORS) {
   for (const pose of CHARACTER_POSES) {
-  const frame = getCharacterFrameRect(color, pose);
-  assert.ok(frame.x >= 0 && frame.x + frame.width <= CHARACTER_SHEET_WIDTH,
-    `${pose}: source X must remain within the atlas`);
-  assert.ok(frame.y >= 0 && frame.y + frame.height <= CHARACTER_SHEET_HEIGHT,
-    `${pose}: source Y must remain within the atlas`);
-  assert.ok(frame.width > 0 && frame.height > 0);
-  assert.ok(frame.displayHeight >= frame.height,
-    `${color}/${pose}: diagnostic atlas baseline must remain separate from its measured crop`);
+    const frame = getCharacterFrameRect(color, pose);
+    assert.ok(frame.x >= 0 && frame.x + frame.width <= CHARACTER_SHEET_WIDTH,
+      `${color}/${pose}: source X must remain within the atlas`);
+    assert.ok(frame.y >= 0 && frame.y + frame.height <= CHARACTER_SHEET_HEIGHT,
+      `${color}/${pose}: source Y must remain within the atlas`);
+    assert.ok(frame.width > 0 && frame.height > 0);
+    assert.ok(frame.displayHeight >= frame.height,
+      `${color}/${pose}: diagnostic atlas baseline must remain separate from its measured crop`);
   }
 }
 
