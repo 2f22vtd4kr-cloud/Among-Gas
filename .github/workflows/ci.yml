@@ -168,6 +168,7 @@ jobs:
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
           node scripts/test-audio-preload.mjs
+          node scripts/test-character-atlas-browser.mjs
 
       - name: Render production-map collision overlay for visual QA
         run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts
