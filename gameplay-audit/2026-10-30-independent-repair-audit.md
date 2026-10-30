@@ -55,7 +55,7 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 | Source review of map loader and draw path | Confirmed defect |
 | Source review of per-pose sprite sizing | Confirmed defect |
 | PNG/WebP transform regression | Added; CI pending |
-| Character atlas / shared feet-anchor regression | Added; CI pending |
+| Character atlas / shared feet-anchor regression | First CI attempt did not execute: `tsx` was invoked from a package that does not install it; test runner corrected in follow-up commit |
 | Workspace typecheck/build | Pending CI |
 | Spawn-clearance and reachability suite after foot geometry change | Pending CI |
 | Browser screenshots and transient kill-scene framing | Pending |
@@ -79,3 +79,10 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - Capture mobile portrait, compact landscape and desktop screenshots for idle, walking, ghost, dropped corpse and transient kill scenes. Verify feet, bone, proportions and camera registration.
 - Continue category-by-category map and gameplay bug hunting after registration is corrected. Record each reproduction, diagnosis, fix and evidence here before advancing.
 - Keep release status pending until the evidence exists.
+
+
+## 2026-10-30 — CI harness correction
+
+- First PR check: the PNG/WebP transform regression passed against the actual assets (PNG 3224×1858, WebP 6608×3808).
+- The character geometry test did not execute: the workflow invoked `tsx` from the `@workspace/telegram-game` package, which does not declare/install that runner. The failure was before test module evaluation, not a failed sprite/collision assertion.
+- Corrected the command to use the already-installed `tsx` from `@workspace/scripts` and added a package script for that invocation. Full CI must rerun; no subsequent gameplay checks have yet run.
