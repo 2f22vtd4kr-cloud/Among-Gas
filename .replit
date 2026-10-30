@@ -1,3 +1,5 @@
+# NOTE: @workspace/db currently has an empty schema and the API server does not use it.
+# DATABASE_URL does not persist live rooms or match state; process restarts lose matches.
 # IMPORTANT: LobbyManager stores authoritative lobbies in process-local Maps.
 # Until shared lobby state/coordination is implemented, cap Autoscale to ONE
 # instance in Replit Publishing settings. Do not scale this multiplayer server
