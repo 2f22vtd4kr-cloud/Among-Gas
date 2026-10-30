@@ -17,7 +17,7 @@ assert.equal(new Set(GENERATED_CHARACTER_PALETTES.map(palette => palette.hue)).s
 const tealSuit: [number, number, number, number] = [40, 184, 170, 231];
 assert.equal(isRecolorableSuitPixel(...tealSuit), true,
   'the authored saturated teal suit material must be eligible for recolouring');
-const [, sourceSaturation, sourceLightness] = rgbToHsl(...tealSuit.slice(0, 3) as [number, number, number]);
+const [, sourceSaturation, sourceLightness] = rgbToHsl(tealSuit[0], tealSuit[1], tealSuit[2]);
 
 for (const palette of GENERATED_CHARACTER_PALETTES) {
   const result = recolorSuitPixel(...tealSuit, palette);
