@@ -49,6 +49,12 @@ export const CHARACTER_COLORS = [
 ] as const;
 export type CharacterColor = (typeof CHARACTER_COLORS)[number];
 
+/** One deterministic palette lookup shared by lobby, HUD, and gameplay renderers. */
+export function getCharacterColorForSlot(slot: number): CharacterColor {
+  const safeSlot = Number.isFinite(slot) ? Math.trunc(slot) : 0;
+  return CHARACTER_COLORS[Math.abs(safeSlot) % CHARACTER_COLORS.length];
+}
+
 export interface GeneratedCharacterPalette {
   readonly color: CharacterColor;
   /** Target suit hue in degrees; all original shading and alpha are retained. */
