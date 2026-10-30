@@ -796,6 +796,34 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(isMovementPathWalkable(cornerGrid, startX, startY, slide.x, slide.y), true);
 }
 
+
+ // 15c. Ghosts phase through walls but remain inside the map's full foot-base bounds.
+{
+  const minX = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
+  const maxX = MAP_W - minX;
+  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
+  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  const base = {
+    x: MAP_W - 20,
+    y: MAP_H / 2,
+    alive: false,
+    movementCreditPx: 49,
+    movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  };
+  const east = validateMovementIntent(base, MAP_W + 20, base.y, 2_000, grid);
+  assert.equal(east.accepted, true, 'ghost movement remains speed-budgeted and accepted');
+  assert.equal(east.corrected, true, 'east-edge ghost target must be clamped');
+  assert.equal(east.x, maxX, 'server east-edge clamp must retain the complete foot base');
+
+  const southBase = { ...base, x: MAP_W / 2, y: MAP_H - 20 };
+  const south = validateMovementIntent(southBase, southBase.x, MAP_H + 20, 2_000, grid);
+  assert.equal(south.corrected, true, 'south-edge ghost target must be clamped');
+  assert.equal(south.y, maxY, 'server south-edge clamp must retain the feet circle');
+
+  assert.ok(minX < maxX && minY < maxY, 'map must have non-empty safe ghost bounds');
+}
+
 // 15b. Spawn scatter must never silently stack players at a central fallback.
 {
   const manager = new LobbyManager();
