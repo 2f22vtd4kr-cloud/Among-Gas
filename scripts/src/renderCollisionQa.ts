@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const dataPath = path.join(root, 'lib/shared/src/collisionData.ts');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
+const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
 
 const source = fs.readFileSync(dataPath, 'utf8');
@@ -52,7 +53,11 @@ const mapHeight = readMapNumber('MAP_H');
 const playerRadius = readCoordNumber('PLAYER_RADIUS');
 const playerHalfWidth = readCoordNumber('PLAYER_HALF_WIDTH');
 if (metadata.width !== mapWidth || metadata.height !== mapHeight) {
-  throw new Error(`Collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${metadata.width}x${metadata.height}`);
+  throw new Error(`PNG collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${metadata.width}x${metadata.height}`);
+}
+const webpMetadata = await sharp(webpPath).metadata();
+if (webpMetadata.width !== mapWidth || webpMetadata.height !== mapHeight) {
+  throw new Error(`WebP collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${webpMetadata.width}x${webpMetadata.height}`);
 }
 const cellWidth = mapWidth / cols;
 const cellHeight = mapHeight / rows;
@@ -75,7 +80,7 @@ const spawnY = Math.round(150 * mapHeight / 580);
 const feetY = spawnY + feetOffset;
 const footprint = [
   `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
-  `<circle cx="${spawnX - playerHalfWidth}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX - playerHalfWidth}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<circle cx="${spawnX + playerHalfWidth}" cy="${feetY}" r="4" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
   `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
