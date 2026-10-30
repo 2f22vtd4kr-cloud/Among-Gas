@@ -25,6 +25,9 @@ try {
 
   const settingsButton = page.getByRole('button', { name: /Settings|Настройки/ });
   await settingsButton.waitFor({ state: 'visible', timeout: 30_000 });
+  const standaloneLeaveButtons = page.getByRole('button', { name: /Leave match|Выйти из матча/ });
+  assert.equal(await standaloneLeaveButtons.count(), 0,
+    'the game must not expose an oversized standalone Leave match button outside settings');
   await settingsButton.click();
 
   const settingsDialog = page.locator('[role="dialog"][aria-labelledby="ag-settings-title"]');
