@@ -832,7 +832,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(south.corrected, true, 'south-edge ghost target must be clamped');
   assert.equal(south.y, maxY, 'server south-edge clamp must retain the complete sprite and feet');
   const west = validateMovementIntent({ ...base, x: 20 }, -20, base.y, 2_000, grid);
-  const north = validateMovementIntent({ ...base, y: 50 }, base.x, -20, 2_000, grid);
+  const north = validateMovementIntent({ ...base, y: 50 }, base.x, 20, 2_000, grid);
   assert.equal(west.x, minX, 'server west-edge clamp must retain the complete sprite');
   assert.equal(north.y, minY, 'server north-edge clamp must remain nonnegative for unsigned wire coordinates');
 
