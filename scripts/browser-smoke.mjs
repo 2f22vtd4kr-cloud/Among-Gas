@@ -1270,14 +1270,17 @@ try {
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
   await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
-  await cameraPage.waitForTimeout(550);
+  // Sample while the pointer is still held. Waiting 550ms before sampling can
+  // let the player hit a nearby wall and stop, making a stationary camera look
+  // stable even if it jitters during the actual movement interval.
   const cameraSamples = [];
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 12; i++) {
+    await cameraPage.waitForTimeout(35);
     const sample = await readCameraTransform();
-    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY),
-      'camera render diagnostics must remain available during movement');
+    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY) &&
+      Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY),
+    'camera and player diagnostics must remain finite during sustained movement');
     cameraSamples.push(sample);
-    await cameraPage.waitForTimeout(70);
   }
   await cameraPage.mouse.up();
   const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
