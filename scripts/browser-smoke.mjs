@@ -1131,6 +1131,7 @@ try {
   });
   await cameraPage.goto(`${origin}/?mock=playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await cameraPage.waitForTimeout(350);
   const readPlayerCentroid = () => cameraPage.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
