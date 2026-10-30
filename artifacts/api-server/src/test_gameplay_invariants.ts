@@ -63,6 +63,7 @@ import {
   isWalkableMovementPoint,
   validateMovementIntent,
   MOVEMENT_PACKET_BURST_CAPACITY,
+  type MovementBudgetState,
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
@@ -716,7 +717,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'a close-arriving packet is accepted when its distance fits the elapsed movement credit');
 
   // Packet floods are bounded independently from movement-distance validation.
-  let floodState = { ...base };
+  let floodState: MovementBudgetState = { ...base };
   let acceptedFloodPackets = 0;
   let floodLimited = false;
   for (let packet = 0; packet < MOVEMENT_PACKET_BURST_CAPACITY + 2; packet++) {
