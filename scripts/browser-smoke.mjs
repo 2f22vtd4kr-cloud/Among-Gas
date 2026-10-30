@@ -334,6 +334,18 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
+  // The assigned filter console is ~263 map-pixels from the lobby spawn;
+  // move toward it with the actual joystick before asserting the proximity UI.
+  const taskJoystick = page.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
+  const taskJoystickBox = await taskJoystick.boundingBox();
+  assert.ok(taskJoystickBox, 'task interaction fixture must expose the movement joystick');
+  const taskJoystickX = taskJoystickBox.x + taskJoystickBox.width / 2;
+  const taskJoystickY = taskJoystickBox.y + taskJoystickBox.height / 2;
+  await page.mouse.move(taskJoystickX, taskJoystickY);
+  await page.mouse.down();
+  await page.mouse.move(taskJoystickX - 38, taskJoystickY + 22, { steps: 5 });
+  await page.waitForTimeout(850);
+  await page.mouse.up();
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
