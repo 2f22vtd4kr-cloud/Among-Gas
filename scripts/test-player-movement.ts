@@ -4,6 +4,7 @@ import {
   isMovementPathWalkable,
   validateMovementIntent,
   MOVEMENT_PACKET_BURST_CAPACITY,
+  type MovementBudgetState,
 } from '../artifacts/api-server/src/ws/movement.js';
 import {
   FEET_OFFSET_Y,
@@ -229,7 +230,7 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
   const burstStartX = MAP_W / 4;
   const burstY = MAP_H / 2 - FEET_OFFSET_Y;
   const packetStepPx = PLAYER_SPEED_PX_PER_SEC * 0.04;
-  let burstState = {
+  let burstState: MovementBudgetState = {
     x: burstStartX,
     y: burstY,
     alive: true,
@@ -269,7 +270,7 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
   const floodGrid = new Uint8Array(COLS * ROWS);
   const floodStartX = MAP_W / 4;
   const floodY = MAP_H / 2 - FEET_OFFSET_Y;
-  let floodState = {
+  let floodState: MovementBudgetState = {
     x: floodStartX,
     y: floodY,
     alive: true,
