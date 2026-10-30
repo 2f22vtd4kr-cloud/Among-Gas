@@ -1159,6 +1159,18 @@ try {
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
       const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
+      if (fixture === 'sabotage-ready') {
+        // The fixture enables sabotage but does not open the selection panel.
+        // Capture the real selection UI and verify every available system.
+        await statePage.getByRole('button', { name: /Саботаж/ })
+          .click();
+        await statePage.getByText('Выберите систему саботажа', { exact: true })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+        for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
+          await statePage.getByRole('button', { name: system, exact: true })
+            .waitFor({ state: 'visible', timeout: 10_000 });
+        }
+      }
       await statePage.screenshot({ path: join(visualQaDir, viewportFilename), fullPage: true });
       await statePage.close();
     }
