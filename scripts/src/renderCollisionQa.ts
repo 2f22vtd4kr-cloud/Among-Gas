@@ -84,6 +84,9 @@ if (!coords.includes('IDLE_SPRITE_VISIBLE_HEIGHT = 136') || !coords.includes('CH
 }
 const spriteHeight = Math.round(36 * (mapWidth / 1652));
 const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
+// The canonical PNG and collision grid share map-native coordinates.
+const scaleX = 1;
+const scaleY = 1;
 const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X = Math\.round\((\d+) \*/)?.[1]);
 const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y = Math\.round\((\d+) \*/)?.[1]);
 if (!Number.isFinite(spawnXRef) || !Number.isFinite(spawnYRef)) {
@@ -95,7 +98,7 @@ const feetY = spawnY + feetOffset * scaleY;
 const footprint = [
   `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
   `<circle cx="${spawnX - playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${spawnX + playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX + playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
   `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
   `<text x="${spawnX + 16}" y="${spawnY - 12}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="4" paint-order="stroke">PLAYER SPAWN / FEET</text>`,
