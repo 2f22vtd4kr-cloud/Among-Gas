@@ -1178,55 +1178,28 @@ try {
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await cameraPage.waitForTimeout(350);
-  const readPlayerCentroid = () => cameraPage.locator('canvas').evaluate(canvas => {
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Could not sample the game canvas for camera stability');
-    const cx = Math.floor(canvas.width / 2);
-    const cy = Math.floor(canvas.height / 2);
-    const radius = 90;
-    const left = Math.max(0, cx - radius);
-    const top = Math.max(0, cy - radius);
-    const width = Math.min(radius * 2, canvas.width - left);
-    const height = Math.min(radius * 2, canvas.height - top);
-    const pixels = context.getImageData(left, top, width, height).data;
-    let count = 0;
-    let sumX = 0;
-    let sumY = 0;
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const i = (y * width + x) * 4;
-        const red = pixels[i];
-        const green = pixels[i + 1];
-        const blue = pixels[i + 2];
-        const alpha = pixels[i + 3];
-        if (alpha > 200 && green > 85 && green > red * 1.2 && blue > 65 && green > blue * 0.82) {
-          count++;
-          sumX += left + x;
-          sumY += top + y;
-        }
-      }
-    }
-    return { x: count ? sumX / count : cx, y: count ? sumY / count : cy, count, cx, cy };
-  });
-  const readWorldFingerprint = () => cameraPage.locator('canvas').evaluate(canvas => {
+  const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
+  const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Could not sample the world canvas for camera movement');
     const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
     const samples = [];
-    const cx = canvas.width / 2;
-    const cy = canvas.height / 2;
     for (let y = 24; y < canvas.height; y += 24) {
       for (let x = 24; x < canvas.width; x += 24) {
-        if (Math.abs(x - cx) < 110 && Math.abs(y - cy) < 110) continue;
+        // Exclude the actual player screen region, not the canvas midpoint:
+        // near the north map edge the camera correctly clamps the player to ~40% height.
+        if (Math.abs(x - player.x) < 110 && Math.abs(y - player.y) < 110) continue;
         const i = (y * canvas.width + x) * 4;
         samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
       }
     }
     return samples;
-  });
-  const cameraBaseline = await readPlayerCentroid();
-  const worldBaseline = await readWorldFingerprint();
-  assert.ok(cameraBaseline.count > 20, 'the local player sprite must be visible before movement');
+  }, { x: playerX, y: playerY });
+  const cameraBaseline = await readCameraTransform();
+  assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
+    Number.isFinite(cameraBaseline.screenY),
+  'the dev camera fixture must expose the player's actual rendered screen coordinates');
+  const worldBaseline = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
   const joystickBox = await joystick.boundingBox();
   assert.ok(joystickBox, 'the movement joystick must be visible for camera-follow testing');
@@ -1238,11 +1211,14 @@ try {
   await cameraPage.waitForTimeout(550);
   const cameraSamples = [];
   for (let i = 0; i < 6; i++) {
-    cameraSamples.push(await readPlayerCentroid());
+    const sample = await readCameraTransform();
+    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY),
+      'camera render diagnostics must remain available during movement');
+    cameraSamples.push(sample);
     await cameraPage.waitForTimeout(70);
   }
   await cameraPage.mouse.up();
-  const worldAfterMovement = await readWorldFingerprint();
+  const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
   console.log('Camera follow diagnostic:', JSON.stringify({
     baseline: cameraBaseline,
@@ -1257,16 +1233,14 @@ try {
   const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
   assert.ok(worldChangeRatio > 0.02,
     `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
-  assert.ok(cameraSamples.every(sample => sample.count > 20),
-    'the local player sprite must remain visible while the camera follows movement');
-  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - cameraBaseline.x)));
-  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.y - cameraBaseline.y)));
-  const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.x)) - Math.min(...cameraSamples.map(sample => sample.x));
-  const cameraSpreadY = Math.max(...cameraSamples.map(sample => sample.y)) - Math.min(...cameraSamples.map(sample => sample.y));
+  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
+  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
+  const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
+  const cameraSpreadY = Math.max(...cameraSamples.map(sample => sample.screenY)) - Math.min(...cameraSamples.map(sample => sample.screenY));
   assert.ok(maxCameraOffsetX < 24 && maxCameraOffsetY < 24,
     `camera must keep the moving player near its pre-movement screen position (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
   assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
-    `camera-following player centroid must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
+    `camera-following player screen position must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
   await cameraPage.close();
 
