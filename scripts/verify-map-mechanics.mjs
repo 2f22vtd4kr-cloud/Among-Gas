@@ -12,6 +12,7 @@ const num = (text, name) => {
 };
 const collisionData = read('lib/shared/src/collisionData.ts');
 const collisionMap = read('lib/shared/src/collisionMap.ts');
+const collisionOverrides = read('lib/shared/src/collisionOverrides.ts');
 const coords = read('lib/shared/src/coords.ts');
 const taskSource = read('lib/shared/src/tasks.ts');
 const ventSource = read('lib/shared/src/vents.ts');
@@ -46,7 +47,13 @@ const characterAtlasRowHeight = 1401 / 9;
 const feetOffsetY = Math.round(spriteHeight * (idleSpriteVisibleHeight / characterAtlasRowHeight) / 2);
 const playerRadius = num(coords, 'PLAYER_RADIUS');
 const playerHalfWidth = num(coords, 'PLAYER_HALF_WIDTH');
+const spriteHalfWidth = num(coords, 'PLAYER_SPRITE_HALF_WIDTH_PX');
+const spriteHalfHeight = num(coords, 'PLAYER_SPRITE_HALF_HEIGHT_PX');
+const spawnMinX = num(coords, 'PLAYER_SPAWN_MIN_X');
+const spawnMaxX = num(coords, 'PLAYER_SPAWN_MAX_X');
+const spawnMaxFeetY = num(coords, 'PLAYER_SPAWN_MAX_FEET_Y');
 assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
+assert.match(coords, /PLAYER_SPAWN_X\s*=\s*Math\.round\(450 \*/);
 assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
 assert.match(coords, /FEET_OFFSET_Y\s*=\s*Math\.round\(/);
 const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
@@ -63,6 +70,50 @@ for (const run of runs) {
   value = 1 - value;
 }
 assert.equal(cursor, cols * rows, 'Collision RLE does not fill the grid');
+
+const polygonBlocks = [...collisionOverrides.matchAll(/points:\s*\[([\s\S]*?)\]/g)].map(match =>
+  [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
+    .map(point => [Number(point[1]), Number(point[2])]),
+);
+assert.ok(polygonBlocks.length > 0, 'Manual collision overrides must define at least one obstacle polygon');
+const pointInPolygon = (x, y, points) => {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, yi] = points[i];
+    const [xj, yj] = points[j];
+    if ((yi > y) !== (yj > y) &&
+        x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi) inside = !inside;
+  }
+  return inside;
+};
+const orientation = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+const onSegment = (a, p, b) => p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]) &&
+  p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
+const segmentsIntersect = (a, b, c, d) => {
+  const o1 = orientation(a,b,c), o2 = orientation(a,b,d), o3 = orientation(c,d,a), o4 = orientation(c,d,b);
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+      ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return true;
+  return (o1 === 0 && onSegment(a,c,b)) || (o2 === 0 && onSegment(a,d,b)) ||
+    (o3 === 0 && onSegment(c,a,d)) || (o4 === 0 && onSegment(c,b,d));
+};
+const polygonIntersectsRect = (points, minX, minY, maxX, maxY) => {
+  const corners = [[minX,minY],[maxX,minY],[maxX,maxY],[minX,maxY]];
+  if (corners.some(([x,y]) => pointInPolygon(x,y,points))) return true;
+  if (points.some(([x,y]) => x >= minX && x <= maxX && y >= minY && y <= maxY)) return true;
+  for (let i=0;i<points.length;i++) {
+    const a=points[i], b=points[(i+1)%points.length];
+    for (let edge=0;edge<4;edge++) if (segmentsIntersect(a,b,corners[edge],corners[(edge+1)%4])) return true;
+  }
+  return false;
+};
+// Apply the same manual obstacle polygons as shared/collisionMap.ts before
+// checking reachability or the full visible spawn sprite.
+for (const points of polygonBlocks) {
+  for (let row=0;row<rows;row++) for (let col=0;col<cols;col++) {
+    const minX=col*cellX, minY=row*cellY;
+    if (polygonIntersectsRect(points,minX,minY,minX+cellX,minY+cellY)) grid[row*cols+col]=1;
+  }
+}
 
 const blocked = (x, y) => {
   const col = Math.floor(x / cellX);
@@ -85,6 +136,19 @@ const canPlayerMoveTo = (x, y) => {
     canCircleMoveTo(x - playerHalfWidth, feetY) &&
     canCircleMoveTo(x + playerHalfWidth, feetY);
 };
+const canSpawnAt = (x, y) => {
+  if (x < spawnMinX || x > spawnMaxX || y + feetOffsetY > spawnMaxFeetY) return false;
+  if (!canPlayerMoveTo(x, y)) return false;
+  const minX=x-spriteHalfWidth, maxX=x+spriteHalfWidth;
+  const minY=y-spriteHalfHeight, maxY=y+spriteHalfHeight;
+  if (minX<0 || maxX>mapW || minY<0 || maxY>mapH) return false;
+  for (let row=Math.floor(minY/cellY);row<=Math.floor(maxY/cellY);row++) {
+    for (let col=Math.floor(minX/cellX);col<=Math.floor(maxX/cellX);col++) {
+      if (grid[row*cols+col]===1) return false;
+    }
+  }
+  return !polygonBlocks.some(points => polygonIntersectsRect(points,minX,minY,maxX,maxY));
+};
 const pointForCell = (col, row) => ({ x: (col + 0.5) * cellX, y: (row + 0.5) * cellY });
 const valid = new Uint8Array(cols * rows);
 const nodes = [];
@@ -102,7 +166,12 @@ const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y\s*=\s*Math\.round\((\d+)\s
 assert.ok(Number.isFinite(spawnXRef) && Number.isFinite(spawnYRef), 'shared spawn formulas must be parseable');
 const spawnX = Math.round(spawnXRef * mapW / 1040);
 const spawnY = Math.round(spawnYRef * mapH / 580);
-assert.ok(canPlayerMoveTo(spawnX, spawnY), 'Spawn position is not collision-walkable');
+assert.ok(canSpawnAt(spawnX, spawnY), 'Spawn sprite overlaps blocked geometry or leaves the main-lobby spawn region');
+const fountainCenter = { x: 1735, y: 490 };
+assert.equal(canPlayerMoveTo(fountainCenter.x, fountainCenter.y), false,
+  'The central fountain must be blocked by its hand-traced collision polygon');
+assert.equal(canPlayerMoveTo(1450, 490), true,
+  'The open lobby floor west of the fountain must remain walkable');
 let start = nodes[0];
 for (const node of nodes) {
   if ((node.x - spawnX) ** 2 + (node.y - spawnY) ** 2 <
@@ -248,6 +317,8 @@ assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emerg
 console.log(JSON.stringify({
   ok: true,
   feetAnchorOffsetPx: feetOffsetY,
+  spawnSpriteClearance: { halfWidthPx: spriteHalfWidth, halfHeightPx: spriteHalfHeight },
+  manualCollisionPolygons: polygonBlocks.length,
   playerFootprint: { radiusPx: playerRadius, halfWidthPx: playerHalfWidth },
   collisionGrid: `${cols}×${rows}`,
   reachableCells: reachableNodes.length,
