@@ -8,12 +8,15 @@ A multi-artifact project centered on a Telegram game with a top-down map, backed
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server (port 5000)
+- `bash scripts/replit-dev.sh` — run the Replit preview as one app: Vite frontend on port 5173, API/WebSocket server on port 8080, with `/api` proxied same-origin.
+- `pnpm --filter @workspace/api-server run dev` — run only the API server (used by the combined Replit launcher).
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL` — Postgres connection string.
+- Production deployment also requires `TELEGRAM_BOT_TOKEN` configured as a Replit Secret; production startup deliberately refuses to run without it.
+- The Replit launcher unsets `VITE_WS_URL` so the client uses the same-origin `/api/ws` endpoint and Vite's WebSocket proxy. Set `VITE_WS_URL` only for a separately hosted static frontend.
 
 ## Stack
 

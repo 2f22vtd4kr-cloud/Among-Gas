@@ -1,13 +1,13 @@
-# Run the API as the Replit preview server. The Vercel frontend points its
-# WebSocket client at this origin via the preview-only VITE_WS_URL variable.
-run = "pnpm --filter @workspace/api-server run dev"
+# Run the Vite frontend and API together for the Replit preview. Vite proxies
+# same-origin /api HTTP requests and WebSocket upgrades to the private API port.
+run = "bash scripts/replit-dev.sh"
 
 modules = ["nodejs-20", "web", "bash"]
 
 [deployment]
 router = "application"
 deploymentTarget = "autoscale"
-build = ["pnpm", "run", "build"]
+build = ["bash", "-lc", "env -u VITE_WS_URL PORT=5173 BASE_PATH=/ pnpm run build"]
 run = ["pnpm", "--filter", "@workspace/api-server", "run", "start"]
 
 [deployment.postBuild]
