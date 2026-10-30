@@ -570,7 +570,7 @@ try {
     'meeting voting must show a color identity chip for every living player');
   assert.equal(await voteIdentityNumbers.count(), await voteIdentityDots.count(),
     'every voting color chip must have a corresponding stable player slot number');
-  assert.match(await voteIdentityNumbers.first().innerText(), /^\\d{2}$/,
+  assert.match(await voteIdentityNumbers.first().innerText(), /^\d{2}$/,
     'voting player identifiers must use two-digit slot numbers');
 
   // All five sabotage choices render in the impostor panel.
