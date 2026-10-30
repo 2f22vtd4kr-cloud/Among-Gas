@@ -27,7 +27,6 @@ import {
 } from '@workspace/shared/coords';
 import {
   buildCollisionGrid,
-  isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
