@@ -1,3 +1,5 @@
+> **Independent re-audit notice — 2026-10-30:** This is a historical record of the earlier movement/spawn patch, not a current release sign-off. The claimed map-image transform correction was not present on the checked `main` source at `dbbe1d3f6558a2fb68a000e3535fa2cd028d2aa4`: `GameMap.tsx` still passed canonical world coordinates directly to `drawImage()` while preferring the higher-resolution WebP. The current source re-audit is `gameplay-audit/2026-10-30-independent-repair-audit.md`; use it for status. The unchecked historical release gates below remain historical evidence only.
+
 # Among Gas — 2026-10-30 Gameplay Regression Fix Audit
 
 **Baseline:** `8ee4ad9cf9eb8e685efbc2d45b5c59ad1b0c588d` on `main`  

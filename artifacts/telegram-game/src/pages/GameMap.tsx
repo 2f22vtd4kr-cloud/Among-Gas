@@ -63,6 +63,7 @@ import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { classifyMovementEcho } from '../game/movementReconciliation';
+import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -1152,6 +1153,13 @@ export default function GameMap() {
       cameraY += (py - cameraY) * cameraBlend;
       const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
       const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
+      // Camera/collision coordinates use canonical world pixels. The loaded
+      // PNG and higher-resolution WebP do not share the same source-pixel scale.
+      const mapSourceRect = mapWorldRectToImagePixels(
+        { x: srcX, y: srcY, width: srcW, height: srcH },
+        { width: MAP_W, height: MAP_H },
+        { width: mapImg.naturalWidth, height: mapImg.naturalHeight },
+      );
 
       const scale = ZOOM * dpr;
       if (cameraDebugEnabled) {
@@ -1164,6 +1172,10 @@ export default function GameMap() {
           screenY: (py - srcY) * scale,
           canvasWidth: cw,
           canvasHeight: ch,
+          mapImageWidth: mapImg.naturalWidth,
+          mapImageHeight: mapImg.naturalHeight,
+          mapWorldRect: { x: srcX, y: srcY, width: srcW, height: srcH },
+          mapSourceRect,
         };
       }
 
@@ -1171,7 +1183,11 @@ export default function GameMap() {
       ctx.clearRect(0, 0, cw, ch);
       ctx.imageSmoothingEnabled = true;
       ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(mapImg, srcX, srcY, srcW, srcH, 0, 0, cw, ch);
+      ctx.drawImage(
+        mapImg,
+        mapSourceRect.x, mapSourceRect.y, mapSourceRect.width, mapSourceRect.height,
+        0, 0, cw, ch,
+      );
 
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
       {

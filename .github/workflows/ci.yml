@@ -35,6 +35,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
+        run: pnpm --filter @workspace/scripts run test:map-image-transform
+
+      - name: Verify character atlas crops, authored scale and shared feet anchor
+        run: pnpm --filter @workspace/scripts run test:character-geometry
+
       - name: Exhaustively verify real-map player footprint and reachable geometry
         run: node scripts/verify-map-mechanics.mjs
 
