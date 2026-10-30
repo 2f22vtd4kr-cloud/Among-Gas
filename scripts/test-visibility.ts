@@ -128,9 +128,9 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
 assert.equal(realGrid[10*COLS+55],0,'manual outline must not fill the old extra-blocked RLE cell');
-assert.equal(isPlayerPositionWalkable(realGrid,1640,490),true,'the western garden path remains walkable');
-assert.equal(isPlayerPositionWalkable(realGrid,1810,490),true,'the eastern garden path remains walkable');
-assert.equal(isPlayerPositionWalkable(realGrid,1735,490),false,'the central statue footprint remains solid');
+assert.equal(isPlayerPositionWalkable(realGrid,1640,449),true,'the western garden path remains walkable');
+assert.equal(isPlayerPositionWalkable(realGrid,1810,449),true,'the eastern garden path remains walkable');
+assert.equal(isPlayerPositionWalkable(realGrid,1735,449),false,'the central statue footprint remains solid');
 const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
 assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
