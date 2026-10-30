@@ -26,8 +26,14 @@ export const MAP_H = 1858;
  * lobby floor instead of centring it on the room's top wall (the old y=150
  * reference point put the sprite centre directly on that wall).
  */
-export const PLAYER_SPAWN_X = Math.round(350 * (MAP_W / 1040));
-export const PLAYER_SPAWN_Y = Math.round(170 * (MAP_H / 580));
+export const PLAYER_SPAWN_X = Math.round(450 * (MAP_W / 1040));
+export const PLAYER_SPAWN_Y = Math.round(150 * (MAP_H / 580));
+
+/** Spawn formation is confined to the main-lobby floor, not adjacent corridors. */
+export const PLAYER_SPAWN_MIN_X = Math.round(280 * (MAP_W / 1040));
+export const PLAYER_SPAWN_MAX_X = Math.round(710 * (MAP_W / 1040));
+export const PLAYER_SPAWN_MAX_FEET_Y = Math.round(200 * (MAP_H / 580));
+export const PLAYER_SPAWN_MIN_SEPARATION_PX = 72;
 
 /**
  * Player constants — must stay in sync with artifacts/telegram-game/src/game/player.ts.
