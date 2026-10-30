@@ -89,6 +89,14 @@ try {
   assert.equal(await lobbySettings.getByTestId('joystick-side-right').getAttribute('aria-pressed'), 'true',
     'the movement joystick must default to the right side');
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
+  const settingsBounds = await lobbySettings.boundingBox();
+  const saveBounds = await lobbySettings.getByTestId('control-layout-save').boundingBox();
+  const viewport = page.viewportSize();
+  assert.ok(settingsBounds && saveBounds && viewport, 'Settings dialog and Save control must be measurable');
+  assert.ok(settingsBounds.y >= 0 && settingsBounds.y + settingsBounds.height <= viewport.height,
+    'Settings dialog must remain entirely inside the mobile viewport');
+  assert.ok(saveBounds.y + saveBounds.height <= viewport.height,
+    'Settings Save control must not be clipped below the mobile viewport');
   await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
   await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
