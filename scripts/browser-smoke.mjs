@@ -1049,7 +1049,12 @@ try {
     await statePage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
     await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
     await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
-    await waitForRoleRevealToFinish(statePage);
+    if (fixture.startsWith('reveal-')) {
+      // Role-reveal fixtures deliberately keep the overlay visible for capture.
+      await statePage.getByText(/^(ваша роль|your role)$/i).waitFor({ state: 'visible', timeout: 15_000 });
+    } else {
+      await waitForRoleRevealToFinish(statePage);
+    }
     await statePage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
     await statePage.close();
   }
