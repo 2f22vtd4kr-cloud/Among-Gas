@@ -64,7 +64,7 @@ export const REPORT_RANGE_PX = Math.round(CELL_X * 2.5);
 
 export type Grid = Uint8Array;
 
-/** Decode the RLE-encoded pixel-accurate grid produced from the reference image. */
+/** Decode the manually reviewed RLE base grid; explicit overrides are applied by buildCollisionGrid(). */
 function decodeRuns(): Grid {
   const g = new Uint8Array(COLS * ROWS);
   let i = 0;
@@ -76,7 +76,7 @@ function decodeRuns(): Grid {
   if (i !== COLS * ROWS) {
     throw new Error(
       `collisionData.ts RUNS decode length mismatch: got ${i} cells, expected ${COLS * ROWS}. ` +
-      `Re-run scripts/src/analyzeCollisionMap.ts to regenerate it.`,
+      `Review scripts/src/analyzeCollisionMap.ts preview output before promoting any new grid.`,
     );
   }
   return g;
