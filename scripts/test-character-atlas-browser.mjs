@@ -31,21 +31,27 @@ try {
     const context = atlas.getContext('2d');
     if (!context) throw new Error('Runtime character atlas has no readable 2D context');
     const cellWidth = 161;
-    const nonEmptyColumns = [];
+    const columnPixelCounts = [];
+    const columnSignatures = [];
     for (let column = 0; column < 18; column++) {
       const pixels = context.getImageData(column * cellWidth, 0, cellWidth, atlas.height).data;
       let opaquePixels = 0;
-      for (let alpha = 3; alpha < pixels.length; alpha += 4) {
-        if (pixels[alpha] > 0) opaquePixels++;
+      let signature = 2166136261;
+      for (let offset = 0; offset < pixels.length; offset++) {
+        const value = pixels[offset];
+        if (offset % 4 === 3 && value > 0) opaquePixels++;
+        signature = Math.imul(signature ^ value, 16777619);
       }
-      nonEmptyColumns.push(opaquePixels);
+      columnPixelCounts.push(opaquePixels);
+      columnSignatures.push(signature >>> 0);
     }
     return {
       width: atlas.width,
       height: atlas.height,
       cellWidth,
       columns: atlas.width / cellWidth,
-      nonEmptyColumns: nonEmptyColumns.filter(count => count > 0).length,
+      nonEmptyColumns: columnPixelCounts.filter(count => count > 0).length,
+      distinctColumns: new Set(columnSignatures).size,
       elapsedMs: Math.round(performance.now() - window.__AG_ATLAS_LOAD_STARTED_AT),
     };
   });
@@ -54,6 +60,7 @@ try {
   assert.equal(metrics.height, 1401, 'runtime atlas must preserve the authored source height');
   assert.equal(metrics.columns, 18, 'runtime canvas must contain eighteen palette columns');
   assert.equal(metrics.nonEmptyColumns, 18, 'every runtime palette column must contain rendered sprite pixels');
+  assert.equal(metrics.distinctColumns, 18, 'every runtime palette column must render distinct pixel colors, not a duplicate teal column');
   console.log('Runtime character atlas browser contract passed:', JSON.stringify(metrics));
 } finally {
   await browser.close();
