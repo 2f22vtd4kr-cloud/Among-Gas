@@ -167,6 +167,7 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
   if (cachedSourceUrl === sourceUrl && cachedAtlasPromise) return cachedAtlasPromise;
   cachedSourceUrl = sourceUrl;
   cachedAtlasPromise = new Promise<HTMLCanvasElement>((resolve, reject) => {
+    const loadStartedAt = performance.now();
     const image = new Image();
     let processing = false;
 
@@ -182,7 +183,33 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
         if (typeof image.decode === 'function') {
           try { await image.decode(); } catch { /* a successful load remains a usable decode fallback */ }
         }
-        resolve(createCharacterAtlas(image));
+        const sourceReadyAt = performance.now();
+        const atlas = createCharacterAtlas(image);
+        const atlasReadyAt = performance.now();
+        if (import.meta.env.DEV) {
+          (window as Window & {
+            __AG_CHARACTER_ATLAS_METRICS?: {
+              sourceLoadMs: number;
+              generationMs: number;
+              totalMs: number;
+              sourceWidth: number;
+              sourceHeight: number;
+              atlasWidth: number;
+              atlasHeight: number;
+              generatedPaletteCount: number;
+            };
+          }).__AG_CHARACTER_ATLAS_METRICS = {
+            sourceLoadMs: sourceReadyAt - loadStartedAt,
+            generationMs: atlasReadyAt - sourceReadyAt,
+            totalMs: atlasReadyAt - loadStartedAt,
+            sourceWidth: image.naturalWidth,
+            sourceHeight: image.naturalHeight,
+            atlasWidth: atlas.width,
+            atlasHeight: atlas.height,
+            generatedPaletteCount: GENERATED_CHARACTER_PALETTES.length,
+          };
+        }
+        resolve(atlas);
       } catch (error) {
         reject(error);
       }
