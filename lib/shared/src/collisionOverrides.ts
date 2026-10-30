@@ -8,4 +8,7 @@
  * around the planter: doing so blocks the whole garden and makes it cast a
  * room-sized shadow.
  */
-export const MANUAL_BLOCKED_POLYGONS = [] as const;
+export const MANUAL_BLOCKED_POLYGONS: readonly {
+  readonly id: string;
+  readonly points: readonly (readonly [number, number])[];
+}[] = [];
