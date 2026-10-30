@@ -498,10 +498,10 @@ try {
   const chatTextbox = page.getByRole('textbox', { name: 'Сообщение в обсуждении' });
   await chatTextbox.waitFor({ state: 'visible' });
   await chatTextbox.focus();
-  const typedMessage = 'wasd WASD qwerty 123';
+  const typedMessage = 'abcdefghijklmnopqrstuvwxyz ABCDEFGHIJKLMNOPQRSTUVWXYZ 0123456789 — !?@#$%&*()_+-=[]{};:,.<>/ ёжик';
   await page.keyboard.type(typedMessage);
   assert.equal(await chatTextbox.inputValue(), typedMessage,
-    'keyboard movement bindings must never prevent W/A/S/D or other letters in chat input');
+    'keyboard movement bindings must never drop Latin, Cyrillic, numeric, or punctuation input');
   await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
