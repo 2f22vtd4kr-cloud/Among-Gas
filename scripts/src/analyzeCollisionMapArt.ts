@@ -18,7 +18,7 @@ import { writeFileSync } from 'fs';
 
 const ROOT = new URL('../../', import.meta.url);
 const SRC  = new URL('artifacts/telegram-game/public/map-hires.png', ROOT).pathname;
-const OUT  = new URL('lib/shared/src/collisionData.ts', ROOT).pathname;
+const OUT  = new URL('lib/shared/src/collisionData.art-preview.ts', ROOT).pathname;
 
 const CELL = 10;
 const COLS = 104;
@@ -169,7 +169,7 @@ export const ROWS = ${ROWS};
 export const RUNS: number[] = [${runs.join(',')}];
 `;
   writeFileSync(OUT, banner);
-  console.log(`wrote ${OUT}`);
+  console.log(`wrote art-analysis preview ${OUT}`);
 }
 
 main();
