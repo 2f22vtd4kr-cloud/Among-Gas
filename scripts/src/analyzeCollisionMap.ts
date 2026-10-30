@@ -33,7 +33,7 @@ const ROWS = MAP_H / CELL;
 
 // Obstacle-vs-room size threshold in source-image pixels (see debug analysis:
 // obstacle blobs top out ~5.3k px, room floors start ~9.4k px in this image).
-const COMPONENT_SIZE_THRESHOLD = 7000;
+const COMPONENT_SIZE_THRESHOLD = 8000;
 
 // Small props (traffic cones, bins, signs, barrels — anything under this pixel
 // area) only block the ground they actually stand on, not their whole traced
