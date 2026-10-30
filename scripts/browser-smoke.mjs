@@ -308,7 +308,7 @@ try {
   const hudSelectors = [
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
-    page.getByRole('button', { name: /тревога/i }),
+    page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
   assert.equal(await page.getByRole('button', { name: 'Покинуть матч' }).count(), 0,
@@ -404,15 +404,19 @@ try {
   }, undefined, { timeout: 3_000 });
 
   // The emergency action and Settings must have independent tap targets on mobile.
-  const emergencyButton = page.getByRole('button', { name: /Тревога/ });
+  const emergencyButton = page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ });
   const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
   await emergencyButton.waitFor({ state: 'visible' });
   await gameplaySettingsButton.waitFor({ state: 'visible' });
   const emergencyBox = await emergencyButton.boundingBox();
   const gameplaySettingsBox = await gameplaySettingsButton.boundingBox();
   assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
-  assert.ok(emergencyBox.width >= 132 && emergencyBox.height >= 58,
-    `Emergency action must be at least 132×58 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
+  assert.ok(emergencyBox.width >= 92 && emergencyBox.height >= 92,
+    `Emergency icon action must be at least 92×92 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
+  const emergencyIcon = emergencyButton.locator('img');
+  const emergencyIconBox = await emergencyIcon.boundingBox();
+  assert.ok(emergencyIconBox && emergencyIconBox.width >= 68 && emergencyIconBox.height >= 68,
+    'Emergency control must display the large original emergency icon asset');
   await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
@@ -473,9 +477,12 @@ try {
   const killButton = page.getByRole('button', { name: /Убить/ });
   await killButton.waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(
-    button => button.textContent?.includes('Убить') && !button.disabled,
+    button => button.getAttribute('aria-label') === 'Убить' && !button.disabled,
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
+  const killIconBox = await killButton.locator('img').boundingBox();
+  assert.ok(killIconBox && killIconBox.width >= 64 && killIconBox.height >= 64,
+    'Kill action must display the large original kill icon asset');
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
   await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
@@ -560,8 +567,12 @@ try {
   // All five sabotage choices render in the impostor panel.
   await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
-  await page.getByRole('button', { name: /Саботаж/ }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('button', { name: /Саботаж/ }).click();
+  const sabotageButton = page.getByRole('button', { name: /Саботаж/ });
+  await sabotageButton.waitFor({ state: 'visible', timeout: 10_000 });
+  const sabotageIconBox = await sabotageButton.locator('img').boundingBox();
+  assert.ok(sabotageIconBox && sabotageIconBox.width >= 64 && sabotageIconBox.height >= 64,
+    'Sabotage action must display the large original sabotage icon asset');
+  await sabotageButton.click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
   for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
     await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
@@ -748,6 +759,11 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.screenshot({ path: join(visualQaDir, 'gameplay-hud.png'), fullPage: true });
+  const gameplaySurfaceSelection = await page.locator('#root > div').first().evaluate(element =>
+    getComputedStyle(element).userSelect,
+  );
+  assert.equal(gameplaySurfaceSelection, 'none',
+    'dragging the virtual joystick must not select HUD labels or map text');
 
   // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
   const viewportCases = [

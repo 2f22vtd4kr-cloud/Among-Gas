@@ -128,9 +128,21 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
 assert.equal(realGrid[10*COLS+55],0,'manual outline must not fill the old extra-blocked RLE cell');
-assert.equal(isPlayerPositionWalkable(realGrid,1735,490),false,'exact vector collision blocks fountain footprint');
+assert.equal(isPlayerPositionWalkable(realGrid,1640,449),true,'the western garden path remains walkable');
+assert.equal(isPlayerPositionWalkable(realGrid,1810,449),true,'the eastern garden path remains walkable');
+assert.equal(isPlayerPositionWalkable(realGrid,1735,449),false,'the central statue footprint remains solid');
 const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
 assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
+const westernGardenCell = 14 * COLS + Math.floor(1640 / CELL_X);
+const easternGardenCell = 14 * COLS + Math.floor(1810 / CELL_X);
+assert.equal(realShadowGrid[westernGardenCell], 0, 'walkable garden floor does not cast a hard shadow');
+assert.equal(realShadowGrid[easternGardenCell], 0, 'the opposite garden path also remains clear in the vision grid');
+const statueOccluder = realNarrowOccluders.find(item =>
+  Math.hypot(item.x - 56 * CELL_X, item.y - 15 * CELL_Y) < 1,
+);
+assert.ok(statueOccluder, 'the central statue remains a dedicated narrow vision occluder');
+assert.ok(statueOccluder.radius < Math.min(CELL_X, CELL_Y) * 0.25,
+  'the statue shadow follows its small footprint instead of the full garden');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
@@ -146,8 +158,8 @@ assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vis
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
-const fountainRay=computeVisibilityPolygon(1450,490,500,realShadowGrid,realNarrowOccluders,true)[360];
-assert.ok(fountainRay.x>1580&&fountainRay.x<1586,'vision ray stops at the vector fountain edge');
+const statueRay=computeVisibilityPolygon(1450,480,500,realShadowGrid,realNarrowOccluders,true)[360];
+assert.ok(statueRay.x>1728&&statueRay.x<1736,'vision ray stops at the narrow statue footprint, not the decorative garden perimeter');
 
 const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(

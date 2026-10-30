@@ -226,13 +226,15 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
  assert.deepEqual(classifyMovementEcho(sent.slice(2),{wireX:105,wireY:200},true),{kind:'stale'});
  assert.deepEqual(classifyMovementEcho(sent.slice(2),{wireX:105,wireY:200,force:true},true),{kind:'correction'});
 }
-// This cell was added only by the old polygon rasterizer; it remains open in
-// the base RLE while exact player footprint checks still block the fountain.
+// The decorative garden remains walkable around the statue. The statue's
+// small 2×2 RLE footprint remains blocked without a planter-wide polygon.
 {
  const canonical=buildCollisionGrid();
  assert.equal(canonical[10*COLS+55],0,'manual outline must not rasterize an open base cell');
- assert.equal(isPlayerPositionWalkable(canonical,1735,490),false,'vector fountain still blocks the player footprint');
- assert.equal(isPlayerPositionWalkable(canonical,1450,490),true,'open west lobby floor stays walkable');
+ assert.equal(isPlayerPositionWalkable(canonical,1640,449),true,'western garden path stays walkable');
+ assert.equal(isPlayerPositionWalkable(canonical,1810,449),true,'eastern garden path stays walkable');
+ assert.equal(isPlayerPositionWalkable(canonical,1735,449),false,'the statue footprint remains blocked');
+ assert.equal(isPlayerPositionWalkable(canonical,1450,449),true,'open west lobby floor stays walkable');
 }
 
 console.log('PASS: movement, vector obstacle collision, stale echoes, thin walls, diagonal corners and map edges');
