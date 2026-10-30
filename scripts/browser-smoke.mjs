@@ -1316,6 +1316,30 @@ try {
   assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
     `camera-following player screen position must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
+
+  // Keep a pointer actively held while a blocking overlay opens. The joystick
+  // must unmount, clear its direction, and not inherit that pointer on remount.
+  await cameraPage.mouse.move(joystickX, joystickY);
+  await cameraPage.mouse.down();
+  await cameraPage.mouse.move(joystickX + 38, joystickY, { steps: 4 });
+  const settingsButton = cameraPage.locator('[aria-label="Settings"], [aria-label="Настройки"]');
+  await settingsButton.evaluate(element => element.click());
+  const leaveMatchButton = cameraPage.getByRole('button', { name: /Leave match|Выйти из матча/ });
+  await leaveMatchButton.waitFor({ state: 'visible' });
+  await leaveMatchButton.evaluate(element => element.click());
+  await cameraPage.getByRole('dialog', { name: /Leave this match|Выйти из матча/ }).waitFor();
+  assert.equal(await joystick.count(), 0,
+    'joystick must unmount while the leave-match confirmation is open');
+  await cameraPage.getByRole('button', { name: /Stay|Остаться/ }).evaluate(element => element.click());
+  await joystick.waitFor({ state: 'visible' });
+  await cameraPage.mouse.move(joystickX + 42, joystickY);
+  await cameraPage.waitForTimeout(100);
+  const remountedKnobTransform = await cameraPage.locator('[data-testid="joystick-knob"]').evaluate(
+    element => element.style.transform,
+  );
+  assert.equal(remountedKnobTransform, 'translate(-50%, -50%)',
+    'a remounted joystick must not inherit the pointer that was held before the modal opened');
+  await cameraPage.mouse.up();
   await cameraPage.close();
 
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
