@@ -249,7 +249,10 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
         queue.push(next);
       }
     }
-    if (component.length !== 4 || component.some(isNonOccludingFurniture)) continue;
+    // A prop is excluded as furniture only when its entire footprint is
+    // inside a known furniture region. A compact pole straddling that region's
+    // edge must retain its narrow silhouette occluder.
+    if (component.length !== 4 || component.every(isNonOccludingFurniture)) continue;
     const cols = component.map(index => index % COLS);
     const rows = component.map(index => Math.floor(index / COLS));
     const minCol = Math.min(...cols);
