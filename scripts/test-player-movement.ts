@@ -59,8 +59,14 @@ const cornerRow = wallRow + 1;
 cornerGrid[cornerRow * COLS + cornerCol] = 1;
 const cornerX = cornerCol * CELL_X;
 const cornerY = cornerRow * CELL_Y;
-const diagonalStart = { x: cornerX - 24, y: cornerY - FEET_OFFSET_Y - 24 };
-const diagonalEnd = { x: cornerX + 24, y: cornerY - FEET_OFFSET_Y + 24 };
+const diagonalStart = {
+  x: cornerX - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3,
+  y: cornerY - FEET_OFFSET_Y - PLAYER_RADIUS - 3,
+};
+const diagonalEnd = {
+  x: cornerX + CELL_X + PLAYER_HALF_WIDTH + PLAYER_RADIUS + 3,
+  y: cornerY + CELL_Y + PLAYER_RADIUS + 3 - FEET_OFFSET_Y,
+};
 assert.equal(isPlayerPositionWalkable(cornerGrid, diagonalStart.x, diagonalStart.y), true,
   'diagonal sweep start must be independently walkable');
 assert.equal(isPlayerPositionWalkable(cornerGrid, diagonalEnd.x, diagonalEnd.y), true,
