@@ -19,6 +19,7 @@ import {
   CHARACTER_CELL_HEIGHT,
   CHARACTER_COLORS,
   CHARACTER_POSES,
+  getCharacterColorForSlot,
   getCharacterFrameRect,
   getCharacterClipPath,
   getCharacterClipNotch,
