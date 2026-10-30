@@ -57,6 +57,7 @@ export function SettingsButton({
           stroke="currentColor"
           strokeWidth="1.4"
           strokeLinejoin="round"
+          transform="translate(-2.45 -0.7)"
         />
       </svg>
     </button>

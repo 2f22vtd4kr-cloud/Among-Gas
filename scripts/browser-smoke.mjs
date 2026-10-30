@@ -49,10 +49,24 @@ try {
   const menuSettingsButton = page.getByRole('button', { name: 'Настройки' });
   await menuTitle.waitFor({ state: 'visible' });
   await menuSettingsButton.waitFor({ state: 'visible' });
-  assert.equal(await menuSettingsButton.locator('svg path').nth(0).getAttribute('d'), 'M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7Z',
-    'the Settings gear inner ring must be centered on the 24×24 icon viewBox');
-  assert.equal(await menuSettingsButton.locator('svg path').nth(1).getAttribute('transform'), null,
-    'the Settings gear outer teeth must not be translated away from the centered inner ring');
+  const gearGeometry = await menuSettingsButton.locator('svg').evaluate(svg => {
+    const [innerRing, outerTeeth] = svg.querySelectorAll('path');
+    const inner = innerRing.getBBox();
+    const outer = outerTeeth.getBBox();
+    const translation = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)\s*\)/.exec(outerTeeth.getAttribute('transform') || '');
+    if (!translation) throw new Error('Settings gear outer path must declare a measurable centering translation');
+    const outerCenter = {
+      x: outer.x + outer.width / 2 + Number(translation[1]),
+      y: outer.y + outer.height / 2 + Number(translation[2]),
+    };
+    return {
+      innerCenter: { x: inner.x + inner.width / 2, y: inner.y + inner.height / 2 },
+      outerCenter: { x: outerCenter.x, y: outerCenter.y },
+    };
+  });
+  assert.ok(Math.abs(gearGeometry.innerCenter.x - gearGeometry.outerCenter.x) < 0.25 &&
+    Math.abs(gearGeometry.innerCenter.y - gearGeometry.outerCenter.y) < 0.25,
+  `the Settings gear ring and teeth must share the same visual center; got ${JSON.stringify(gearGeometry)}`);
   const menuTitleBox = await menuTitle.boundingBox();
   const menuSettingsBox = await menuSettingsButton.boundingBox();
   assert.ok(menuTitleBox && menuSettingsBox, 'the title and Settings button must be measurable');
@@ -186,6 +200,22 @@ try {
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
   assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
+  const roleRevealShadow = page.locator('[data-role-reveal-shadow="true"]');
+  await roleRevealShadow.waitFor({ state: 'visible' });
+  const shadowGeometry = await roleRevealShadow.evaluate((shadow, sprite) => {
+    const a = shadow.getBoundingClientRect();
+    const b = sprite.getBoundingClientRect();
+    const style = getComputedStyle(shadow);
+    return { shadowCenterX: a.left + a.width / 2, spriteCenterX: b.left + b.width / 2, shadowTop: a.top, spriteBottom: b.bottom, width: Number.parseFloat(style.width), height: Number.parseFloat(style.height), animation: style.animationName, background: style.backgroundColor };
+  }, await roleRevealSprite.elementHandle());
+  assert.ok(Math.abs(shadowGeometry.shadowCenterX - shadowGeometry.spriteCenterX) < 2,
+    'the role-reveal ground shadow must stay centered beneath the character');
+  assert.ok(shadowGeometry.shadowTop >= shadowGeometry.spriteBottom - 2,
+    'the role-reveal shadow must sit below the character feet, not overlap the sprite');
+  assert.ok(shadowGeometry.width >= 90 && shadowGeometry.height >= 14 && shadowGeometry.background.includes('0.85'),
+    'the ground shadow must have enough area and contrast to remain visible at mobile render scale');
+  assert.equal(shadowGeometry.animation, 'rrShadowPulse',
+    'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });

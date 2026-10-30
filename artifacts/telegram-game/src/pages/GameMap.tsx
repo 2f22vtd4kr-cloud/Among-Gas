@@ -766,6 +766,17 @@ export default function GameMap() {
         80%  { transform: scale(1)    translateY(0);    }
         100% { transform: scale(0.96) translateY(-6px); }
       }
+      @keyframes rrCharacterBob {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+      }
+      @keyframes rrShadowPulse {
+        0%, 100% { transform: scaleX(1); opacity: 0.68; }
+        50% { transform: scaleX(0.72); opacity: 0.5; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .ag-role-reveal-character, .ag-role-reveal-shadow { animation: none !important; }
+      }
     `;
     document.head.appendChild(style);
     return () => { document.head.removeChild(style); };
@@ -2845,16 +2856,31 @@ export default function GameMap() {
                 {en ? 'Your role' : 'Ваша роль'}
               </p>
 
-              {/* Large character sprite */}
+              {/* Character floats subtly above its own animated ground shadow. */}
               <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 28 }}>
-                <CharSpriteUI
-                  color={isImp ? 'maroon' : 'teal'}
-                  pose={isImp ? 'mask' : 'idle'}
-                  size={170}
-                 
-                />
+                <div style={{ position: 'relative', display: 'flex', justifyContent: 'center' }}>
+                  <div className="ag-role-reveal-character" style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}>
+                    <CharSpriteUI
+                      color={isImp ? 'maroon' : 'teal'}
+                      pose={isImp ? 'mask' : 'idle'}
+                      size={170}
+                    />
+                  </div>
+                  <div
+                    className="ag-role-reveal-shadow"
+                    data-role-reveal-shadow="true"
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute', bottom: -15, left: '50%', marginLeft: -47, zIndex: 0,
+                      width: 94, height: 14, borderRadius: '50%', transformOrigin: 'center center',
+                      background: 'rgba(0, 0, 0, 0.85)',
+                      boxShadow: '0 0 8px rgba(0, 0, 0, 0.35)',
+                      filter: 'blur(2.5px)',
+                      animation: isMockReveal ? 'none' : 'rrShadowPulse 1.2s ease-in-out infinite',
+                    }}
+                  />
+                </div>
               </div>
-
               {/* Role name */}
               <div style={{
                 fontFamily: "'Fredoka One', sans-serif",
