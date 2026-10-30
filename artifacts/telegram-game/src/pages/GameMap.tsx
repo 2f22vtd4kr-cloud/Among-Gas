@@ -2871,7 +2871,7 @@ export default function GameMap() {
                     data-role-reveal-shadow="true"
                     aria-hidden="true"
                     style={{
-                      position: 'absolute', bottom: -7, left: '50%',
+                      position: 'absolute', bottom: -12, left: '50%',
                       width: 86, height: 11, borderRadius: '50%',
                       transform: 'translateX(-50%)',
                       background: 'rgba(8, 16, 24, 0.78)',
