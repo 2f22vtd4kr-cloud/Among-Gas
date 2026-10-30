@@ -1166,14 +1166,21 @@ try {
   });
   const cameraBaseline = await readPlayerCentroid();
   assert.ok(cameraBaseline.count > 20, 'the local player sprite must be visible before movement');
-  await cameraPage.keyboard.down('ArrowRight');
+  const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
+  const joystickBox = await joystick.boundingBox();
+  assert.ok(joystickBox, 'the movement joystick must be visible for camera-follow testing');
+  const joystickX = joystickBox.x + joystickBox.width / 2;
+  const joystickY = joystickBox.y + joystickBox.height / 2;
+  await cameraPage.mouse.move(joystickX, joystickY);
+  await cameraPage.mouse.down();
+  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
   await cameraPage.waitForTimeout(550);
   const cameraSamples = [];
   for (let i = 0; i < 6; i++) {
     cameraSamples.push(await readPlayerCentroid());
     await cameraPage.waitForTimeout(70);
   }
-  await cameraPage.keyboard.up('ArrowRight');
+  await cameraPage.mouse.up();
   assert.ok(cameraSamples.every(sample => sample.count > 20),
     'the local player sprite must remain visible while the camera follows movement');
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - cameraBaseline.x)));
