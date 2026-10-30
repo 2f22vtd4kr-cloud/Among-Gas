@@ -1,5 +1,10 @@
 import { PLAYER_ANIM_INTERVAL_MS } from './player';
 
+/** Gameplay ground-shadow ellipse ratios, relative to the sprite frame. */
+export const CHARACTER_SHADOW_WIDTH_RADIUS_RATIO = 0.34;
+export const CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO = 0.07;
+export const CHARACTER_SHADOW_Y_OFFSET_RATIO = 0.55;
+
 /**
  * Draw-only vertical bounce for the two-frame walk cycle.
  * The animation accumulator is shared with pose selection so feet and body
