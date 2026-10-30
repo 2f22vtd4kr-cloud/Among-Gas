@@ -37,7 +37,7 @@ export function isMovementPathWalkableWide(
   return isPlayerPathWalkable(grid, x, y, nx, ny);
 }
 
-/** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
+/** Spawn point in open main-lobby floor — validated against the full visible sprite rectangle. */
 export const PLAYER_SPAWN = {
   x: PLAYER_SPAWN_X,
   y: PLAYER_SPAWN_Y,
