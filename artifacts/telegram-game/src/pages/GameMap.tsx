@@ -22,7 +22,6 @@ import {
   CHARACTER_COLORS,
   CHARACTER_POSES,
   getCharacterFrameRect,
-  getCharacterFrameDisplayScale,
   getCharacterClipPath,
   getCharacterClipNotch,
   type CharacterColor,
@@ -176,14 +175,11 @@ function CharSpriteUI({
     safePose,
   );
   const scale = size / CHARACTER_CELL_WIDTH;
-  // The measured source crop removes detached atlas strokes. Restore its
-  // authored display height so the cropped bitmap does not shrink the pose.
-  const verticalScale = scale * (frame.displayHeight / frame.height);
   const bgW = _SHEET_PX_W * scale;
-  const bgH = _SHEET_PX_H * verticalScale;
+  const bgH = _SHEET_PX_H * scale;
   const posX = -frame.x * scale;
-  const posY = -frame.y * verticalScale;
-  const height = frame.displayHeight * scale;
+  const posY = -frame.y * scale;
+  const height = frame.height * scale;
 
   // Every pose uses its measured, isolated atlas window. The corpse is a single
   // authored sprite (cut suit + exposed bone); do not splice in the adjacent
@@ -1355,7 +1351,7 @@ export default function GameMap() {
         // instead of stretching a mixed corpse/crouch crop into a fake landscape.
         const corpseW = Math.max(18, Math.round(PLAYER_DISPLAY_WIDTH * scale * 0.95));
         const corpseH = Math.max(12, Math.round(
-          PLAYER_DISPLAY_HEIGHT * scale * getCharacterFrameDisplayScale('dead-body') * 0.95,
+          PLAYER_DISPLAY_HEIGHT * scale * (rect.height / CHARACTER_CELL_HEIGHT) * 0.95,
         ));
         const corpseX = bx - corpseW / 2;
         const corpseY = by - corpseH / 2;
@@ -1473,7 +1469,7 @@ export default function GameMap() {
                 : 'walk-2'
               : 'idle';
           const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
-          const rSpriteH = Math.round(rBaseSpriteH * getCharacterFrameDisplayScale(rPose));
+          const rSpriteH = Math.round(rBaseSpriteH * rRect.height / CHARACTER_CELL_HEIGHT);
 
           // Give ghosts a readable float path: vertical drift, lateral sway,
           // and a slow breathing pulse. This is draw-only; authoritative/world
@@ -1560,7 +1556,7 @@ export default function GameMap() {
       const playerCY = (py - srcY) * scale;
 
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
-      const sH = Math.round(spriteH * getCharacterFrameDisplayScale(pose));
+      const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
       const sx = Math.ceil(rect.x);
       const sy = Math.ceil(rect.y);
       const sw = Math.floor(rect.x + rect.width)  - sx;

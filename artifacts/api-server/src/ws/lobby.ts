@@ -99,29 +99,14 @@ function computeSpawnPosition(
       if (available(x, y)) return { x, y };
     }
   }
-  // The coarse 12px/48-angle ring can miss narrow safe pockets, especially
-  // after the full authored sprite bounds are applied. Search the same bounded
-  // spawn ellipse on an 8px lattice and choose the candidate with the greatest
-  // clearance from already assigned players. This keeps the map/spawn bounds
-  // unchanged while avoiding an order-dependent false "no spawn" failure.
-  let best: { x: number; y: number; score: number } | undefined;
-  const minX = Math.max(0, SPAWN_X - 600);
-  const maxX = Math.min(MAP_W, SPAWN_X + 600);
-  const minY = Math.max(0, SPAWN_Y - 360);
-  const maxY = Math.min(MAP_H, SPAWN_Y + 360);
-  for (let y = minY; y <= maxY; y += 8) for (let x = minX; x <= maxX; x += 8) {
-    const dx = x - SPAWN_X;
-    const dy = y - SPAWN_Y;
-    if (dx * dx + (dy / 0.6) ** 2 > 600 * 600) continue;
-    if (!available(x, y)) continue;
-    const radialDistance = Math.hypot(dx, dy / 0.6);
-    const nearestPlayer = occupied.length
-      ? Math.min(...occupied.map(player => Math.hypot(player.x - x, player.y - y)))
-      : 600;
-    const score = nearestPlayer - Math.abs(radialDistance - 240) * 0.015;
-    if (!best || score > best.score) best = { x, y, score };
+  // Solo and multiplayer share the same fallback when the preferred spawn is
+  // too close to a wall/prop after applying the full-sprite margin.
+  for (let radius = 12; radius <= 600; radius += 12) for (let step = 0; step < 48; step++) {
+    const angle = (step / 48) * Math.PI * 2;
+    const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
+    const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
+    if (available(x, y)) return { x, y };
   }
-  if (best) return { x: best.x, y: best.y };
   throw new Error('No separated spawn position meets the full sprite clearance margin');
 }
 

@@ -25,13 +25,13 @@ Scope: spawn and collision registration, map/camera alignment, full character pr
 
 `GameMap.tsx` calculates `srcX/srcY/srcW/srcH` in canonical 3224×1858 world pixels, then passed them directly to `drawImage()`. The loader prefers `map-hires.webp` and falls back to the canonical-sized PNG. Using world coordinates directly as WebP source pixels samples a different scale than player positions, collision and visibility. This is a confirmed defect and a plausible primary cause of the apparent player-on-wall/camera registration failure.
 
-### 3.2 Isolated pose crops were also used as destination heights
+### 3.2 Sprite atlas crop contract — not a confirmed defect
 
-The atlas stores measured source windows and a separate `displayHeight` for each pose. Gameplay, remote players, corpse rendering and DOM role/kill sprites sized the destination from `frame.height` rather than authored `displayHeight`. The discrepancy is largest for the cut-body pose (93 source pixels vs 118 display pixels) and idle (136 vs 153). This shrinks several character poses despite the atlas crop being bounded.
+The atlas supplies both a measured source crop and a separate diagnostic `displayHeight`. The existing browser suite explicitly requires role-reveal sprites to remain un-stretched (`transform: none`) while a clip path masks detached strokes below the feet. The prior hypothesis that `displayHeight` should scale the destination was incorrect and has been rolled back. The idle crop remains 136px; the cut-body/exposed-bone crop remains 93px. Whether the user's reported visible-leg clipping comes from an incorrect crop window, clip path, or the old map/background scale must be judged from post-transform screenshots. It is not marked fixed yet.
 
-### 3.3 Shared feet geometry must follow rendered idle height
+### 3.3 Shared foot geometry
 
-The shared `FEET_OFFSET_Y` and vertical spawn extent were derived from the 136px cropped idle window. Once rendering uses the measured 153px idle display height, those shared constants must change together or the visual feet and authoritative collision anchor diverge.
+The feet anchor and spawn bounds remain tied to the measured 136px idle crop (half-height 31px). They were intentionally restored after the above hypothesis was rejected; no expansion of the sprite footprint is retained.
 
 ### 3.4 Square collision and visibility remain a separate known limitation
 
@@ -42,8 +42,7 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - Add a pure world-rectangle → native-image-pixel transform using independent ratios from the actual loaded image dimensions.
 - Apply that transform before gameplay map `drawImage()`; extend opt-in camera diagnostics with image size and transformed source rect.
 - Add a regression that reads actual PNG/WebP metadata and verifies identity PNG scaling plus full-map and interior crop mapping for both assets.
-- Render isolated atlas frames at their authored per-pose display height, keeping source crop windows intact; apply the scale to local, remote, corpse and DOM role/kill rendering.
-- Update shared idle foot offset and full-sprite vertical spawn bounds together, so client and server keep the same visible foot anchor.
+- Preserve the atlas's existing measured per-pose crop windows and no-vertical-stretch rendering contract, including the diagnostic `displayHeight` metadata. Add regression coverage for the seven colors, nine bounded pose crops, idle feet anchor and cut-body/exposed-bone source frame.
 - Add a pose-window / feet-anchor regression and wire both new checks into CI.
 - Preserve map art, atlas pixels, RLE base collision and the existing vector fountain.
 
@@ -100,3 +99,11 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - Latest CI run passed both new asset/sprite regressions but failed the exhaustive 15-player placement check at slot 12. The previous radial fallback sampled only 48 angles at 12px radius increments, which can miss small safe positions and makes sequential placement order-dependent.
 - Replaced that fallback in both the authoritative API lobby and the independent map verifier with a deterministic 8px lattice search inside the existing 600px spawn ellipse and existing shared spawn-area bounds. The chosen point maximizes nearest-player clearance with a mild preference for staying near the intended lobby spawn radius. The normal preferred ring placement remains unchanged when it succeeds.
 - No collision cells, foot hitbox, spawn zone boundaries, or minimum 72px inter-player separation were weakened. CI must confirm 15 valid positions, spawn-region safety and the remaining gameplay suites.
+
+
+## 2026-10-30 — Rejected sprite-height hypothesis and spawn rollback
+
+- Reviewing `scripts/browser-smoke.mjs` revealed an explicit existing contract: role-reveal character sprites must use `transform: none`, with the polygon clip path removing detached lower-atlas strokes while retaining the feet. The `displayHeight` field is diagnostic baseline metadata, not a destination scaling instruction.
+- Reverted the proposed vertical stretch in DOM, local, remote and corpse sprite rendering; restored the original 136px idle source crop and 31px vertical half-extent/feet anchor. The updated atlas regression now protects the actual crop dimensions, seven-color/nine-pose atlas bounds, idle baseline metadata and corpse exposed-bone crop.
+- The 15-player check failure was caused by this incorrect height expansion, not proof that the existing spawn search needed redesign. Reverted the 8px lattice fallback in both the API and verifier, and restored the previously validated radial candidate search. The test will rerun against the correct sprite geometry.
+- The map raster transform remains the independently confirmed defect and stays in the patch. Visible sprite-leg crop remains open pending post-transform browser screenshots and inspection of the actual role/kill render.

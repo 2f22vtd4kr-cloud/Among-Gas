@@ -67,17 +67,6 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
-/**
- * Destination scale for the isolated source crop. Several poses have detached
- * pixels trimmed from their source window, so using crop.height as the
- * destination height would make the complete character appear too small.
- */
-export function getCharacterFrameDisplayScale(pose: CharacterPose): number {
-  const row = CHARACTER_POSES.indexOf(pose);
-  if (row < 0) throw new RangeError(`Unknown character pose: ${pose}`);
-  return POSE_ROW_WINDOWS[row].displayHeight / CHARACTER_CELL_HEIGHT;
-}
-
 /** Returns an isolated source window (px) for a given color and pose. */
 export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose) {
   const col = CHARACTER_COLORS.indexOf(color);
@@ -88,7 +77,7 @@ export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose
     y: window.top,
     width: CHARACTER_CELL_WIDTH,
     height: window.bottom - window.top,
-    /** Authored destination height after detached pixels are removed from the source crop. */
+    /** Original atlas baseline retained for diagnostics; rendering never stretches cropped pixels. */
     displayHeight: window.displayHeight,
     row,
   };
