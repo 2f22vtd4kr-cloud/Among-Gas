@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CELL_X, CELL_Y, COLS, ROWS, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
 import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
@@ -61,9 +61,16 @@ const cornerX = cornerCol * CELL_X;
 const cornerY = cornerRow * CELL_Y;
 const diagonalStart = { x: cornerX - 24, y: cornerY - FEET_OFFSET_Y - 24 };
 const diagonalEnd = { x: cornerX + 24, y: cornerY - FEET_OFFSET_Y + 24 };
+assert.equal(isPlayerPositionWalkable(cornerGrid, diagonalStart.x, diagonalStart.y), true,
+  'diagonal sweep start must be independently walkable');
+assert.equal(isPlayerPositionWalkable(cornerGrid, diagonalEnd.x, diagonalEnd.y), true,
+  'diagonal sweep destination must be independently walkable');
 assert.equal(isMovementPathWalkableWide(
   cornerGrid, diagonalStart.x, diagonalStart.y, diagonalEnd.x, diagonalEnd.y,
 ), false, 'diagonal movement must not cut across a blocked corner cell');
+assert.equal(isMovementPathWalkable(
+  cornerGrid, diagonalStart.x, diagonalStart.y, diagonalEnd.x, diagonalEnd.y,
+), false, 'the server must reject the same diagonal corner sweep');
 
 const cornerStart = {
   ...createInitialPlayerState(),
@@ -75,10 +82,49 @@ assert.ok(cornerSlide.x > cornerStart.x,
   'the resolver should preserve a clear horizontal slide at a blocked corner');
 assert.equal(cornerSlide.y, cornerStart.y,
   'x-first sliding must reject only the blocked vertical component');
+{
+  const delta = PLAYER_SPEED_PX_PER_SEC * 0.048 / Math.SQRT2;
+  const serverSlide = validateMovementIntent({
+    x: cornerStart.x, y: cornerStart.y, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, cornerStart.x + delta, cornerStart.y + delta, 2_000, cornerGrid);
+  assert.equal(serverSlide.corrected, true,
+    'server must report a correction for the rejected diagonal component');
+  assert.ok(serverSlide.x > cornerStart.x,
+    'server must preserve the same clear horizontal slide as the client');
+  assert.equal(serverSlide.y, cornerStart.y,
+    'server must not accept the blocked vertical component');
+}
 
-// Map-edge footprint is blocked even when the sprite centre remains inside.
-assert.equal(isPlayerPositionWalkable(grid, -1, worldY), false,
+// Map-edge footprint is blocked even while the sprite anchor itself remains inside.
+assert.equal(isPlayerPositionWalkable(grid, 1, worldY), false,
   'the full player footprint must not extend beyond the west map boundary');
+assert.equal(isPlayerPositionWalkable(grid, MAP_W - 1, worldY), false,
+  'the full player footprint must not extend beyond the east map boundary');
+assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, 1 - FEET_OFFSET_Y), false,
+  'the full player footprint must not extend beyond the north map boundary');
+assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1), false,
+  'the full player footprint must not extend beyond the south map boundary');
+
+// A movement packet that would push an otherwise valid player outside the
+// west edge is corrected rather than leaving the authoritative state out of bounds.
+{
+  const edgeGrid = new Uint8Array(COLS * ROWS);
+  const edgeX = PLAYER_HALF_WIDTH + PLAYER_RADIUS + 1;
+  const edgeY = MAP_H / 2 - FEET_OFFSET_Y;
+  assert.equal(isPlayerPositionWalkable(edgeGrid, edgeX, edgeY), true,
+    'edge fixture must begin with the complete footprint inside the map');
+  const edgeDecision = validateMovementIntent({
+    x: edgeX, y: edgeY, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, edgeX - 8, edgeY, 2_000, edgeGrid);
+  assert.equal(edgeDecision.corrected, true,
+    'server must correct a target that would push the hitbox beyond the map edge');
+  assert.equal(edgeDecision.x, edgeX,
+    'server must preserve the last fully in-bounds position');
+}
 
 // Blocked input must not animate or generate footstep events. Movement is
 // determined by the resolved world delta, not by whether a key is held.
@@ -101,3 +147,16 @@ assert.equal(isPlayerPositionWalkable(grid, -1, worldY), false,
 }
 
 console.log('PASS: client/server collision agreement, thin walls, diagonal corners, map edges and blocked-input animation');
+
+// Normal movement remains animated, and dead players retain wall-phasing.
+{
+  const initial = createInitialPlayerState();
+  const normal = stepPlayer(grid, initial, new Set(['d']), 48);
+  assert.ok(normal.x > initial.x, 'walkable movement input must advance the player');
+  assert.equal(normal.pose, 'walk-1', 'real displacement must animate the walking sprite');
+
+  const ghostState = { ...initial, x: wallLeft + 5, y: worldY };
+  const ghost = stepPlayer(grid, ghostState, new Set(['d']), 48, true);
+  assert.ok(ghost.x > ghostState.x, 'ghost movement must pass through a blocked collision cell');
+  assert.equal(ghost.pose, 'ghost', 'ghost movement must retain its dedicated static pose');
+}
