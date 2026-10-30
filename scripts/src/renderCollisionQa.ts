@@ -104,7 +104,7 @@ await map.composite([{ input: svg }]).png().toFile(outputPath);
 // The production WebP is intentionally a 2x raster for sharper downscaling
 // in the canvas renderer. Reuse the exact same map-coordinate overlay and let
 // SVG viewBox scaling place it at the WebP's native resolution.
-const webpSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${webpMetadata.width}" height="${webpMetadata.height}" viewBox="0 0 ${mapWidth} ${mapHeight}">${rects.join('')}${footprint}</svg>`);
+const webpSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${webpMetadata.width}" height="${webpMetadata.height}" viewBox="0 0 ${mapWidth} ${mapHeight}" preserveAspectRatio="none">${rects.join('')}${footprint}</svg>`);
 await sharp(webpPath).composite([{ input: webpSvg }]).png().toFile(outputWebpPath);
 console.log(JSON.stringify({
   output: outputPath,
