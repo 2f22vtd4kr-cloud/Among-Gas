@@ -344,8 +344,12 @@ try {
   await page.mouse.move(taskJoystickX, taskJoystickY);
   await page.mouse.down();
   await page.mouse.move(taskJoystickX - 38, taskJoystickY + 22, { steps: 5 });
-  await page.waitForTimeout(850);
+  const taskKnobTransform = await page.getByTestId('joystick-knob').evaluate(node => (node as HTMLElement).style.transform);
+  assert.match(taskKnobTransform, /calc\(-50% \+/,
+    'the task-approach pointer gesture must engage the actual joystick knob');
+  await page.waitForTimeout(650);
   await page.mouse.up();
+  await page.screenshot({ path: join(visualQaDir, 'task-approach-after-movement.png'), fullPage: true });
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
