@@ -760,4 +760,54 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 }
 
+
+// 15a. Diagonal corner contact and wall sliding share the same full-footprint
+// swept geometry as client prediction.
+{
+  const cornerGrid = new Uint8Array(COLS * ROWS);
+  const col = Math.floor(COLS / 2);
+  const row = Math.floor(ROWS / 2);
+  cornerGrid[row * COLS + col] = 1;
+  const wallLeft = col * CELL_X;
+  const wallTop = row * CELL_Y;
+  const startX = wallLeft - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3;
+  const startY = wallTop - FEET_OFFSET_Y - PLAYER_RADIUS - 3;
+  const delta = PLAYER_SPEED_PX_PER_SEC * 0.048 / Math.SQRT2;
+  assert.equal(isWalkableMovementPoint(cornerGrid, startX, startY), true);
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY,
+    startX + delta, startY + delta), false,
+    'the diagonal segment must detect the blocked corner');
+  const slide = validateMovementIntent({
+    x: startX, y: startY, alive: true,
+    movementCreditPx: 20, movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, startX + delta, startY + delta, 2_000, cornerGrid);
+  assert.equal(slide.corrected, true);
+  assert.ok(slide.x > startX, 'a clear horizontal slide should be preserved');
+  assert.equal(slide.y, startY, 'the rejected vertical component must not enter the corner');
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY, slide.x, slide.y), true);
+}
+
+// 15b. Spawn scatter must never silently stack players at a central fallback.
+{
+  const manager = new LobbyManager();
+  const players = Array.from({ length: 10 }, (_, slot) =>
+    makePlayer(slot, 'crewmate', 0, 0).player,
+  );
+  const lobby = makeLobby(players);
+  lobby.phase = 'WAITING';
+  manager.startGame(lobby, 2);
+  const positions = [...lobby.players.values()].map(player => ({ x: player.x, y: player.y }));
+  assert.equal(new Set(positions.map(pos => `${pos.x},${pos.y}`)).size, positions.length,
+    'all players must receive distinct spawn coordinates');
+  for (const pos of positions) assertClientWalkable(pos.x, pos.y, 'scattered spawn');
+  for (let i = 0; i < positions.length; i++) {
+    for (let j = i + 1; j < positions.length; j++) {
+      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 30,
+        'spawn positions must keep players separated');
+    }
+  }
+  manager.disposeLobby(lobby);
+}
+
 console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown, kill and spawn separation)');
