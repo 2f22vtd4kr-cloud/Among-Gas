@@ -58,6 +58,8 @@ assert.match(coords, /PLAYER_SPAWN_MAX_FEET_Y\s*=\s*Math\.round\(200 \*/);
 assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
 assert.match(coords, /PLAYER_SPAWN_X\s*=\s*Math\.round\(450 \*/);
 assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
+assert.match(uiLobbySource, /gameQuery\.set\('mock', mock\)/,
+  'dev mock fixture identifiers must survive the lobby-to-game route transition');
 assert.match(coords, /FEET_OFFSET_Y\s*=\s*Math\.round\(/);
 const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 assert.ok(wireRunsMatch, 'Could not parse RLE collision grid');
