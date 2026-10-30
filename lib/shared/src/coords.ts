@@ -26,7 +26,19 @@ export const MAP_H = 1858;
  * Used by the server for collision validation with the same geometry as the client.
  */
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
-export const FEET_OFFSET_Y = Math.round(_SPRITE_H_MAP_PX * 0.25);
+/**
+ * The world position is the sprite's ground/foot anchor, not its visual
+ * centre. The idle atlas crop is 136px high from a 1401/9px cell; the
+ * rendered sprite is centred on its world point, so its visible feet sit
+ * half that cropped height below the centre. The former 25% offset put the
+ * collision footprint ~13 map-pixels above the visible feet and let players
+ * stand visibly inside wall edges.
+ */
+const IDLE_SPRITE_VISIBLE_HEIGHT = 136;
+const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
+export const FEET_OFFSET_Y = Math.round(
+  _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
+);
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;
