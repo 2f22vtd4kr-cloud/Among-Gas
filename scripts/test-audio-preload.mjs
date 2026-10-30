@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { chromium } from 'playwright-core';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
 const browser = await chromium.launch({
