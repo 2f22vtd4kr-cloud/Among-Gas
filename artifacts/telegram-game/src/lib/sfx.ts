@@ -98,8 +98,12 @@ function playFootstep(volume: number): void {
 function load(key: string, url: string): void {
   if (cache.has(key)) return;
   try {
-    const a = new Audio(url);
-    a.preload = 'auto';
+    // Construct without a source first so preload='none' is in place before
+    // assigning the URL. Otherwise every sound (including multi-megabyte menu
+    // music and victory tracks) may download as soon as the lobby imports sfx.
+    const a = new Audio();
+    a.preload = 'none';
+    a.src = url;
     cache.set(key, a);
   } catch {
     // Web Audio not supported
