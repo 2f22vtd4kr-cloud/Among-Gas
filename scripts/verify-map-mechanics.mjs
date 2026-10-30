@@ -109,7 +109,7 @@ const queue = [start];
 reachable[start.index] = 1;
 for (let head = 0; head < queue.length; head++) {
   const current = queue[head];
-  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+  for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
     const col = current.col + dc;
     const row = current.row + dr;
     if (col < 0 || col >= cols || row < 0 || row >= rows) continue;
@@ -117,8 +117,9 @@ for (let head = 0; head < queue.length; head++) {
     if (!valid[index] || reachable[index]) continue;
     const next = pointForCell(col, row);
     let clear = true;
-    for (let step = 1; step < 10; step++) {
-      const t = step / 10;
+    const segmentSteps = Math.max(1, Math.ceil(Math.hypot(next.x - current.x, next.y - current.y) / 2));
+    for (let step = 0; step <= segmentSteps; step++) {
+      const t = step / segmentSteps;
       if (!canPlayerMoveTo(current.x + (next.x - current.x) * t,
                            current.y + (next.y - current.y) * t)) {
         clear = false;
@@ -242,6 +243,8 @@ assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emerg
 
 console.log(JSON.stringify({
   ok: true,
+  feetAnchorOffsetPx: feetOffsetY,
+  playerFootprint: { radiusPx: playerRadius, halfWidthPx: playerHalfWidth },
   collisionGrid: `${cols}×${rows}`,
   reachableCells: reachableNodes.length,
   taskCount: tasks.length,
