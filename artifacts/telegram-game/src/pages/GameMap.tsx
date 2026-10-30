@@ -1174,6 +1174,7 @@ export default function GameMap() {
           canvasHeight: ch,
           mapImageWidth: mapImg.naturalWidth,
           mapImageHeight: mapImg.naturalHeight,
+          mapWorldRect: { x: srcX, y: srcY, width: srcW, height: srcH },
           mapSourceRect,
         };
       }

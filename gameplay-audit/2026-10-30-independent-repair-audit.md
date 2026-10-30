@@ -107,3 +107,10 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - Reverted the proposed vertical stretch in DOM, local, remote and corpse sprite rendering; restored the original 136px idle source crop and 31px vertical half-extent/feet anchor. The updated atlas regression now protects the actual crop dimensions, seven-color/nine-pose atlas bounds, idle baseline metadata and corpse exposed-bone crop.
 - The 15-player check failure was caused by this incorrect height expansion, not proof that the existing spawn search needed redesign. Reverted the 8px lattice fallback in both the API and verifier, and restored the previously validated radial candidate search. The test will rerun against the correct sprite geometry.
 - The map raster transform remains the independently confirmed defect and stays in the patch. Visible sprite-leg crop remains open pending post-transform browser screenshots and inspection of the actual role/kill render.
+
+
+## 2026-10-30 — Browser assertions strengthened
+
+- Added a mobile browser assertion that the role-reveal sprite's rendered aspect ratio matches the 136px measured idle crop (1123/7 source width), preventing CSS/background-size scaling from disguising vertical stretch.
+- Added camera diagnostics for both canonical world crop and native-image crop. The browser smoke test now verifies the actual gameplay render reports the 6608×3808 WebP and that X/Y source coordinates and dimensions are transformed using the independent measured ratios.
+- The crop-preserving commit's full CI is still in progress; this new browser coverage must also pass before merge.

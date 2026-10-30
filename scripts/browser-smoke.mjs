@@ -234,6 +234,13 @@ try {
     'the authored role-reveal baseline remains available as metadata');
   assert.equal(await roleRevealSprite.evaluate(el => el.style.transform), 'none',
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
+  const roleCropRatio = await roleRevealSprite.evaluate(el => {
+    const bounds = el.getBoundingClientRect();
+    return bounds.width > 0 ? bounds.height / bounds.width : 0;
+  });
+  const expectedRoleCropRatio = 136 / (1123 / 7);
+  assert.ok(Math.abs(roleCropRatio - expectedRoleCropRatio) < 0.01,
+    `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
   const roleRevealShadow = page.locator('[data-role-reveal-shadow="true"]');
@@ -1221,6 +1228,23 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
+  assert.equal(cameraBaseline.mapImageWidth, 6608,
+    'camera diagnostics must identify the native high-resolution WebP width');
+  assert.equal(cameraBaseline.mapImageHeight, 3808,
+    'camera diagnostics must identify the native high-resolution WebP height');
+  const worldRect = cameraBaseline.mapWorldRect;
+  const sourceRect = cameraBaseline.mapSourceRect;
+  assert.ok(worldRect && sourceRect &&
+    [worldRect.x, worldRect.y, worldRect.width, worldRect.height,
+      sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height].every(Number.isFinite),
+  'camera must expose finite world and native-image source rectangles');
+  const scaleX = cameraBaseline.mapImageWidth / 3224;
+  const scaleY = cameraBaseline.mapImageHeight / 1858;
+  assert.ok(Math.abs(sourceRect.x - worldRect.x * scaleX) < 1e-6 &&
+    Math.abs(sourceRect.y - worldRect.y * scaleY) < 1e-6 &&
+    Math.abs(sourceRect.width - worldRect.width * scaleX) < 1e-6 &&
+    Math.abs(sourceRect.height - worldRect.height * scaleY) < 1e-6,
+  'actual WebP camera source rectangle must be transformed independently on X and Y');
   const worldBaseline = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
   const joystickBox = await joystick.boundingBox();
