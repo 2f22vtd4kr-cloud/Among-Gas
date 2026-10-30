@@ -16,6 +16,8 @@ import {
 } from './collisionMap';
 import {
   PLAYER_SPEED_PX_PER_SEC,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
 import type { CharacterPose } from './characterSprites';
 
@@ -38,8 +40,8 @@ export function isMovementPathWalkableWide(
 
 /** Spawn point inside the main lobby — verified walkable with margin for PLAYER_RADIUS. */
 export const PLAYER_SPAWN = {
-  x: Math.round(350 * (MAP_W / 1040)),
-  y: Math.round(150 * (MAP_H / 580)),
+  x: PLAYER_SPAWN_X,
+  y: PLAYER_SPAWN_Y,
 };
 
 export interface PlayerState {
