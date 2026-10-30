@@ -344,7 +344,7 @@ try {
   await page.mouse.move(taskJoystickX, taskJoystickY);
   await page.mouse.down();
   await page.mouse.move(taskJoystickX - 38, taskJoystickY + 22, { steps: 5 });
-  const taskKnobTransform = await page.getByTestId('joystick-knob').evaluate(node => (node as HTMLElement).style.transform);
+  const taskKnobTransform = await page.getByTestId('joystick-knob').evaluate(node => node.style.transform);
   assert.match(taskKnobTransform, /calc\(-50% \+/,
     'the task-approach pointer gesture must engage the actual joystick knob');
   await page.waitForTimeout(650);
