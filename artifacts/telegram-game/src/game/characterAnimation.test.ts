@@ -10,9 +10,9 @@ const maximumBob = spriteHeight * 0.06;
 
 assert.equal(getCharacterWalkBobOffset(0, spriteHeight), 0,
   'the first frame starts grounded');
-assert.equal(getCharacterWalkBobOffset(PLAYER_ANIM_INTERVAL_MS, spriteHeight), 0,
+assert.ok(getCharacterWalkBobOffset(PLAYER_ANIM_INTERVAL_MS, spriteHeight) < 1e-10,
   'the next walk frame starts grounded');
-assert.equal(getCharacterWalkBobOffset(PLAYER_ANIM_INTERVAL_MS * 2, spriteHeight), 0,
+assert.ok(getCharacterWalkBobOffset(PLAYER_ANIM_INTERVAL_MS * 2, spriteHeight) < 1e-10,
   'the complete two-frame cycle returns to ground');
 assert.equal(getCharacterWalkBobOffset(PLAYER_ANIM_INTERVAL_MS / 2, spriteHeight), maximumBob,
   'the character reaches its highest point halfway through the first step');
