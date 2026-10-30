@@ -568,6 +568,7 @@ try {
   await page.goto(`${origin}/?mock=meeting-ghost`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Вы мертвы — наблюдаете', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByText('Голосование', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('I saw Nova near the west wall.', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('I was finishing the task console.', { exact: true }).waitFor({ state: 'visible' });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'hidden' });
