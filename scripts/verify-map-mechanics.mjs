@@ -310,7 +310,7 @@ assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must re
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
 assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(grid, true\)/, 'narrow props must use separate visual occlusion circles rather than square collision cells');
-assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
+assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
