@@ -1298,6 +1298,15 @@ try {
   const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
   assert.ok(worldChangeRatio > 0.02,
     `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
+  const playerMovementSamples = cameraSamples.filter((sample, index) => index > 0 &&
+    Math.hypot(sample.playerX - cameraSamples[index - 1].playerX,
+      sample.playerY - cameraSamples[index - 1].playerY) > 0.25);
+  const sampledMovementDistance = Math.hypot(
+    cameraSamples[cameraSamples.length - 1].playerX - cameraSamples[0].playerX,
+    cameraSamples[cameraSamples.length - 1].playerY - cameraSamples[0].playerY,
+  );
+  assert.ok(playerMovementSamples.length >= 3 && sampledMovementDistance > 30,
+    `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} samples over ${sampledMovementDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
