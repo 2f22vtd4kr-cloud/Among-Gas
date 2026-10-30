@@ -115,10 +115,13 @@ export function stepPlayer(
 
   const facingLeft = dx !== 0 ? dx < 0 : state.facingLeft;
 
-  const animElapsedMs = moving ? state.animElapsedMs + dtMs : 0;
+  // Input alone is not movement: pressing into a wall or map boundary must
+  // not animate a walk cycle or emit footsteps while the world position is fixed.
+  const actuallyMoving = x !== state.x || y !== state.y;
+  const animElapsedMs = actuallyMoving ? state.animElapsedMs + dtMs : 0;
   const pose: CharacterPose = ghost
     ? 'ghost'
-    : moving
+    : actuallyMoving
       ? Math.floor(animElapsedMs / PLAYER_ANIM_INTERVAL_MS) % 2 === 0
         ? 'walk-1'
         : 'walk-2'
