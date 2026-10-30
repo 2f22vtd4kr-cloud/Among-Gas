@@ -55,8 +55,8 @@ assert.ok(
 // detached underline strokes; rendering uses native crop scale and a pose-specific gap mask.
 {
   const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
-  assert.equal(corpseFrames.length, 7, 'all seven balaclava colors have a corpse pose');
-  assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 7, 'each color has its own corpse atlas column');
+  assert.equal(corpseFrames.length, 18, 'all eighteen runtime palettes have a corpse pose');
+  assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 18, 'each runtime palette has its own atlas column');
   assert.equal(getCharacterFrameRect('teal', 'idle').height, 136,
     'idle crop ends before the detached under-foot scanlines');
   assert.equal(corpseFrames[0].height, 93,
