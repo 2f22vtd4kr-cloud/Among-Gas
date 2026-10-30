@@ -13,3 +13,5 @@ When adding visual effects (drop shadows, outline removal, glow, etc.) to a game
 ## 2026-10-30 implementation update — synchronized bob clock
 
 Local and remote gameplay characters now share `getCharacterWalkBobOffset()` and `getCharacterShadowScale()` from `characterAnimation.ts`. The local path uses `playerStateRef.current.animElapsedMs`, the same accumulator used to select walk-1/walk-2; the remote path uses its matching `animMs`. Do not use global RAF wall-clock time for local bob phase, because it drifts from the footstep frames. The ground ellipse remains anchored at ground Y and scales down as the sprite rises.
+
+The gameplay oval geometry was also made visibly separable from the feet after inspecting the 390×844 `camera-stability-after-move.png` capture: its center is at 0.55× sprite height, with horizontal/vertical radii 0.34× sprite width and 0.07× sprite height. The previous 0.28/0.055/0.48 ratios left most of the ellipse occluded by the opaque sprite. Regression tests require the oval to overlap the feet baseline slightly while remaining visible below it.
