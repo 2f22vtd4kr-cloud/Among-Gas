@@ -1689,7 +1689,7 @@ export default function GameMap() {
   return (
     <div
       onPointerDown={unlockSfx}
-      style={{ position: 'fixed', inset: 0, overflow: 'hidden', overscrollBehavior: 'none', touchAction: 'none', background: '#3d4e5e' }}
+      style={{ position: 'fixed', inset: 0, overflow: 'hidden', overscrollBehavior: 'none', touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none', background: '#3d4e5e' }}
     >
       {killAnimation && (
         <div
