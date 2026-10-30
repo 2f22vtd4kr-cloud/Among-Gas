@@ -26,6 +26,7 @@ import {
   PLAYER_SPAWN_MAX_FEET_Y,
 } from './coords.js';
 import { MANUAL_BLOCKED_POLYGONS } from './collisionOverrides.js';
+export { MANUAL_BLOCKED_POLYGONS };
 
 // Map now renders from a pre-upscaled static asset (public/map-hires.png).
 // MAP_W/MAP_H must match that asset's native pixel size exactly.
