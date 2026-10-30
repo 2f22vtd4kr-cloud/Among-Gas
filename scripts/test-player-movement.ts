@@ -43,3 +43,51 @@ assert.ok(result.x < wallLeft - PLAYER_HALF_WIDTH,
   `client prediction must not cross the wall (start=${startX.toFixed(1)}, result=${result.x.toFixed(1)}, wall=${wallLeft.toFixed(1)})`);
 
 console.log('PASS: client prediction validates the full movement path against thin walls');
+
+// Diagonal corner contact: the straight segment clips a blocked cell even
+// though both independent axis slides remain clear. The resolver must slide
+// rather than letting the character's wide feet hitbox enter the corner.
+{
+  const cornerGrid = new Uint8Array(COLS * ROWS);
+  cornerGrid[wallRow * COLS + wallCol] = 1;
+  const cornerStartX = wallLeft - PLAYER_HALF_WIDTH - PLAYER_RADIUS - 3;
+  const cornerStartFeetY = wallTop - PLAYER_RADIUS - 3;
+  const cornerState = {
+    ...createInitialPlayerState(),
+    x: cornerStartX,
+    y: cornerStartFeetY - FEET_OFFSET_Y,
+  };
+  const diagonalKeys = new Set(['d', 's']);
+  const cornerResult = stepPlayer(cornerGrid, cornerState, diagonalKeys, 48);
+  const intendedDistance = PLAYER_SPEED_PX_PER_SEC * 48 / 1000;
+  const intendedX = cornerStartX + intendedDistance / Math.SQRT2;
+  const intendedFeetY = cornerStartFeetY + intendedDistance / Math.SQRT2;
+
+  assert.equal(isMovementPathWalkableWide(
+    cornerGrid, cornerStartX, cornerStartFeetY, intendedX, intendedFeetY,
+  ), false, 'diagonal contact with a blocked cell corner must be rejected');
+  assert.ok(cornerResult.x > cornerStartX,
+    'a clear horizontal slide should preserve horizontal movement');
+  assert.equal(cornerResult.y, cornerState.y,
+    'x-first sliding must not push the player diagonally into the blocked corner');
+  assert.ok(isMovementPathWalkableWide(
+    cornerGrid, cornerStartX, cornerStartFeetY, intendedX, cornerStartFeetY,
+  ), 'the horizontal slide itself must remain clear');
+}
+
+// Long diagonal sweep: endpoints are walkable on opposite sides of one
+// blocked cell, but the full segment intersects it. This catches corner
+// clipping that cardinal-only endpoint tests miss.
+{
+  const diagonalGrid = new Uint8Array(COLS * ROWS);
+  diagonalGrid[wallRow * COLS + wallCol] = 1;
+  const fromX = wallLeft - 20;
+  const fromFeetY = wallTop - 20;
+  const toX = wallLeft + CELL_X + 20;
+  const toFeetY = wallTop + CELL_Y + 20;
+  assert.equal(feetWalkable(fromX), true, 'diagonal fixture start must be walkable');
+  assert.equal(feetWalkable(toX), true, 'diagonal fixture destination x must be walkable');
+  assert.equal(isMovementPathWalkableWide(
+    diagonalGrid, fromX, fromFeetY, toX, toFeetY,
+  ), false, 'a diagonal segment must not tunnel through a blocked cell');
+}
