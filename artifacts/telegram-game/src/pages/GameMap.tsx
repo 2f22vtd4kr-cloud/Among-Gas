@@ -327,7 +327,8 @@ export default function GameMap() {
       return () => window.clearTimeout(timer);
     }
     if (lastKill.attackerSlot === mySlot) {
-      sfx('kill', 0.48);
+      // The attacker already played the cue on the trusted Kill-button
+      // gesture; do not replay it when the authoritative event returns.
       return;
     }
 
@@ -2347,7 +2348,15 @@ export default function GameMap() {
                 ? (en ? `Kill cooldown ${Math.ceil(killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(killCooldownMs / 1000)} секунд`)
                 : (en ? 'Kill' : 'Убить')}
               disabled={killCooldownMs > 0 || nearestTarget === null}
-              onClick={() => { if (nearestTarget !== null) { haptic.tap(); sendKill(nearestTarget); } }}
+              onClick={() => {
+                if (nearestTarget !== null) {
+                  haptic.tap();
+                  // Start audio on the user's gesture instead of waiting for
+                  // the server round-trip and React's authoritative kill event.
+                  sfx('kill', 0.48);
+                  sendKill(nearestTarget);
+                }
+              }}
               style={{
                 width: 76, height: 76, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
