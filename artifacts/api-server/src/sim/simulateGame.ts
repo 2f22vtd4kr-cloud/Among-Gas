@@ -22,6 +22,7 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
+import { buildCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import type { SimGameResult, SimWinner } from './types.js';
 
 export interface SimBatchOptions {
@@ -40,6 +41,8 @@ export interface SimBatchOptions {
   /** Called once per finished game, as soon as its result is known. */
   onGameResult?: (result: SimGameResult) => void;
 }
+
+const simulationCollisionGrid = buildCollisionGrid();
 
 const BOT_NAMES = [
   'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta',
@@ -81,6 +84,8 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       let kills = 0;
       let meetings = 0;
       let settled = false;
+      let collisionMonitor: ReturnType<typeof setInterval> | null = null;
+      let collisionViolation: { slot: number; x: number; y: number } | undefined;
 
       let deadlineAt = startedAt + timeoutMs;
       let criticalSabotageExtensionUsed = false;
@@ -90,6 +95,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         if (settled) return;
         settled = true;
         clearTimeout(timeoutHandle);
+        if (collisionMonitor) clearInterval(collisionMonitor);
         perGameHandlers.delete(lobby.code);
         const timeoutState = winner === 'timeout' ? {
           phase: lobby.phase,
@@ -100,6 +106,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           } : null,
           completedTaskSteps: lobby.completedTaskSteps.size,
           totalTaskSteps: lobby.totalTaskSteps,
+          ...(collisionViolation ? { collisionViolation } : {}),
           players: Array.from(lobby.players.values()).map(player => ({
             slot: player.slot,
             role: player.role,
@@ -164,6 +171,25 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       }
       manager.startGame(lobby, impostors);
       assignBotAgentsByRole(lobby);
+
+      // Independently audit every living bot position throughout the real
+      // simulation loop. This catches collision/pathfinding regressions that
+      // outcome-only tests miss (e.g. a bot slowly walking through a wall).
+      collisionMonitor = setInterval(() => {
+        if (settled) return;
+        for (const player of lobby.players.values()) {
+          if (!player.alive) continue; // ghosts intentionally ignore walls
+          if (!isPlayerPositionWalkable(simulationCollisionGrid, player.x, player.y)) {
+            collisionViolation = {
+              slot: player.slot,
+              x: Math.round(player.x),
+              y: Math.round(player.y),
+            };
+            finish('timeout');
+            return;
+          }
+        }
+      }, 20);
     }
 
     const initialBatch = Math.min(concurrency, games);
