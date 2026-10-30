@@ -18,7 +18,6 @@ import {
   MAP_W, MAP_H,
   toWire,
   DELTA_THRESHOLD_SQ,
-  FEET_OFFSET_Y, PLAYER_RADIUS,
   KILL_COOLDOWN_MS,
   MEETING_DISCUSSION_MS, MEETING_VOTING_MS,
   NO_TARGET,
@@ -26,6 +25,7 @@ import {
 import {
   buildCollisionGrid,
   canMoveTo,
+  isPlayerPositionWalkable,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -81,7 +81,12 @@ function computeSpawnPosition(
   total: number,
   occupied: readonly { x: number; y: number }[] = [],
 ): { x: number; y: number } {
-  if (total <= 1) return { x: SPAWN_X, y: SPAWN_Y };
+  if (total <= 1) {
+    if (!isPlayerPositionWalkable(spawnGrid, SPAWN_X, SPAWN_Y)) {
+      throw new Error('Configured player spawn is outside the walkable map footprint');
+    }
+    return { x: SPAWN_X, y: SPAWN_Y };
+  }
   const baseAngle = (index / total) * Math.PI * 2 - Math.PI / 2;
   // Try several angular/radial candidates instead of falling back immediately
   // to the shared center. A rejected candidate must not stack multiple players
@@ -93,10 +98,7 @@ function computeSpawnPosition(
       const angle = baseAngle + offset;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      const feetY = y + FEET_OFFSET_Y;
-      const clear = canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) &&
-        canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) &&
-        canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS);
+      const clear = isPlayerPositionWalkable(spawnGrid, x, y);
       if (!clear) continue;
       if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
       return { x, y };
@@ -109,16 +111,12 @@ function computeSpawnPosition(
       const angle = (step / 24) * Math.PI * 2;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      const feetY = y + FEET_OFFSET_Y;
-      if (!canMoveTo(spawnGrid, x, feetY, PLAYER_RADIUS) ||
-          !canMoveTo(spawnGrid, x - 12, feetY, PLAYER_RADIUS) ||
-          !canMoveTo(spawnGrid, x + 12, feetY, PLAYER_RADIUS)) continue;
+      if (!isPlayerPositionWalkable(spawnGrid, x, y)) continue;
       if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
       return { x, y };
     }
   }
-  // Last resort only: map geometry has no further separated walkable spawn.
-  return { x: SPAWN_X, y: SPAWN_Y };
+  throw new Error('No separated walkable spawn position found; refusing to spawn a player inside map geometry');
 }
 
 /** Impostor count by player count (GAME_SPEC.md §8; host setting UI is future work). */
