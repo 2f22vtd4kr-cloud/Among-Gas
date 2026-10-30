@@ -7,7 +7,7 @@
  *
  * Subclasses implement tick() and chooseVote().
  */
-import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, type Grid } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, isPlayerPathWalkable, type Grid } from '@workspace/shared/collisionMap';
 import {
   PLAYER_RADIUS,
   PLAYER_HALF_WIDTH,
@@ -105,19 +105,17 @@ function isSpawnReachable(feetX: number, feetY: number): boolean {
   return spawnReachability[row * COLS + col] === 1;
 }
 
-/** Ensure a candidate movement segment stays clear, not just its endpoint. */
+/** Use the exact same 2px swept footprint check as human prediction and server authority. */
 function canTraverse(from: Point, to: Point): boolean {
-  const distance = Math.hypot(to.x - from.x, to.y - from.y);
-  const samples = Math.max(1, Math.ceil(distance / 8));
-  for (let i = 1; i <= samples; i++) {
-    const t = i / samples;
-    if (!canMoveToPlayer(
-      grid,
-      from.x + (to.x - from.x) * t,
-      from.y + (to.y - from.y) * t,
-    )) return false;
-  }
-  return true;
+  // Bot waypoints are stored in feet-space; the shared helper accepts the
+  // sprite anchor and applies the canonical feet offset internally.
+  return isPlayerPathWalkable(
+    grid,
+    from.x,
+    from.y - FEET_OFFSET_Y,
+    to.x,
+    to.y - FEET_OFFSET_Y,
+  );
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
