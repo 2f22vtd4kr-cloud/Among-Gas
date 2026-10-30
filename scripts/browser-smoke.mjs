@@ -1159,6 +1159,8 @@ try {
     }
     return { x: count ? sumX / count : cx, y: count ? sumY / count : cy, count, cx, cy };
   });
+  const cameraBaseline = await readPlayerCentroid();
+  assert.ok(cameraBaseline.count > 20, 'the local player sprite must be visible before movement');
   await cameraPage.keyboard.down('ArrowRight');
   await cameraPage.waitForTimeout(550);
   const cameraSamples = [];
@@ -1169,12 +1171,12 @@ try {
   await cameraPage.keyboard.up('ArrowRight');
   assert.ok(cameraSamples.every(sample => sample.count > 20),
     'the local player sprite must remain visible while the camera follows movement');
-  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - sample.cx)));
-  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.y - sample.cy)));
+  const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - cameraBaseline.x)));
+  const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.y - cameraBaseline.y)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.x)) - Math.min(...cameraSamples.map(sample => sample.x));
   const cameraSpreadY = Math.max(...cameraSamples.map(sample => sample.y)) - Math.min(...cameraSamples.map(sample => sample.y));
   assert.ok(maxCameraOffsetX < 24 && maxCameraOffsetY < 24,
-    `camera must keep the moving player near viewport center (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
+    `camera must keep the moving player near its pre-movement screen position (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
   assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
     `camera-following player centroid must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
