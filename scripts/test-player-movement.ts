@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
-import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
+import {
+  FEET_OFFSET_Y,
+  PLAYER_HALF_WIDTH,
+  PLAYER_RADIUS,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPEED_PX_PER_SEC,
+} from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
 import { resolvePlayerMovement } from '../artifacts/telegram-game/src/game/collisionMap.js';
 
@@ -191,6 +198,23 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
     'blocked input must not accumulate animation time');
 }
 
+
+// The authoritative dead-player movement path must use the same nonnegative
+// edge clamp so the server never emits an invalid unsigned wire coordinate.
+{
+  const decision = validateMovementIntent({
+    x: MAP_W / 2,
+    y: 50,
+    alive: false,
+    movementCreditPx: 27,
+    movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, MAP_W / 2, 30, 2_000, grid);
+  assert.equal(decision.y, PLAYER_SPRITE_HALF_HEIGHT_PX,
+    'server ghost movement must clamp the anchor to the visible north sprite bound');
+  assert.ok(decision.y >= 0, 'server ghost movement must never produce a negative wire y coordinate');
+}
+
 console.log('PASS: client/server collision agreement, thin walls, diagonal corners, map edges and blocked-input animation');
 
 // Normal movement remains animated, and dead players retain wall-phasing.
@@ -211,10 +235,10 @@ console.log('PASS: client/server collision agreement, thin walls, diagonal corne
 // footprint on all four edges rather than allowing the sprite anchor to reach
 // x=0 / y=0 where its collision base would be outside the map.
 {
-  const minX = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
+  const minX = Math.max(PLAYER_SPRITE_HALF_WIDTH_PX, PLAYER_HALF_WIDTH + PLAYER_RADIUS);
   const maxX = MAP_W - minX;
-  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
-  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  const minY = Math.max(0, PLAYER_SPRITE_HALF_HEIGHT_PX, PLAYER_RADIUS - FEET_OFFSET_Y);
+  const maxY = MAP_H - Math.max(PLAYER_SPRITE_HALF_HEIGHT_PX, FEET_OFFSET_Y + PLAYER_RADIUS);
   const base = createInitialPlayerState();
   const west = stepPlayer(grid, { ...base, x: minX + 10 }, new Set(['a']), 48, true);
   const east = stepPlayer(grid, { ...base, x: maxX - 10 }, new Set(['d']), 48, true);
@@ -222,6 +246,11 @@ console.log('PASS: client/server collision agreement, thin walls, diagonal corne
   const south = stepPlayer(grid, { ...base, y: maxY - 10 }, new Set(['s']), 48, true);
   assert.equal(west.x, minX, 'ghost west edge clamp must preserve the full horizontal foot base');
   assert.equal(east.x, maxX, 'ghost east edge clamp must preserve the full horizontal foot base');
-  assert.equal(north.y, minY, 'ghost north edge clamp must preserve the feet circle inside the map');
-  assert.equal(south.y, maxY, 'ghost south edge clamp must preserve the feet circle inside the map');
+  assert.equal(north.y, minY, 'ghost north edge clamp must preserve the complete sprite and feet inside the map');
+  assert.equal(south.y, maxY, 'ghost south edge clamp must preserve the complete sprite and feet inside the map');
+  assert.ok(north.y >= 0, 'ghost north edge anchor must remain nonnegative for unsigned wire coordinates');
+  assert.ok(north.y - PLAYER_SPRITE_HALF_HEIGHT_PX >= 0,
+    'ghost north edge must keep the complete visible sprite inside the map');
+  assert.ok(south.y + Math.max(PLAYER_SPRITE_HALF_HEIGHT_PX, FEET_OFFSET_Y + PLAYER_RADIUS) <= MAP_H,
+    'ghost south edge must keep the visible sprite and feet inside the map');
 }
