@@ -93,3 +93,10 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - The second CI attempt passed both new regression tests, then stopped in `scripts/verify-map-mechanics.mjs` before map reachability was evaluated. Its old expectation hardcoded the former 136px cropped idle height and rejected the new authored 153px display height.
 - Updated the verifier to read the shared numeric `IDLE_SPRITE_VISIBLE_HEIGHT`, rather than duplicating the previous value. Kept `PLAYER_SPRITE_HALF_HEIGHT_PX` as a numeric literal for the existing source parser; the atlas test asserts that it remains the calculated ceiling (35px).
 - CI must rerun to determine whether any solo/multiplayer spawn candidate needs adjustment under the corrected feet position and sprite bounds.
+
+
+## 2026-10-30 — Full-match spawn capacity investigation
+
+- Latest CI run passed both new asset/sprite regressions but failed the exhaustive 15-player placement check at slot 12. The previous radial fallback sampled only 48 angles at 12px radius increments, which can miss small safe positions and makes sequential placement order-dependent.
+- Replaced that fallback in both the authoritative API lobby and the independent map verifier with a deterministic 8px lattice search inside the existing 600px spawn ellipse and existing shared spawn-area bounds. The chosen point maximizes nearest-player clearance with a mild preference for staying near the intended lobby spawn radius. The normal preferred ring placement remains unchanged when it succeeds.
+- No collision cells, foot hitbox, spawn zone boundaries, or minimum 72px inter-player separation were weakened. CI must confirm 15 valid positions, spawn-region safety and the remaining gameplay suites.

@@ -187,8 +187,18 @@ const computeSpawn=(index,total,occupied=[])=>{
   const offsets=[0,Math.PI/12,-Math.PI/12,Math.PI/6,-Math.PI/6,Math.PI/4,-Math.PI/4,Math.PI/3,-Math.PI/3];
   for(const offset of offsets)for(const radius of radii){const a=baseAngle+offset,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
  }
- for(let radius=12;radius<=600;radius+=12)for(let step=0;step<48;step++){const a=step/48*Math.PI*2,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
- return null;
+ let bestSpawn=null;
+ const minX=Math.max(0,spawnX-600),maxX=Math.min(mapW,spawnX+600);
+ const minY=Math.max(0,spawnY-360),maxY=Math.min(mapH,spawnY+360);
+ for(let y=minY;y<=maxY;y+=8)for(let x=minX;x<=maxX;x+=8){
+  const dx=x-spawnX,dy=y-spawnY;
+  if(dx*dx+(dy/0.6)**2>600*600||!availableSpawn(x,y,occupied))continue;
+  const radialDistance=Math.hypot(dx,dy/0.6);
+  const nearestPlayer=occupied.length?Math.min(...occupied.map(p=>Math.hypot(p.x-x,p.y-y))):600;
+  const score=nearestPlayer-Math.abs(radialDistance-240)*0.015;
+  if(!bestSpawn||score>bestSpawn.score)bestSpawn={x,y,score};
+ }
+ return bestSpawn?{x:bestSpawn.x,y:bestSpawn.y}:null;
 };
 const soloSpawn=computeSpawn(0,1);
 assert.ok(soloSpawn,'solo start finds a clearance-safe point or fallback');
