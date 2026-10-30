@@ -2742,13 +2742,13 @@ export default function GameMap() {
                       cursor: hasVoted ? 'default' : 'pointer',
                     }}
                   >
-                    <span aria-hidden="true" style={{
+                    <span data-testid="vote-player-color" aria-hidden="true" style={{
                       width: 18, height: 18, flex: '0 0 18px', borderRadius: '50%',
                       background: ADMIN_DOT_COLORS[slotColor(p.slot)],
                       border: '2px solid rgba(255,255,255,0.72)',
                       boxShadow: '0 1px 4px rgba(0,0,0,0.55)',
                     }} />
-                    <span style={{ minWidth: 28, color: 'rgba(210,225,240,0.72)', fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>
+                    <span data-testid="vote-player-number" style={{ minWidth: 28, color: 'rgba(210,225,240,0.72)', fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>
                       {String(p.slot + 1).padStart(2, '0')}
                     </span>
                     <span>{p.slot === mySlot ? `${p.username} (${en ? 'you' : 'вы'})` : p.username}</span>
