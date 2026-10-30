@@ -35,7 +35,7 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify collision-map gameplay coordinates
+      - name: Exhaustively verify real-map player footprint and reachable geometry
         run: node scripts/verify-map-mechanics.mjs
 
       - name: Verify base-game vision and wall occlusion
@@ -43,9 +43,6 @@ jobs:
 
       - name: Verify client/server movement collision agreement, thin walls, corners and bounds
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-player-movement.ts
-
-      - name: Exhaustively verify real-map player footprint and reachable geometry
-        run: node scripts/verify-map-mechanics.mjs
 
       - name: Typecheck and build API/frontend
         run: pnpm run build
