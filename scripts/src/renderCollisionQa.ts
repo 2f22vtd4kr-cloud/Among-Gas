@@ -1,151 +1,118 @@
 import sharp from 'sharp';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  buildCollisionGrid,
+  COLS,
+  ROWS,
+  MAP_W,
+  MAP_H,
+} from '@workspace/shared/collisionMap';
+import {
+  FEET_OFFSET_Y,
+  PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
+} from '@workspace/shared/coords';
+import { MANUAL_BLOCKED_POLYGONS } from '@workspace/shared/collisionOverrides';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const dataPath = path.join(root, 'lib/shared/src/collisionData.ts');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
 const referencePath = path.join(root, 'attached_assets/IMG_2907_1783632830477.jpeg');
-const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
 const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay-webp.png');
+const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 
-const source = fs.readFileSync(dataPath, 'utf8');
-const mapSource = fs.readFileSync(path.join(root, 'lib/shared/src/collisionMap.ts'), 'utf8');
-const coords = fs.readFileSync(path.join(root, 'lib/shared/src/coords.ts'), 'utf8');
-const readNumber = (name: string) => {
-  const match = source.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
-  if (!match) throw new Error(`Missing collision constant ${name}`);
-  return Number(match[1]);
-};
-const cols = readNumber('COLS');
-const rows = readNumber('ROWS');
-const runsMatch = source.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
-if (!runsMatch) throw new Error('Could not parse canonical collision RLE');
-const runs = runsMatch[1].split(',').map(value => Number(value.trim()));
-const grid = new Uint8Array(cols * rows);
-let cursor = 0;
-let value = 0;
-for (const run of runs) {
-  if (!Number.isInteger(run) || run < 0 || cursor + run > grid.length) {
-    throw new Error(`Invalid collision run at cell ${cursor}`);
-  }
-  grid.fill(value, cursor, cursor + run);
-  cursor += run;
-  value = 1 - value;
-}
-if (cursor !== grid.length) throw new Error(`Collision RLE covers ${cursor}, expected ${grid.length}`);
-
+const grid = buildCollisionGrid();
 const map = sharp(mapPath);
 const metadata = await map.metadata();
-if (!metadata.width || !metadata.height) throw new Error('Map image dimensions unavailable');
-const readMapNumber = (name: string) => {
-  const match = mapSource.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
-  if (!match) throw new Error(`Missing map constant ${name}`);
-  return Number(match[1]);
-};
-const readCoordNumber = (name: string) => {
-  const match = coords.match(new RegExp(`export const ${name}\\s*=\\s*(\\d+)`));
-  if (!match) throw new Error(`Missing player constant ${name}`);
-  return Number(match[1]);
-};
-const mapWidth = readMapNumber('MAP_W');
-const mapHeight = readMapNumber('MAP_H');
-const playerRadius = readCoordNumber('PLAYER_RADIUS');
-const playerHalfWidth = readCoordNumber('PLAYER_HALF_WIDTH');
-if (metadata.width !== mapWidth || metadata.height !== mapHeight) {
-  throw new Error(`PNG collision/map size mismatch: grid expects ${mapWidth}x${mapHeight}, image is ${metadata.width}x${metadata.height}`);
-}
 const webpMetadata = await sharp(webpPath).metadata();
-if (!webpMetadata.width || !webpMetadata.height) throw new Error('WebP map dimensions unavailable');
-const webpScaleX = webpMetadata.width / mapWidth;
-const webpScaleY = webpMetadata.height / mapHeight;
-if (!Number.isFinite(webpScaleX) || webpScaleX < 1 || Math.abs(webpScaleX - webpScaleY) > 0.001) {
-  throw new Error(`WebP must be an isotropic upscale of the collision map; got ${webpMetadata.width}x${webpMetadata.height} for ${mapWidth}x${mapHeight}`);
-}
-const cellWidth = mapWidth / cols;
-const cellHeight = mapHeight / rows;
-const rects: string[] = [];
-for (let row = 0; row < rows; row++) {
-  for (let col = 0; col < cols; col++) {
-    if (grid[row * cols + col] !== 1) continue;
-    const x = col * cellWidth;
-    const y = row * cellHeight;
-    rects.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${cellWidth.toFixed(2)}" height="${cellHeight.toFixed(2)}" fill="#ff1744" fill-opacity="0.34" stroke="#ff1744" stroke-opacity="0.8" stroke-width="1.1"/>`);
-  }
-}
-
-// Render the exact player footprint at the configured solo spawn: three
-// overlapping foot circles, with the visible-feet baseline highlighted.
-if (!coords.includes('IDLE_SPRITE_VISIBLE_HEIGHT = 136') || !coords.includes('CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9')) {
-  throw new Error('Player feet-anchor source constants changed; update collision QA overlay geometry');
-}
-const spriteHeight = Math.round(36 * (mapWidth / 1652));
-const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
-// The canonical PNG and collision grid share map-native coordinates.
-const scaleX = 1;
-const scaleY = 1;
-const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X = Math\.round\((\d+) \*/)?.[1]);
-const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y = Math\.round\((\d+) \*/)?.[1]);
-if (!Number.isFinite(spawnXRef) || !Number.isFinite(spawnYRef)) {
-  throw new Error('Could not parse shared player spawn reference coordinates');
-}
-const spawnX = Math.round(spawnXRef * mapWidth / 1040 * scaleX);
-const spawnY = Math.round(spawnYRef * mapHeight / 580 * scaleY);
-const feetY = spawnY + feetOffset * scaleY;
-const footprint = [
-  `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
-  `<circle cx="${spawnX - playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${spawnX + playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
-  `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
-  `<text x="${spawnX + 16}" y="${spawnY - 12}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="4" paint-order="stroke">PLAYER SPAWN / FEET</text>`,
-].join('');
-const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${metadata.width}" height="${metadata.height}" viewBox="0 0 ${metadata.width} ${metadata.height}">${rects.join('')}${footprint}</svg>`);
-await map.composite([{ input: svg }]).png().toFile(outputPath);
-
-// Also overlay the same grid on the original hand-traced red-line reference.
-// This makes it possible to audit whether the canonical RLE still corresponds
-// to the map image and whether downsampling erased narrow walls or doorways.
 const reference = sharp(referencePath);
 const referenceMeta = await reference.metadata();
-if (!referenceMeta.width || !referenceMeta.height) throw new Error('Collision reference dimensions unavailable');
-const refCellWidth = referenceMeta.width / cols;
-const refCellHeight = referenceMeta.height / rows;
-const refRects: string[] = [];
-for (let row = 0; row < rows; row++) {
-  for (let col = 0; col < cols; col++) {
-    if (grid[row * cols + col] !== 1) continue;
-    refRects.push(`<rect x="${(col * refCellWidth).toFixed(2)}" y="${(row * refCellHeight).toFixed(2)}" width="${refCellWidth.toFixed(2)}" height="${refCellHeight.toFixed(2)}" fill="#ff1744" fill-opacity="0.34" stroke="#ff1744" stroke-opacity="0.8" stroke-width="1.1"/>`);
-  }
+for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['reference', referenceMeta]] as const) {
+  if (!meta.width || !meta.height) throw new Error(`${label} map image dimensions unavailable`);
 }
-const refSpawnX = spawnXRef * referenceMeta.width / 1040;
-const refSpawnY = spawnYRef * referenceMeta.height / 580;
-const refFeetY = refSpawnY + feetOffset * referenceMeta.height / mapHeight;
-const refFootprint = [
-  `<circle cx="${refSpawnX}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
-  `<circle cx="${refSpawnX - playerHalfWidth * referenceMeta.width / mapWidth}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${refSpawnX + playerHalfWidth * referenceMeta.width / mapWidth}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-].join('');
-const refSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${referenceMeta.width}" height="${referenceMeta.height}" viewBox="0 0 ${referenceMeta.width} ${referenceMeta.height}">${refRects.join('')}${refFootprint}</svg>`);
-await reference.composite([{ input: refSvg }]).png().toFile(referenceOutputPath);
+const scaleFor = (width: number, height: number, label: string) => {
+  const scaleX = width / MAP_W;
+  const scaleY = height / MAP_H;
+  if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) ||
+      Math.abs(scaleX - scaleY) > 0.002 || scaleX < 1) {
+    throw new Error(`${label} dimensions ${width}x${height} do not match logical map ${MAP_W}x${MAP_H}`);
+  }
+  return { x: scaleX, y: scaleY };
+};
+const pngScale = scaleFor(metadata.width!, metadata.height!, 'PNG');
+const webpScale = scaleFor(webpMetadata.width!, webpMetadata.height!, 'WebP');
+const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference');
+if (metadata.width !== webpMetadata.width || metadata.height !== webpMetadata.height) {
+  throw new Error('PNG and WebP map assets must have identical native dimensions');
+}
 
-// The production WebP is intentionally a 2x raster for sharper downscaling
-// in the canvas renderer. Reuse the exact same map-coordinate overlay and let
-// SVG viewBox scaling place it at the WebP's native resolution.
-const webpSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${webpMetadata.width}" height="${webpMetadata.height}" viewBox="0 0 ${mapWidth} ${mapHeight}" preserveAspectRatio="none">${rects.join('')}${footprint}</svg>`);
-await sharp(webpPath).composite([{ input: webpSvg }]).png().toFile(outputWebpPath);
+function makeOverlaySvg(
+  width: number,
+  height: number,
+  scaleX: number,
+  scaleY: number,
+  includeSpawn: boolean,
+): Buffer {
+  const cellWidth = (MAP_W / COLS) * scaleX;
+  const cellHeight = (MAP_H / ROWS) * scaleY;
+  const rects: string[] = [];
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      if (grid[row * COLS + col] !== 1) continue;
+      const x = col * cellWidth;
+      const y = row * cellHeight;
+      rects.push(`<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${cellWidth.toFixed(2)}" height="${cellHeight.toFixed(2)}" fill="#ff1744" fill-opacity="0.32" stroke="#ff1744" stroke-opacity="0.72" stroke-width="1.0"/>`);
+    }
+  }
+
+  const polygonLines = MANUAL_BLOCKED_POLYGONS.map(polygon => {
+    const points = polygon.points.map(([x, y]) => `${(x * scaleX).toFixed(2)},${(y * scaleY).toFixed(2)}`).join(' ');
+    return `<polygon points="${points}" fill="none" stroke="#ffd740" stroke-width="${3 * scaleX}" stroke-linejoin="round"/>`;
+  }).join('');
+
+  let spawn = '';
+  if (includeSpawn) {
+    const x = PLAYER_SPAWN_X * scaleX;
+    const y = PLAYER_SPAWN_Y * scaleY;
+    const feetY = (PLAYER_SPAWN_Y + FEET_OFFSET_Y) * scaleY;
+    const radius = PLAYER_RADIUS * scaleX;
+    const halfWidth = PLAYER_HALF_WIDTH * scaleX;
+    const halfSpriteWidth = PLAYER_SPRITE_HALF_WIDTH_PX * scaleX;
+    const halfSpriteHeight = PLAYER_SPRITE_HALF_HEIGHT_PX * scaleY;
+    spawn = [
+      `<rect x="${x - halfSpriteWidth}" y="${y - halfSpriteHeight}" width="${halfSpriteWidth * 2}" height="${halfSpriteHeight * 2}" fill="#00e5ff" fill-opacity="0.08" stroke="#00e5ff" stroke-width="${2 * scaleX}" stroke-dasharray="${6 * scaleX} ${4 * scaleX}"/>`,
+      `<circle cx="${x}" cy="${feetY}" r="${radius}" fill="#00e5ff" fill-opacity="0.85" stroke="#001018" stroke-width="${2 * scaleX}"/>`,
+      `<circle cx="${x - halfWidth}" cy="${feetY}" r="${radius}" fill="#00e5ff" fill-opacity="0.55" stroke="#001018" stroke-width="${1.5 * scaleX}"/>`,
+      `<circle cx="${x + halfWidth}" cy="${feetY}" r="${radius}" fill="#00e5ff" fill-opacity="0.55" stroke="#001018" stroke-width="${1.5 * scaleX}"/>`,
+      `<line x1="${x}" y1="${y}" x2="${x}" y2="${feetY}" stroke="#00e5ff" stroke-width="${2 * scaleX}" stroke-dasharray="${5 * scaleX} ${4 * scaleX}"/>`,
+      `<text x="${x + 16 * scaleX}" y="${y - 12 * scaleY}" font-size="${22 * scaleX}" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="${4 * scaleX}" paint-order="stroke">SPAWN / FULL SPRITE / FEET</text>`,
+    ].join('');
+  }
+
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${rects.join('')}${polygonLines}${spawn}</svg>`);
+}
+
+await map.composite([{ input: makeOverlaySvg(metadata.width!, metadata.height!, pngScale.x, pngScale.y, true) }]).png().toFile(outputPath);
+await sharp(webpPath).composite([{ input: makeOverlaySvg(webpMetadata.width!, webpMetadata.height!, webpScale.x, webpScale.y, true) }]).png().toFile(outputWebpPath);
+await reference.composite([{ input: makeOverlaySvg(referenceMeta.width!, referenceMeta.height!, refScale.x, refScale.y, true) }]).png().toFile(referenceOutputPath);
+
 console.log(JSON.stringify({
   output: outputPath,
-  referenceOutput: referenceOutputPath,
   outputWebp: outputWebpPath,
-  map: `${mapWidth}x${mapHeight}`,
-  webp: `${webpMetadata.width}x${webpMetadata.height} (${webpScaleX}x)`,
-  grid: `${cols}x${rows}`,
+  referenceOutput: referenceOutputPath,
+  logicalMap: `${MAP_W}x${MAP_H}`,
+  png: `${metadata.width}x${metadata.height}`,
+  webp: `${webpMetadata.width}x${webpMetadata.height}`,
+  reference: `${referenceMeta.width}x${referenceMeta.height}`,
+  grid: `${COLS}x${ROWS}`,
   blockedCells: grid.reduce((sum, cell) => sum + cell, 0),
   walkableCells: grid.reduce((sum, cell) => sum + (cell === 0 ? 1 : 0), 0),
-  feetOffsetPx: feetOffset,
-  spawn: { x: spawnX, y: spawnY, feetY },
+  feetOffsetPx: FEET_OFFSET_Y,
+  spawn: { x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y, feetY: PLAYER_SPAWN_Y + FEET_OFFSET_Y },
 }, null, 2));
