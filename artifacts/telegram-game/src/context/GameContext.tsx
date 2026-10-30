@@ -470,6 +470,19 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
+  // Dead players must retain read-only access to the meeting transcript.
+  'meeting-ghost': {
+    state: {
+      phase: 'playing', mySlot: 1, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
+      meeting: { reporterSlot: 2, bodySlot: NO_TARGET, startedAtMs: Date.now() - 1000 },
+      meetingMessages: [
+        { slot: 0, text: 'I saw Nova near the west wall.', receivedAt: Date.now() - 1500 },
+        { slot: 2, text: 'I was finishing the task console.', receivedAt: Date.now() - 900 },
+      ],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 6 — meeting concluded, someone was ejected, game continues.
   'meeting-result': {
     state: {
