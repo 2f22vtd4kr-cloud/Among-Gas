@@ -252,7 +252,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   void vent2;
 }
 
-// 4. Meeting chat is only available to living players during discussion.
+// 4. Living players can post meeting chat; all lobby members, including ghosts, can read it.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const ghost = makePlayer(1, 'crewmate', 120, 100);
@@ -272,7 +272,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.sendMeetingChat(lobby, 2, 'voting started'), true, 'chat remains available during voting in the base game');
   assert.ok(host.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
   assert.ok(speaker.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
-  assert.equal(ghost.packets.filter(packet => packet[0] === 0x19).length, 0, 'ghost does not receive discussion chat');
+  assert.ok(ghost.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02), 'ghost receives meeting chat as a read-only spectator');
   manager.disposeLobby(lobby);
 }
 
