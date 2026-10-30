@@ -53,7 +53,7 @@ try {
     const [innerRing, outerTeeth] = svg.querySelectorAll('path');
     const inner = innerRing.getBBox();
     const outer = outerTeeth.getBBox();
-    const translation = /translate\\(\\s*(-?[\\d.]+)[ ,]+(-?[\\d.]+)\\s*\\)/.exec(outerTeeth.getAttribute('transform') || '');
+    const translation = /translate\(\s*(-?[\d.]+)[ ,]+(-?[\d.]+)\s*\)/.exec(outerTeeth.getAttribute('transform') || '');
     if (!translation) throw new Error('Settings gear outer path must declare a measurable centering translation');
     const outerCenter = {
       x: outer.x + outer.width / 2 + Number(translation[1]),
