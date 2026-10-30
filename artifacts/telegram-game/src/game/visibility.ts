@@ -202,6 +202,17 @@ const NON_OCCLUDING_REGIONS = [
   { minCol: 62, maxCol: 66, minRow: 8, maxRow: 11 },
 ] as const;
 
+// The small upper-atrium lamp is partly merged with the adjacent furniture
+// mask in the coarse collision grid. Keep its measured visual silhouette as
+// an explicit circle rather than losing it during connected-component filtering.
+const MANUAL_NARROW_OCCLUDERS: readonly VisualOccluderCircle[] = [
+  {
+    x: 62 * CELL_X,
+    y: 8 * CELL_Y,
+    radius: Math.min(CELL_X, CELL_Y) * 0.2,
+  },
+];
+
 function isNonOccludingFurniture(index: number): boolean {
   const row = Math.floor(index / COLS);
   const col = index - row * COLS;
@@ -265,6 +276,11 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
       y: (minRow + 1) * CELL_Y,
       radius: Math.min(CELL_X, CELL_Y) * 0.2,
     });
+  }
+  for (const manual of MANUAL_NARROW_OCCLUDERS) {
+    if (!occluders.some(item => Math.hypot(item.x - manual.x, item.y - manual.y) < 1)) {
+      occluders.push(manual);
+    }
   }
   return occluders;
 }
