@@ -100,7 +100,7 @@ export interface CharacterClipNotch {
  */
 export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
   if (pose === 'idle') {
-    return { leftLegStart: 0.31, leftLegEnd: 0.52, rightLegStart: 0.56, rightLegEnd: 0.73, top: 0.79 };
+    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.62, rightLegEnd: 0.73, top: 0.79 };
   }
   if (pose === 'dead-body') {
     return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.66 };
