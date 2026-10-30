@@ -200,6 +200,19 @@ try {
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
   assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
+  const roleRevealShadow = page.locator('[data-role-reveal-shadow="true"]');
+  await roleRevealShadow.waitFor({ state: 'visible' });
+  const shadowGeometry = await roleRevealShadow.evaluate((shadow, sprite) => {
+    const a = shadow.getBoundingClientRect();
+    const b = sprite.getBoundingClientRect();
+    return { shadowCenterX: a.left + a.width / 2, spriteCenterX: b.left + b.width / 2, shadowTop: a.top, spriteBottom: b.bottom, animation: getComputedStyle(shadow).animationName };
+  }, await roleRevealSprite.elementHandle());
+  assert.ok(Math.abs(shadowGeometry.shadowCenterX - shadowGeometry.spriteCenterX) < 2,
+    'the role-reveal ground shadow must stay centered beneath the character');
+  assert.ok(shadowGeometry.shadowTop >= shadowGeometry.spriteBottom - 2,
+    'the role-reveal shadow must sit below the character feet, not overlap the sprite');
+  assert.equal(shadowGeometry.animation, 'rrShadowPulse',
+    'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
