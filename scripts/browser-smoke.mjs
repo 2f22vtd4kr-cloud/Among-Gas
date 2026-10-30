@@ -581,6 +581,29 @@ try {
     'the adjacent sit-crouch row must not be spliced into the corpse');
   await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
 
+  const corpseColorCoverage = await page.evaluate(async () => {
+    const image = new Image();
+    image.src = `/sprites/characters.png?corpse-color-check=${Date.now()}`;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not inspect corpse sprite atlas');
+    context.drawImage(image, 0, 0);
+    const cellWidth = image.naturalWidth / 7;
+    return Array.from({ length: 7 }, (_, column) => {
+      const left = Math.floor(column * cellWidth);
+      const right = Math.ceil((column + 1) * cellWidth);
+      const pixels = context.getImageData(left, 1067, right - left, 93).data;
+      let opaque = 0;
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) opaque++;
+      return opaque;
+    });
+  });
+  assert.ok(corpseColorCoverage.every(count => count > 100),
+    `every player color must have an authored corpse/bone sprite row; alpha coverage=${corpseColorCoverage.join(',')}`);
+
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
@@ -1048,6 +1071,7 @@ try {
   const visualStateCases = [
     ['reveal-impostor', 'role-reveal-impostor.png'],
     ['task-playing', 'task-progress.png'],
+    ['corpse-all-colors', 'corpse-all-seven-colors.png'],
     ['impostor-opening', 'impostor-opening-cooldown.png'],
     ['kill-ready', 'kill-ready.png'],
     ['meeting-discussion', 'meeting-discussion.png'],
