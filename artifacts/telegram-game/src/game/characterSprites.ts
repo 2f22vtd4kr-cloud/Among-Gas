@@ -1,7 +1,8 @@
-// Character sprite sheet: artifacts/telegram-game/public/sprites/characters.png
-// Pixel-art sheet, 1123×1401px, transparent-background PNG.
+// Character sprite source: artifacts/telegram-game/public/sprites/characters.png
+// Pixel-art source atlas, 1123×1401px, transparent-background PNG.
 //
-// The sheet has 7 color columns and 9 pose bands, but the pose bands are NOT
+// The source atlas has 7 authored color columns. characterAtlas.ts expands
+// those into 18 runtime palettes. The 9 pose bands are NOT
 // evenly spaced vertically. Dividing image height by 9 puts crop boundaries
 // through real pixels in the mask, held-item, corpse and crouch art. Use the
 // measured, non-overlapping windows below; each window contains its whole pose
