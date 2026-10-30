@@ -115,7 +115,7 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
 
   context.imageSmoothingEnabled = false;
   const sourceCellWidth = CHARACTER_SOURCE_SHEET_WIDTH / CHARACTER_SOURCE_SHEET_COLS;
-  const paletteByColor = new Map(CHARACTER_GENERATED_PALETTES.map(palette => [palette.color, palette]));
+  const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]));
 
   for (let column = 0; column < CHARACTER_COLORS.length; column++) {
     const color = CHARACTER_COLORS[column];
