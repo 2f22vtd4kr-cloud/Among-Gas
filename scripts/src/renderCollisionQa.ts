@@ -7,6 +7,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const dataPath = path.join(root, 'lib/shared/src/collisionData.ts');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
+const referencePath = path.join(root, 'attached_assets/IMG_2907_1783632830477.jpeg');
+const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
 const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay-webp.png');
 
@@ -87,19 +89,45 @@ const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y = Math\.round\((\d+) \*/)?
 if (!Number.isFinite(spawnXRef) || !Number.isFinite(spawnYRef)) {
   throw new Error('Could not parse shared player spawn reference coordinates');
 }
-const spawnX = Math.round(spawnXRef * mapWidth / 1040);
-const spawnY = Math.round(spawnYRef * mapHeight / 580);
-const feetY = spawnY + feetOffset;
+const spawnX = Math.round(spawnXRef * mapWidth / 1040 * scaleX);
+const spawnY = Math.round(spawnYRef * mapHeight / 580 * scaleY);
+const feetY = spawnY + feetOffset * scaleY;
 const footprint = [
-  `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
-  `<circle cx="${spawnX - playerHalfWidth}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
-  `<circle cx="${spawnX + playerHalfWidth}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
+  `<circle cx="${spawnX - playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius * scaleX}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${spawnX + playerHalfWidth * scaleX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
   `<line x1="${spawnX}" y1="${spawnY}" x2="${spawnX}" y2="${feetY}" stroke="#00e5ff" stroke-width="2" stroke-dasharray="5 4"/>`,
   `<circle cx="${spawnX}" cy="${spawnY}" r="9" fill="none" stroke="#fff" stroke-width="2"/>`,
   `<text x="${spawnX + 16}" y="${spawnY - 12}" font-size="22" font-family="sans-serif" font-weight="bold" fill="#fff" stroke="#001018" stroke-width="4" paint-order="stroke">PLAYER SPAWN / FEET</text>`,
 ].join('');
-const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${mapWidth}" height="${mapHeight}" viewBox="0 0 ${mapWidth} ${mapHeight}">${rects.join('')}${footprint}</svg>`);
+const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${metadata.width}" height="${metadata.height}" viewBox="0 0 ${metadata.width} ${metadata.height}">${rects.join('')}${footprint}</svg>`);
 await map.composite([{ input: svg }]).png().toFile(outputPath);
+
+// Also overlay the same grid on the original hand-traced red-line reference.
+// This makes it possible to audit whether the canonical RLE still corresponds
+// to the map image and whether downsampling erased narrow walls or doorways.
+const reference = sharp(referencePath);
+const referenceMeta = await reference.metadata();
+if (!referenceMeta.width || !referenceMeta.height) throw new Error('Collision reference dimensions unavailable');
+const refCellWidth = referenceMeta.width / cols;
+const refCellHeight = referenceMeta.height / rows;
+const refRects: string[] = [];
+for (let row = 0; row < rows; row++) {
+  for (let col = 0; col < cols; col++) {
+    if (grid[row * cols + col] !== 1) continue;
+    refRects.push(`<rect x="${(col * refCellWidth).toFixed(2)}" y="${(row * refCellHeight).toFixed(2)}" width="${refCellWidth.toFixed(2)}" height="${refCellHeight.toFixed(2)}" fill="#ff1744" fill-opacity="0.34" stroke="#ff1744" stroke-opacity="0.8" stroke-width="1.1"/>`);
+  }
+}
+const refSpawnX = spawnXRef * referenceMeta.width / 1040;
+const refSpawnY = spawnYRef * referenceMeta.height / 580;
+const refFeetY = refSpawnY + feetOffset * referenceMeta.height / mapHeight;
+const refFootprint = [
+  `<circle cx="${refSpawnX}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
+  `<circle cx="${refSpawnX - playerHalfWidth * referenceMeta.width / mapWidth}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+  `<circle cx="${refSpawnX + playerHalfWidth * referenceMeta.width / mapWidth}" cy="${refFeetY}" r="${playerRadius * referenceMeta.width / mapWidth}" fill="#00e5ff" fill-opacity="0.65" stroke="#001018" stroke-width="1.5"/>`,
+].join('');
+const refSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${referenceMeta.width}" height="${referenceMeta.height}" viewBox="0 0 ${referenceMeta.width} ${referenceMeta.height}">${refRects.join('')}${refFootprint}</svg>`);
+await reference.composite([{ input: refSvg }]).png().toFile(referenceOutputPath);
 
 // The production WebP is intentionally a 2x raster for sharper downscaling
 // in the canvas renderer. Reuse the exact same map-coordinate overlay and let
@@ -108,6 +136,7 @@ const webpSvg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${we
 await sharp(webpPath).composite([{ input: webpSvg }]).png().toFile(outputWebpPath);
 console.log(JSON.stringify({
   output: outputPath,
+  referenceOutput: referenceOutputPath,
   outputWebp: outputWebpPath,
   map: `${mapWidth}x${mapHeight}`,
   webp: `${webpMetadata.width}x${webpMetadata.height} (${webpScaleX}x)`,
