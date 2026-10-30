@@ -1023,6 +1023,10 @@ export default function GameMap() {
     if (!canvas || !mapImg || !sprite) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    // Expose the actual render transform only to the opt-in dev camera fixture.
+    // Browser QA uses this to distinguish player drift from changing map pixels.
+    const cameraDebugEnabled = import.meta.env.DEV &&
+      new URLSearchParams(window.location.search).get('mock') === 'task-playing';
     const fogCanvas = document.createElement('canvas');
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
@@ -1172,6 +1176,18 @@ export default function GameMap() {
       const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
 
       const scale = ZOOM * dpr;
+      if (cameraDebugEnabled) {
+        (window as Window & { __AG_CAMERA_DEBUG?: unknown }).__AG_CAMERA_DEBUG = {
+          playerX: px,
+          playerY: py,
+          cameraX,
+          cameraY,
+          screenX: (px - srcX) * scale,
+          screenY: (py - srcY) * scale,
+          canvasWidth: cw,
+          canvasHeight: ch,
+        };
+      }
 
       // ── 1. Clear + Map ───────────────────────────────────────────────────
       ctx.clearRect(0, 0, cw, ch);
