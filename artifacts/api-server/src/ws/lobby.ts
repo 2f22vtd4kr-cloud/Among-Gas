@@ -733,8 +733,10 @@ export class LobbyManager {
     packet[2] = playerSlot;
     packet[3] = body.length;
     body.copy(packet, 4);
+    // Meeting chat is public to the whole lobby, including eliminated
+    // spectators. The sender check above still prevents ghosts from posting.
     for (const player of lobby.players.values()) {
-      if (player.alive && player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
+      if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
     }
     return true;
   }
