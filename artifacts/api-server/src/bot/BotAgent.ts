@@ -7,7 +7,14 @@
  *
  * Subclasses implement tick() and chooseVote().
  */
-import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid, canMoveTo, isPlayerPathWalkable, type Grid } from '@workspace/shared/collisionMap';
+import {
+  CELL_X, CELL_Y, COLS, ROWS,
+  buildCollisionGrid,
+  isPlayerFootprintWalkableAtFeet,
+  isPlayerPositionWalkable,
+  isPlayerPathWalkable,
+  type Grid,
+} from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
   MAP_W,
