@@ -748,6 +748,11 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.screenshot({ path: join(visualQaDir, 'gameplay-hud.png'), fullPage: true });
+  const gameplaySurfaceSelection = await page.locator('#root > div').first().evaluate(element =>
+    getComputedStyle(element).userSelect,
+  );
+  assert.equal(gameplaySurfaceSelection, 'none',
+    'dragging the virtual joystick must not select HUD labels or map text');
 
   // Check responsive layout at narrow portrait, landscape phone, and desktop sizes.
   const viewportCases = [
