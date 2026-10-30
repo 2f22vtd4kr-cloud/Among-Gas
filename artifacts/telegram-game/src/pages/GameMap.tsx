@@ -26,6 +26,10 @@ import {
   type CharacterPose,
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
+import {
+  getCharacterShadowScale,
+  getCharacterWalkBobOffset,
+} from '../game/characterAnimation';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
 import {
@@ -1498,7 +1502,7 @@ export default function GameMap() {
           // Living characters visibly bounce on each step. This is draw-only:
           // authoritative coordinates and collision are never modified.
           const rWalkBob = rMoving
-            ? Math.abs(Math.sin((anim.animMs / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, rBaseSpriteH * 0.06)
+            ? getCharacterWalkBobOffset(anim.animMs, rBaseSpriteH)
             : 0;
           const rpGroundY = Math.round((anim.renderY - srcY) * scale);
           const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
@@ -1516,7 +1520,7 @@ export default function GameMap() {
             ctx.globalAlpha = 0.55;
             ctx.fillStyle = '#000000';
             const rShadowScale = rMoving
-              ? 1 - Math.min(0.24, rWalkBob / Math.max(1, rBaseSpriteH * 0.06) * 0.24)
+              ? getCharacterShadowScale(rWalkBob, rBaseSpriteH)
               : 1;
             ctx.beginPath();
             ctx.ellipse(rpCX, rpGroundY + rSpriteH * 0.48, rSpriteW * 0.28 * rShadowScale, rSpriteH * 0.055 * rShadowScale, 0, 0, Math.PI * 2);
@@ -1580,8 +1584,10 @@ export default function GameMap() {
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
       const localMoving = pose === 'walk-1' || pose === 'walk-2';
+      // Use the same elapsed movement clock as the local walk-1/walk-2 pose
+      // selection; RAF wall-clock time can otherwise drift out of phase.
       const localWalkBob = localMoving
-        ? Math.abs(Math.sin((ts / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, sH * 0.06)
+        ? getCharacterWalkBobOffset(playerRef.current.animElapsedMs, sH)
         : 0;
 
       // Ground shadow (ghosts float — no shadow). The local ghost uses the
@@ -1601,7 +1607,7 @@ export default function GameMap() {
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
         const localShadowScale = localMoving
-          ? 1 - Math.min(0.24, localWalkBob / Math.max(1, sH * 0.06) * 0.24)
+          ? getCharacterShadowScale(localWalkBob, sH)
           : 1;
         ctx.beginPath();
         ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28 * localShadowScale, sH * 0.055 * localShadowScale, 0, 0, Math.PI * 2);
