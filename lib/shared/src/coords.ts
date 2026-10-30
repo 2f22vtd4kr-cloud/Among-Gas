@@ -23,8 +23,8 @@ export const MAP_H = 1858;
 
 /**
  * Shared production spawn point. Keep the sprite body fully inside the tiled
- * lobby floor instead of centring it on the room's top wall (the old y=150
- * reference point put the sprite centre directly on that wall).
+ * lobby floor instead of centring it on the narrow doorway at ref(350,150),
+ * where the visible sprite was wider than the opening and overlapped the wall.
  */
 export const PLAYER_SPAWN_X = Math.round(450 * (MAP_W / 1040));
 export const PLAYER_SPAWN_Y = Math.round(150 * (MAP_H / 580));
@@ -53,13 +53,6 @@ const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
 export const FEET_OFFSET_Y = Math.round(
   _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
 );
-/** Half-extents of the rendered idle sprite, used to keep spawn art clear of walls. */
-const CHARACTER_ATLAS_CELL_WIDTH = 1123 / 7;
-const CHARACTER_ATLAS_CELL_HEIGHT = 1401 / 9;
-export const PLAYER_SPRITE_HALF_WIDTH_PX = Math.round(
-  _SPRITE_H_MAP_PX * (CHARACTER_ATLAS_CELL_WIDTH / CHARACTER_ATLAS_CELL_HEIGHT) / 2,
-);
-export const PLAYER_SPRITE_HALF_HEIGHT_PX = Math.round(_SPRITE_H_MAP_PX / 2);
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;
