@@ -1055,6 +1055,11 @@ try {
     } else {
       await waitForRoleRevealToFinish(statePage);
     }
+    if (fixture === 'reveal-impostor') {
+      const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
+      assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
+        'impostor role reveal must show a living character, not the corpse sprite');
+    }
     await statePage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
     await statePage.close();
   }
