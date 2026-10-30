@@ -2422,7 +2422,7 @@ export default function GameMap() {
                 }
               }}
               style={{
-                width: 76, height: 76, borderRadius: '50%',
+                width: 88, height: 88, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
                 letterSpacing: '0.05em', textTransform: 'uppercase',
                 color: killCooldownMs > 0 || nearestTarget === null ? 'rgba(255,150,150,0.35)' : '#ffe8e8',
@@ -2435,14 +2435,14 @@ export default function GameMap() {
                 backdropFilter: 'blur(4px)',
               }}
             >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/kill_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Kill' : 'Убить'}</>}
+              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : <img src={`${import.meta.env.BASE_URL}au-assets/kill_icon.png`} alt="" aria-hidden="true" style={{ width: 66, height: 66, objectFit: 'contain', display: 'block', opacity: nearestTarget === null ? 0.45 : 1 }} />}
             </button>
           )}
           {sabotage === null && nearestBody !== null && (
             <button
               onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); reportBody(nearestBody); }}
               style={{
-                width: 76, height: 76, borderRadius: '50%',
+                width: 88, height: 88, borderRadius: '50%',
                 fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
                 letterSpacing: '0.03em', textTransform: 'uppercase',
                 color: '#fff6d8',
@@ -2468,7 +2468,7 @@ export default function GameMap() {
             disabled={sabotageCooldownMs > 0}
             onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
             style={{
-              width: 76, height: 76, borderRadius: '50%',
+              width: 88, height: 88, borderRadius: '50%',
               fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
               letterSpacing: '0.03em', textTransform: 'uppercase',
               color: sabotageCooldownMs > 0 ? 'rgba(200,170,255,0.35)' : '#f0e4ff',
@@ -2481,7 +2481,7 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <><img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Sabotage' : 'Саботаж'}</>}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 66, height: 66, objectFit: 'contain', display: 'block', opacity: 1 }} />}
           </button>
         </div>
       )}
@@ -2586,8 +2586,8 @@ export default function GameMap() {
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
             style={{
-              minWidth: 132, minHeight: 58,
-              padding: '10px 18px', borderRadius: 10,
+              width: 92, height: 92, padding: 8, borderRadius: '50%',
+              display: 'grid', placeItems: 'center',
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
               color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
               border: '1px solid rgba(255,120,80,0.4)', fontFamily: 'sans-serif',
@@ -2596,7 +2596,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : <><img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 21, height: 21, objectFit: 'contain', verticalAlign: 'middle', marginRight: 7 }} />{en ? 'Emergency' : 'Тревога'}</>}
+            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 70, height: 70, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
           </button>
         </div>
       )}
