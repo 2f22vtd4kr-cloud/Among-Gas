@@ -1198,7 +1198,7 @@ try {
   const cameraBaseline = await readCameraTransform();
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
-  'the dev camera fixture must expose the player's actual rendered screen coordinates');
+  "the dev camera fixture must expose the player's actual rendered screen coordinates");
   const worldBaseline = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
   const joystickBox = await joystick.boundingBox();
