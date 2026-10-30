@@ -1725,4 +1725,4 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **State to restore**
 - PR #28 branch: `fix/settings-gear-centered-regression` — Settings gear geometry, role-reveal shadow, and browser regression tests.
 - PR #29 branch: `fix/replit-full-stack-runtime` — full Replit dev/production runtime and integration tests.
-- Neither PR has been merged by this entry. `main` remains at the verified starting head until CI and merge checks are complete.
+- PR #28 is merged to `main` as `1a5b350d8ff19f2688743442fc0fb6d7a00b8004`. PR #29 has been reset/reapplied on top of that main head and remains open pending its new CI run. `main` contains the Settings geometry fix, role-reveal shadow, and their browser regressions; the Replit runtime fix is still on PR #29.
