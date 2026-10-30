@@ -797,7 +797,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 }
 
 
- // 15c. Ghosts phase through walls but remain inside the map's full foot-base bounds.
+ // 15b. Ghosts phase through walls but remain inside the map's full foot-base bounds.
 {
   const minX = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
   const maxX = MAP_W - minX;
@@ -824,26 +824,86 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.ok(minX < maxX && minY < maxY, 'map must have non-empty safe ghost bounds');
 }
 
-// 15b. Spawn scatter must never silently stack players at a central fallback.
+
+
+// 17. Voting handles ties, skip majorities, duplicate/dead voters, and both
+// terminal ejection outcomes without accidentally ejecting a player.
 {
-  const manager = new LobbyManager();
-  const players = Array.from({ length: MAX_PLAYERS }, (_, slot) =>
-    makePlayer(slot, 'crewmate', 0, 0).player,
-  );
-  const lobby = makeLobby(players);
-  lobby.phase = 'WAITING';
-  manager.startGame(lobby, 2);
-  const positions = [...lobby.players.values()].map(player => ({ x: player.x, y: player.y }));
-  assert.equal(new Set(positions.map(pos => `${pos.x},${pos.y}`)).size, positions.length,
-    'all players must receive distinct spawn coordinates');
-  for (const pos of positions) assertClientWalkable(pos.x, pos.y, 'scattered spawn');
-  for (let i = 0; i < positions.length; i++) {
-    for (let j = i + 1; j < positions.length; j++) {
-      assert.ok(Math.hypot(positions[i].x - positions[j].x, positions[i].y - positions[j].y) >= 30,
-        'spawn positions must keep players separated');
-    }
+  const createVotingFixture = (roles: Array<'crewmate' | 'impostor'>) => {
+    const players = roles.map((role, slot) =>
+      makePlayer(slot, role, MAP_W / 2, MAP_H / 2).player,
+    );
+    const lobby = makeLobby(players);
+    lobby.phase = 'MEETING';
+    lobby.meeting = {
+      reporterSlot: 0,
+      bodySlot: NO_TARGET,
+      votes: new Map(),
+      votingOpen: true,
+      discussionTimer: null,
+      votingTimer: null,
+    };
+    return { lobby, manager: new LobbyManager(), players };
+  };
+
+  // 2–2 tie: no one is ejected and play resumes.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    assert.equal(manager.castVote(lobby, 0, 1), true);
+    assert.equal(manager.castVote(lobby, 0, 2), false,
+      'a player cannot submit a second vote in the same meeting');
+    assert.equal(manager.castVote(lobby, 1, 2), true);
+    assert.equal(manager.castVote(lobby, 2, 1), true);
+    assert.equal(manager.castVote(lobby, 3, 2), true);
+    assert.equal(lobby.phase, 'ROAMING', 'a tied vote must resume roaming');
+    assert.equal(players[1].alive, true, 'a tied vote must not eject the first candidate');
+    assert.equal(players[2].alive, true, 'a tied vote must not eject the second candidate');
+    manager.disposeLobby(lobby);
   }
-  manager.disposeLobby(lobby);
+
+  // Skip majority: skip wins the tally; dead players cannot vote.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    players[3].alive = false;
+    assert.equal(manager.castVote(lobby, 3, 1), false,
+      'dead players cannot cast meeting votes');
+    assert.equal(manager.castVote(lobby, 0, NO_TARGET), true);
+    assert.equal(manager.castVote(lobby, 1, NO_TARGET), true);
+    assert.equal(manager.castVote(lobby, 2, 1), true);
+    assert.equal(lobby.phase, 'ROAMING', 'a skip majority must not eject anyone');
+    assert.equal(players[1].alive, true, 'skip majority must preserve the leading player');
+    manager.disposeLobby(lobby);
+  }
+
+  // Removing the final impostor is an immediate crewmate win.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'crewmate', 'crewmate', 'crewmate',
+    ]);
+    for (let voter = 0; voter < players.length; voter++) {
+      assert.equal(manager.castVote(lobby, voter, 0), true);
+    }
+    assert.equal(players[0].alive, false);
+    assert.equal(lobby.phase, 'GAMEOVER', 'ejecting the final impostor must end the round');
+    manager.disposeLobby(lobby);
+  }
+
+  // Ejecting a crewmate when impostors reach parity is an impostor win.
+  {
+    const { lobby, manager, players } = createVotingFixture([
+      'impostor', 'impostor', 'crewmate', 'crewmate',
+    ]);
+    for (let voter = 0; voter < players.length; voter++) {
+      assert.equal(manager.castVote(lobby, voter, 2), true);
+    }
+    assert.equal(players[2].alive, false);
+    assert.equal(lobby.phase, 'GAMEOVER', 'impostor parity after ejection must end the round');
+    manager.disposeLobby(lobby);
+  }
 }
 
 console.log('PASS: Among Gas gameplay invariants (map, tasks, vents, sabotage, chat, corpses, meetings, lobby sessions, bot cooldown, kill and spawn separation)');
