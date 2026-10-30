@@ -771,8 +771,8 @@ export default function GameMap() {
         50% { transform: translateY(-4px); }
       }
       @keyframes rrShadowPulse {
-        0%, 100% { transform: scaleX(1); opacity: 0.55; }
-        50% { transform: scaleX(0.78); opacity: 0.38; }
+        0%, 100% { transform: scaleX(1); opacity: 0.68; }
+        50% { transform: scaleX(0.72); opacity: 0.5; }
       }
       @media (prefers-reduced-motion: reduce) {
         .ag-role-reveal-character, .ag-role-reveal-shadow { animation: none !important; }
@@ -2871,10 +2871,11 @@ export default function GameMap() {
                     data-role-reveal-shadow="true"
                     aria-hidden="true"
                     style={{
-                      position: 'absolute', bottom: -12, left: '50%', marginLeft: -43,
-                      width: 86, height: 11, borderRadius: '50%', transformOrigin: 'center center',
-                      background: 'rgba(8, 16, 24, 0.78)',
-                      filter: 'blur(3px)',
+                      position: 'absolute', bottom: -15, left: '50%', marginLeft: -47, zIndex: 0,
+                      width: 94, height: 14, borderRadius: '50%', transformOrigin: 'center center',
+                      background: 'rgba(0, 0, 0, 0.85)',
+                      boxShadow: '0 0 8px rgba(0, 0, 0, 0.35)',
+                      filter: 'blur(2.5px)',
                       animation: isMockReveal ? 'none' : 'rrShadowPulse 1.2s ease-in-out infinite',
                     }}
                   />
