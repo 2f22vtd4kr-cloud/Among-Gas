@@ -724,6 +724,7 @@ export class LobbyManager {
   /** Living players can send meeting chat; all connected lobby members can receive it. */
   sendMeetingChat(lobby: Lobby, playerSlot: number, rawText: string): boolean {
     if (lobby.phase !== 'MEETING' || !lobby.meeting) return false;
+    const meeting = lobby.meeting;
     const sender = lobby.players.get(playerSlot);
     if (!sender || !sender.alive) return false;
     const now = Date.now();
