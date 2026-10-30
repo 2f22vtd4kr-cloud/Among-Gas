@@ -1,5 +1,5 @@
 import type { Grid } from '@workspace/shared/collisionMap';
-import { CELL_X, CELL_Y, COLS, ROWS } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, MANUAL_BLOCKED_POLYGONS } from '@workspace/shared/collisionMap';
 
 export interface VisionPoint {
   x: number;
@@ -50,6 +50,22 @@ function rayCircleHitDistance(
   return null;
 }
 
+/** First ray/segment hit for an authored vector outline. */
+function rayPolygonHitDistance(px: number, py: number, dx: number, dy: number,
+  points: readonly (readonly [number, number])[], maxDistance: number): number | null {
+  let closest = maxDistance;
+  for (let i = 0; i < points.length; i++) {
+    const [ax, ay] = points[i], [bx, by] = points[(i + 1) % points.length];
+    const sx = bx - ax, sy = by - ay, qx = ax - px, qy = ay - py;
+    const denominator = dx * sy - dy * sx;
+    if (Math.abs(denominator) < 1e-9) continue;
+    const distance = (qx * sy - qy * sx) / denominator;
+    const t = (qx * dy - qy * dx) / denominator;
+    if (distance >= 0 && distance < closest && t >= 0 && t <= 1) closest = distance;
+  }
+  return closest < maxDistance ? closest : null;
+}
+
 /**
  * Build the local player's visibility polygon by grid DDA ray casting.
  * Rays visit collision cells in order and stop at the first blocked cell,
@@ -63,6 +79,7 @@ export function computeVisibilityPolygon(
   radius: number,
   grid: Grid,
   narrowOccluders: readonly VisualOccluderCircle[] = [],
+  includeManualMapPolygons = false,
 ): VisionPoint[] {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(radius) || radius <= 0) {
     return [];
@@ -133,6 +150,12 @@ export function computeVisibilityPolygon(
     for (const occluder of narrowOccluders) {
       const circleHit = rayCircleHitDistance(px, py, dx, dy, occluder, hitDistance);
       if (circleHit !== null && circleHit < hitDistance) hitDistance = circleHit;
+    }
+    if (includeManualMapPolygons) {
+      for (const polygon of MANUAL_BLOCKED_POLYGONS) {
+        const hit = rayPolygonHitDistance(px, py, dx, dy, polygon.points, hitDistance);
+        if (hit !== null && hit < hitDistance) hitDistance = hit;
+      }
     }
     points.push({ x: px + dx * hitDistance, y: py + dy * hitDistance });
   }

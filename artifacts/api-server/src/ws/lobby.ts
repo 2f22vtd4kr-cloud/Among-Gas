@@ -83,46 +83,31 @@ function computeSpawnPosition(
   total: number,
   occupied: readonly { x: number; y: number }[] = [],
 ): { x: number; y: number } {
-  if (total <= 1) {
-    if (!isPlayerSpawnPositionClear(spawnGrid, SPAWN_X, SPAWN_Y)) {
-      throw new Error('Configured player spawn sprite overlaps blocked map geometry');
-    }
-    return { x: SPAWN_X, y: SPAWN_Y };
-  }
-  const baseAngle = (index / total) * Math.PI * 2 - Math.PI / 2;
-  // Try several angular/radial candidates instead of falling back immediately
-  // to the shared center. A rejected candidate must not stack multiple players
-  // on the same spawn pixel, where their first movement can repeatedly collide.
-  const radii = [96, 120, 144, 168, 192, 216, 240];
-  const angleOffsets = [
-    0, Math.PI / 12, -Math.PI / 12,
-    Math.PI / 6, -Math.PI / 6,
-    Math.PI / 4, -Math.PI / 4,
-    Math.PI / 3, -Math.PI / 3,
-  ];
-  for (const offset of angleOffsets) {
-    for (const radius of radii) {
+  const available = (x: number, y: number) =>
+    isPlayerSpawnPositionClear(spawnGrid, x, y) &&
+    !occupied.some(player => Math.hypot(player.x - x, player.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX);
+  if (total <= 1 && available(SPAWN_X, SPAWN_Y)) return { x: SPAWN_X, y: SPAWN_Y };
+  if (total > 1) {
+    const baseAngle = (index / total) * Math.PI * 2 - Math.PI / 2;
+    const radii = [96, 120, 144, 168, 192, 216, 240];
+    const angleOffsets = [0, Math.PI / 12, -Math.PI / 12, Math.PI / 6, -Math.PI / 6,
+      Math.PI / 4, -Math.PI / 4, Math.PI / 3, -Math.PI / 3];
+    for (const offset of angleOffsets) for (const radius of radii) {
       const angle = baseAngle + offset;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
-      return { x, y };
+      if (available(x, y)) return { x, y };
     }
   }
-  // Search the full lobby floor before refusing to start. The visual sprite
-  // rectangle must be clear, not merely the much smaller feet hitbox.
-  for (let radius = 12; radius <= 360; radius += 12) {
-    for (let step = 0; step < 48; step++) {
-      const angle = (step / 48) * Math.PI * 2;
-      const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
-      const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
-      return { x, y };
-    }
+  // Solo and multiplayer share the same fallback when the preferred spawn is
+  // too close to a wall/prop after applying the full-sprite margin.
+  for (let radius = 12; radius <= 600; radius += 12) for (let step = 0; step < 48; step++) {
+    const angle = (step / 48) * Math.PI * 2;
+    const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
+    const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
+    if (available(x, y)) return { x, y };
   }
-  throw new Error('No separated walkable spawn position found; refusing to spawn a player inside map geometry');
+  throw new Error('No separated spawn position meets the full sprite clearance margin');
 }
 
 /** Impostor count by player count (GAME_SPEC.md §8; host setting UI is future work). */

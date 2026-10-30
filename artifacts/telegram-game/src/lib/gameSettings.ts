@@ -175,7 +175,7 @@ export function customControlPositionStyle(
     map: { halfWidth: 50, halfHeight: 24 },
     tasks: { halfWidth: 54, halfHeight: 24 },
     settings: { halfWidth: 22, halfHeight: 22 },
-    emergency: { halfWidth: 70, halfHeight: 20 },
+    emergency: { halfWidth: 74, halfHeight: 30 },
     taskAction: { halfWidth: 84, halfHeight: 20 },
     killReport: { halfWidth: 84, halfHeight: 38 },
     sabotage: { halfWidth: 38, halfHeight: 38 },

@@ -61,6 +61,8 @@ export const FEET_OFFSET_Y = Math.round(
  */
 export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
 export const PLAYER_SPRITE_HALF_HEIGHT_PX = 31;
+/** Spawn-only gap between the rendered sprite and traced wall/prop boundaries. */
+export const PLAYER_SPAWN_CLEARANCE_PX = 12;
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;

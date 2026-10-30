@@ -62,6 +62,7 @@ import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
+import { classifyMovementEcho } from '../game/movementReconciliation';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -1070,54 +1071,31 @@ export default function GameMap() {
     let lastSentWireY = -1;
     let cameraX = playerStateRef.current.x;
     let cameraY = playerStateRef.current.y;
+    let hasAuthoritativePosition = false;
 
     const frame = (ts: number) => {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
       lastTs = ts;
 
-      // Reconcile any pending server position echo before stepping physics.
-      //
-      // The 0xFF broadcast always includes our own last-known-accepted
-      // position, even when nothing was rejected — it's simply an ack of
-      // whatever we most recently sent, arriving one round trip later.
-      // Local movement never waits for that ack, so by the time it arrives
-      // we've already moved further in the same direction. Blindly
-      // snapping to every echo fights local prediction and reads as
-      // continuous shake/jitter as soon as the player starts moving.
-      //
-      // Instead, compare the echoed wire position against our own recent
-      // send history: if it matches something we sent, it's just a normal
-      // ack — drop it and keep predicting forward. If it doesn't match
-      // anything we sent recently, the server actually fell back to an
-      // older valid position (a real wall-clip rejection) — snap to it.
+      // First own-player 0xFF snapshot initializes the server-selected spawn.
+      // Later 0xFF snapshots only acknowledge a sent position. Delayed or
+      // duplicate snapshots cannot overwrite newer local prediction; only an
+      // explicit 0x22 rejection/correction is allowed to snap the player.
       if (correctionRef.current) {
-        const { wireX: cWireX, wireY: cWireY, force = false } = correctionRef.current;
+        const incoming = correctionRef.current;
         correctionRef.current = null;
-
         const pending = pendingSentRef.current;
-        const ackIndex = pending.findIndex(
-          (p) => p.wireX === cWireX && p.wireY === cWireY,
-        );
-
-        if (!force && ackIndex !== -1) {
-          // Confirmed — everything up to and including this send is stale
-          // history now; local prediction already accounts for it.
-          pending.splice(0, ackIndex + 1);
-        } else {
-          // Explicit server corrections (0x22) always win over local prediction,
-          // even if their position happens to match an older item in send history.
-          const correctedX = fromWire(cWireX, MAP_W);
-          const correctedY = fromWire(cWireY, MAP_H);
-          playerStateRef.current = {
-            ...playerStateRef.current,
-            x: correctedX,
-            y: correctedY,
-          };
-          if (force) {
-            cameraX = correctedX;
-            cameraY = correctedY;
-          }
+        const classification = classifyMovementEcho(pending, incoming, hasAuthoritativePosition);
+        if (classification.kind === 'initial' || classification.kind === 'correction') {
+          const correctedX = fromWire(incoming.wireX, MAP_W);
+          const correctedY = fromWire(incoming.wireY, MAP_H);
+          playerStateRef.current = { ...playerStateRef.current, x: correctedX, y: correctedY };
+          cameraX = correctedX;
+          cameraY = correctedY;
+          hasAuthoritativePosition = true;
           pending.length = 0;
+        } else if (classification.kind === 'acknowledgement') {
+          pending.splice(0, classification.acknowledgedIndex + 1);
         }
       }
 
@@ -1633,7 +1611,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
@@ -2592,16 +2570,17 @@ export default function GameMap() {
             disabled={emergencyMeetingUsed}
             onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
             style={{
-              padding: '8px 14px', borderRadius: 8,
+              minWidth: 132, minHeight: 58,
+              padding: '10px 18px', borderRadius: 10,
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
               color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
               border: '1px solid rgba(255,120,80,0.4)', fontFamily: 'sans-serif',
-              fontWeight: 700, fontSize: 12, letterSpacing: '0.04em',
+              fontWeight: 800, fontSize: 14, letterSpacing: '0.04em',
               textTransform: 'uppercase', cursor: emergencyMeetingUsed ? 'default' : 'pointer',
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : <><img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 17, height: 17, objectFit: 'contain', verticalAlign: 'middle', marginRight: 6 }} />{en ? 'Emergency' : 'Тревога'}</>}
+            {emergencyMeetingUsed ? (en ? '✓ Emergency used' : '✓ Тревога использована') : <><img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 21, height: 21, objectFit: 'contain', verticalAlign: 'middle', marginRight: 7 }} />{en ? 'Emergency' : 'Тревога'}</>}
           </button>
         </div>
       )}

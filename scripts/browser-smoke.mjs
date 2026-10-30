@@ -404,6 +404,9 @@ try {
   const emergencyBox = await emergencyButton.boundingBox();
   const gameplaySettingsBox = await gameplaySettingsButton.boundingBox();
   assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
+  assert.ok(emergencyBox.width >= 132 && emergencyBox.height >= 58,
+    `Emergency action must be at least 132×58 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
+  await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
       gameplaySettingsBox.x + gameplaySettingsBox.width <= emergencyBox.x ||
