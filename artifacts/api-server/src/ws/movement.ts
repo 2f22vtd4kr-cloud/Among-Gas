@@ -21,7 +21,6 @@ export const MAX_MOVEMENT_CREDIT_MS = 120;
 export const MIN_MOVEMENT_PACKET_INTERVAL_MS = 12;
 export const MOVEMENT_POSITION_TOLERANCE_PX = 0.75;
 const CORRECTION_MIN_INTERVAL_MS = 40;
-const PATH_SAMPLE_SPACING_PX = 2;
 
 export interface MovementBudgetState {
   x: number;
