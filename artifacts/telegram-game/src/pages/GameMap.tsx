@@ -1002,7 +1002,7 @@ export default function GameMap() {
     const shadowGrid = buildShadowGrid(grid);
     const narrowOccluders = buildNarrowShadowOccluders(grid);
     if (!isSpawnWalkable(grid)) {
-      console.warn('Player spawn point is not walkable — check PLAYER_SPAWN in game/player.ts');
+      throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
     let rafId = 0;
