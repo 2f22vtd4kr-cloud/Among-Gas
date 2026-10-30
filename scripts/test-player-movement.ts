@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { CELL_X, CELL_Y, COLS, ROWS, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
-import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
 
 // Regression for prediction/server disagreement: both endpoints are walkable,
