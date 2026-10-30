@@ -3,6 +3,7 @@ import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
+  isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
@@ -951,17 +952,8 @@ export default function GameMap() {
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const initialPlayerState = createInitialPlayerState();
-  // The task-interaction visual fixture starts at the nearest verified
-  // walkable point beside its assigned console; production state always
-  // starts at the shared lobby spawn.
-  if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
-    const fixtureTask = TASK_DEFS.find(task => task.id === 4);
-    if (fixtureTask) {
-      initialPlayerState.x = fixtureTask.x;
-      initialPlayerState.y = fixtureTask.y - 12;
-    }
-  }
+  // Task fixture placement is resolved against the real collision grid below.
+  // Production state always starts at the shared lobby spawn.
   const playerStateRef = useRef(initialPlayerState);
 
   // Nearest vent is recomputed at low frequency; the server still checks range.
@@ -1010,6 +1002,25 @@ export default function GameMap() {
     if (!fogCtx) return;
 
     const grid = buildCollisionGrid();
+    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+        new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
+      const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+      if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
+      let nearest: { x: number; y: number; distanceSq: number } | null = null;
+      const range = TASK_INTERACTION_RANGE_PX - 8;
+      for (let y = fixtureTask.y - range; y <= fixtureTask.y + range; y += 4) {
+        for (let x = fixtureTask.x - range; x <= fixtureTask.x + range; x += 4) {
+          const dx = fixtureTask.x - x;
+          const dy = fixtureTask.y - y;
+          const distanceSq = dx * dx + dy * dy;
+          if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
+          if (!isPlayerPositionWalkable(grid, x, y)) continue;
+          nearest = { x, y, distanceSq };
+        }
+      }
+      if (!nearest) throw new Error('Task interaction fixture has no walkable player position within interaction range');
+      playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
+    }
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
     const shadowGrid = buildShadowGrid(grid);
