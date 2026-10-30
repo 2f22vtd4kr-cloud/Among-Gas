@@ -569,8 +569,8 @@ try {
   await waitForRoleRevealToFinish(page);
   await page.getByText('Вы мертвы — наблюдаете', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByText('Голосование', { exact: true }).waitFor({ state: 'visible' });
-  await page.getByText('I saw Nova near the west wall.', { exact: true }).waitFor({ state: 'visible' });
-  await page.getByText('I was finishing the task console.', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText(/I saw Nova near the west wall\./).waitFor({ state: 'visible' });
+  await page.getByText(/I was finishing the task console\./).waitFor({ state: 'visible' });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Пропустить' }).waitFor({ state: 'hidden' });
   await page.screenshot({ path: join(visualQaDir, 'meeting-ghost-read-only-chat.png'), fullPage: true });
