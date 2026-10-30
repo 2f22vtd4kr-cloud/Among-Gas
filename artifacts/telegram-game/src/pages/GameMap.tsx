@@ -1587,7 +1587,7 @@ export default function GameMap() {
       // Use the same elapsed movement clock as the local walk-1/walk-2 pose
       // selection; RAF wall-clock time can otherwise drift out of phase.
       const localWalkBob = localMoving
-        ? getCharacterWalkBobOffset(playerRef.current.animElapsedMs, sH)
+        ? getCharacterWalkBobOffset(playerStateRef.current.animElapsedMs, sH)
         : 0;
 
       // Ground shadow (ghosts float — no shadow). The local ghost uses the
