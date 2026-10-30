@@ -36,18 +36,18 @@ const referenceMeta = await reference.metadata();
 for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['reference', referenceMeta]] as const) {
   if (!meta.width || !meta.height) throw new Error(`${label} map image dimensions unavailable`);
 }
-const scaleFor = (width: number, height: number, label: string) => {
+const scaleFor = (width: number, height: number, label: string, requireUpscale = true) => {
   const scaleX = width / MAP_W;
   const scaleY = height / MAP_H;
   if (!Number.isFinite(scaleX) || !Number.isFinite(scaleY) ||
-      Math.abs(scaleX - scaleY) > 0.002 || scaleX < 1) {
+      Math.abs(scaleX - scaleY) > 0.002 || (requireUpscale && scaleX < 1)) {
     throw new Error(`${label} dimensions ${width}x${height} do not match logical map ${MAP_W}x${MAP_H}`);
   }
   return { x: scaleX, y: scaleY };
 };
 const pngScale = scaleFor(metadata.width!, metadata.height!, 'PNG');
 const webpScale = scaleFor(webpMetadata.width!, webpMetadata.height!, 'WebP');
-const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference');
+const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference', false);
 if (metadata.width !== webpMetadata.width || metadata.height !== webpMetadata.height) {
   throw new Error('PNG and WebP map assets must have identical native dimensions');
 }
