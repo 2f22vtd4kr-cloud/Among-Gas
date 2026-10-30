@@ -10,8 +10,7 @@ import {
   isPlayerPositionWalkable,
   isPlayerPathWalkable,
   resolvePlayerMovement,
-  MAP_W,
-  MAP_H,
+  clampPlayerPositionToMapBounds,
   type Grid,
 } from './collisionMap';
 import {
@@ -107,9 +106,8 @@ export function stepPlayer(
     const nx = x + (dx / len) * dist;
     const ny = y + (dy / len) * dist;
     if (ghost) {
-      // No collision — clamp to map bounds only.
-      x = Math.max(0, Math.min(MAP_W, nx));
-      y = Math.max(0, Math.min(MAP_H, ny));
+      // Ghosts phase through walls but their complete foot base stays inside the map.
+      [x, y] = clampPlayerPositionToMapBounds(nx, ny);
     } else {
       [x, y] = resolvePlayerMovement(grid, x, y, nx, ny);
     }
