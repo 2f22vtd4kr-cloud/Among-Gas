@@ -341,6 +341,19 @@ try {
   // The mock fixture starts at the closest verified walkable point beside
   // the assigned console so this checks proximity UI independently of movement.
   await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
+  const taskDiagnostics = await page.evaluate(() => ({
+    taskActionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    taskAction: (() => {
+      const element = document.querySelector('[data-testid="gameplay-task-action"]');
+      if (!element) return null;
+      const rect = element.getBoundingClientRect();
+      const style = getComputedStyle(element);
+      return { text: element.textContent, x: rect.x, y: rect.y, width: rect.width, height: rect.height, display: style.display, visibility: style.visibility, opacity: style.opacity };
+    })(),
+    roleReveal: document.querySelector('.ag-character-sprite[data-pose]')?.getAttribute('data-pose'),
+    bodyText: document.body.innerText.slice(-1200),
+  }));
+  console.log('Task interaction fixture diagnostics:', JSON.stringify(taskDiagnostics));
   const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
