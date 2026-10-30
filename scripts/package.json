@@ -7,7 +7,7 @@
     "hello": "tsx ./src/hello.ts",
     "test:pathfinding": "tsx ./src/testPathfinding.ts",
     "test:map-image-transform": "tsx ./src/testMapImageTransform.ts",
-    "test:character-geometry": "tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts && tsx ./test-character-atlas.ts",
+    "test:character-geometry": "tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts && tsx ../artifacts/telegram-game/src/game/characterAnimation.test.ts && tsx ./test-character-atlas.ts",
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts"
