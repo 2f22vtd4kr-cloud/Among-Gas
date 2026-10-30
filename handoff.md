@@ -1812,3 +1812,23 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Confirm database persistence is not implemented
+
+**Done**
+- Enumerated and inspected all 18 API-server source files on main. None imports `@workspace/db`, references `DATABASE_URL`, constructs a Postgres `Pool`, or calls Drizzle.
+- Verified `lib/db/src/schema/index.ts` currently exports no tables (`export {}`); the package only defines Drizzle CLI scripts.
+- Confirmed the live game server stores lobbies, user-to-room mappings, players, tasks, meetings, timers and bot loops in process-local memory. A process restart loses active matches; `DATABASE_URL` does not currently provide match/session persistence.
+- Documented this explicitly in `.replit` and `replit.md` so future work does not mistake a configured database secret for shared multiplayer state.
+
+**Decisions & gotchas**
+- Treat process-local match state as an intentional ephemeral-session model only if that is an explicit product decision. If restart recovery or horizontal scaling is required, introduce a shared authoritative state design; adding an unused database dependency is not sufficient.
+- Shared state must include lobby ownership, membership, match phase, player positions/alive state, tasks, meeting/votes/chat, cooldowns, bot timers and event ordering—not just a lobby-code table.
+
+**Left off / next steps**
+- Decide whether the release target is single-instance ephemeral matches or durable/shared sessions. For the immediate Replit test, keep Autoscale max instances at 1 and accept that process restarts terminate matches.
+- Design shared persistence and reconnect semantics together rather than persisting only partial lobby metadata.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
