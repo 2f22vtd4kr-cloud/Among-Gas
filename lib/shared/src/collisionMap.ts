@@ -159,6 +159,13 @@ function orientation(a: PolygonPoint, b: PolygonPoint, c: PolygonPoint): number 
   return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 }
 
+function onSegment(a: PolygonPoint, point: PolygonPoint, b: PolygonPoint): boolean {
+  return point[0] >= Math.min(a[0], b[0]) &&
+    point[0] <= Math.max(a[0], b[0]) &&
+    point[1] >= Math.min(a[1], b[1]) &&
+    point[1] <= Math.max(a[1], b[1]);
+}
+
 function segmentsIntersect(
   a: PolygonPoint, b: PolygonPoint, c: PolygonPoint, d: PolygonPoint,
 ): boolean {
@@ -166,8 +173,13 @@ function segmentsIntersect(
   const o2 = orientation(a, b, d);
   const o3 = orientation(c, d, a);
   const o4 = orientation(c, d, b);
-  return ((o1 <= 0 && o2 >= 0) || (o1 >= 0 && o2 <= 0)) &&
-    ((o3 <= 0 && o4 >= 0) || (o3 >= 0 && o4 <= 0));
+  if (((o1 > 0 && o2 < 0) || (o1 < 0 && o2 > 0)) &&
+      ((o3 > 0 && o4 < 0) || (o3 < 0 && o4 > 0))) return true;
+  if (o1 === 0 && onSegment(a, c, b)) return true;
+  if (o2 === 0 && onSegment(a, d, b)) return true;
+  if (o3 === 0 && onSegment(c, a, d)) return true;
+  if (o4 === 0 && onSegment(c, b, d)) return true;
+  return false;
 }
 
 function polygonIntersectsRect(
