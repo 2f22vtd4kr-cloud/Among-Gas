@@ -159,7 +159,7 @@ let cachedAtlasPromise: Promise<HTMLCanvasElement> | null = null;
 /** Load and palette-expand the source once per application session. */
 export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const sourceUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\\/+/, '')}`;
+  const sourceUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\/+/, '')}`;
 
   if (cachedSourceUrl === sourceUrl && cachedAtlasPromise) return cachedAtlasPromise;
   cachedSourceUrl = sourceUrl;
