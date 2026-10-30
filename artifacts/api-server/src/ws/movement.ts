@@ -13,11 +13,14 @@ import {
  * The client predicts locally, but the server must constrain each target to
  * the distance that could have been travelled since the prior accepted packet.
  *
- * A 120ms credit cap absorbs a small burst caused by network jitter without
- * letting an idle client bank seconds of movement and teleport across the map.
+ * A 200ms credit cap absorbs short event-loop/network stalls without allowing
+ * an idle client to bank seconds of movement. A separate token bucket limits
+ * packet-processing work while allowing ordered WebSocket frames to arrive in
+ * a tight burst after TCP/event-loop buffering.
  */
-export const MAX_MOVEMENT_CREDIT_MS = 120;
-export const MIN_MOVEMENT_PACKET_INTERVAL_MS = 12;
+export const MAX_MOVEMENT_CREDIT_MS = 200;
+export const MOVEMENT_PACKET_BURST_CAPACITY = 16;
+export const MOVEMENT_PACKET_REFILL_PER_SECOND = 50;
 export const MOVEMENT_POSITION_TOLERANCE_PX = 0.75;
 const CORRECTION_MIN_INTERVAL_MS = 40;
 
@@ -29,6 +32,8 @@ export interface MovementBudgetState {
   movementCreditUpdatedAtMs?: number;
   lastMovementPacketAtMs?: number;
   lastMovementCorrectionAtMs?: number;
+  movementPacketTokens?: number;
+  movementPacketTokensUpdatedAtMs?: number;
 }
 
 export interface MovementDecision {
@@ -42,6 +47,8 @@ export interface MovementDecision {
   movementCreditUpdatedAtMs: number;
   lastMovementPacketAtMs: number | undefined;
   lastMovementCorrectionAtMs: number | undefined;
+  movementPacketTokens: number;
+  movementPacketTokensUpdatedAtMs: number;
 }
 
 export function isWalkableMovementPoint(grid: Grid, x: number, y: number): boolean {
@@ -78,8 +85,14 @@ export function validateMovementIntent(
   nowMs: number,
   grid: Grid,
 ): MovementDecision {
-  const priorPacketAt = state.lastMovementPacketAtMs;
-  if (priorPacketAt !== undefined && nowMs - priorPacketAt < MIN_MOVEMENT_PACKET_INTERVAL_MS) {
+  const packetTokensUpdatedAt = state.movementPacketTokensUpdatedAtMs ?? nowMs;
+  const packetTokenElapsedMs = Math.max(0, nowMs - packetTokensUpdatedAt);
+  const packetTokens = Math.min(
+    MOVEMENT_PACKET_BURST_CAPACITY,
+    (state.movementPacketTokens ?? MOVEMENT_PACKET_BURST_CAPACITY) +
+      MOVEMENT_PACKET_REFILL_PER_SECOND * packetTokenElapsedMs / 1000,
+  );
+  if (packetTokens < 1) {
     return {
       x: state.x,
       y: state.y,
@@ -89,10 +102,13 @@ export function validateMovementIntent(
       sendCorrection: false,
       movementCreditPx: state.movementCreditPx ?? 0,
       movementCreditUpdatedAtMs: state.movementCreditUpdatedAtMs ?? nowMs,
-      lastMovementPacketAtMs: priorPacketAt,
+      lastMovementPacketAtMs: state.lastMovementPacketAtMs,
       lastMovementCorrectionAtMs: state.lastMovementCorrectionAtMs,
+      movementPacketTokens: packetTokens,
+      movementPacketTokensUpdatedAtMs: nowMs,
     };
   }
+  const remainingPacketTokens = packetTokens - 1;
 
   const creditUpdatedAt = state.movementCreditUpdatedAtMs ?? nowMs;
   const elapsedMs = Math.max(0, nowMs - creditUpdatedAt);
@@ -124,6 +140,8 @@ export function validateMovementIntent(
       movementCreditUpdatedAtMs: nowMs,
       lastMovementPacketAtMs: nowMs,
       lastMovementCorrectionAtMs: shouldSend ? nowMs : state.lastMovementCorrectionAtMs,
+      movementPacketTokens: remainingPacketTokens,
+      movementPacketTokensUpdatedAtMs: nowMs,
     };
   };
 
