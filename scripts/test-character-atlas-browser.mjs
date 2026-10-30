@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
-import { chromium } from 'playwright-core';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
 const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
 if (!existsSync(atlasModulePath)) {
