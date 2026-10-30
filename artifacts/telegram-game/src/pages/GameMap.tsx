@@ -2871,9 +2871,8 @@ export default function GameMap() {
                     data-role-reveal-shadow="true"
                     aria-hidden="true"
                     style={{
-                      position: 'absolute', bottom: -12, left: '50%',
-                      width: 86, height: 11, borderRadius: '50%',
-                      transform: 'translateX(-50%)',
+                      position: 'absolute', bottom: -12, left: '50%', marginLeft: -43,
+                      width: 86, height: 11, borderRadius: '50%', transformOrigin: 'center center',
                       background: 'rgba(8, 16, 24, 0.78)',
                       filter: 'blur(3px)',
                       animation: isMockReveal ? 'none' : 'rrShadowPulse 1.2s ease-in-out infinite',
