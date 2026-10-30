@@ -64,17 +64,17 @@ export interface GeneratedCharacterPalette {
  * filter, dark outlines, highlights and transparent pixels remain intact.
  */
 export const GENERATED_CHARACTER_PALETTES: readonly GeneratedCharacterPalette[] = [
-  { color: "red", hue: 4 },
-  { color: "blue", hue: 218 },
-  { color: "green", hue: 132 },
-  { color: "pink", hue: 330 },
-  { color: "orange", hue: 28 },
-  { color: "yellow", hue: 50 },
+  { color: "red", hue: 4, lightnessScale: 1.15, lightnessOffset: 0.04 },
+  { color: "blue", hue: 218, lightnessScale: 1.18, lightnessOffset: 0.04 },
+  { color: "green", hue: 132, lightnessScale: 1.08, lightnessOffset: 0.02 },
+  { color: "pink", hue: 330, saturationScale: 0.85, lightnessScale: 1.15, lightnessOffset: 0.05 },
+  { color: "orange", hue: 28, lightnessScale: 1.15, lightnessOffset: 0.05 },
+  { color: "yellow", hue: 50, saturationScale: 0.85, lightnessScale: 1.2, lightnessOffset: 0.08 },
   { color: "black", hue: 220, saturationScale: 0.24, lightnessScale: 0.55, lightnessOffset: -0.02 },
   { color: "white", hue: 210, saturationScale: 0.12, lightnessScale: 0.35, lightnessOffset: 0.58 },
-  { color: "lime", hue: 95 },
-  { color: "cyan", hue: 190 },
-  { color: "rose", hue: 345 },
+  { color: "lime", hue: 95, lightnessScale: 1.1, lightnessOffset: 0.04 },
+  { color: "cyan", hue: 190, lightnessScale: 1.08, lightnessOffset: 0.03 },
+  { color: "rose", hue: 345, saturationScale: 0.82, lightnessScale: 1.16, lightnessOffset: 0.05 },
 ];
 
 export const CHARACTER_POSES = [
