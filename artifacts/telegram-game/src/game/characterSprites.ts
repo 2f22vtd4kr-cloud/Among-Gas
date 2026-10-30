@@ -15,11 +15,15 @@
 const SPRITE_SHEET_VERSION = 6;
 export const CHARACTER_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
 
-export const CHARACTER_SHEET_COLS = 7;
-export const CHARACTER_SHEET_ROWS = 9;   // was incorrectly 8; sheet has 9 pose rows
-export const CHARACTER_SHEET_WIDTH = 1123;
+// The authored source atlas remains seven columns. The runtime canvas atlas
+// expands those seven columns to eighteen while preserving the original poses.
+export const CHARACTER_SOURCE_SHEET_COLS = 7;
+export const CHARACTER_SOURCE_SHEET_WIDTH = 1123;
+export const CHARACTER_SHEET_COLS = 18;
+export const CHARACTER_SHEET_ROWS = 9;
+export const CHARACTER_SHEET_WIDTH = 2898; // 18 × 161px integer columns
 export const CHARACTER_SHEET_HEIGHT = 1401;
-export const CHARACTER_CELL_WIDTH = CHARACTER_SHEET_WIDTH / CHARACTER_SHEET_COLS;
+export const CHARACTER_CELL_WIDTH = 161;
 export const CHARACTER_CELL_HEIGHT = CHARACTER_SHEET_HEIGHT / CHARACTER_SHEET_ROWS;
 
 export const CHARACTER_COLORS = [
@@ -30,8 +34,47 @@ export const CHARACTER_COLORS = [
   "brown",
   "dark-gray",
   "magenta",
+  "red",
+  "blue",
+  "green",
+  "pink",
+  "orange",
+  "yellow",
+  "black",
+  "white",
+  "lime",
+  "cyan",
+  "rose",
 ] as const;
 export type CharacterColor = (typeof CHARACTER_COLORS)[number];
+
+export interface GeneratedCharacterPalette {
+  readonly color: CharacterColor;
+  /** Target suit hue in degrees; all original shading and alpha are retained. */
+  readonly hue: number;
+  readonly saturationScale?: number;
+  readonly lightnessScale?: number;
+  readonly lightnessOffset?: number;
+}
+
+/**
+ * Additional palettes are generated from the authored teal suit column.
+ * Only saturated teal suit pixels are hue-shifted; the balaclava, visor,
+ * filter, dark outlines, highlights and transparent pixels remain intact.
+ */
+export const GENERATED_CHARACTER_PALETTES: readonly GeneratedCharacterPalette[] = [
+  { color: "red", hue: 4 },
+  { color: "blue", hue: 218 },
+  { color: "green", hue: 132 },
+  { color: "pink", hue: 330 },
+  { color: "orange", hue: 28 },
+  { color: "yellow", hue: 50 },
+  { color: "black", hue: 220, saturationScale: 0.24, lightnessScale: 0.55, lightnessOffset: -0.02 },
+  { color: "white", hue: 210, saturationScale: 0.12, lightnessScale: 0.35, lightnessOffset: 0.58 },
+  { color: "lime", hue: 95 },
+  { color: "cyan", hue: 190 },
+  { color: "rose", hue: 345 },
+];
 
 export const CHARACTER_POSES = [
   "idle",
