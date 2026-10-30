@@ -1195,7 +1195,24 @@ try {
     }
     return { x: count ? sumX / count : cx, y: count ? sumY / count : cy, count, cx, cy };
   });
+  const readWorldFingerprint = () => cameraPage.locator('canvas').evaluate(canvas => {
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not sample the world canvas for camera movement');
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const samples = [];
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
+    for (let y = 24; y < canvas.height; y += 24) {
+      for (let x = 24; x < canvas.width; x += 24) {
+        if (Math.abs(x - cx) < 110 && Math.abs(y - cy) < 110) continue;
+        const i = (y * canvas.width + x) * 4;
+        samples.push([pixels[i], pixels[i + 1], pixels[i + 2]]);
+      }
+    }
+    return samples;
+  });
   const cameraBaseline = await readPlayerCentroid();
+  const worldBaseline = await readWorldFingerprint();
   assert.ok(cameraBaseline.count > 20, 'the local player sprite must be visible before movement');
   const joystick = cameraPage.locator('[aria-label="Джойстик движения"], [aria-label="Movement joystick"]');
   const joystickBox = await joystick.boundingBox();
@@ -1212,6 +1229,14 @@ try {
     await cameraPage.waitForTimeout(70);
   }
   await cameraPage.mouse.up();
+  const worldAfterMovement = await readWorldFingerprint();
+  const changedWorldSamples = worldBaseline.reduce((count, before, index) => {
+    const after = worldAfterMovement[index];
+    return count + (after && before.some((channel, channelIndex) => Math.abs(channel - after[channelIndex]) > 24) ? 1 : 0);
+  }, 0);
+  const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
+  assert.ok(worldChangeRatio > 0.02,
+    `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
   assert.ok(cameraSamples.every(sample => sample.count > 20),
     'the local player sprite must remain visible while the camera follows movement');
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.x - cameraBaseline.x)));
