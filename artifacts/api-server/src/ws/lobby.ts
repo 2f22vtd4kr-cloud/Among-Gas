@@ -18,6 +18,7 @@ import {
   MAP_W, MAP_H,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
+  PLAYER_SPAWN_MIN_SEPARATION_PX,
   toWire,
   DELTA_THRESHOLD_SQ,
   KILL_COOLDOWN_MS,
@@ -27,6 +28,7 @@ import {
 import {
   buildCollisionGrid,
   isPlayerPositionWalkable,
+  isPlayerSpawnPositionClear,
   KILL_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -83,8 +85,8 @@ function computeSpawnPosition(
   occupied: readonly { x: number; y: number }[] = [],
 ): { x: number; y: number } {
   if (total <= 1) {
-    if (!isPlayerPositionWalkable(spawnGrid, SPAWN_X, SPAWN_Y)) {
-      throw new Error('Configured player spawn is outside the walkable map footprint');
+    if (!isPlayerSpawnPositionClear(spawnGrid, SPAWN_X, SPAWN_Y)) {
+      throw new Error('Configured player spawn sprite overlaps blocked map geometry');
     }
     return { x: SPAWN_X, y: SPAWN_Y };
   }
@@ -92,28 +94,32 @@ function computeSpawnPosition(
   // Try several angular/radial candidates instead of falling back immediately
   // to the shared center. A rejected candidate must not stack multiple players
   // on the same spawn pixel, where their first movement can repeatedly collide.
-  const radii = [60, 48, 72, 36, 84, 24, 96, 108];
-  const angleOffsets = [0, Math.PI / 12, -Math.PI / 12, Math.PI / 6, -Math.PI / 6, Math.PI / 4, -Math.PI / 4];
+  const radii = [96, 120, 144, 168, 192, 216, 240];
+  const angleOffsets = [
+    0, Math.PI / 12, -Math.PI / 12,
+    Math.PI / 6, -Math.PI / 6,
+    Math.PI / 4, -Math.PI / 4,
+    Math.PI / 3, -Math.PI / 3,
+  ];
   for (const offset of angleOffsets) {
     for (const radius of radii) {
       const angle = baseAngle + offset;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      const clear = isPlayerPositionWalkable(spawnGrid, x, y);
-      if (!clear) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
       return { x, y };
     }
   }
-  // The center is known walkable, but prefer the farthest safe candidate if
-  // a crowded/custom map exhausts the ideal ellipse candidates.
-  for (let radius = 12; radius <= 180; radius += 12) {
-    for (let step = 0; step < 24; step++) {
-      const angle = (step / 24) * Math.PI * 2;
+  // Search the full lobby floor before refusing to start. The visual sprite
+  // rectangle must be clear, not merely the much smaller feet hitbox.
+  for (let radius = 12; radius <= 360; radius += 12) {
+    for (let step = 0; step < 48; step++) {
+      const angle = (step / 48) * Math.PI * 2;
       const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
       const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);
-      if (!isPlayerPositionWalkable(spawnGrid, x, y)) continue;
-      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < 30)) continue;
+      if (!isPlayerSpawnPositionClear(spawnGrid, x, y)) continue;
+      if (occupied.some(p => Math.hypot(p.x - x, p.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX)) continue;
       return { x, y };
     }
   }
