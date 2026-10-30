@@ -477,9 +477,12 @@ try {
   const killButton = page.getByRole('button', { name: /Убить/ });
   await killButton.waitFor({ state: 'visible', timeout: 10_000 });
   await page.waitForFunction(() => [...document.querySelectorAll('button')].some(
-    button => button.textContent?.includes('Убить') && !button.disabled,
+    button => button.getAttribute('aria-label') === 'Убить' && !button.disabled,
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
+  const killIconBox = await killButton.locator('img').boundingBox();
+  assert.ok(killIconBox && killIconBox.width >= 64 && killIconBox.height >= 64,
+    'Kill action must display the large original kill icon asset');
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
   await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
