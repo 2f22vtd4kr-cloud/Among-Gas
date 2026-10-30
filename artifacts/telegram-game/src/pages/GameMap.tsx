@@ -1102,7 +1102,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
+      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || leaveConfirmOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -2042,7 +2042,7 @@ export default function GameMap() {
         </div>
       )}
 
-      {loaded && <Joystick keysRef={keysRef} />}
+      {loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && <Joystick keysRef={keysRef} />}
 
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
         <SettingsButton
