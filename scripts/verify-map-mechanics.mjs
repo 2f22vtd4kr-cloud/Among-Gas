@@ -74,7 +74,9 @@ for (const run of runs) {
 }
 assert.equal(cursor, cols * rows, 'Collision RLE does not fill the grid');
 
-const polygonBlocks = [...collisionOverrides.matchAll(/points:\s*\[([\s\S]*?)\]/g)].map(match =>
+const polygonBlocks = [...collisionOverrides.matchAll(
+  /points:\s*\[((?:\s*\[\s*\d+\s*,\s*\d+\s*\]\s*,?)+)\]/g,
+)].map(match =>
   [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
     .map(point => [Number(point[1]), Number(point[2])]),
 );
