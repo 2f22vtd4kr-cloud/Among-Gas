@@ -319,6 +319,8 @@ export default function GameMap() {
   } = useGameActions();
 
   const [killAnimation, setKillAnimation] = useState<ReturnType<typeof useGameState>['lastKill']>(null);
+  const killAnimationOpenRef = useRef(killAnimation !== null);
+  killAnimationOpenRef.current = killAnimation !== null;
   useEffect(() => {
     if (!lastKill) return undefined;
     // Victims see the blocking death sequence; attackers keep playing.
@@ -387,8 +389,12 @@ export default function GameMap() {
   useEffect(() => { sabotageRef.current = sabotage; }, [sabotage]);
   const myRoleRef = useRef(myRole);
   useEffect(() => { myRoleRef.current = myRole; }, [myRole]);
+  const gameOverOpenRef = useRef(Boolean(voteResult?.winner));
+  gameOverOpenRef.current = Boolean(voteResult?.winner);
 
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
+  const sabotagePanelOpenRef = useRef(showSabotagePanel);
+  sabotagePanelOpenRef.current = showSabotagePanel;
   const [showAdminTable, setShowAdminTable] = useState(false);
   const [, setAdminTableTick] = useState(0);
   const [showMiniMap, setShowMiniMap] = useState(false);
@@ -584,6 +590,8 @@ export default function GameMap() {
   const nearestTaskRef = useRef<number | null>(null);
   /** Which task minigame is currently open (null = none). */
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+  const activeTaskOpenRef = useRef(activeTaskId !== null);
+  activeTaskOpenRef.current = activeTaskId !== null;
 
   useEffect(() => {
     if (trackedTaskId !== null && !myTasks.some(task => {
@@ -1102,7 +1110,7 @@ export default function GameMap() {
 
       // Step player physics. Dead players (ghosts) walk through walls.
       // Movement freezes entirely during a meeting (server ignores 0x11 too).
-      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || leaveConfirmOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current
+      const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || leaveConfirmOpenRef.current || myVentRef.current !== null || adminTableOpenRef.current || miniMapOpenRef.current || activeTaskOpenRef.current || sabotagePanelOpenRef.current || killAnimationOpenRef.current || gameOverOpenRef.current
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
@@ -2042,7 +2050,7 @@ export default function GameMap() {
         </div>
       )}
 
-      {loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && <Joystick keysRef={keysRef} />}
+      {loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && activeTaskId === null && !showSabotagePanel && !killAnimation && !voteResult?.winner && <Joystick keysRef={keysRef} />}
 
       {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
         <SettingsButton
