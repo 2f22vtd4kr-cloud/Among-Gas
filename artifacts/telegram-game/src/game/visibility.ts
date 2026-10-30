@@ -1,5 +1,5 @@
 import type { Grid } from '@workspace/shared/collisionMap';
-import { CELL_X, CELL_Y, COLS, ROWS } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid } from '@workspace/shared/collisionMap';
 
 export interface VisionPoint {
   x: number;
@@ -277,9 +277,13 @@ export function buildNarrowShadowOccluders(collisionGrid: Grid): VisualOccluderC
       radius: Math.min(CELL_X, CELL_Y) * 0.2,
     });
   }
-  for (const manual of MANUAL_NARROW_OCCLUDERS) {
-    if (!occluders.some(item => Math.hypot(item.x - manual.x, item.y - manual.y) < 1)) {
-      occluders.push(manual);
+  // These manually measured circles belong only to the canonical map.
+  // Synthetic grids in unit tests must remain fully data-driven.
+  if (collisionGrid === buildCollisionGrid()) {
+    for (const manual of MANUAL_NARROW_OCCLUDERS) {
+      if (!occluders.some(item => Math.hypot(item.x - manual.x, item.y - manual.y) < 1)) {
+        occluders.push(manual);
+      }
     }
   }
   return occluders;
