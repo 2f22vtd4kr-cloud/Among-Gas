@@ -28,9 +28,11 @@ try {
 
   const menuMusicRequest = page.waitForRequest(request => request.url().endsWith('/au-sounds/menu_music.mp3'));
   const killRequest = page.waitForRequest(request => request.url().endsWith('/au-sounds/kill.wav'));
+  const killResponse = page.waitForResponse(response => response.url().endsWith('/au-sounds/kill.wav') && response.ok());
   await page.mouse.click(5, 5);
-  await Promise.all([menuMusicRequest, killRequest]);
-  await page.waitForTimeout(250);
+  await Promise.all([menuMusicRequest, killRequest, killResponse]);
+  // Allow decodeAudioData to finish before the first real kill event can occur.
+  await page.waitForTimeout(300);
 
   const requested = [...new Set(audioRequests)].sort();
   assert.deepEqual(requested, ['/au-sounds/kill.wav', '/au-sounds/menu_music.mp3'],
