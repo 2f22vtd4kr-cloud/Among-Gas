@@ -1149,7 +1149,10 @@ try {
     for (let y = 0; y < height; y++) {
       for (let x = 0; x < width; x++) {
         const i = (y * width + x) * 4;
-        const [red, green, blue, alpha] = pixels.slice(i, i + 4);
+        const red = pixels[i];
+        const green = pixels[i + 1];
+        const blue = pixels[i + 2];
+        const alpha = pixels[i + 3];
         if (alpha > 200 && green > 85 && green > red * 1.2 && blue > 65 && green > blue * 0.82) {
           count++;
           sumX += left + x;
