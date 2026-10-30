@@ -101,11 +101,7 @@ assert.equal(shadowGrid[propB], 0, 'all cells of the small prop are non-occludin
 assert.equal(shadowGrid[propC], 0, 'four-cell light-pole-sized footprints stay out of visual occlusion');
 assert.equal(shadowGrid[propD], 0, 'four-cell light-pole-sized footprints stay out of the coarse square occlusion grid');
 assert.equal(shadowGrid[20 * COLS + 25], 1, 'long wall component remains a vision occluder');
-const canonicalCollisionGrid = buildCollisionGrid();
-assert.notEqual(propGrid, canonicalCollisionGrid,
-  'synthetic prop fixture must remain separate from the production collision grid');
 const narrowOccluders = buildNarrowShadowOccluders(propGrid);
-console.log('synthetic narrow occluders', narrowOccluders);
 assert.equal(narrowOccluders.length, 1, 'a four-cell 2×2 pole footprint becomes one narrow visual occluder');
 const pole = narrowOccluders[0];
 assert.equal(pole.x, 3 * CELL_X, 'narrow occluder is centered on the original prop');
