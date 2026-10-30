@@ -144,10 +144,14 @@ export interface CharacterClipNotch {
  */
 export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
   if (pose === 'idle') {
-    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.62, rightLegEnd: 0.73, top: 0.79 };
+    // The original idle frame has a short black hook inside the leg gap.
+    // Extend the transparent notch to the actual right-leg silhouette edge.
+    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.68, rightLegEnd: 0.73, top: 0.79 };
   }
   if (pose === 'dead-body') {
-    return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.66 };
+    // The corpse frame contains the same detached horizontal bridge; remove
+    // the full gap bridge without cutting into either outer leg silhouette.
+    return { leftLegStart: 0.34, leftLegEnd: 0.49, rightLegStart: 0.67, rightLegEnd: 0.77, top: 0.66 };
   }
   return undefined;
 }
