@@ -137,7 +137,7 @@ const MOVE_SEND_INTERVAL_MS = 40;
 
 // ── Player color: keyed by lobby slot, using the 18 runtime palettes ─────────
 function slotColor(slot: number): CharacterColor {
-  return CHARACTER_COLORS[slot % CHARACTER_COLORS.length];
+  return getCharacterColorForSlot(slot);
 }
 
 // ── Canvas sprite renderer for DOM overlays (role-reveal, game-over) ─────────
