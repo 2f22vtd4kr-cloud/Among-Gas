@@ -1853,3 +1853,43 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Integrated platform/gameplay audit findings and current handoff
+
+**Done**
+- Registered Agent 5 in shared coordination issue #36 and opened PR #39.
+- PR #39 head \`52ac8fb4\` passed full CI in run #41128156869: Node 20, empty-schema Replit post-merge hook, typecheck/build, Replit production/dev smoke, Telegram auth, live WebSocket lobby/sabotage authorization, browser smoke/audio network regression, collision visual artifact upload, and headless multiplayer simulations.
+- Inspected 47 CI screenshots from artifact #13011074123 across lobby, settings, loading, role reveal, gameplay viewports, tasks, kill/corpse/report, sabotage, meetings, voting, ghost mode and game-over states.
+- Verified loading-screen behavior: browser test holds map + character image decode promises; overlay remains until both are ready. Server invariant separately freezes solo bots until map + sprite readiness.
+- Inspected Agent 1's generated fine-grid preview and independently decoded the candidate RLE to 266560 cells (680×392). Rendered a candidate overlay against the reference; central garden and narrow corridors appear plausible, with statue footprint blocked.
+- Identified and reported shared-file/contract overlaps across Agents 1–4 and PR #39 CI workflow; proposed geometry → movement → art → gameplay → integrated QA rebase order.
+- Confirmed the API server does not use \`@workspace/db\`; schema is empty. Made Replit post-merge skip empty-schema migration and added a CI test with \`DATABASE_URL\` unset.
+
+**New findings / release blockers**
+- Active-match WebSocket reconnect/resume is absent: client \`onclose\` only sets an error; server immediately removes the player and user-to-lobby mapping. Reconnect grace, resume protocol and per-player state snapshot still need implementation.
+- Telegram \`startapp=LOBBY_CODE\` / \`initDataUnsafe.start_param\` auto-join is absent. Manual lobby-code join exists, but Telegram invite deep links do not auto-join.
+- Kill, report, task, vent and sabotage-repair authorization currently rely on Euclidean distance without collision-aware line of sight. Close targets across walls may permit through-wall actions. Agents 1 and 4 have been asked to coordinate a shared server-safe fine-grid LOS/approach-point contract.
+- Dev mock auth accepts caller-supplied numeric user IDs when running in development without a real bot token. Production HMAC validation is enabled; keep shared dev previews access-restricted or use real Telegram initData.
+- Replit Autoscale uses process-local LobbyManager state. One instance must be configured for immediate testing; process restart loses matches. The actual Replit deployment's max-instance setting could not be verified because no Among Gas Replit app is accessible through the connected account.
+- Agent 1's fine vision polygon uses 720 rays in every animation frame; benchmark/caching is required on real mobile WebView.
+- Agent 3's runtime atlas recolour processes ~2.48M pixels on first load; benchmark on iPhone/Android WebView. PR #39's atlas browser test is deferred until \`characterAtlas.ts\` lands.
+- Agent 4's voting UI has a seven-key \`ADMIN_DOT_COLORS: Record<CharacterColor,string>\`; rebase onto Agent 3's 18-color union requires all 18 keys or a shared CSS mapping.
+
+**Agent branch/PR state at this handoff**
+- Agent 1: PR #42, latest observed head \`38e1d0ff\`; fine-grid decode and core geometry tests passed after RLE correction, but latest CI failed the exact-footprint assertion for the \`Fix Wiring\` task console. Task definitions describe console centres; test should assert a reachable walkable approach point within interaction range, not that the console itself is walkable. CI also needs to use read-only generator \`--check\` and explicitly run/upload the collision, shadow, vision and region-tile renderer.
+- Agent 2: PR #37, latest observed head \`20762bd4\`; latest browser smoke failed camera stability because the fixture hit an obstacle after only 26.5px of additional travel. Diagnostic screenX values looked stable; choose a longer unobstructed path and require sustained real movement.
+- Agent 3: PR #41, latest observed head \`b2a45cf1\`, draft; previous head passed full CI, latest changes are rerunning. Preserve the 18-color tests when rebasing with Agent 1.
+- Agent 4: PRs #35, #38 and #40 have reported full CI success, but require rebases after shared GameMap/lobby/test changes from Agents 1–3.
+- Agent 5: PR #39, head \`52ac8fb4\`, full CI success; keep open until the other branches integrate and rerun the final combined suite.
+
+**Left off / next steps**
+1. Wait for Agent 1 to fix task reachability test semantics, renderer CI invocation/evidence, and read-only collision-data verification.
+2. Wait for Agent 2 to fix camera test path and rebase movement to \`buildPreciseCollisionGrid()\`.
+3. Rebase Agent 3's atlas onto fine-grid GameMap and preserve Agent 1's geometry tests.
+4. Rebase Agent 4's meeting/chat/voting/report work onto the integrated map/art contracts; complete LOS/approach authorization.
+5. After Agent 2/4 shared-file changes land, implement Agent 5's reconnect/resume and Telegram start-param auto-join.
+6. Rebase PR #39 onto the final main, preserve all CI workflow steps, activate atlas browser test, rerun full CI, and request a live Replit run only after release gates pass.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
