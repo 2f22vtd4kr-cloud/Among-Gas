@@ -42,7 +42,8 @@ for (const palette of GENERATED_CHARACTER_PALETTES) {
 // The visor, filter, mask fabric, dark outline and transparent pixels are not suit material.
 for (const untouched of [
   [111, 174, 197, 255], // blue visor highlight
-  [183, 214, 213, 255], // pale filter material
+  [183, 214, 213, 255], // low-saturation pale filter material
+  [174, 224, 222, 255], // high-saturation pale cyan filter highlight (lightness mask)
   [17, 27, 38, 255],    // dark outline
   [40, 184, 170, 0],    // transparent teal edge
 ] as const) {
