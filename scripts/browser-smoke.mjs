@@ -1157,9 +1157,11 @@ try {
     }
   }
 
-  // Move the local player while the camera follows. The character's suit
-  // centroid should remain stable near canvas center instead of shaking or
-  // drifting as the map scrolls beneath it.
+  // Move the local player from the verified, open main-lobby spawn while the
+  // camera follows. Keep this separate from task-interaction: that fixture
+  // deliberately relocates the player beside task 4, where nearby geometry can
+  // constrain movement and is covered by the task/collision-specific checks.
+  // The character's suit centroid should remain stable near canvas center.
   const cameraPage = await browser.newPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -1172,7 +1174,7 @@ try {
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  await cameraPage.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await cameraPage.waitForTimeout(350);
