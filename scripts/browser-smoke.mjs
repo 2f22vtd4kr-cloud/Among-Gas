@@ -342,6 +342,8 @@ try {
   // the assigned console so this checks proximity UI independently of movement.
   await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
   const taskDiagnostics = await page.evaluate(() => ({
+    taskFixturePosition: window.__AG_TASK_FIXTURE_POSITION ?? null,
+    taskDebug: window.__AG_TASK_DEBUG ?? null,
     taskActionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
     taskAction: (() => {
       const element = document.querySelector('[data-testid="gameplay-task-action"]');
