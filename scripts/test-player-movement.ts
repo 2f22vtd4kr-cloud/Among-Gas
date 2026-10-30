@@ -166,3 +166,23 @@ console.log('PASS: client/server collision agreement, thin walls, diagonal corne
   assert.ok(ghost.x > ghostState.x, 'ghost movement must pass through a blocked collision cell');
   assert.equal(ghost.pose, 'ghost', 'ghost movement must retain its dedicated static pose');
 }
+
+
+// Ghosts ignore wall cells, not the outer map boundary. Clamp the full feet
+// footprint on all four edges rather than allowing the sprite anchor to reach
+// x=0 / y=0 where its collision base would be outside the map.
+{
+  const minX = PLAYER_HALF_WIDTH + PLAYER_RADIUS;
+  const maxX = MAP_W - minX;
+  const minY = PLAYER_RADIUS - FEET_OFFSET_Y;
+  const maxY = MAP_H - PLAYER_RADIUS - FEET_OFFSET_Y;
+  const base = createInitialPlayerState();
+  const west = stepPlayer(grid, { ...base, x: minX + 10 }, new Set(['a']), 48, true);
+  const east = stepPlayer(grid, { ...base, x: maxX - 10 }, new Set(['d']), 48, true);
+  const north = stepPlayer(grid, { ...base, y: minY + 10 }, new Set(['w']), 48, true);
+  const south = stepPlayer(grid, { ...base, y: maxY - 10 }, new Set(['s']), 48, true);
+  assert.equal(west.x, minX, 'ghost west edge clamp must preserve the full horizontal foot base');
+  assert.equal(east.x, maxX, 'ghost east edge clamp must preserve the full horizontal foot base');
+  assert.equal(north.y, minY, 'ghost north edge clamp must preserve the feet circle inside the map');
+  assert.equal(south.y, maxY, 'ghost south edge clamp must preserve the feet circle inside the map');
+}
