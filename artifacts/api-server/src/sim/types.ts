@@ -9,6 +9,7 @@ export interface SimTimeoutSnapshot {
   sabotage: { systemId: number; lockedTaskIds: number[]; fixedPads: number[] } | null;
   completedTaskSteps: number;
   totalTaskSteps: number;
+  collisionViolation?: { slot: number; x: number; y: number };
   players: Array<{
     slot: number;
     role: string;
