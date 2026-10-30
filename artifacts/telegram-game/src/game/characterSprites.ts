@@ -111,7 +111,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
-/** Returns an isolated source window (px) for a given color and pose. */
+/** Returns an isolated runtime-atlas window (px) for a given color and pose. */
 export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose) {
   const col = CHARACTER_COLORS.indexOf(color);
   const row = CHARACTER_POSES.indexOf(pose);
