@@ -15,6 +15,7 @@ import {
   PLAYER_HALF_WIDTH,
   PLAYER_SPRITE_HALF_WIDTH_PX,
   PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPAWN_CLEARANCE_PX,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
@@ -85,7 +86,10 @@ function makeOverlaySvg(
     const halfWidth = PLAYER_HALF_WIDTH * scaleX;
     const halfSpriteWidth = PLAYER_SPRITE_HALF_WIDTH_PX * scaleX;
     const halfSpriteHeight = PLAYER_SPRITE_HALF_HEIGHT_PX * scaleY;
+    const spawnMarginX = PLAYER_SPAWN_CLEARANCE_PX * scaleX;
+    const spawnMarginY = PLAYER_SPAWN_CLEARANCE_PX * scaleY;
     spawn = [
+      `<rect x="${x - halfSpriteWidth - spawnMarginX}" y="${y - halfSpriteHeight - spawnMarginY}" width="${(halfSpriteWidth + spawnMarginX) * 2}" height="${(halfSpriteHeight + spawnMarginY) * 2}" fill="none" stroke="#00ffae" stroke-width="${2 * scaleX}" stroke-dasharray="${5 * scaleX} ${3 * scaleX}"/>`,
       `<rect x="${x - halfSpriteWidth}" y="${y - halfSpriteHeight}" width="${halfSpriteWidth * 2}" height="${halfSpriteHeight * 2}" fill="#00e5ff" fill-opacity="0.08" stroke="#00e5ff" stroke-width="${2 * scaleX}" stroke-dasharray="${6 * scaleX} ${4 * scaleX}"/>`,
       `<circle cx="${x}" cy="${feetY}" r="${radius}" fill="#00e5ff" fill-opacity="0.85" stroke="#001018" stroke-width="${2 * scaleX}"/>`,
       `<circle cx="${x - halfWidth}" cy="${feetY}" r="${radius}" fill="#00e5ff" fill-opacity="0.55" stroke="#001018" stroke-width="${1.5 * scaleX}"/>`,

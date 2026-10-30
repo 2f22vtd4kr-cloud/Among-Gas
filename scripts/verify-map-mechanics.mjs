@@ -49,12 +49,15 @@ const playerRadius = num(coords, 'PLAYER_RADIUS');
 const playerHalfWidth = num(coords, 'PLAYER_HALF_WIDTH');
 const spriteHalfWidth = num(coords, 'PLAYER_SPRITE_HALF_WIDTH_PX');
 const spriteHalfHeight = num(coords, 'PLAYER_SPRITE_HALF_HEIGHT_PX');
+const spawnClearance = num(coords, 'PLAYER_SPAWN_CLEARANCE_PX');
+const spawnMinSeparation = num(coords, 'PLAYER_SPAWN_MIN_SEPARATION_PX');
 const spawnMinX = Math.round(280 * mapW / 1040);
 const spawnMaxX = Math.round(710 * mapW / 1040);
 const spawnMaxFeetY = Math.round(200 * mapH / 580);
 assert.match(coords, /PLAYER_SPAWN_MIN_X\s*=\s*Math\.round\(280 \*/);
 assert.match(coords, /PLAYER_SPAWN_MAX_X\s*=\s*Math\.round\(710 \*/);
 assert.match(coords, /PLAYER_SPAWN_MAX_FEET_Y\s*=\s*Math\.round\(200 \*/);
+assert.equal(spawnClearance,12,'spawn clearance remains 12px');
 assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
 assert.match(coords, /PLAYER_SPAWN_X\s*=\s*Math\.round\(450 \*/);
 assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
@@ -113,19 +116,20 @@ const polygonIntersectsRect = (points, minX, minY, maxX, maxY) => {
   }
   return false;
 };
-// Apply the same manual obstacle polygons as shared/collisionMap.ts before
-// checking reachability or the full visible spawn sprite.
-for (const points of polygonBlocks) {
-  for (let row=0;row<rows;row++) for (let col=0;col<cols;col++) {
-    const minX=col*cellX, minY=row*cellY;
-    if (polygonIntersectsRect(points,minX,minY,minX+cellX,minY+cellY)) grid[row*cols+col]=1;
-  }
-}
+// Manual obstacles remain vector geometry; do not rasterize them into cells.
+const pointSegmentDistanceSq=(x,y,a,b)=>{
+ const dx=b[0]-a[0],dy=b[1]-a[1],len2=dx*dx+dy*dy;
+ const t=len2===0?0:Math.max(0,Math.min(1,((x-a[0])*dx+(y-a[1])*dy)/len2));
+ const px=a[0]+dx*t,py=a[1]+dy*t;return (x-px)**2+(y-py)**2;
+};
+const circleIntersectsPolygon=(x,y,r,points)=>pointInPolygon(x,y,points)||
+ points.some((a,i)=>pointSegmentDistanceSq(x,y,a,points[(i+1)%points.length])<=r*r);
 
 const blocked = (x, y) => {
   const col = Math.floor(x / cellX);
   const row = Math.floor(y / cellY);
-  return col < 0 || col >= cols || row < 0 || row >= rows || grid[row * cols + col] === 1;
+  return col < 0 || col >= cols || row < 0 || row >= rows || grid[row * cols + col] === 1 ||
+    polygonBlocks.some(points => pointInPolygon(x,y,points));
 };
 // Mirror shared collisionMap.canMoveTo and the server's feet-offset check.
 const canCircleMoveTo = (cx, cy) => {
@@ -135,7 +139,7 @@ const canCircleMoveTo = (cx, cy) => {
     const angle = (i / samples) * Math.PI * 2;
     if (blocked(cx + Math.cos(angle) * playerRadius, cy + Math.sin(angle) * playerRadius)) return false;
   }
-  return true;
+  return !polygonBlocks.some(points => circleIntersectsPolygon(cx,cy,playerRadius,points));
 };
 const canPlayerMoveTo = (x, y) => {
   const feetY = y + feetOffsetY;
@@ -146,8 +150,8 @@ const canPlayerMoveTo = (x, y) => {
 const canSpawnAt = (x, y) => {
   if (x < spawnMinX || x > spawnMaxX || y + feetOffsetY > spawnMaxFeetY) return false;
   if (!canPlayerMoveTo(x, y)) return false;
-  const minX=x-spriteHalfWidth, maxX=x+spriteHalfWidth;
-  const minY=y-spriteHalfHeight, maxY=y+spriteHalfHeight;
+  const minX=x-spriteHalfWidth-spawnClearance, maxX=x+spriteHalfWidth+spawnClearance;
+  const minY=y-spriteHalfHeight-spawnClearance, maxY=y+spriteHalfHeight+spawnClearance;
   if (minX<0 || maxX>mapW || minY<0 || maxY>mapH) return false;
   for (let row=Math.floor(minY/cellY);row<=Math.floor(maxY/cellY);row++) {
     for (let col=Math.floor(minX/cellX);col<=Math.floor(maxX/cellX);col++) {
@@ -173,7 +177,22 @@ const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y\s*=\s*Math\.round\((\d+)\s
 assert.ok(Number.isFinite(spawnXRef) && Number.isFinite(spawnYRef), 'shared spawn formulas must be parseable');
 const spawnX = Math.round(spawnXRef * mapW / 1040);
 const spawnY = Math.round(spawnYRef * mapH / 580);
-assert.ok(canSpawnAt(spawnX, spawnY), 'Spawn sprite overlaps blocked geometry or leaves the main-lobby spawn region');
+const availableSpawn=(x,y,occupied=[])=>canSpawnAt(x,y)&&!occupied.some(p=>Math.hypot(p.x-x,p.y-y)<spawnMinSeparation);
+const computeSpawn=(index,total,occupied=[])=>{
+ if(total<=1&&availableSpawn(spawnX,spawnY,occupied))return{x:spawnX,y:spawnY};
+ if(total>1){
+  const baseAngle=index/total*Math.PI*2-Math.PI/2,radii=[96,120,144,168,192,216,240];
+  const offsets=[0,Math.PI/12,-Math.PI/12,Math.PI/6,-Math.PI/6,Math.PI/4,-Math.PI/4,Math.PI/3,-Math.PI/3];
+  for(const offset of offsets)for(const radius of radii){const a=baseAngle+offset,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
+ }
+ for(let radius=12;radius<=360;radius+=12)for(let step=0;step<48;step++){const a=step/48*Math.PI*2,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
+ return null;
+};
+const soloSpawn=computeSpawn(0,1);
+assert.ok(soloSpawn,'solo start finds a clearance-safe point or fallback');
+const fiveSpawns=[];
+for(let i=0;i<5;i++){const pos=computeSpawn(i,5,fiveSpawns);assert.ok(pos, `five-player solver finds slot ${i}`);assert.ok(canSpawnAt(pos.x,pos.y), `slot ${i} clears geometry and margin`);fiveSpawns.push(pos);}
+for(let i=0;i<5;i++)for(let j=i+1;j<5;j++)assert.ok(Math.hypot(fiveSpawns[i].x-fiveSpawns[j].x,fiveSpawns[i].y-fiveSpawns[j].y)>=spawnMinSeparation, `slots ${i} and ${j} remain separated`);
 const fountainCenter = { x: 1735, y: 490 };
 assert.equal(canPlayerMoveTo(fountainCenter.x, fountainCenter.y), false,
   'The central fountain must be blocked by its hand-traced collision polygon');
@@ -328,7 +347,9 @@ assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emerg
 console.log(JSON.stringify({
   ok: true,
   feetAnchorOffsetPx: feetOffsetY,
-  spawnSpriteClearance: { halfWidthPx: spriteHalfWidth, halfHeightPx: spriteHalfHeight },
+  spawnSpriteClearance: { halfWidthPx: spriteHalfWidth, halfHeightPx: spriteHalfHeight, marginPx: spawnClearance },
+  soloSpawn,
+  fivePlayerSpawns: fiveSpawns,
   manualCollisionPolygons: polygonBlocks.length,
   playerFootprint: { radiusPx: playerRadius, halfWidthPx: playerHalfWidth },
   collisionGrid: `${cols}×${rows}`,

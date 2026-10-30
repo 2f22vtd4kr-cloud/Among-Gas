@@ -7,6 +7,7 @@ import {
   MAP_H,
   MAP_W,
   ROWS,
+  isPlayerPositionWalkable,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
@@ -126,6 +127,8 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
 const realShadowGrid = buildShadowGrid(realGrid);
+assert.equal(realGrid[10*COLS+55],0,'manual outline must not fill the old extra-blocked RLE cell');
+assert.equal(isPlayerPositionWalkable(realGrid,1735,490),false,'exact vector collision blocks fountain footprint');
 const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
 assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
@@ -143,6 +146,9 @@ assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vis
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
+const fountainRay=computeVisibilityPolygon(1450,490,500,realShadowGrid,realNarrowOccluders,true)[360];
+assert.ok(fountainRay.x>1580&&fountainRay.x<1586,'vision ray stops at the vector fountain edge');
+
 const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(
   realOrigin.x,
@@ -150,6 +156,7 @@ const realPolygon = computeVisibilityPolygon(
   NORMAL_VISION_RADIUS_PX,
   realShadowGrid,
   realNarrowOccluders,
+  true,
 );
 const roundedRealPolygon = smoothVisibilityPolygon(realPolygon, realOrigin);
 assert.equal(realPolygon.length, 720, 'custom map returns a full visibility polygon');

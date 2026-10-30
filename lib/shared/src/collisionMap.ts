@@ -21,6 +21,7 @@ import {
   PLAYER_RADIUS,
   PLAYER_SPRITE_HALF_WIDTH_PX,
   PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPAWN_CLEARANCE_PX,
   PLAYER_SPAWN_MIN_X,
   PLAYER_SPAWN_MAX_X,
   PLAYER_SPAWN_MAX_FEET_Y,
@@ -202,29 +203,27 @@ function polygonIntersectsRect(
   return false;
 }
 
-function applyManualBlockedPolygons(grid: Grid): void {
-  for (const polygon of MANUAL_BLOCKED_POLYGONS as readonly BlockedPolygon[]) {
-    for (let row = 0; row < ROWS; row++) {
-      for (let col = 0; col < COLS; col++) {
-        const minX = col * CELL_X;
-        const minY = row * CELL_Y;
-        if (polygonIntersectsRect(
-          polygon.points,
-          minX, minY,
-          minX + CELL_X,
-          minY + CELL_Y,
-        )) {
-          grid[row * COLS + col] = 1;
-        }
-      }
-    }
+
+
+/** Exact circle/outline test for manually traced vector obstacles. */
+function circleIntersectsPolygon(cx: number, cy: number, radius: number, points: readonly PolygonPoint[]): boolean {
+  if (pointInPolygon(cx, cy, points)) return true;
+  const r2 = radius * radius;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    const dx = b[0] - a[0], dy = b[1] - a[1], len2 = dx * dx + dy * dy;
+    const t = len2 === 0 ? 0 : Math.max(0, Math.min(1, ((cx - a[0]) * dx + (cy - a[1]) * dy) / len2));
+    const x = cx - (a[0] + dx * t), y = cy - (a[1] + dy * t);
+    if (x * x + y * y <= r2) return true;
   }
+  return false;
 }
 
 export function buildCollisionGrid(): Grid {
   if (_cached) return _cached;
+  // The reviewed RLE is the base movement mask. Hand-traced additions remain
+  // vector geometry; rasterizing them creates 31x32px square collision edges.
   _cached = decodeRuns();
-  applyManualBlockedPolygons(_cached);
   return _cached;
 }
 
@@ -237,7 +236,10 @@ export function isBlocked(grid: Grid, px: number, py: number): boolean {
   const col = Math.floor(px / CELL_X);
   const row = Math.floor(py / CELL_Y);
   if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
-  return grid[row * COLS + col] === 1;
+  if (grid[row * COLS + col] === 1) return true;
+  return grid === _cached && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+    pointInPolygon(px, py, polygon.points as readonly PolygonPoint[])
+  );
 }
 
 /**
@@ -259,6 +261,9 @@ export function canMoveTo(
     const py = cy + Math.sin(angle) * radius;
     if (isBlocked(grid, px, py)) return false;
   }
+  if (grid === _cached && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+    circleIntersectsPolygon(cx, cy, radius, polygon.points as readonly PolygonPoint[])
+  )) return false;
   return true;
 }
 
@@ -294,10 +299,10 @@ export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): bo
     !isPlayerPositionWalkable(grid, x, y)
   ) return false;
 
-  const minX = x - PLAYER_SPRITE_HALF_WIDTH_PX;
-  const maxX = x + PLAYER_SPRITE_HALF_WIDTH_PX;
-  const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX;
-  const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX;
+  const minX = x - PLAYER_SPRITE_HALF_WIDTH_PX - PLAYER_SPAWN_CLEARANCE_PX;
+  const maxX = x + PLAYER_SPRITE_HALF_WIDTH_PX + PLAYER_SPAWN_CLEARANCE_PX;
+  const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX - PLAYER_SPAWN_CLEARANCE_PX;
+  const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
   if (minX < 0 || maxX > MAP_W || minY < 0 || maxY > MAP_H) return false;
 
   const minCol = Math.floor(minX / CELL_X);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, buildCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
 import {
   FEET_OFFSET_Y,
@@ -11,6 +11,7 @@ import {
 } from '@workspace/shared/coords';
 import { createInitialPlayerState, isMovementPathWalkableWide, stepPlayer } from '../artifacts/telegram-game/src/game/player.js';
 import { resolvePlayerMovement } from '../artifacts/telegram-game/src/game/collisionMap.js';
+import { classifyMovementEcho } from '../artifacts/telegram-game/src/game/movementReconciliation.js';
 
 // Regression for prediction/server disagreement: both endpoints are walkable,
 // but the straight path crosses a thin wall. Local movement must not teleport
@@ -215,7 +216,26 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
   assert.ok(decision.y >= 0, 'server ghost movement must never produce a negative wire y coordinate');
 }
 
-console.log('PASS: client/server collision agreement, thin walls, diagonal corners, map edges and blocked-input animation');
+
+// Delayed/duplicate ordinary 0xFF echoes cannot rollback newer prediction.
+{
+ const sent=[{wireX:100,wireY:200},{wireX:110,wireY:200},{wireX:120,wireY:200}];
+ assert.deepEqual(classifyMovementEcho(sent,{wireX:100,wireY:200},false),{kind:'initial'});
+ assert.deepEqual(classifyMovementEcho(sent,{wireX:110,wireY:200},true),{kind:'acknowledgement',acknowledgedIndex:1});
+ assert.deepEqual(classifyMovementEcho(sent.slice(2),{wireX:110,wireY:200},true),{kind:'stale'});
+ assert.deepEqual(classifyMovementEcho(sent.slice(2),{wireX:105,wireY:200},true),{kind:'stale'});
+ assert.deepEqual(classifyMovementEcho(sent.slice(2),{wireX:105,wireY:200,force:true},true),{kind:'correction'});
+}
+// This cell was added only by the old polygon rasterizer; it remains open in
+// the base RLE while exact player footprint checks still block the fountain.
+{
+ const canonical=buildCollisionGrid();
+ assert.equal(canonical[10*COLS+55],0,'manual outline must not rasterize an open base cell');
+ assert.equal(isPlayerPositionWalkable(canonical,1735,490),false,'vector fountain still blocks the player footprint');
+ assert.equal(isPlayerPositionWalkable(canonical,1450,490),true,'open west lobby floor stays walkable');
+}
+
+console.log('PASS: movement, vector obstacle collision, stale echoes, thin walls, diagonal corners and map edges');
 
 // Normal movement remains animated, and dead players retain wall-phasing.
 {
