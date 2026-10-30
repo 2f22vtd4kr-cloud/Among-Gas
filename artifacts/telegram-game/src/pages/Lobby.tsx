@@ -16,7 +16,7 @@ import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
 import './lobby.css';
 
-// Lobby, gameplay, and kill sprites share the original measured balaclava PNG atlas.
+// Lobby, gameplay, and kill sprites share the cached runtime atlas built from the original PNG.
 import {
   CHARACTER_COLORS,
   CHARACTER_CELL_WIDTH,
@@ -29,7 +29,7 @@ import { loadCharacterAtlas } from '@/game/characterAtlas';
 
 const SLOT_COLORS = CHARACTER_COLORS;
 
-/** Render one measured original sprite pose. Ground shadows remain separate game art. */
+/** Render one measured pose from the shared palette atlas; ground shadows remain separate game art. */
 function CharSprite({
   color, pose = 'idle', size = 48, flipped = false,
 }: {
