@@ -78,8 +78,8 @@ if (!coords.includes('IDLE_SPRITE_VISIBLE_HEIGHT = 136') || !coords.includes('CH
 }
 const spriteHeight = Math.round(36 * (mapWidth / 1652));
 const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
-const spawnX = Math.round(350 * mapWidth / 1040);
-const spawnY = Math.round(150 * mapHeight / 580);
+const spawnX = readCoordNumber('PLAYER_SPAWN_X');
+const spawnY = readCoordNumber('PLAYER_SPAWN_Y');
 const feetY = spawnY + feetOffset;
 const footprint = [
   `<circle cx="${spawnX}" cy="${feetY}" r="${playerRadius}" fill="#00e5ff" fill-opacity="0.9" stroke="#001018" stroke-width="2"/>`,
