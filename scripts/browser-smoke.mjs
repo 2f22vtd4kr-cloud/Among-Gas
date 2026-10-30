@@ -205,13 +205,14 @@ try {
   const shadowGeometry = await roleRevealShadow.evaluate((shadow, sprite) => {
     const a = shadow.getBoundingClientRect();
     const b = sprite.getBoundingClientRect();
-    return { shadowCenterX: a.left + a.width / 2, spriteCenterX: b.left + b.width / 2, shadowTop: a.top, spriteBottom: b.bottom, width: a.width, height: a.height, animation: getComputedStyle(shadow).animationName, background: getComputedStyle(shadow).backgroundColor };
+    const style = getComputedStyle(shadow);
+    return { shadowCenterX: a.left + a.width / 2, spriteCenterX: b.left + b.width / 2, shadowTop: a.top, spriteBottom: b.bottom, width: Number.parseFloat(style.width), height: Number.parseFloat(style.height), animation: style.animationName, background: style.backgroundColor };
   }, await roleRevealSprite.elementHandle());
   assert.ok(Math.abs(shadowGeometry.shadowCenterX - shadowGeometry.spriteCenterX) < 2,
     'the role-reveal ground shadow must stay centered beneath the character');
   assert.ok(shadowGeometry.shadowTop >= shadowGeometry.spriteBottom - 2,
     'the role-reveal shadow must sit below the character feet, not overlap the sprite');
-  assert.ok(shadowGeometry.width >= 90 && shadowGeometry.height >= 12 && shadowGeometry.background.includes('0.85'),
+  assert.ok(shadowGeometry.width >= 90 && shadowGeometry.height >= 14 && shadowGeometry.background.includes('0.85'),
     'the ground shadow must have enough area and contrast to remain visible at mobile render scale');
   assert.equal(shadowGeometry.animation, 'rrShadowPulse',
     'the role-reveal ground shadow must animate with the character bob');
