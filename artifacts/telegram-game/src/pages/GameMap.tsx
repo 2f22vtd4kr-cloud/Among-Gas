@@ -608,11 +608,12 @@ export default function GameMap() {
   useEffect(() => {
     const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
       new URLSearchParams(window.location.search).get('mock') === 'task-interaction';
-    if (taskMockActive) {
+    if (import.meta.env.DEV) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
         mockEnabled: import.meta.env.VITE_ENABLE_GAME_MOCKS,
         query: window.location.search,
+        taskMockActive,
         role: myRole,
         meeting,
         sabotage,
