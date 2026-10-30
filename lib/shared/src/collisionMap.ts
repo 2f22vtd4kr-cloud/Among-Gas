@@ -175,13 +175,17 @@ export function canMoveTo(
  * anchor. Client prediction, server validation, and spawn placement must use
  * this exact footprint so they cannot disagree about where a player can stand.
  */
-export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): boolean {
-  const feetY = y + FEET_OFFSET_Y;
+export function isPlayerFootprintWalkableAtFeet(grid: Grid, feetX: number, feetY: number): boolean {
   return (
-    canMoveTo(grid, x, feetY, PLAYER_RADIUS) &&
-    canMoveTo(grid, x - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
-    canMoveTo(grid, x + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
+    canMoveTo(grid, feetX, feetY, PLAYER_RADIUS) &&
+    canMoveTo(grid, feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+    canMoveTo(grid, feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS)
   );
+}
+
+/** Tests the shared foot footprint for a sprite-centre world position. */
+export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): boolean {
+  return isPlayerFootprintWalkableAtFeet(grid, x, y + FEET_OFFSET_Y);
 }
 
 /** Checks the starting point and every point along a segment at <=2px spacing. */
