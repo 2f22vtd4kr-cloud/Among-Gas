@@ -632,6 +632,20 @@ export default function GameMap() {
       }
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
+      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+          new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
+        const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+        (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
+          role: myRole,
+          meeting: meeting !== null,
+          assignedTasks: myTasksRef.current,
+          player: { x: myPos.x, y: myPos.y },
+          target: fixtureTask ? { x: fixtureTask.x, y: fixtureTask.y } : null,
+          distance: fixtureTask ? Math.hypot(fixtureTask.x - myPos.x, fixtureTask.y - myPos.y) : null,
+          range: TASK_INTERACTION_RANGE_PX,
+          best,
+        };
+      }
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1020,6 +1034,7 @@ export default function GameMap() {
       }
       if (!nearest) throw new Error('Task interaction fixture has no walkable player position within interaction range');
       playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
+      (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
     }
     // Movement still uses every solid collision cell. Vision shadows use a
     // separate occlusion grid that ignores tiny isolated props like benches.
