@@ -7,7 +7,7 @@
  * • Fredoka One font, thick outline title
  * • All UI text in Russian; title "Among Gas" stays English per spec
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useGameState, useGameActions } from '@/context/GameContext';
 import { useLocation } from 'wouter';
 import { haptic } from '@/lib/haptics';
@@ -20,14 +20,12 @@ import './lobby.css';
 import {
   CHARACTER_COLORS,
   CHARACTER_CELL_WIDTH,
-  CHARACTER_SHEET_WIDTH,
-  CHARACTER_SHEET_HEIGHT,
-  CHARACTER_SHEET_PATH,
   getCharacterFrameRect,
   getCharacterClipPath,
   type CharacterColor,
   type CharacterPose,
 } from '@/game/characterSprites';
+import { loadCharacterAtlas } from '@/game/characterAtlas';
 
 const SLOT_COLORS = CHARACTER_COLORS;
 
@@ -39,24 +37,44 @@ function CharSprite({
 }) {
   const frame = getCharacterFrameRect(color, pose);
   const scale = size / CHARACTER_CELL_WIDTH;
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadCharacterAtlas(import.meta.env.BASE_URL).then(atlas => {
+      if (cancelled || !canvasRef.current) return;
+      const context = canvasRef.current.getContext('2d');
+      if (!context) return;
+      context.imageSmoothingEnabled = false;
+      context.clearRect(0, 0, frame.width, frame.height);
+      context.drawImage(
+        atlas,
+        frame.x, frame.y, frame.width, frame.height,
+        0, 0, frame.width, frame.height,
+      );
+    }).catch(error => {
+      if (import.meta.env.DEV) console.error('Could not render lobby character sprite', error);
+    });
+    return () => { cancelled = true; };
+  }, [frame.x, frame.y, frame.width, frame.height]);
+
   return (
-    <div
+    <canvas
+      ref={canvasRef}
       className="au-menu-character-sprite"
       data-pose={pose}
       data-sprite-row={frame.row}
+      width={frame.width}
+      height={frame.height}
       style={{
+        display: 'block',
         width: size,
         height: frame.height * scale,
-        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
-        backgroundSize: `${CHARACTER_SHEET_WIDTH * scale}px ${CHARACTER_SHEET_HEIGHT * scale}px`,
-        backgroundPosition: `${-frame.x * scale}px ${-frame.y * scale}px`,
-        backgroundRepeat: 'no-repeat',
         imageRendering: 'pixelated',
         transformOrigin: 'top center',
         transform: flipped ? 'scaleX(-1)' : 'none',
         clipPath: getCharacterClipPath(pose),
         flexShrink: 0,
-        overflow: 'hidden',
       }}
     />
   );
