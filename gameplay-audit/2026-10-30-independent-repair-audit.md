@@ -86,3 +86,10 @@ The base collision and ray visibility data still use 104×58 cells (about 31×32
 - First PR check: the PNG/WebP transform regression passed against the actual assets (PNG 3224×1858, WebP 6608×3808).
 - The character geometry test did not execute: the workflow invoked `tsx` from the `@workspace/telegram-game` package, which does not declare/install that runner. The failure was before test module evaluation, not a failed sprite/collision assertion.
 - Corrected the command to use the already-installed `tsx` from `@workspace/scripts` and added a package script for that invocation. Full CI must rerun; no subsequent gameplay checks have yet run.
+
+
+## 2026-10-30 — Spawn-geometry verifier corrected
+
+- The second CI attempt passed both new regressions, then stopped in `scripts/verify-map-mechanics.mjs` before map reachability was evaluated. Its old expectation hardcoded the former 136px cropped idle height and rejected the new authored 153px display height.
+- Updated the verifier to read the shared numeric `IDLE_SPRITE_VISIBLE_HEIGHT`, rather than duplicating the previous value. Kept `PLAYER_SPRITE_HALF_HEIGHT_PX` as a numeric literal for the existing source parser; the atlas test asserts that it remains the calculated ceiling (35px).
+- CI must rerun to determine whether any solo/multiplayer spawn candidate needs adjustment under the corrected feet position and sprite bounds.
