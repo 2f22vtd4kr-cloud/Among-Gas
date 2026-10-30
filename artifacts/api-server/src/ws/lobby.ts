@@ -101,7 +101,7 @@ function computeSpawnPosition(
   }
   // Solo and multiplayer share the same fallback when the preferred spawn is
   // too close to a wall/prop after applying the full-sprite margin.
-  for (let radius = 12; radius <= 360; radius += 12) for (let step = 0; step < 48; step++) {
+  for (let radius = 12; radius <= 600; radius += 12) for (let step = 0; step < 48; step++) {
     const angle = (step / 48) * Math.PI * 2;
     const x = Math.round(SPAWN_X + Math.cos(angle) * radius);
     const y = Math.round(SPAWN_Y + Math.sin(angle) * radius * 0.6);

@@ -185,14 +185,14 @@ const computeSpawn=(index,total,occupied=[])=>{
   const offsets=[0,Math.PI/12,-Math.PI/12,Math.PI/6,-Math.PI/6,Math.PI/4,-Math.PI/4,Math.PI/3,-Math.PI/3];
   for(const offset of offsets)for(const radius of radii){const a=baseAngle+offset,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
  }
- for(let radius=12;radius<=360;radius+=12)for(let step=0;step<48;step++){const a=step/48*Math.PI*2,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
+ for(let radius=12;radius<=600;radius+=12)for(let step=0;step<48;step++){const a=step/48*Math.PI*2,x=Math.round(spawnX+Math.cos(a)*radius),y=Math.round(spawnY+Math.sin(a)*radius*0.6);if(availableSpawn(x,y,occupied))return{x,y};}
  return null;
 };
 const soloSpawn=computeSpawn(0,1);
 assert.ok(soloSpawn,'solo start finds a clearance-safe point or fallback');
-const fiveSpawns=[];
-for(let i=0;i<5;i++){const pos=computeSpawn(i,5,fiveSpawns);assert.ok(pos, `five-player solver finds slot ${i}`);assert.ok(canSpawnAt(pos.x,pos.y), `slot ${i} clears geometry and margin`);fiveSpawns.push(pos);}
-for(let i=0;i<5;i++)for(let j=i+1;j<5;j++)assert.ok(Math.hypot(fiveSpawns[i].x-fiveSpawns[j].x,fiveSpawns[i].y-fiveSpawns[j].y)>=spawnMinSeparation, `slots ${i} and ${j} remain separated`);
+const maxPlayerSpawns=[];
+for(let i=0;i<15;i++){const pos=computeSpawn(i,15,maxPlayerSpawns);assert.ok(pos, `15-player solver finds slot ${i}`);assert.ok(canSpawnAt(pos.x,pos.y), `slot ${i} clears geometry and margin`);maxPlayerSpawns.push(pos);}
+for(let i=0;i<maxPlayerSpawns.length;i++)for(let j=i+1;j<maxPlayerSpawns.length;j++)assert.ok(Math.hypot(maxPlayerSpawns[i].x-maxPlayerSpawns[j].x,maxPlayerSpawns[i].y-maxPlayerSpawns[j].y)>=spawnMinSeparation, `slots ${i} and ${j} remain separated`);
 const fountainCenter = { x: 1735, y: 490 };
 assert.equal(canPlayerMoveTo(fountainCenter.x, fountainCenter.y), false,
   'The central fountain must be blocked by its hand-traced collision polygon');
@@ -349,7 +349,7 @@ console.log(JSON.stringify({
   feetAnchorOffsetPx: feetOffsetY,
   spawnSpriteClearance: { halfWidthPx: spriteHalfWidth, halfHeightPx: spriteHalfHeight, marginPx: spawnClearance },
   soloSpawn,
-  fivePlayerSpawns: fiveSpawns,
+  maxPlayerSpawns,
   manualCollisionPolygons: polygonBlocks.length,
   playerFootprint: { radiusPx: playerRadius, halfWidthPx: playerHalfWidth },
   collisionGrid: `${cols}×${rows}`,

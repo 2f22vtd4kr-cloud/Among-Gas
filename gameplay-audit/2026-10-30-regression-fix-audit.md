@@ -50,7 +50,8 @@ Prior predicate checked the sprite rectangle with no spacing outside it.
 ### Cycle 2 — Spawn safety
 - [x] 12px margin around visible sprite, spawn only.
 - [x] Margin-aware solo/multiplayer fallback.
-- [x] Five-player formation and separation assertions.
+- [x] Extended fallback scan to radius 600 after the 15-player server invariant exposed that 360px was too short with the new clearance margin.
+- [x] Geometry verifier now mirrors the maximum 15-player formation and separation test.
 - [ ] CI geometry check and live spawn screenshot.
 
 ### Cycle 3 — Movement
