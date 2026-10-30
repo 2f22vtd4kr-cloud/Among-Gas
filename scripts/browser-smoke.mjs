@@ -1055,6 +1055,18 @@ try {
     } else {
       await waitForRoleRevealToFinish(statePage);
     }
+    if (fixture === 'sabotage-ready') {
+      // This fixture enables sabotage but does not open the selection panel.
+      // Open it explicitly so the screenshot captures the actual UI state.
+      await statePage.getByRole('button', { name: /Саботаж/ })
+        .click();
+      await statePage.getByText('Выберите систему саботажа', { exact: true })
+        .waitFor({ state: 'visible', timeout: 10_000 });
+      for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
+        await statePage.getByRole('button', { name: system, exact: true })
+          .waitFor({ state: 'visible', timeout: 10_000 });
+      }
+    }
     await statePage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
     await statePage.close();
   }
