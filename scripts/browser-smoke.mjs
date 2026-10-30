@@ -308,7 +308,7 @@ try {
   const hudSelectors = [
     page.getByRole('button', { name: /КАРТА/ }),
     page.getByRole('button', { name: /ЗАДАНИЯ/ }),
-    page.getByRole('button', { name: /тревога/i }),
+    page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
   assert.equal(await page.getByRole('button', { name: 'Покинуть матч' }).count(), 0,
