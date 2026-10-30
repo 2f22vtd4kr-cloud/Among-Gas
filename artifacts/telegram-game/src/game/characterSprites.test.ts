@@ -9,6 +9,8 @@ import {
   CHARACTER_SHEET_WIDTH,
   CHARACTER_SOURCE_SHEET_COLS,
   CHARACTER_SOURCE_SHEET_WIDTH,
+  getCharacterClipNotch,
+  getCharacterClipPath,
   getCharacterFrameRect,
 } from './characterSprites';
 import { FEET_OFFSET_Y, MAP_W, PLAYER_SPRITE_HALF_HEIGHT_PX } from '@workspace/shared/coords';
@@ -41,6 +43,15 @@ for (const color of CHARACTER_COLORS) {
     `${color}/${pose}: diagnostic atlas baseline must remain separate from its measured crop`);
   }
 }
+
+assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.68,
+  'idle leg-gap mask must remove the stray black hook while preserving the right foot');
+assert.match(getCharacterClipPath('idle') ?? '', /68%/,
+  'idle DOM and canvas renderers must share the widened transparent gap');
+assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.67,
+  'corpse leg-gap mask must remove the detached horizontal bridge');
+assert.match(getCharacterClipPath('dead-body') ?? '', /67%/,
+  'corpse DOM and canvas renderers must share the widened transparent gap');
 
 const idle = getCharacterFrameRect('teal', 'idle');
 assert.equal(idle.height, 136, 'idle source crop retains its detached-stroke trim');
