@@ -96,6 +96,30 @@ try {
   await lobbySettings.getByTestId('joystick-side-left').click();
   await page.getByRole('button', { name: 'Close settings' }).click();
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
+
+  // Preserve the three distinct waiting-room states for visual QA as well.
+  for (const [fixture, roomCode, filename] of [
+    ['lobby-host', 'XYZ789', 'lobby-host.png'],
+    ['lobby-solo', 'SOLO01', 'lobby-solo.png'],
+    ['lobby-guest', 'ABC123', 'lobby-guest.png'],
+  ]) {
+    const lobbyPage = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    lobbyPage.on('pageerror', error => failures.push(error.message));
+    await lobbyPage.route('**/*', route => {
+      const url = route.request().url();
+      if (url.startsWith(origin)) return route.continue();
+      return route.abort();
+    });
+    await lobbyPage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
+    await lobbyPage.getByText(roomCode, { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
+    await lobbyPage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
+    await lobbyPage.close();
+  }
   const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
     nodes.map(node => {
       const rect = node.getBoundingClientRect();
@@ -565,6 +589,7 @@ try {
     0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation',
   );
+  await page.screenshot({ path: join(visualQaDir, 'kill-animation-attacker.png'), fullPage: true });
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
