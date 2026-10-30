@@ -48,6 +48,7 @@ import {
 } from '@workspace/shared/sabotage';
 import {
   LobbyManager,
+  MAX_PLAYERS,
   buildCorpsePacket,
   type Lobby,
   type LobbyPlayer,
@@ -804,7 +805,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 // 16. Spawn scatter must never silently stack players at the central fallback.
 {
   const manager = new LobbyManager();
-  const players = Array.from({ length: 10 }, (_, slot) =>
+  const players = Array.from({ length: MAX_PLAYERS }, (_, slot) =>
     makePlayer(slot, 'crewmate', 0, 0).player,
   );
   const lobby = makeLobby(players);
