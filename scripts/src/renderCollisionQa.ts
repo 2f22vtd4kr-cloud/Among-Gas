@@ -78,8 +78,8 @@ if (!coords.includes('IDLE_SPRITE_VISIBLE_HEIGHT = 136') || !coords.includes('CH
 }
 const spriteHeight = Math.round(36 * (mapWidth / 1652));
 const feetOffset = Math.round(spriteHeight * (136 / (1401 / 9)) / 2);
-const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X = Math\\.round\\((\\d+) \\*/)?.[1]);
-const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y = Math\\.round\\((\\d+) \\*/)?.[1]);
+const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X = Math\.round\((\d+) \*/)?.[1]);
+const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y = Math\.round\((\d+) \*/)?.[1]);
 if (!Number.isFinite(spawnXRef) || !Number.isFinite(spawnYRef)) {
   throw new Error('Could not parse shared player spawn reference coordinates');
 }
