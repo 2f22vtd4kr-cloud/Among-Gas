@@ -47,7 +47,7 @@ const feetOffsetY = Math.round(spriteHeight * (idleSpriteVisibleHeight / charact
 const playerRadius = num(coords, 'PLAYER_RADIUS');
 const playerHalfWidth = num(coords, 'PLAYER_HALF_WIDTH');
 assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*136/);
-assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(170 \*/);
+assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
 assert.match(coords, /FEET_OFFSET_Y\s*=\s*Math\.round\(/);
 const wireRunsMatch = collisionData.match(/export const RUNS(?::\s*number\[\])?\s*=\s*\[([\s\S]*?)\]\s*;/);
 assert.ok(wireRunsMatch, 'Could not parse RLE collision grid');
