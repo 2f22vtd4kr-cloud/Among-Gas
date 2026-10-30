@@ -22,9 +22,9 @@ export const MAP_W = 3224;
 export const MAP_H = 1858;
 
 /**
- * Shared production spawn point. Keep the sprite body fully inside the tiled
- * lobby floor instead of centring it on the narrow doorway at ref(350,150),
- * where the visible sprite was wider than the opening and overlapped the wall.
+ * Shared production spawn point on open main-lobby floor, west of the central
+ * fountain. The former ref(350,150) point sat in a narrow doorway where the
+ * visible sprite was wider than the opening and overlapped the wall.
  */
 export const PLAYER_SPAWN_X = Math.round(450 * (MAP_W / 1040));
 export const PLAYER_SPAWN_Y = Math.round(150 * (MAP_H / 580));
