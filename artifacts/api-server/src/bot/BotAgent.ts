@@ -239,7 +239,7 @@ export abstract class BotAgent {
           lower.includes(`player ${slotNumber}`) ||
           lower.includes(`slot ${slotNumber}`);
       });
-      const mentionsColour = /\\b(red|blue|green|pink|orange|yellow|black|white|purple|brown|cyan)\\b/i.test(lower);
+      const mentionsColour = /\b(red|blue|green|pink|orange|yellow|black|white|purple|brown|cyan)\b/i.test(lower);
 
       if (mentionedPlayer) {
         message = `I heard ${speaker.username} mention ${mentionedPlayer.username}. Can anyone confirm where they were?`;
