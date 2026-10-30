@@ -133,6 +133,16 @@ assert.equal(isPlayerPositionWalkable(realGrid,1810,449),true,'the eastern garde
 assert.equal(isPlayerPositionWalkable(realGrid,1735,449),false,'the central statue footprint remains solid');
 const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
 assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
+const westernGardenCell = 14 * COLS + Math.floor(1640 / CELL_X);
+const easternGardenCell = 14 * COLS + Math.floor(1810 / CELL_X);
+assert.equal(realShadowGrid[westernGardenCell], 0, 'walkable garden floor does not cast a hard shadow');
+assert.equal(realShadowGrid[easternGardenCell], 0, 'the opposite garden path also remains clear in the vision grid');
+const statueOccluder = realNarrowOccluders.find(item =>
+  Math.hypot(item.x - 56 * CELL_X, item.y - 15 * CELL_Y) < 1,
+);
+assert.ok(statueOccluder, 'the central statue remains a dedicated narrow vision occluder');
+assert.ok(statueOccluder.radius < Math.min(CELL_X, CELL_Y) * 0.25,
+  'the statue shadow follows its small footprint instead of the full garden');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
