@@ -109,6 +109,8 @@ jobs:
           path: |
             ${{ runner.temp }}/among-gas-visual-qa/*.png
             artifacts/telegram-game/collision-qa-overlay.png
+            artifacts/telegram-game/collision-reference-overlay.png
+            attached_assets/IMG_2907_1783632830477.jpeg
             artifacts/telegram-game/collision-qa-overlay-webp.png
           if-no-files-found: warn
           retention-days: 3
