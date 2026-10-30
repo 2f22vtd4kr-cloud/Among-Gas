@@ -1,5 +1,5 @@
 import type { Grid } from '@workspace/shared/collisionMap';
-import { CELL_X, CELL_Y, COLS, ROWS, buildCollisionGrid } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS } from '@workspace/shared/collisionMap';
 
 export interface VisionPoint {
   x: number;
