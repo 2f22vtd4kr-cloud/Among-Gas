@@ -502,6 +502,7 @@ try {
   await page.keyboard.type(typedMessage);
   assert.equal(await chatTextbox.inputValue(), typedMessage,
     'keyboard movement bindings must never drop Latin, Cyrillic, numeric, or punctuation input');
+  await page.screenshot({ path: join(visualQaDir, 'meeting-chat-typing.png'), fullPage: true });
   await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
