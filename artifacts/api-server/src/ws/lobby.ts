@@ -167,6 +167,9 @@ export interface LobbyPlayer {
   lastMovementPacketAtMs?: number;
   /** Server time the last explicit position correction was sent. */
   lastMovementCorrectionAtMs?: number;
+  /** Packet-flood token bucket; independent of the distance-based movement budget. */
+  movementPacketTokens?: number;
+  movementPacketTokensUpdatedAtMs?: number;
   /** True for server-side synthetic bot slots (no real WS connection). */
   isBot?: true;
   /** Bot AI agent — present only when isBot is true. */
