@@ -178,10 +178,18 @@ export interface LobbyPlayer {
  * `votes` maps voterSlot → targetSlot (NO_TARGET = skip). Both timers are
  * server-authoritative; the client only mirrors them for its countdown UI.
  */
+export interface MeetingChatEntry {
+  slot: number;
+  text: string;
+  sentAtMs: number;
+}
+
 export interface MeetingState {
   reporterSlot: number;
   /** NO_TARGET (0xFF) = emergency button, no specific body. */
   bodySlot: number;
+  /** Public discussion transcript retained server-side so bots can respond to real chat. */
+  messages: MeetingChatEntry[];
   votes: Map<number, number>;
   /** Becomes true once the discussion window elapses; votes are rejected before then. */
   votingOpen: boolean;
@@ -726,6 +734,8 @@ export class LobbyManager {
     const safeText = payload.toString('utf8').trim();
     if (!safeText) return false;
     const body = Buffer.from(safeText, 'utf8');
+    meeting.messages.push({ slot: playerSlot, text: safeText, sentAtMs: now });
+    if (meeting.messages.length > 60) meeting.messages.splice(0, meeting.messages.length - 60);
     this._chatLastSentAt.set(sender.tgUserId, now);
     const packet = Buffer.alloc(4 + body.length);
     packet[0] = 0x19;
@@ -1483,6 +1493,7 @@ export class LobbyManager {
     const meeting: MeetingState = {
       reporterSlot,
       bodySlot,
+      messages: [],
       votes: new Map(),
       votingOpen: false,
       discussionTimer: null,
