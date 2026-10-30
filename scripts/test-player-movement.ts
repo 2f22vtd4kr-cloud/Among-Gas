@@ -85,8 +85,14 @@ console.log('PASS: client prediction validates the full movement path against th
   const fromFeetY = wallTop - 20;
   const toX = wallLeft + CELL_X + 20;
   const toFeetY = wallTop + CELL_Y + 20;
-  assert.equal(feetWalkable(fromX), true, 'diagonal fixture start must be walkable');
-  assert.equal(feetWalkable(toX), true, 'diagonal fixture destination x must be walkable');
+  const diagonalPointWalkable = (x: number, feetY: number) =>
+    canMoveTo(diagonalGrid, x, feetY, PLAYER_RADIUS) &&
+    canMoveTo(diagonalGrid, x - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+    canMoveTo(diagonalGrid, x + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
+  assert.equal(diagonalPointWalkable(fromX, fromFeetY), true,
+    'diagonal fixture start must be walkable');
+  assert.equal(diagonalPointWalkable(toX, toFeetY), true,
+    'diagonal fixture destination must be walkable');
   assert.equal(isMovementPathWalkableWide(
     diagonalGrid, fromX, fromFeetY, toX, toFeetY,
   ), false, 'a diagonal segment must not tunnel through a blocked cell');
