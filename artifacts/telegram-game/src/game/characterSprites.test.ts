@@ -11,6 +11,7 @@ import {
   CHARACTER_SOURCE_SHEET_WIDTH,
   getCharacterClipNotch,
   getCharacterClipPath,
+  getCharacterColorForSlot,
   getCharacterFrameRect,
 } from './characterSprites';
 import { FEET_OFFSET_Y, MAP_W, PLAYER_SPRITE_HALF_HEIGHT_PX } from '@workspace/shared/coords';
@@ -24,6 +25,14 @@ assert.equal(CHARACTER_CELL_WIDTH, 161, 'integer runtime columns avoid fractiona
 assert.equal(CHARACTER_SHEET_WIDTH, 2898, 'eighteen runtime columns must fit the generated atlas');
 assert.equal(CHARACTER_POSES.length, 9, 'all nine authored animation and kill poses must remain');
 assert.equal(CHARACTER_SHEET_HEIGHT, 1401);
+
+const currentLobbyColors = Array.from({ length: 15 }, (_, slot) => getCharacterColorForSlot(slot));
+assert.equal(new Set(currentLobbyColors).size, 15,
+  'all fifteen currently supported player slots must have unique character colours');
+assert.equal(getCharacterColorForSlot(15), 'lime',
+  'the sixteenth slot can use the next reserved palette');
+assert.equal(getCharacterColorForSlot(18), 'teal',
+  'palette lookup must wrap deterministically only after all eighteen colours');
 
 const colorFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'idle'));
 assert.equal(new Set(colorFrames.map(frame => frame.x)).size, 18,
