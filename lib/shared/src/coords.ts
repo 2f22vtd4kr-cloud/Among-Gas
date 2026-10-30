@@ -53,6 +53,13 @@ const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
 export const FEET_OFFSET_Y = Math.round(
   _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
 );
+/** Half-extents of the rendered idle sprite, used to keep spawn art clear of walls. */
+const CHARACTER_ATLAS_CELL_WIDTH = 1123 / 7;
+const CHARACTER_ATLAS_CELL_HEIGHT = 1401 / 9;
+export const PLAYER_SPRITE_HALF_WIDTH_PX = Math.round(
+  _SPRITE_H_MAP_PX * (CHARACTER_ATLAS_CELL_WIDTH / CHARACTER_ATLAS_CELL_HEIGHT) / 2,
+);
+export const PLAYER_SPRITE_HALF_HEIGHT_PX = Math.round(_SPRITE_H_MAP_PX / 2);
 export const PLAYER_RADIUS = 4;
 /** Wider horizontal feet clearance shared by client and authoritative movement. */
 export const PLAYER_HALF_WIDTH = 10;
