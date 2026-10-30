@@ -22,6 +22,14 @@ export const MAP_W = 3224;
 export const MAP_H = 1858;
 
 /**
+ * Shared production spawn point. Keep the sprite body fully inside the tiled
+ * lobby floor instead of centring it on the room's top wall (the old y=150
+ * reference point put the sprite centre directly on that wall).
+ */
+export const PLAYER_SPAWN_X = Math.round(350 * (MAP_W / 1040));
+export const PLAYER_SPAWN_Y = Math.round(170 * (MAP_H / 580));
+
+/**
  * Player constants — must stay in sync with artifacts/telegram-game/src/game/player.ts.
  * Used by the server for collision validation with the same geometry as the client.
  */
