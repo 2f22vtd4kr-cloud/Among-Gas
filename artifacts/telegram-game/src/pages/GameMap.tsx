@@ -950,7 +950,19 @@ export default function GameMap() {
   }, []);
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
-  const playerStateRef = useRef(createInitialPlayerState());
+  const initialPlayerState = createInitialPlayerState();
+  // The task-interaction visual fixture starts at the nearest verified
+  // walkable point beside its assigned console; production state always
+  // starts at the shared lobby spawn.
+  if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+      new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
+    const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+    if (fixtureTask) {
+      initialPlayerState.x = fixtureTask.x;
+      initialPlayerState.y = fixtureTask.y - 12;
+    }
+  }
+  const playerStateRef = useRef(initialPlayerState);
 
   // Nearest vent is recomputed at low frequency; the server still checks range.
   const [nearestVentId, setNearestVentId] = useState<number | null>(null);
