@@ -1017,6 +1017,39 @@ try {
   await reopenedRestrictedSettings.getByRole('button', { name: 'English' }).waitFor({ state: 'visible' });
   await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
 
+  // Capture the major non-roaming gameplay states as CI artifacts too.
+  // These are separate browser contexts so timers, local state, and overlays
+  // from one fixture cannot leak into another screenshot.
+  const visualStateCases = [
+    ['meeting-discussion', 'meeting-discussion.png'],
+    ['meeting-voting', 'meeting-voting.png'],
+    ['meeting-result', 'meeting-result.png'],
+    ['gameover-crew', 'gameover-crew.png'],
+    ['gameover-impostor', 'gameover-impostor.png'],
+    ['sabotage-ready', 'sabotage-ready.png'],
+    ['sabotage-o2', 'sabotage-o2.png'],
+  ];
+  for (const [fixture, filename] of visualStateCases) {
+    const statePage = await browser.newPage({
+      viewport: { width: 390, height: 844 },
+      deviceScaleFactor: 2,
+      isMobile: true,
+      hasTouch: true,
+    });
+    statePage.on('pageerror', error => failures.push(error.message));
+    await statePage.route('**/*', route => {
+      const url = route.request().url();
+      if (url.startsWith(origin)) return route.continue();
+      return route.abort();
+    });
+    await statePage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
+    await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+    await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
+    await waitForRoleRevealToFinish(statePage);
+    await statePage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
+    await statePage.close();
+  }
+
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({
