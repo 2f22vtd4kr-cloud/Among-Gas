@@ -95,18 +95,33 @@ function playFootstep(volume: number): void {
   }
 }
 
-function load(key: string, url: string): void {
-  if (cache.has(key)) return;
+const AUDIO_URLS: Record<string, string> = {
+  roundStart: '/au-sounds/roundstart.wav',
+  victoryCrewmate: '/au-sounds/victory_crew.wav',
+  victoryImpostor: '/au-sounds/victory_impostor.wav',
+  bodyReport: '/au-sounds/report_body.wav',
+  meeting: '/au-sounds/meeting.wav',
+  taskComplete: '/au-sounds/task_complete.wav',
+  kill: '/au-sounds/kill.wav',
+  uiSelect: '/au-sounds/ui_select.wav',
+  menuMusic: '/au-sounds/menu_music.mp3',
+};
+
+/** Create an audio element only when its sound is actually needed. */
+function getAudio(key: string): HTMLAudioElement | undefined {
+  const cached = cache.get(key);
+  if (cached) return cached;
+  const url = AUDIO_URLS[key];
+  if (!url) return undefined;
   try {
-    // Construct without a source first so preload='none' is in place before
-    // assigning the URL. Otherwise every sound (including multi-megabyte menu
-    // music and victory tracks) may download as soon as the lobby imports sfx.
-    const a = new Audio();
-    a.preload = 'none';
-    a.src = url;
-    cache.set(key, a);
+    const audio = new Audio();
+    audio.preload = 'none';
+    audio.src = url;
+    cache.set(key, audio);
+    return audio;
   } catch {
-    // Web Audio not supported
+    // Audio is optional; Web Audio or the browser may be unavailable.
+    return undefined;
   }
 }
 
@@ -159,7 +174,7 @@ export function sfx(key: string, volume = 1): void {
     playCue(key, volume);
     return;
   }
-  const src = cache.get(key);
+  const src = getAudio(key);
   if (!src) return;
   try {
     const clone = src.cloneNode(true) as HTMLAudioElement;
@@ -168,27 +183,13 @@ export function sfx(key: string, volume = 1): void {
   } catch { /* ignore */ }
 }
 
-// ── Preload ────────────────────────────────────────────────────────────────
-load('roundStart',      '/au-sounds/roundstart.wav');
-load('victoryCrewmate', '/au-sounds/victory_crew.wav');
-load('victoryImpostor', '/au-sounds/victory_impostor.wav');
-load('bodyReport',      '/au-sounds/report_body.wav');
-load('meeting',         '/au-sounds/meeting.wav');
-load('taskComplete',    '/au-sounds/task_complete.wav');
-load('kill',            '/au-sounds/kill.wav');
-load('uiSelect',        '/au-sounds/ui_select.wav');
-load('menuMusic',       '/au-sounds/menu_music.mp3');
-
-const menuTrack = cache.get('menuMusic');
-if (menuTrack) {
-  menuTrack.loop = true;
-  menuTrack.volume = 0.18;
-}
-
 /** Start quiet menu music only after a user gesture, respecting browser autoplay rules. */
 export function startMenuMusic(): void {
-  const track = cache.get('menuMusic');
-  if (track && track.paused) track.play().catch(() => {});
+  const track = getAudio('menuMusic');
+  if (!track) return;
+  track.loop = true;
+  track.volume = 0.18;
+  if (track.paused) track.play().catch(() => {});
 }
 
 export function stopMenuMusic(): void {
