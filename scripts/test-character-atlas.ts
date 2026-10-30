@@ -26,16 +26,17 @@ for (const palette of GENERATED_CHARACTER_PALETTES) {
   assert.ok(hueDelta < 2, `${palette.color}: suit hue must match its palette`);
   assert.equal(result[3], tealSuit[3], `${palette.color}: original alpha must be preserved`);
 
-  if (palette.color === 'black') {
-    assert.ok(lightness < sourceLightness * 0.6, 'black suit must remain visibly dark');
-  } else if (palette.color === 'white') {
-    assert.ok(lightness > sourceLightness + 0.15, 'white suit must remain visibly light');
-  } else {
-    assert.ok(Math.abs(lightness - sourceLightness) < 0.01,
-      `${palette.color}: original pixel shading/lightness must be retained`);
-    assert.ok(Math.abs(saturation - sourceSaturation) < 0.01,
-      `${palette.color}: original suit saturation must be retained`);
-  }
+  const expectedLightness = Math.max(0.04, Math.min(
+    0.96,
+    sourceLightness * (palette.lightnessScale ?? 1) + (palette.lightnessOffset ?? 0),
+  ));
+  const expectedSaturation = sourceSaturation * (palette.saturationScale ?? 1);
+  assert.ok(Math.abs(lightness - expectedLightness) < 0.01,
+    `${palette.color}: palette brightness must retain the authored pixel's relative shading`);
+  assert.ok(Math.abs(saturation - expectedSaturation) < 0.01,
+    `${palette.color}: palette saturation must follow its explicit material transform`);
+  if (palette.color === 'black') assert.ok(lightness < 0.3, 'black suit must remain visibly dark');
+  if (palette.color === 'white') assert.ok(lightness > 0.7, 'white suit must remain visibly light');
 }
 
 // The visor, filter, mask fabric, dark outline and transparent pixels are not suit material.
