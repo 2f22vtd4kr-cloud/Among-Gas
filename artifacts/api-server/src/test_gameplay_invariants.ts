@@ -9,6 +9,10 @@ import {
   canMoveTo,
   MAP_W,
   MAP_H,
+  CELL_X,
+  CELL_Y,
+  COLS,
+  ROWS,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
@@ -734,6 +738,67 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     false,
     'swept path validation rejects walkable endpoints separated by a wall',
   );
+}
+
+
+
+// 15a. Diagonal collision and wall sliding use the same swept geometry as
+// client prediction. A diagonal can intersect a cell corner while both
+// horizontal and vertical alternatives remain independently walkable.
+{
+  const cornerGrid = new Uint8Array(COLS * ROWS);
+  const col = Math.floor(COLS / 2);
+  const row = Math.floor(ROWS / 2);
+  cornerGrid[row * COLS + col] = 1;
+  const wallLeft = col * CELL_X;
+  const wallTop = row * CELL_Y;
+  const startX = wallLeft - 17;
+  const startY = wallTop - FEET_OFFSET_Y - 7;
+  const delta = PLAYER_SPEED_PX_PER_SEC * 0.048 / Math.SQRT2;
+
+  assert.equal(isWalkableMovementPoint(cornerGrid, startX, startY), true,
+    'diagonal fixture must start in a walkable cell');
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY,
+    startX + delta, startY + delta), false,
+    'diagonal movement must detect contact with the blocked cell corner');
+
+  const slide = validateMovementIntent({
+    x: startX,
+    y: startY,
+    alive: true,
+    movementCreditPx: 20,
+    movementCreditUpdatedAtMs: 2_000,
+    lastMovementPacketAtMs: 1_950,
+  }, startX + delta, startY + delta, 2_000, cornerGrid);
+
+  assert.equal(slide.accepted, true, 'a legal axis slide remains an accepted movement intent');
+  assert.equal(slide.corrected, true, 'the diagonal target must be corrected to its clear axis slide');
+  assert.ok(slide.x > startX, 'the clear horizontal component must be preserved');
+  assert.equal(slide.y, startY, 'the rejected vertical component must not enter the wall corner');
+  assert.equal(isMovementPathWalkable(cornerGrid, startX, startY,
+    slide.x, slide.y), true, 'the accepted slide must be collision-walkable');
+}
+
+// A large diagonal segment with walkable endpoints must still be rejected
+// when it crosses a blocked cell; endpoint-only collision checks are unsafe.
+{
+  const diagonalGrid = new Uint8Array(COLS * ROWS);
+  const col = Math.floor(COLS / 2);
+  const row = Math.floor(ROWS / 2);
+  diagonalGrid[row * COLS + col] = 1;
+  const wallLeft = col * CELL_X;
+  const wallTop = row * CELL_Y;
+  const fromX = wallLeft - 20;
+  const fromY = wallTop - FEET_OFFSET_Y - 20;
+  const toX = wallLeft + CELL_X + 20;
+  const toY = wallTop + CELL_Y + 20 - FEET_OFFSET_Y;
+
+  assert.equal(isWalkableMovementPoint(diagonalGrid, fromX, fromY), true,
+    'diagonal sweep start must be walkable');
+  assert.equal(isWalkableMovementPoint(diagonalGrid, toX, toY), true,
+    'diagonal sweep destination must be walkable');
+  assert.equal(isMovementPathWalkable(diagonalGrid, fromX, fromY, toX, toY), false,
+    'server collision must reject a diagonal segment that crosses a blocked cell');
 }
 
 // 16. Spawn scatter must never silently stack players at the central fallback.
