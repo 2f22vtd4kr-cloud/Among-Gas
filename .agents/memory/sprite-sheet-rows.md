@@ -22,3 +22,16 @@ Even with 9 rows, `Math.floor(row * 155.67)` starts the source rect a fraction o
 - Store the cleaned `OffscreenCanvas` (not the raw `HTMLImageElement`) in the sprite ref; `ctx.drawImage` accepts `CanvasImageSource` which includes `OffscreenCanvas`.
 
 **Why:** Fractional cell sizes mean floor-snapping the origin rounds DOWN into the previous row. Nearest-neighbor sampling (imageSmoothingEnabled=false) then magnifies even 0.3px of overlap into clearly visible artifacts on high-DPR screens (DPR=3 → scale=1.8, so 1 source pixel becomes 1.8 physical pixels).
+
+
+## 2026-10-30 implementation update — measured crop windows supersede blanket row clearing
+
+The runtime atlas now copies the original 1123×1401 PNG into an in-memory 18-column canvas without clearing uniform row boundaries. All character renderers must draw only the absolute crop returned by `getCharacterFrameRect()` in `characterSprites.ts`.
+
+Why the earlier blanket `clearRect` suggestion must not be applied blindly:
+
+- The walk-1 crop ends at source y=310, before the stray alpha bridge at y=312–315; walk-2 starts at y=327. The explicit crop windows already exclude that bleed band.
+- The exposed-bone corpse crop intentionally starts at y=1067, before the nominal uniform row boundary at approximately y=1089.7. Clearing a fixed band at that boundary would erase actual corpse/bone pixels.
+- Regression tests now assert the walk-1/walk-2 safety gap and the corpse's y=1067 crop origin.
+
+If the source PNG changes, remeasure the absolute pose windows and inspect rendered screenshots. Do not add global boundary clearing unless the new art is proven to require it and the corpse crop is protected.
