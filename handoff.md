@@ -1774,3 +1774,22 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Gate autoscaling on shared multiplayer state
+
+**Done**
+- Cross-checked the autoscale concern against Replit's current deployment documentation. Autoscale can add application servers under demand and exposes a configurable maximum instance count; Reserved VM is an always-on alternative for persistent server workloads.
+- Added explicit one-instance guidance to `.replit` comments and `replit.md`: current process-local lobby state is incompatible with horizontal scaling, so cap Autoscale at one instance until a shared-state architecture is implemented and verified.
+- Confirmed the connected Replit app search returned no accessible Among Gas app; actual deployment max-instance settings remain unverified and cannot be changed from this session.
+
+**Decisions & gotchas**
+- Do not change deploymentTarget to Reserved VM in code without validating Replit's deployment settings and the user's cost preference. The immediate safe control is Autoscale max instances = 1 in the Publishing UI.
+- A single instance is an interim constraint, not a horizontally scalable multiplayer architecture. Shared state must cover room membership, authoritative match state, bot ticks, timers, and broadcasts before raising the limit.
+
+**Left off / next steps**
+- Verify the live deployment's maximum instance setting in Replit Publishing when access is available.
+- Implement and test active-match reconnect/resume separately from horizontal state sharing.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
