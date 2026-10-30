@@ -1021,6 +1021,10 @@ try {
   // These are separate browser contexts so timers, local state, and overlays
   // from one fixture cannot leak into another screenshot.
   const visualStateCases = [
+    ['reveal-impostor', 'role-reveal-impostor.png'],
+    ['task-playing', 'task-progress.png'],
+    ['impostor-opening', 'impostor-opening-cooldown.png'],
+    ['kill-ready', 'kill-ready.png'],
     ['meeting-discussion', 'meeting-discussion.png'],
     ['meeting-voting', 'meeting-voting.png'],
     ['meeting-result', 'meeting-result.png'],
