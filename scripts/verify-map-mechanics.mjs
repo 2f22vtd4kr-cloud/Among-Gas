@@ -97,8 +97,11 @@ for (let row = 0; row < rows; row++) {
     nodes.push({ col, row, ...point, index });
   }
 }
-const spawnX = Math.round(350 * mapW / 1040);
-const spawnY = Math.round(150 * mapH / 580);
+const spawnXRef = Number(coords.match(/PLAYER_SPAWN_X\s*=\s*Math\.round\((\d+)\s*\*/)?.[1]);
+const spawnYRef = Number(coords.match(/PLAYER_SPAWN_Y\s*=\s*Math\.round\((\d+)\s*\*/)?.[1]);
+assert.ok(Number.isFinite(spawnXRef) && Number.isFinite(spawnYRef), 'shared spawn formulas must be parseable');
+const spawnX = Math.round(spawnXRef * mapW / 1040);
+const spawnY = Math.round(spawnYRef * mapH / 580);
 assert.ok(canPlayerMoveTo(spawnX, spawnY), 'Spawn position is not collision-walkable');
 let start = nodes[0];
 for (const node of nodes) {
