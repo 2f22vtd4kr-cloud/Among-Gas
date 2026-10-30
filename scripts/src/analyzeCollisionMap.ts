@@ -1,6 +1,7 @@
-// One-off analysis script: builds a pixel-accurate collision grid from the
-// red-line reference image and writes it out as a compact RLE-encoded
-// TypeScript module the game imports at runtime.
+// One-off analysis script: builds a candidate collision grid from the
+// red-line reference image and writes a NON-PRODUCTION preview. The canonical
+// collisionData.ts contains hand-reviewed edits and must never be overwritten
+// by this heuristic without visual review.
 //
 // Algorithm:
 //  1. Decode the reference JPEG to raw RGB pixels.
@@ -22,7 +23,7 @@ import { writeFileSync } from 'fs';
 
 const ROOT = new URL('../../', import.meta.url);
 const SRC = new URL('attached_assets/IMG_2907_1783632830477.jpeg', ROOT).pathname;
-const OUT = new URL('lib/shared/src/collisionData.ts', ROOT).pathname;
+const OUT = new URL('lib/shared/src/collisionData.generated-preview.ts', ROOT).pathname;
 
 // Logical game grid (must match collisionMap.ts constants)
 const MAP_W = 1040;
@@ -221,7 +222,7 @@ export const ROWS = ${ROWS};
 export const RUNS: number[] = [${runs.join(',')}];
 `;
   writeFileSync(OUT, banner);
-  console.log(`wrote ${OUT} (${runs.length} runs, grid ${COLS}x${ROWS}, cell=${CELL}px)`);
+  console.log(`wrote collision-analysis preview ${OUT} (${runs.length} runs, grid ${COLS}x${ROWS}, cell=${CELL}px)`);
 }
 
 main();
