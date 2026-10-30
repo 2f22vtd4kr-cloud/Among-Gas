@@ -87,7 +87,7 @@ const polygonBlocks = [...collisionOverrides.matchAll(
   [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
     .map(point => [Number(point[1]), Number(point[2])]),
 );
-assert.ok(polygonBlocks.length > 0, 'Manual collision overrides must define at least one obstacle polygon');
+assert.equal(polygonBlocks.length, 0, 'The decorative central garden must not be filled by a manual collision polygon');
 const pointInPolygon = (x, y, points) => {
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
@@ -195,9 +195,13 @@ assert.ok(soloSpawn,'solo start finds a clearance-safe point or fallback');
 const maxPlayerSpawns=[];
 for(let i=0;i<15;i++){const pos=computeSpawn(i,15,maxPlayerSpawns);assert.ok(pos, `15-player solver finds slot ${i}`);assert.ok(canSpawnAt(pos.x,pos.y), `slot ${i} clears geometry and margin`);maxPlayerSpawns.push(pos);}
 for(let i=0;i<maxPlayerSpawns.length;i++)for(let j=i+1;j<maxPlayerSpawns.length;j++)assert.ok(Math.hypot(maxPlayerSpawns[i].x-maxPlayerSpawns[j].x,maxPlayerSpawns[i].y-maxPlayerSpawns[j].y)>=spawnMinSeparation, `slots ${i} and ${j} remain separated`);
-const fountainCenter = { x: 1735, y: 490 };
-assert.equal(canPlayerMoveTo(fountainCenter.x, fountainCenter.y), false,
-  'The central fountain must be blocked by its hand-traced collision polygon');
+const statueCenter = { x: 1735, y: 490 };
+assert.equal(canPlayerMoveTo(statueCenter.x, statueCenter.y), false,
+  'The central statue remains blocked by its small authored RLE footprint');
+assert.equal(canPlayerMoveTo(1640, 490), true,
+  'The western path through the decorative garden remains walkable');
+assert.equal(canPlayerMoveTo(1810, 490), true,
+  'The eastern path through the decorative garden remains walkable');
 assert.equal(canPlayerMoveTo(1450, 490), true,
   'The open lobby floor west of the fountain must remain walkable');
 let start = nodes[0];
