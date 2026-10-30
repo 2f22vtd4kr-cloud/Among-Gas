@@ -1161,7 +1161,11 @@ export default function GameMap() {
       const srcW = (cw / dpr) / ZOOM;
       const srcH = (ch / dpr) / ZOOM;
 
-      const cameraBlend = 1 - Math.exp(-dtMs / 72);
+      // Keep camera lag below one character-footprint at full run speed.
+      // A 72ms time constant left the player visibly drifting ~30 map-pixels
+      // behind the viewport centre during sustained joystick movement.
+      // 16ms preserves sub-frame smoothing without making the camera feel detached.
+      const cameraBlend = 1 - Math.exp(-dtMs / 16);
       cameraX += (px - cameraX) * cameraBlend;
       cameraY += (py - cameraY) * cameraBlend;
       const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
