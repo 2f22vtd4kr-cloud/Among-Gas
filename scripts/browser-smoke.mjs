@@ -404,15 +404,19 @@ try {
   }, undefined, { timeout: 3_000 });
 
   // The emergency action and Settings must have independent tap targets on mobile.
-  const emergencyButton = page.getByRole('button', { name: /Тревога/ });
+  const emergencyButton = page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ });
   const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
   await emergencyButton.waitFor({ state: 'visible' });
   await gameplaySettingsButton.waitFor({ state: 'visible' });
   const emergencyBox = await emergencyButton.boundingBox();
   const gameplaySettingsBox = await gameplaySettingsButton.boundingBox();
   assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
-  assert.ok(emergencyBox.width >= 132 && emergencyBox.height >= 58,
-    `Emergency action must be at least 132×58 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
+  assert.ok(emergencyBox.width >= 92 && emergencyBox.height >= 92,
+    `Emergency icon action must be at least 92×92 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
+  const emergencyIcon = emergencyButton.locator('img');
+  const emergencyIconBox = await emergencyIcon.boundingBox();
+  assert.ok(emergencyIconBox && emergencyIconBox.width >= 68 && emergencyIconBox.height >= 68,
+    'Emergency control must display the large original emergency icon asset');
   await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
