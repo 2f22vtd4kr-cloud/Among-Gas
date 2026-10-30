@@ -57,7 +57,8 @@ export const FEET_OFFSET_Y = Math.round(
  * 153px display height, yielding an approximately 72×69px visible sprite.
  */
 export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
-// The atlas regression test verifies this literal is the ceiling of the calculated rendered half-height.
+// Literal for the source-parsing geometry verifier; the atlas regression test
+// asserts this stays equal to the calculated rendered idle half-height ceiling.
 export const PLAYER_SPRITE_HALF_HEIGHT_PX = 35;
 /** Spawn-only gap between the rendered sprite and traced wall/prop boundaries. */
 export const PLAYER_SPAWN_CLEARANCE_PX = 12;
