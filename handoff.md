@@ -1726,3 +1726,170 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - PR #28 branch: `fix/settings-gear-centered-regression` — Settings gear geometry, role-reveal shadow, and browser regression tests.
 - PR #29 branch: `fix/replit-full-stack-runtime` — full Replit dev/production runtime and integration tests.
 - PR #28 is merged to `main` as `1a5b350d8ff19f2688743442fc0fb6d7a00b8004`. PR #29 has been reset/reapplied on top of that main head and remains open pending its new CI run. `main` contains the Settings geometry fix, role-reveal shadow, and their browser regressions; the Replit runtime fix is still on PR #29.
+
+
+### 2026-10-30 — Agent 5 platform and integrated QA audit
+
+**Done**
+- Registered Agent 5 in coordination issue #36 and created branch `audit/agent-5-platform-quality` from main SHA `a128d35242a5f98540fa4d02f415378113392b53`.
+- Verified open PR #35 and GitHub Actions run #41123658131. The workflow passed build, Replit production/development smoke, server gameplay invariants, Telegram HMAC auth, and live WebSocket lobby/sabotage checks; the mobile browser smoke step failed.
+- Identified the double-escaped player-slot regex in PR #35 at `scripts/browser-smoke.mjs:573`; reported it to Agent 4 and posted an integration review comment. Agent 4 retains implementation ownership.
+- Identified missing active-match reconnect/resume: client socket closes without retry; server removes disconnected players and rejects joins after WAITING. Registered as AG5-PLATFORM-001 for Agent 5 ownership.
+- Identified an autoscale/process-local state architecture risk: Replit target is autoscale while the authoritative LobbyManager and all lobby maps are process-local. Actual deployed replica count remains unverified.
+- Downloaded and inspected the CI visual QA artifact; it contains 12 Playwright captures across lobby, settings, role reveal, chat, tasks, mobile controls, and corpse/report states. These are CI browser captures, not a live Replit deployment inspection.
+- Aligned CI Node.js setup with the configured Replit Node.js 20 runtime and corrected the stack version in `replit.md`.
+
+**Decisions & gotchas**
+- Do not merge PR #35 until the voting identifier regex is corrected and the full browser smoke job passes.
+- Do not claim active-match reconnection works: it requires a server-side resume protocol and restoration of authoritative match state, not just a client reconnect loop.
+- Treat autoscale with in-memory lobbies as a release architecture risk until either single-instance deployment is enforced or shared state/coordination is implemented and tested.
+- Agent 5 owns CI/runtime config and connection lifecycle; avoid conflicting edits to Agent 1–4 map, movement, sprite, and gameplay implementation areas.
+
+**Left off / next steps**
+- Run CI on this branch to validate Node.js 20 compatibility; fix any actual compatibility failures rather than reverting to a non-Replit CI runtime.
+- Design and implement a reconnect/resume protocol with explicit coordination around shared GameContext and WebSocket files; add tests for lobby reconnect, active match reconnect, stale socket rejection, and app background/resume.
+- Determine Replit autoscale instance behavior and constrain deployment or introduce shared authoritative lobby state before multiplayer scale-out.
+- Continue security, protocol, session lifecycle, and whole-game cross-system audit; visually inspect the final integrated build after all agent PRs merge.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Lazy-load noncritical audio assets
+
+**Done**
+- Inspected the production static build artifact from the PR #35 CI run: 23.8 MB total across 36 files, including a 9.7 MB PNG map fallback, 1.12 MB WebP map, 1.35 MB character atlas, and multiple multi-megabyte audio files.
+- Found that `artifacts/telegram-game/src/lib/sfx.ts` constructed every HTMLAudioElement with `preload='auto'` at module import, making all sound effects and menu/victory music eligible for download before gameplay.
+- Changed audio element construction to set `preload='none'` before assigning `src`. The existing explicit first-gesture kill-buffer decode and menu-music start remain unchanged.
+- Added `scripts/test-audio-preload.mjs` and wired it into CI to assert no audio assets are requested on lobby load, and that the first trusted gesture requests only the kill buffer and menu music.
+
+**Decisions & gotchas**
+- The 23.8 MB artifact size is not itself the initial network payload. The browser network regression is the authoritative check for eager audio requests.
+- Keep the latency-sensitive kill sound explicitly primed on the first trusted user gesture; do not eagerly preload every sound merely to reduce later playback delay.
+- Map WebP/PNG fallback and character-atlas loading remain separate asset-budget work owned by the relevant visual/performance owners.
+
+**Left off / next steps**
+- Run the new Playwright network regression and full CI on the updated PR #39 head.
+- Inspect network request timing and transferred bytes in a real Telegram WebView/Replit deployment when available.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Gate autoscaling on shared multiplayer state
+
+**Done**
+- Cross-checked the autoscale concern against Replit's current deployment documentation. Autoscale can add application servers under demand and exposes a configurable maximum instance count; Reserved VM is an always-on alternative for persistent server workloads.
+- Added explicit one-instance guidance to `.replit` comments and `replit.md`: current process-local lobby state is incompatible with horizontal scaling, so cap Autoscale at one instance until a shared-state architecture is implemented and verified.
+- Confirmed the connected Replit app search returned no accessible Among Gas app; actual deployment max-instance settings remain unverified and cannot be changed from this session.
+
+**Decisions & gotchas**
+- Do not change deploymentTarget to Reserved VM in code without validating Replit's deployment settings and the user's cost preference. The immediate safe control is Autoscale max instances = 1 in the Publishing UI.
+- A single instance is an interim constraint, not a horizontally scalable multiplayer architecture. Shared state must cover room membership, authoritative match state, bot ticks, timers, and broadcasts before raising the limit.
+
+**Left off / next steps**
+- Verify the live deployment's maximum instance setting in Replit Publishing when access is available.
+- Implement and test active-match reconnect/resume separately from horizontal state sharing.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Runtime character-atlas browser contract
+
+**Done**
+- Accepted Agent 3's request for an integrated browser assertion of `window.__AG_CHARACTER_ATLAS`.
+- Added `scripts/test-character-atlas-browser.mjs`, separate from Agent 4's shared `browser-smoke.mjs`, to open the corpse visual fixture and verify the runtime canvas is 2898×1401, contains 18 integer 161px columns, and every column has non-transparent rendered pixels.
+- Wired the browser contract into CI after the audio network regression. It is explicitly deferred with a visible log message while `characterAtlas.ts` is absent from main; once Agent 3's atlas implementation merges, the browser test automatically becomes mandatory and fails if the global/dimensions are missing.
+
+**Decisions & gotchas**
+- Do not modify `browser-smoke.mjs` while Agent 4 owns the meeting/chat and voter identity blocks.
+- The atlas browser check measures the actual runtime canvas, not only source constants. It does not claim that all 18 colors are perceptually distinct; the source/unit tests cover palette count and unique column mapping.
+
+**Left off / next steps**
+- Re-run CI on this PR after adding the atlas contract.
+- Once Agent 3's PR merges, verify the browser test executes (rather than defers), inspect the visual artifact, and check atlas-generation time on a mobile-class device.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Confirm database persistence is not implemented
+
+**Done**
+- Enumerated and inspected all 18 API-server source files on main. None imports `@workspace/db`, references `DATABASE_URL`, constructs a Postgres `Pool`, or calls Drizzle.
+- Verified `lib/db/src/schema/index.ts` currently exports no tables (`export {}`); the package only defines Drizzle CLI scripts.
+- Confirmed the live game server stores lobbies, user-to-room mappings, players, tasks, meetings, timers and bot loops in process-local memory. A process restart loses active matches; `DATABASE_URL` does not currently provide match/session persistence.
+- Documented this explicitly in `.replit` and `replit.md` so future work does not mistake a configured database secret for shared multiplayer state.
+
+**Decisions & gotchas**
+- Treat process-local match state as an intentional ephemeral-session model only if that is an explicit product decision. If restart recovery or horizontal scaling is required, introduce a shared authoritative state design; adding an unused database dependency is not sufficient.
+- Shared state must include lobby ownership, membership, match phase, player positions/alive state, tasks, meeting/votes/chat, cooldowns, bot timers and event ordering—not just a lobby-code table.
+
+**Left off / next steps**
+- Decide whether the release target is single-instance ephemeral matches or durable/shared sessions. For the immediate Replit test, keep Autoscale max instances at 1 and accept that process restarts terminate matches.
+- Design shared persistence and reconnect semantics together rather than persisting only partial lobby metadata.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Make the Replit post-merge hook safe without an unused database
+
+**Done**
+- Found that \`scripts/post-merge.sh\` unconditionally ran \`pnpm install\` and \`pnpm --filter db push\`, while the Drizzle schema index exports no tables and the API server does not use the DB package. This made every Replit post-merge depend on a database secret that does not currently back any game state.
+- Changed the hook to detect actual \`export * from\` schema entries first. With the current empty schema it logs a clear skip and exits successfully without requiring \`DATABASE_URL\` or reinstalling dependencies.
+- When real schema exports exist, the hook now requires \`DATABASE_URL\`, performs the frozen install, and invokes the exact \`@workspace/db\` package script.
+- Added a CI step that executes the post-merge hook with \`DATABASE_URL\` unset and verifies the current empty-schema path is safe.
+- Corrected \`replit.md\` to describe \`DATABASE_URL\` as migration-only rather than a runtime requirement.
+
+**Decisions & gotchas**
+- Once actual tables are exported from \`lib/db/src/schema/index.ts\`, CI will fail without a database URL in the post-merge-hook test. That is intentional: adding persistence requires adding a proper database migration/integration test and configuring the secret.
+- The empty-schema check uses the project's documented \`export * from './table'\` convention. If the schema export convention changes, update this guard and its CI check together.
+
+**Left off / next steps**
+- Verify the new post-merge hook CI step passes on the latest PR #39 head.
+- Keep the distinction clear: this hook no longer blocks the current ephemeral in-memory game, but it does not create session persistence or solve autoscale.
+
+**State to restore**
+- No temporary runtime state or environment overrides.
+
+
+### 2026-10-30 — Integrated platform/gameplay audit findings and current handoff
+
+**Done**
+- Registered Agent 5 in shared coordination issue #36 and opened PR #39.
+- PR #39 head \`52ac8fb4\` passed full CI in run #41128156869: Node 20, empty-schema Replit post-merge hook, typecheck/build, Replit production/dev smoke, Telegram auth, live WebSocket lobby/sabotage authorization, browser smoke/audio network regression, collision visual artifact upload, and headless multiplayer simulations.
+- Inspected 47 CI screenshots from artifact #13011074123 across lobby, settings, loading, role reveal, gameplay viewports, tasks, kill/corpse/report, sabotage, meetings, voting, ghost mode and game-over states.
+- Verified loading-screen behavior: browser test holds map + character image decode promises; overlay remains until both are ready. Server invariant separately freezes solo bots until map + sprite readiness.
+- Inspected Agent 1's generated fine-grid preview and independently decoded the candidate RLE to 266560 cells (680×392). Rendered a candidate overlay against the reference; central garden and narrow corridors appear plausible, with statue footprint blocked.
+- Identified and reported shared-file/contract overlaps across Agents 1–4 and PR #39 CI workflow; proposed geometry → movement → art → gameplay → integrated QA rebase order.
+- Confirmed the API server does not use \`@workspace/db\`; schema is empty. Made Replit post-merge skip empty-schema migration and added a CI test with \`DATABASE_URL\` unset.
+
+**New findings / release blockers**
+- Active-match WebSocket reconnect/resume is absent: client \`onclose\` only sets an error; server immediately removes the player and user-to-lobby mapping. Reconnect grace, resume protocol and per-player state snapshot still need implementation.
+- Telegram \`startapp=LOBBY_CODE\` / \`initDataUnsafe.start_param\` auto-join is absent. Manual lobby-code join exists, but Telegram invite deep links do not auto-join.
+- Kill, report, task, vent and sabotage-repair authorization currently rely on Euclidean distance without collision-aware line of sight. Close targets across walls may permit through-wall actions. Agents 1 and 4 have been asked to coordinate a shared server-safe fine-grid LOS/approach-point contract.
+- Dev mock auth accepts caller-supplied numeric user IDs when running in development without a real bot token. Production HMAC validation is enabled; keep shared dev previews access-restricted or use real Telegram initData.
+- Replit Autoscale uses process-local LobbyManager state. One instance must be configured for immediate testing; process restart loses matches. The actual Replit deployment's max-instance setting could not be verified because no Among Gas Replit app is accessible through the connected account.
+- Agent 1's fine vision polygon uses 720 rays in every animation frame; benchmark/caching is required on real mobile WebView.
+- Agent 3's runtime atlas recolour processes ~2.48M pixels on first load; benchmark on iPhone/Android WebView. PR #39's atlas browser test is deferred until \`characterAtlas.ts\` lands.
+- Agent 4's voting UI has a seven-key \`ADMIN_DOT_COLORS: Record<CharacterColor,string>\`; rebase onto Agent 3's 18-color union requires all 18 keys or a shared CSS mapping.
+
+**Agent branch/PR state at this handoff**
+- Agent 1: PR #42, latest observed head \`38e1d0ff\`; fine-grid decode and core geometry tests passed after RLE correction, but latest CI failed the exact-footprint assertion for the \`Fix Wiring\` task console. Task definitions describe console centres; test should assert a reachable walkable approach point within interaction range, not that the console itself is walkable. CI also needs to use read-only generator \`--check\` and explicitly run/upload the collision, shadow, vision and region-tile renderer.
+- Agent 2: PR #37, latest observed head \`20762bd4\`; latest browser smoke failed camera stability because the fixture hit an obstacle after only 26.5px of additional travel. Diagnostic screenX values looked stable; choose a longer unobstructed path and require sustained real movement.
+- Agent 3: PR #41, latest observed head \`b2a45cf1\`, draft; previous head passed full CI, latest changes are rerunning. Preserve the 18-color tests when rebasing with Agent 1.
+- Agent 4: PRs #35, #38 and #40 have reported full CI success, but require rebases after shared GameMap/lobby/test changes from Agents 1–3.
+- Agent 5: PR #39, head \`52ac8fb4\`, full CI success; keep open until the other branches integrate and rerun the final combined suite.
+
+**Left off / next steps**
+1. Wait for Agent 1 to fix task reachability test semantics, renderer CI invocation/evidence, and read-only collision-data verification.
+2. Wait for Agent 2 to fix camera test path and rebase movement to \`buildPreciseCollisionGrid()\`.
+3. Rebase Agent 3's atlas onto fine-grid GameMap and preserve Agent 1's geometry tests.
+4. Rebase Agent 4's meeting/chat/voting/report work onto the integrated map/art contracts; complete LOS/approach authorization.
+5. After Agent 2/4 shared-file changes land, implement Agent 5's reconnect/resume and Telegram start-param auto-join.
+6. Rebase PR #39 onto the final main, preserve all CI workflow steps, activate atlas browser test, rerun full CI, and request a live Replit run only after release gates pass.
+
+**State to restore**
+- No temporary runtime state or environment overrides.

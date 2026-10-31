@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Keep only the newest CI run per PR/branch; parallel agents push frequently.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -28,9 +33,16 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Keep CI aligned with .replit's nodejs-20 runtime.
+          node-version: 20
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
+
+      - name: Assert CI runtime matches Replit
+        run: node -e "if (process.versions.node.split('.')[0] !== '20') throw new Error('CI must match Replit Node.js 20 runtime')"
+
+      - name: Verify Replit post-merge hook skips an empty database schema
+        run: env -u DATABASE_URL bash scripts/post-merge.sh
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -163,6 +175,9 @@ jobs:
           done
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
+          node scripts/test-audio-preload.mjs
+          node scripts/test-character-atlas-browser.mjs
+          node scripts/test-ingame-settings.mjs
 
       - name: Render production-map collision overlay for visual QA
         run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts

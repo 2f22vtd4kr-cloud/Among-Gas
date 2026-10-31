@@ -1,3 +1,10 @@
+# NOTE: @workspace/db currently has an empty schema and the API server does not use it.
+# The post-merge hook skips Drizzle push until real tables are exported.
+# DATABASE_URL does not persist live rooms or match state; process restarts lose matches.
+# IMPORTANT: LobbyManager stores authoritative lobbies in process-local Maps.
+# Until shared lobby state/coordination is implemented, cap Autoscale to ONE
+# instance in Replit Publishing settings. Do not scale this multiplayer server
+# horizontally; separate instances cannot see or join each other's lobbies.
 # Run the Vite frontend and API together for the Replit preview. Vite proxies
 # same-origin /api HTTP requests and WebSocket upgrades to the private API port.
 run = "bash scripts/replit-dev.sh"
