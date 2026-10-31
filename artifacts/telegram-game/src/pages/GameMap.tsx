@@ -573,7 +573,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting]);
+  }, [amIDead, meeting, taskInteractionGrid]);
 
   // Local countdown clock for the meeting overlay, ticked independently of
   // the canvas rAF loop (this UI lives outside the canvas).
@@ -630,7 +630,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIImpostor, amIDead]);
+  }, [amIImpostor, amIDead, taskInteractionGrid]);
 
   // ── Task system (Phase 7) ─────────────────────────────────────────────────
   // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
@@ -736,7 +736,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage, amIDead]);
+  }, [meeting, myRole, sabotage, amIDead, taskInteractionGrid]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1071,7 +1071,7 @@ export default function GameMap() {
       setNearestVentId(best);
     }, 150);
     return () => clearInterval(id);
-  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner, taskInteractionGrid]);
 
 
   useEffect(() => {
