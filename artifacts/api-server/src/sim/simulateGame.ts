@@ -179,6 +179,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         if (settled) return;
         for (const player of lobby.players.values()) {
           if (!player.alive) continue; // ghosts intentionally ignore walls
+          if (player.inVent) continue; // vent occupancy is a separate traversal state, not ordinary map collision
           if (!isPlayerPositionWalkable(simulationCollisionGrid, player.x, player.y)) {
             collisionViolation = {
               slot: player.slot,
