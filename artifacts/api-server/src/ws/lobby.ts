@@ -16,6 +16,7 @@ import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
 import {
   MAP_W, MAP_H,
+  FEET_OFFSET_Y,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
   PLAYER_SPAWN_MIN_SEPARATION_PX,
@@ -28,6 +29,8 @@ import {
 import {
   buildPreciseCollisionGrid,
   isPlayerSpawnPositionClear,
+  isLineOfSightClear,
+  isLineOfSightToInteractionTarget,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
 } from '@workspace/shared/collisionMap';
@@ -49,6 +52,9 @@ import {
   canTravelVent,
   findVent,
 } from '@workspace/shared/vents';
+
+// Reuse the canonical fine-grid geometry for every server-authoritative interaction.
+const INTERACTION_COLLISION_GRID = buildPreciseCollisionGrid();
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -869,6 +875,12 @@ export class LobbyManager {
     const dx = player.x - vent.x;
     const dy = player.y - vent.y;
     if (dx * dx + dy * dy > VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX) return false;
+    if (!isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      vent.x, vent.y + FEET_OFFSET_Y,
+      20,
+    )) return false;
 
     player.inVent = true;
     player.ventId = ventId;
@@ -1410,6 +1422,11 @@ export class LobbyManager {
     const dx = attacker.x - victim.x;
     const dy = attacker.y - victim.y;
     if (dx * dx + dy * dy > KILL_RANGE_PX * KILL_RANGE_PX) return false;
+    if (!isLineOfSightClear(
+      INTERACTION_COLLISION_GRID,
+      attacker.x, attacker.y + FEET_OFFSET_Y,
+      victim.x, victim.y + FEET_OFFSET_Y,
+    )) return false;
 
     victim.corpseX = victim.x;
     victim.corpseY = victim.y;
@@ -1570,6 +1587,12 @@ export class LobbyManager {
     if (dx * dx + dy * dy > SABOTAGE_INTERACTION_RANGE_PX * SABOTAGE_INTERACTION_RANGE_PX) {
       return 'rejected';
     }
+    if (!isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      pad.x, pad.y + FEET_OFFSET_Y,
+      24,
+    )) return 'rejected';
 
     if (def.pads.length === 1) {
       // Single-pad systems (Lights): any one interaction fixes it immediately.
@@ -1677,6 +1700,12 @@ export class LobbyManager {
       );
       return false;
     }
+    if (!isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      def.x, def.y + FEET_OFFSET_Y,
+      24,
+    )) return false;
 
     // Steps must be completed in order
     for (let i = 0; i < stepIndex; i++) {
@@ -1730,6 +1759,11 @@ export class LobbyManager {
       if (reportDx * reportDx + reportDy * reportDy > REPORT_RANGE_PX * REPORT_RANGE_PX) {
         return false; // the reporter must be within the authoritative corpse interaction radius
       }
+      if (!isLineOfSightClear(
+        INTERACTION_COLLISION_GRID,
+        reporter.x, reporter.y + FEET_OFFSET_Y,
+        body.corpseX, body.corpseY + FEET_OFFSET_Y,
+      )) return false;
       if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
       body.bodyReported = true;
     } else {
