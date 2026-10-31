@@ -22,7 +22,7 @@ import {
   MAP_H,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
-import type { Point } from '@workspace/shared';
+import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
@@ -32,6 +32,16 @@ export { NO_TARGET };
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
 const movementGrid = buildPreciseCollisionGrid();
+const NAV_COLS = COLS * 2;
+const NAV_ROWS = ROWS * 2;
+const NAV_CELL_X = CELL_X / 2;
+const NAV_CELL_Y = CELL_Y / 2;
+const navigationGeometry: PathGridGeometry = {
+  cols: NAV_COLS,
+  rows: NAV_ROWS,
+  cellX: NAV_CELL_X,
+  cellY: NAV_CELL_Y,
+};
 
 /** Same three-circle foot footprint used by client prediction and server authority. */
 function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
@@ -45,16 +55,16 @@ function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean
  * rejects (the old failure mode left a bot stationary forever at a task).
  */
 function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(COLS * ROWS);
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const index = row * COLS + col;
+  const result = new Uint8Array(NAV_COLS * NAV_ROWS);
+  for (let row = 0; row < NAV_ROWS; row++) {
+    for (let col = 0; col < NAV_COLS; col++) {
+      const index = row * NAV_COLS + col;
       if (collision[index] !== 0) {
         result[index] = 1;
         continue;
       }
-      const x = (col + 0.5) * CELL_X;
-      const y = (row + 0.5) * CELL_Y;
+      const x = (col + 0.5) * NAV_CELL_X;
+      const y = (row + 0.5) * NAV_CELL_Y;
       result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
     }
   }
@@ -65,11 +75,11 @@ const navigationGrid = buildNavigationGrid(movementGrid);
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
-  const reachable = new Uint8Array(COLS * ROWS);
-  const startCol = Math.floor(SPAWN_X / CELL_X);
-  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / CELL_Y);
-  if (startCol < 0 || startCol >= COLS || startRow < 0 || startRow >= ROWS) return reachable;
-  const startIndex = startRow * COLS + startCol;
+  const reachable = new Uint8Array(NAV_COLS * NAV_ROWS);
+  const startCol = Math.floor(SPAWN_X / NAV_CELL_X);
+  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / NAV_CELL_Y);
+  if (startCol < 0 || startCol >= NAV_COLS || startRow < 0 || startRow >= NAV_ROWS) return reachable;
+  const startIndex = startRow * NAV_COLS + startCol;
   if (navigationGrid[startIndex] !== 0) return reachable;
 
   const queue = [startIndex];
@@ -80,17 +90,17 @@ function buildSpawnReachability(): Uint8Array {
   ];
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
-    const row = Math.floor(index / COLS);
-    const col = index - row * COLS;
+    const row = Math.floor(index / NAV_COLS);
+    const col = index - row * NAV_COLS;
     for (const [dc, dr, diagonal] of directions) {
       const nextCol = col + dc;
       const nextRow = row + dr;
-      if (nextCol < 0 || nextCol >= COLS || nextRow < 0 || nextRow >= ROWS) continue;
-      const nextIndex = nextRow * COLS + nextCol;
+      if (nextCol < 0 || nextCol >= NAV_COLS || nextRow < 0 || nextRow >= NAV_ROWS) continue;
+      const nextIndex = nextRow * NAV_COLS + nextCol;
       if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
       if (diagonal) {
-        if (navigationGrid[row * COLS + nextCol] !== 0 ||
-            navigationGrid[nextRow * COLS + col] !== 0) continue;
+        if (navigationGrid[row * NAV_COLS + nextCol] !== 0 ||
+            navigationGrid[nextRow * NAV_COLS + col] !== 0) continue;
       }
       reachable[nextIndex] = 1;
       queue.push(nextIndex);
@@ -102,10 +112,10 @@ function buildSpawnReachability(): Uint8Array {
 const spawnReachability = buildSpawnReachability();
 
 function isSpawnReachable(feetX: number, feetY: number): boolean {
-  const col = Math.floor(feetX / CELL_X);
-  const row = Math.floor(feetY / CELL_Y);
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
-  return spawnReachability[row * COLS + col] === 1;
+  const col = Math.floor(feetX / NAV_CELL_X);
+  const row = Math.floor(feetY / NAV_CELL_Y);
+  if (col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) return false;
+  return spawnReachability[row * NAV_COLS + col] === 1;
 }
 
 /** Use the exact same 2px swept footprint check as human prediction and server authority. */
@@ -285,7 +295,7 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal);
+    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry);
     const waypoint = result?.waypoints[0] ?? feetGoal;
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
