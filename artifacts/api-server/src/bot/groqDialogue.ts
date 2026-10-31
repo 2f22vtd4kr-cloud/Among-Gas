@@ -3,8 +3,14 @@
  * Keys are accepted only in memory for the active authenticated lobby session;
  * this module never logs credentials or includes them in errors.
  */
+import { createHash } from 'node:crypto';
+
 export const GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile';
 const GROQ_KEY_PATTERN = /^gsk_[A-Za-z0-9_-]{20,240}$/;
+const GROQ_MIN_REQUEST_INTERVAL_MS = 1_500;
+// Store fingerprints only; never retain raw credentials in rate-limit state.
+const lastGroqRequestAt = new Map<string, number>();
+const activeGroqKeys = new Set<string>();
 
 export function isValidGroqApiKey(value: string): boolean {
   return GROQ_KEY_PATTERN.test(value);
@@ -20,6 +26,15 @@ export async function requestGroqDialogue(
   messages: readonly GroqDialogueMessage[],
 ): Promise<string | null> {
   if (!isValidGroqApiKey(apiKey)) return null;
+  const keyFingerprint = createHash('sha256').update(apiKey).digest('hex');
+  const now = Date.now();
+  const lastRequestAt = lastGroqRequestAt.get(keyFingerprint) ?? 0;
+  if (activeGroqKeys.has(keyFingerprint) || now - lastRequestAt < GROQ_MIN_REQUEST_INTERVAL_MS) return null;
+  activeGroqKeys.add(keyFingerprint);
+  lastGroqRequestAt.set(keyFingerprint, now);
+  for (const [fingerprint, at] of lastGroqRequestAt) {
+    if (now - at > 5 * 60_000 && !activeGroqKeys.has(fingerprint)) lastGroqRequestAt.delete(fingerprint);
+  }
   try {
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
@@ -48,6 +63,8 @@ export async function requestGroqDialogue(
     // Provider outages, invalid keys, DNS errors and timeouts all use the
     // deterministic in-game dialogue fallback. Never expose provider details.
     return null;
+  } finally {
+    activeGroqKeys.delete(keyFingerprint);
   }
 }
 
