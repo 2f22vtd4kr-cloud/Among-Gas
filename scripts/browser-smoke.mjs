@@ -669,7 +669,7 @@ try {
     const atlas = window.__AG_CHARACTER_ATLAS;
     if (!atlas) return null;
     if (atlas.width !== 2898 || atlas.height !== 1401) {
-      return { width: atlas.width, height: atlas.height, columns: [] as Array<{ opaque: number; signature: string }> };
+      return { width: atlas.width, height: atlas.height, columns: [] };
     }
     const context = atlas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not inspect the generated runtime character atlas');
