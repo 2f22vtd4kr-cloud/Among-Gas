@@ -28,6 +28,7 @@ import {
 } from '@workspace/shared/coords';
 import {
   buildPreciseCollisionGrid,
+  isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
