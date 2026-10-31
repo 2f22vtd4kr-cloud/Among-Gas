@@ -1912,6 +1912,7 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Included cell dimensions in PathCache keys and added a regression test for equal grid dimensions with different world-space cell sizes.
 - Made a validated fresh Telegram invite take precedence over a saved WebView room: the stale resume key is cleared and the lobby joins the invited code. Added precedence tests.
 - Fixed the final 100-game timeout: dead crewmate bots now submit remaining ghost-task steps immediately when in range instead of relying on a dwell counter. Added a regression for the exact Download Data timeout position and exercised it through the normal bot tick dispatcher.
+- Mirrored the server's line-of-sight task-interaction rule in the client HUD. Task prompts now require both range and LOS; added a blocked-wall browser fixture proving the prompt stays hidden even when the player is numerically within task radius.
 
 **Current verification / release gate**
 - On the previous integrated head, Node 20, install, geometry/collision/vision checks, typecheck/build, Replit production/development serving, server gameplay invariants, Telegram start-param, reconnect/resume, HMAC auth, live WebSocket checks, mobile browser smoke, and visual artifact generation passed. The previous 100-game simulation was still running when the final vent-sync and cache/watchdog review fixes were added; it is not evidence for the final head.
@@ -1920,5 +1921,5 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - `main` base at the start of this integration: `b06fe62e50e08b257f88b10a8abfc40faa9939ad`.
-- Latest integration branch: `integration/among-gas-release-candidate-invite-priority` (current head being refined). Open a fresh PR from the final SHA to trigger CI on the exact final code.
+- Latest integration branch: `integration/among-gas-release-candidate-ghost-task-final` (current head being refined). Open a fresh PR from the final SHA to trigger CI on the exact final code.
 - No Replit app matching “Among Gas” was returned by the connected Replit app search. Do not claim a live workspace launch or publish was performed.
