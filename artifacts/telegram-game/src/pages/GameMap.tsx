@@ -15,18 +15,25 @@ import {
   PLAYER_ANIM_INTERVAL_MS,
 } from '../game/player';
 import {
-  CHARACTER_SHEET_PATH,
-  CHARACTER_SHEET_ROWS,
   CHARACTER_CELL_WIDTH,
   CHARACTER_CELL_HEIGHT,
   CHARACTER_COLORS,
   CHARACTER_POSES,
+  getCharacterColorForSlot,
   getCharacterFrameRect,
   getCharacterClipPath,
   getCharacterClipNotch,
   type CharacterColor,
   type CharacterPose,
 } from '../game/characterSprites';
+import { loadCharacterAtlas } from '../game/characterAtlas';
+import {
+  CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
+  CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
+  CHARACTER_SHADOW_Y_OFFSET_RATIO,
+  getCharacterShadowScale,
+  getCharacterWalkBobOffset,
+} from '../game/characterAnimation';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
 import {
@@ -106,6 +113,17 @@ const ADMIN_DOT_COLORS: Record<CharacterColor, string> = {
   brown: '#8c6755',
   'dark-gray': '#5e6872',
   magenta: '#c94eb6',
+  red: '#df3e4c',
+  blue: '#438bdc',
+  green: '#3d9e62',
+  pink: '#ed91c4',
+  orange: '#e58b3c',
+  yellow: '#e4c84a',
+  black: '#30343b',
+  white: '#e3e8eb',
+  lime: '#9acb3c',
+  cyan: '#45c4cf',
+  rose: '#e87999',
 };
 
 // ── Camera ────────────────────────────────────────────────────────────────────
@@ -120,14 +138,12 @@ const PLAYER_DISPLAY_WIDTH  = PLAYER_DISPLAY_HEIGHT * (CHARACTER_CELL_WIDTH / CH
 // ── Movement throttle: send 0x11 at most once per 40ms (25Hz) ────────────────
 const MOVE_SEND_INTERVAL_MS = 40;
 
-// ── Player color: keyed by lobby slot, cycling the 7 sheet colors ────────────
+// ── Player color: keyed by lobby slot, using the 18 runtime palettes ─────────
 function slotColor(slot: number): CharacterColor {
-  return CHARACTER_COLORS[slot % CHARACTER_COLORS.length];
+  return getCharacterColorForSlot(slot);
 }
 
-// ── CSS-based sprite renderer for DOM overlays (role-reveal, game-over) ──────
-const _SHEET_PX_W = CHARACTER_CELL_WIDTH * CHARACTER_COLORS.length;
-const _SHEET_PX_H = CHARACTER_CELL_HEIGHT * CHARACTER_SHEET_ROWS;
+// ── Canvas sprite renderer for DOM overlays (role-reveal, game-over) ─────────
 
 function clipSpriteLegGap(
   ctx: CanvasRenderingContext2D,
@@ -174,30 +190,48 @@ function CharSpriteUI({
     CHARACTER_COLORS.includes(color as CharacterColor) ? color as CharacterColor : 'teal',
     safePose,
   );
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const scale = size / CHARACTER_CELL_WIDTH;
-  const bgW = _SHEET_PX_W * scale;
-  const bgH = _SHEET_PX_H * scale;
-  const posX = -frame.x * scale;
-  const posY = -frame.y * scale;
   const height = frame.height * scale;
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadCharacterAtlas(import.meta.env.BASE_URL).then(atlas => {
+      if (cancelled || !canvasRef.current) return;
+      const context = canvasRef.current.getContext('2d');
+      if (!context) return;
+      context.imageSmoothingEnabled = false;
+      context.clearRect(0, 0, frame.width, frame.height);
+      context.drawImage(
+        atlas,
+        frame.x, frame.y, frame.width, frame.height,
+        0, 0, frame.width, frame.height,
+      );
+    }).catch(error => {
+      if (import.meta.env.DEV) console.error('Could not render Among Gas character sprite', error);
+    });
+    return () => { cancelled = true; };
+  }, [frame.x, frame.y, frame.width, frame.height]);
 
   // Every pose uses its measured, isolated atlas window. The corpse is a single
   // authored sprite (cut suit + exposed bone); do not splice in the adjacent
   // sit-crouch row or erase pixels at guessed uniform row boundaries.
   return (
-    <div
+    <canvas
+      ref={canvasRef}
       className="ag-character-sprite"
       data-pose={safePose}
       data-sprite-row={frame.row}
       data-source-y={frame.y}
       data-source-height={frame.height}
       data-display-height={frame.displayHeight}
+      width={frame.width}
+      height={frame.height}
       style={{
-        width: size, height, flexShrink: 0, overflow: 'hidden',
-        backgroundImage: `url(${CHARACTER_SHEET_PATH})`,
-        backgroundSize: `${bgW}px ${bgH}px`,
-        backgroundPosition: `${posX}px ${posY}px`,
-        backgroundRepeat: 'no-repeat',
+        display: 'block',
+        width: size,
+        height,
+        flexShrink: 0,
         imageRendering: 'pixelated',
         transformOrigin: 'top center',
         transform: flipped ? 'scaleX(-1)' : 'none',
@@ -911,33 +945,20 @@ export default function GameMap() {
     markGameplayReady();
   }, [phase, myRole, loaded, spriteLoaded, markGameplayReady]);
 
-  // ── Load the original vector sprite sheet ────────────────────────────────
+  // ── Load the authored atlas and expand its suit palettes once ────────────
   useEffect(() => {
     let cancelled = false;
-    let completedSource = '';
-    const img = new Image();
-    const finishDecodedLoad = async () => {
-      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
-      const source = img.currentSrc || img.src;
-      if (completedSource === source) return;
-      try {
-        if (typeof img.decode === 'function') await img.decode();
-      } catch {
-        if (!cancelled) setError(true);
-        return;
+    void loadCharacterAtlas(import.meta.env.BASE_URL).then(atlas => {
+      if (cancelled) return;
+      spriteImgRef.current = atlas;
+      if (import.meta.env.DEV) {
+        (window as Window & { __AG_CHARACTER_ATLAS?: HTMLCanvasElement }).__AG_CHARACTER_ATLAS = atlas;
       }
-      if (cancelled || (img.currentSrc || img.src) !== source) return;
-      completedSource = source;
-      // Keep the authored character atlas intact; crop windows and draw scale
-      // are defined in characterSprites.ts and never threshold the source pixels.
-      spriteImgRef.current = img;
       setSpriteLoaded(true);
-    };
-    img.onload = () => { void finishDecodedLoad(); };
-    img.onerror = () => { if (!cancelled) setError(true); };
-    img.src = `${import.meta.env.BASE_URL}${CHARACTER_SHEET_PATH.slice(1)}`;
-    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
-    return () => { cancelled = true; img.onload = null; img.onerror = null; };
+    }).catch(() => {
+      if (!cancelled) setError(true);
+    });
+    return () => { cancelled = true; };
   }, []);
 
   // ── Track held movement keys ──────────────────────────────────────────────
@@ -1493,7 +1514,7 @@ export default function GameMap() {
           // Living characters visibly bounce on each step. This is draw-only:
           // authoritative coordinates and collision are never modified.
           const rWalkBob = rMoving
-            ? Math.abs(Math.sin((anim.animMs / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, rBaseSpriteH * 0.06)
+            ? getCharacterWalkBobOffset(anim.animMs, rBaseSpriteH)
             : 0;
           const rpGroundY = Math.round((anim.renderY - srcY) * scale);
           const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
@@ -1511,10 +1532,16 @@ export default function GameMap() {
             ctx.globalAlpha = 0.55;
             ctx.fillStyle = '#000000';
             const rShadowScale = rMoving
-              ? 1 - Math.min(0.24, rWalkBob / Math.max(1, rBaseSpriteH * 0.06) * 0.24)
+              ? getCharacterShadowScale(rWalkBob, rBaseSpriteH)
               : 1;
             ctx.beginPath();
-            ctx.ellipse(rpCX, rpGroundY + rSpriteH * 0.48, rSpriteW * 0.28 * rShadowScale, rSpriteH * 0.055 * rShadowScale, 0, 0, Math.PI * 2);
+            ctx.ellipse(
+              rpCX,
+              rpGroundY + rSpriteH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
+              rSpriteW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * rShadowScale,
+              rSpriteH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * rShadowScale,
+              0, 0, Math.PI * 2,
+            );
             ctx.fill();
             ctx.restore();
             ctx.filter = 'none';
@@ -1575,8 +1602,10 @@ export default function GameMap() {
       const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
       const localMoving = pose === 'walk-1' || pose === 'walk-2';
+      // Use the same elapsed movement clock as the local walk-1/walk-2 pose
+      // selection; RAF wall-clock time can otherwise drift out of phase.
       const localWalkBob = localMoving
-        ? Math.abs(Math.sin((ts / PLAYER_ANIM_INTERVAL_MS) * Math.PI)) * Math.max(1.5, sH * 0.06)
+        ? getCharacterWalkBobOffset(playerStateRef.current.animElapsedMs, sH)
         : 0;
 
       // Ground shadow (ghosts float — no shadow). The local ghost uses the
@@ -1596,10 +1625,16 @@ export default function GameMap() {
         ctx.globalAlpha = 0.55;
         ctx.fillStyle = '#000000';
         const localShadowScale = localMoving
-          ? 1 - Math.min(0.24, localWalkBob / Math.max(1, sH * 0.06) * 0.24)
+          ? getCharacterShadowScale(localWalkBob, sH)
           : 1;
         ctx.beginPath();
-        ctx.ellipse(pCX, pCY + sH * 0.48, sW * 0.28 * localShadowScale, sH * 0.055 * localShadowScale, 0, 0, Math.PI * 2);
+        ctx.ellipse(
+          pCX,
+          pCY + sH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
+          sW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * localShadowScale,
+          sH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * localShadowScale,
+          0, 0, Math.PI * 2,
+        );
         ctx.fill();
         ctx.restore();
         ctx.filter = 'none';

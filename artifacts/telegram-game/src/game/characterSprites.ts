@@ -1,7 +1,8 @@
-// Character sprite sheet: artifacts/telegram-game/public/sprites/characters.png
-// Pixel-art sheet, 1123×1401px, transparent-background PNG.
+// Character sprite source: artifacts/telegram-game/public/sprites/characters.png
+// Pixel-art source atlas, 1123×1401px, transparent-background PNG.
 //
-// The sheet has 7 color columns and 9 pose bands, but the pose bands are NOT
+// The source atlas has 7 authored color columns. characterAtlas.ts expands
+// those into 18 runtime palettes. The 9 pose bands are NOT
 // evenly spaced vertically. Dividing image height by 9 puts crop boundaries
 // through real pixels in the mask, held-item, corpse and crouch art. Use the
 // measured, non-overlapping windows below; each window contains its whole pose
@@ -15,11 +16,15 @@
 const SPRITE_SHEET_VERSION = 6;
 export const CHARACTER_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
 
-export const CHARACTER_SHEET_COLS = 7;
-export const CHARACTER_SHEET_ROWS = 9;   // was incorrectly 8; sheet has 9 pose rows
-export const CHARACTER_SHEET_WIDTH = 1123;
+// The authored source atlas remains seven columns. The runtime canvas atlas
+// expands those seven columns to eighteen while preserving the original poses.
+export const CHARACTER_SOURCE_SHEET_COLS = 7;
+export const CHARACTER_SOURCE_SHEET_WIDTH = 1123;
+export const CHARACTER_SHEET_COLS = 18;
+export const CHARACTER_SHEET_ROWS = 9;
+export const CHARACTER_SHEET_WIDTH = 2898; // 18 × 161px integer columns
 export const CHARACTER_SHEET_HEIGHT = 1401;
-export const CHARACTER_CELL_WIDTH = CHARACTER_SHEET_WIDTH / CHARACTER_SHEET_COLS;
+export const CHARACTER_CELL_WIDTH = 161;
 export const CHARACTER_CELL_HEIGHT = CHARACTER_SHEET_HEIGHT / CHARACTER_SHEET_ROWS;
 
 export const CHARACTER_COLORS = [
@@ -30,8 +35,53 @@ export const CHARACTER_COLORS = [
   "brown",
   "dark-gray",
   "magenta",
+  "red",
+  "blue",
+  "green",
+  "pink",
+  "orange",
+  "yellow",
+  "black",
+  "white",
+  "lime",
+  "cyan",
+  "rose",
 ] as const;
 export type CharacterColor = (typeof CHARACTER_COLORS)[number];
+
+/** One deterministic palette lookup shared by lobby, HUD, and gameplay renderers. */
+export function getCharacterColorForSlot(slot: number): CharacterColor {
+  const safeSlot = Number.isFinite(slot) ? Math.trunc(slot) : 0;
+  return CHARACTER_COLORS[Math.abs(safeSlot) % CHARACTER_COLORS.length];
+}
+
+export interface GeneratedCharacterPalette {
+  readonly color: CharacterColor;
+  /** Target suit hue in degrees; all original shading and alpha are retained. */
+  readonly hue: number;
+  readonly saturationScale?: number;
+  readonly lightnessScale?: number;
+  readonly lightnessOffset?: number;
+}
+
+/**
+ * Additional palettes are generated from the authored teal suit column.
+ * Only saturated teal suit pixels are hue-shifted; the balaclava, visor,
+ * filter, dark outlines, highlights and transparent pixels remain intact.
+ */
+export const GENERATED_CHARACTER_PALETTES: readonly GeneratedCharacterPalette[] = [
+  { color: "red", hue: 4, lightnessScale: 1.15, lightnessOffset: 0.04 },
+  { color: "blue", hue: 218, lightnessScale: 1.18, lightnessOffset: 0.04 },
+  { color: "green", hue: 132, lightnessScale: 1.08, lightnessOffset: 0.02 },
+  { color: "pink", hue: 330, saturationScale: 0.85, lightnessScale: 1.15, lightnessOffset: 0.05 },
+  { color: "orange", hue: 28, lightnessScale: 1.15, lightnessOffset: 0.05 },
+  { color: "yellow", hue: 50, saturationScale: 0.85, lightnessScale: 1.2, lightnessOffset: 0.08 },
+  { color: "black", hue: 220, saturationScale: 0.24, lightnessScale: 0.55, lightnessOffset: -0.02 },
+  { color: "white", hue: 210, saturationScale: 0.12, lightnessScale: 0.35, lightnessOffset: 0.58 },
+  { color: "lime", hue: 95, lightnessScale: 1.1, lightnessOffset: 0.04 },
+  { color: "cyan", hue: 190, lightnessScale: 1.08, lightnessOffset: 0.03 },
+  { color: "rose", hue: 345, saturationScale: 0.82, lightnessScale: 1.16, lightnessOffset: 0.05 },
+];
 
 export const CHARACTER_POSES = [
   "idle",
@@ -67,7 +117,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
-/** Returns an isolated source window (px) for a given color and pose. */
+/** Returns an isolated runtime-atlas window (px) for a given color and pose. */
 export function getCharacterFrameRect(color: CharacterColor, pose: CharacterPose) {
   const col = CHARACTER_COLORS.indexOf(color);
   const row = CHARACTER_POSES.indexOf(pose);
@@ -100,10 +150,14 @@ export interface CharacterClipNotch {
  */
 export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch | undefined {
   if (pose === 'idle') {
-    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.62, rightLegEnd: 0.73, top: 0.79 };
+    // The original idle frame has a short black hook inside the leg gap.
+    // Extend the transparent notch to the actual right-leg silhouette edge.
+    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.68, rightLegEnd: 0.73, top: 0.79 };
   }
   if (pose === 'dead-body') {
-    return { leftLegStart: 0.34, leftLegEnd: 0.53, rightLegStart: 0.57, rightLegEnd: 0.77, top: 0.66 };
+    // The corpse frame contains the same detached horizontal bridge; remove
+    // the full gap bridge without cutting into either outer leg silhouette.
+    return { leftLegStart: 0.34, leftLegEnd: 0.49, rightLegStart: 0.67, rightLegEnd: 0.77, top: 0.66 };
   }
   return undefined;
 }
