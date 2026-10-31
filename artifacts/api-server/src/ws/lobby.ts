@@ -315,6 +315,7 @@ export interface IBotAgent {
 export type LobbyEvent =
   | { type: 'kill'; code: string; attackerSlot: number; victimSlot: number; atMs: number }
   | { type: 'taskStep'; code: string; slot: number; taskId: number; stepIndex: number; completedSteps: number; totalSteps: number; atMs: number }
+  | { type: 'taskStepRejected'; code: string; slot: number; taskId: number; reason: string; atMs: number }
   | { type: 'meetingStart'; code: string; reporterSlot: number; bodySlot: number; atMs: number }
   | { type: 'vote'; code: string; voterSlot: number; targetSlot: number; atMs: number }
   | { type: 'meetingResult'; code: string; ejectedSlot: number; atMs: number }
@@ -1729,18 +1730,22 @@ export class LobbyManager {
    *   - Step must not already be completed
    */
   handleTaskStep(lobby: Lobby, playerSlot: number, taskId: number, stepIndex: number): boolean {
-    if (lobby.phase !== 'ROAMING') return false;
+    const reject = (reason: string): false => {
+      this._emit({ type: 'taskStepRejected', code: lobby.code, slot: playerSlot, taskId, reason, atMs: Date.now() });
+      return false;
+    };
+    if (lobby.phase !== 'ROAMING') return reject('not-roaming');
 
     const player = lobby.players.get(playerSlot);
     // Crewmate ghosts can still complete their assigned tasks, just like the base game.
-    if (!player || player.role !== 'crewmate' || player.inVent) return false;
+    if (!player || player.role !== 'crewmate' || player.inVent) return reject('invalid-player-role-or-vent');
     const activeSabotage = lobby.sabotage;
-    if (activeSabotage?.systemId === SABOTAGE_COMMS) return false; // Comms disables task completion
-    if (activeSabotage?.systemId === SABOTAGE_DOORS && activeSabotage.lockedTaskIds.includes(taskId)) return false;
-    if (!player.assignedTasks.includes(taskId)) return false;
+    if (activeSabotage?.systemId === SABOTAGE_COMMS) return reject('comms-sabotage'); // Comms disables task completion
+    if (activeSabotage?.systemId === SABOTAGE_DOORS && activeSabotage.lockedTaskIds.includes(taskId)) return reject('doors-task-locked');
+    if (!player.assignedTasks.includes(taskId)) return reject('task-not-assigned');
 
     const def = TASK_DEFS.find(t => t.id === taskId);
-    if (!def || stepIndex < 0 || stepIndex >= def.steps) return false;
+    if (!def || stepIndex < 0 || stepIndex >= def.steps) return reject('invalid-task-or-step');
 
     // Server-side proximity check: authoritative player position vs task console.
     // Prevents a forged client from completing tasks from anywhere on the map.
@@ -1752,7 +1757,7 @@ export class LobbyManager {
         `taskId=${taskId} dist=${Math.sqrt(dx * dx + dy * dy).toFixed(0)} ` +
         `range=${TASK_INTERACTION_RANGE_PX}`,
       );
-      return false;
+      return reject('out-of-range');
     }
     // Ghosts intentionally phase through walls and retain their task rights;
     // line-of-sight only constrains living crewmates interacting with consoles.
@@ -1761,15 +1766,15 @@ export class LobbyManager {
       player.x, player.y + FEET_OFFSET_Y,
       def.x, def.y + FEET_OFFSET_Y,
       24,
-    )) return false;
+    )) return reject('blocked-line-of-sight');
 
     // Steps must be completed in order
     for (let i = 0; i < stepIndex; i++) {
-      if (!lobby.completedTaskSteps.has(`${playerSlot}:${taskId}:${i}`)) return false;
+      if (!lobby.completedTaskSteps.has(`${playerSlot}:${taskId}:${i}`)) return reject('steps-out-of-order');
     }
 
     const key = `${playerSlot}:${taskId}:${stepIndex}`;
-    if (lobby.completedTaskSteps.has(key)) return false; // already done
+    if (lobby.completedTaskSteps.has(key)) return reject('already-completed'); // already done
 
     lobby.completedTaskSteps.add(key);
     logger.info(
