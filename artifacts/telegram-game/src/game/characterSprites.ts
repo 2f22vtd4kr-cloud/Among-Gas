@@ -152,7 +152,7 @@ export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch |
   if (pose === 'idle') {
     // The original idle frame has a short black hook inside the leg gap.
     // Extend the transparent notch to the actual right-leg silhouette edge.
-    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.68, rightLegEnd: 0.73, top: 0.79 };
+    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.56, rightLegEnd: 0.73, top: 0.79 };
   }
   if (pose === 'dead-body') {
     // The corpse frame contains the same detached horizontal bridge; remove
