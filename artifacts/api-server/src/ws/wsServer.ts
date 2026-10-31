@@ -220,7 +220,13 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           ws.send(buildSlotAssignedPacket(ws.playerSlotId));
           lobbyManager.broadcastRoomUpdate(result);
           const resumeSnapshot = lobbyManager.buildResumeSnapshot(result, ws.playerSlotId);
-          if (resumeSnapshot) ws.send(buildResumeSnapshotPacket(resumeSnapshot));
+          if (resumeSnapshot) {
+            ws.send(buildResumeSnapshotPacket(resumeSnapshot));
+          } else {
+            // 0x25 / v0 confirms a successful WAITING-lobby rejoin. This makes
+            // lobby-vs-active resume deterministic without a client-side timer.
+            ws.send(Buffer.from([0x25, 0x00]));
+          }
           logger.info(`[WS] Join room ${roomCode} → slot=${ws.playerSlotId} (userId=${tgUserId})`);
           return;
         }
