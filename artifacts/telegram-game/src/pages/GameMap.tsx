@@ -1089,7 +1089,11 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
+          if (!isPlayerPositionWalkable(fineGrid, x, y) || !isLineOfSightToInteractionTarget(
+            fineGrid, x, y + FEET_OFFSET_Y,
+            fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
+            24,
+          )) continue;
           nearest = { x, y, distanceSq };
         }
       }
