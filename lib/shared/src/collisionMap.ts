@@ -27,8 +27,8 @@ import {
   PLAYER_SPAWN_MAX_X,
   PLAYER_SPAWN_MAX_FEET_Y,
 } from './coords.js';
-import { MANUAL_BLOCKED_POLYGONS } from './collisionOverrides.js';
-export { MANUAL_BLOCKED_POLYGONS };
+import { MANUAL_BLOCKED_POLYGONS, MANUAL_WALKABLE_REPLACEMENT_ZONES } from './collisionOverrides.js';
+export { MANUAL_BLOCKED_POLYGONS, MANUAL_WALKABLE_REPLACEMENT_ZONES };
 
 // Map now renders from a pre-upscaled static asset (public/map-hires.png).
 // MAP_W/MAP_H must match that asset's native pixel size exactly.
@@ -326,9 +326,47 @@ export function buildFineCollisionGridFromRle(encoded: string): Grid {
   return decodeFineRuns(encoded);
 }
 
+function applyManualWalkableReplacementZones(grid: Grid): void {
+  for (const zone of MANUAL_WALKABLE_REPLACEMENT_ZONES) {
+    const [minX, minY, maxX, maxY] = zone.bounds;
+    const minCol = Math.max(0, Math.floor(minX / FINE_CELL_X));
+    const maxCol = Math.min(FINE_COLS - 1, Math.ceil(maxX / FINE_CELL_X));
+    const minRow = Math.max(0, Math.floor(minY / FINE_CELL_Y));
+    const maxRow = Math.min(FINE_ROWS - 1, Math.ceil(maxY / FINE_CELL_Y));
+    // First remove the inaccurate source-art footprint inside the bay.
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const x = (col + 0.5) * FINE_CELL_X;
+        const y = (row + 0.5) * FINE_CELL_Y;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          grid[row * FINE_COLS + col] = 0;
+        }
+      }
+    }
+    // Then restore only the actual object silhouette as solid geometry.
+    for (const polygon of zone.blockedPolygons) {
+      const xs = polygon.map(point => point[0]);
+      const ys = polygon.map(point => point[1]);
+      const polygonMinCol = Math.max(0, Math.floor(Math.min(...xs) / FINE_CELL_X));
+      const polygonMaxCol = Math.min(FINE_COLS - 1, Math.ceil(Math.max(...xs) / FINE_CELL_X));
+      const polygonMinRow = Math.max(0, Math.floor(Math.min(...ys) / FINE_CELL_Y));
+      const polygonMaxRow = Math.min(FINE_ROWS - 1, Math.ceil(Math.max(...ys) / FINE_CELL_Y));
+      for (let row = polygonMinRow; row <= polygonMaxRow; row++) {
+        for (let col = polygonMinCol; col <= polygonMaxCol; col++) {
+          const x = (col + 0.5) * FINE_CELL_X;
+          const y = (row + 0.5) * FINE_CELL_Y;
+          if (pointInPolygon(x, y, polygon as readonly PolygonPoint[])) {
+            grid[row * FINE_COLS + col] = 1;
+          }
+        }
+      }
+    }
+  }
+}
+
 export function buildPreciseCollisionGrid(): Grid {
   if (_fineCached) return _fineCached;
-  _fineCached = decodeFineRuns(FINE_RLE_BASE64);
+  _fineCached = decodeFineRuns(FINE_RLE_BASE64);\n  applyManualWalkableReplacementZones(_fineCached);
   return _fineCached;
 }
 
