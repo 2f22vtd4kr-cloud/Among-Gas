@@ -188,15 +188,13 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         if (settled) return;
         for (const player of lobby.players.values()) {
           if (!isSimulationCollisionViolation(player, simulationCollisionGrid)) continue;
-          {
-            collisionViolation = {
-              slot: player.slot,
-              x: Math.round(player.x),
-              y: Math.round(player.y),
-            };
-            finish('timeout');
-            return;
-          }
+          collisionViolation = {
+            slot: player.slot,
+            x: Math.round(player.x),
+            y: Math.round(player.y),
+          };
+          finish('timeout');
+          return;
         }
       }, 20);
     }
