@@ -14,6 +14,7 @@ import { haptic } from '@/lib/haptics';
 import { sfx, startMenuMusic, stopMenuMusic, unlockSfx } from '@/lib/sfx';
 import { useLanguage, type AppLanguage } from '@/lib/language';
 import SettingsDialog, { SettingsButton } from '@/components/SettingsDialog';
+import { readLobbyStartParam } from '@/lib/telegramStartParam';
 import './lobby.css';
 
 // Lobby, gameplay, and kill sprites share the cached runtime atlas built from the original PNG.
@@ -181,6 +182,7 @@ export default function Lobby() {
   const [botCount,     setBotCount]     = useState(4);
   const [joinExpanded, setJoinExpanded] = useState(false);
   const [code,         setCode]         = useState('');
+  const handledStartParamRef = useRef<string | null>(null);
 
   useEffect(() => {
     const unlock = () => {
@@ -197,6 +199,22 @@ export default function Lobby() {
       stopMenuMusic();
     };
   }, []);
+
+  // Telegram invite links pass the six-character lobby code as start_param.
+  // Wait until the authenticated socket is online, then join exactly once.
+  useEffect(() => {
+    if (state.connectionStatus !== 'online' || state.roomCode !== null) return;
+    const telegramStartParam = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
+    const inviteCode = readLobbyStartParam(window.location.search, telegramStartParam);
+    if (!inviteCode || handledStartParamRef.current === inviteCode) return;
+
+    handledStartParamRef.current = inviteCode;
+    setCode(inviteCode);
+    setJoinExpanded(true);
+    haptic.tap();
+    sfx('uiSelect', 0.35);
+    joinRoom(inviteCode);
+  }, [state.connectionStatus, state.roomCode, joinRoom]);
 
   useEffect(() => {
     if (state.phase !== 'playing') return;
