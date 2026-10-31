@@ -89,7 +89,7 @@ export function verifyTelegramAuth(initData: string): TelegramUser | null {
 
     // auth_date freshness check — reject replayed tokens
     const authDateRaw = params.get('auth_date');
-    if (!authDateRaw || !/^\\d+$/.test(authDateRaw)) return null;
+    if (!authDateRaw || !/^\d+$/.test(authDateRaw)) return null;
     const authDate = Number(authDateRaw);
     if (!Number.isSafeInteger(authDate)) return null;
     const ageSeconds = Math.floor(Date.now() / 1000) - authDate;
@@ -98,13 +98,13 @@ export function verifyTelegramAuth(initData: string): TelegramUser | null {
     params.delete('hash');
 
     const entries: string[] = [];
-    params.forEach((val, key) => entries.push(`${key}=${val}`));
+    params.forEach((val, key) => entries.push(key + '=' + val));
     entries.sort();
 
     // Key derivation: HMAC-SHA256("WebAppData", botToken)
     const secretKey = createHmac('sha256', 'WebAppData').update(BOT_TOKEN!).digest();
     const computed = createHmac('sha256', secretKey)
-      .update(entries.join('\\n'))
+      .update(entries.join('\n'))
       .digest();
 
     // Constant-time comparison — prevents timing-based hash oracle attacks
