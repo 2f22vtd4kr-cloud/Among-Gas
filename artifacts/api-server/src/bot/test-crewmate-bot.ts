@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
-import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
+import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
+import { FEET_OFFSET_Y } from '@workspace/shared/coords';
+import { TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
@@ -84,7 +86,17 @@ try {
 // at a nearer non-visible stand-off point and retrying a rejected task forever.
 {
   const fuelTask = TASK_DEFS.find(candidate => candidate.id === 7)!;
-  const fuelBot = new CrewmateBot();
+  class InspectableCrewmateBot extends CrewmateBot {
+    approach(target: { x: number; y: number }, radius: number) {
+      return this.nearestApproachPoint(target, radius);
+    }
+  }
+  const fuelBot = new InspectableCrewmateBot();
+  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, TASK_INTERACTION_RANGE_PX - 8);
+  assert.equal(isLineOfSightToInteractionTarget(
+    grid, approach.x, approach.y + FEET_OFFSET_Y,
+    fuelTask.x, fuelTask.y + FEET_OFFSET_Y, 24,
+  ), true, 'Fuel Engine bot approach must be actually visible, not the nearest non-visible fallback');
   const player: LobbyPlayer = {
     slot: 0,
     tgUserId: -11,
@@ -119,7 +131,7 @@ try {
       fuelBot.roamingTick(fuelLobby, player, fuelManager);
     }
     assert.equal(fuelLobby.completedTaskSteps.size, fuelTask.steps,
-      'a bot starting at the real spawn must complete both Fuel Engine steps');
+      `a bot starting at the real spawn must complete both Fuel Engine steps (position=${player.x.toFixed(0)},${player.y.toFixed(0)} distance=${Math.hypot(player.x - fuelTask.x, player.y - fuelTask.y).toFixed(0)} goal=${approach.x.toFixed(0)},${approach.y.toFixed(0)})`);
     assert.equal(fuelLobby.phase, 'GAMEOVER',
       'finishing the only assigned Fuel Engine task must end the test round');
     console.log('PASS: bot reaches the visible Fuel Engine stand-off point and completes both steps');
