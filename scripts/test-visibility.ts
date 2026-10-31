@@ -199,7 +199,7 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
   const y = FINE_CELL_Y * 10.5;
   const sight = computeVisibilityPolygon(x, y, FINE_CELL_X * 10, openFineShadowGrid, [], false, outlineSegments);
   assert.ok(Math.abs(sight[360].x - FINE_CELL_X * 10) < 1e-5,
-    'the east ray terminates at the object's exact left outline, not an expanded square');
+    "the east ray terminates at the object's exact left outline, not an expanded square");
 }
 
 // The actual custom map yields a complete visibility polygon with distinct
