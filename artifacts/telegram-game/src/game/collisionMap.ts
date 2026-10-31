@@ -16,6 +16,7 @@ export {
   isPlayerPathWalkable,
   resolvePlayerMovement,
   isBlocked,
+  isLineOfSightToInteractionTarget,
   canMoveTo,
   resolveMovement,
   ZONES,
