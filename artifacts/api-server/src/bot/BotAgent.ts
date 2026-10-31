@@ -59,10 +59,6 @@ function buildNavigationGrid(collision: Grid): Grid {
   for (let row = 0; row < NAV_ROWS; row++) {
     for (let col = 0; col < NAV_COLS; col++) {
       const index = row * NAV_COLS + col;
-      if (collision[index] !== 0) {
-        result[index] = 1;
-        continue;
-      }
       const x = (col + 0.5) * NAV_CELL_X;
       const y = (row + 0.5) * NAV_CELL_Y;
       result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
