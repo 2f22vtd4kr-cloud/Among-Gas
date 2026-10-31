@@ -45,7 +45,7 @@ function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean
  * rejects (the old failure mode left a bot stationary forever at a task).
  */
 function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(collision.length);
+  const result = new Uint8Array(COLS * ROWS);
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
       const index = row * COLS + col;
