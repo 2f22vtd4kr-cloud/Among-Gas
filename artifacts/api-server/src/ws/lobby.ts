@@ -617,7 +617,8 @@ export class LobbyManager {
     const lobby = this.getLobbyForUser(tgUserId);
     if (!lobby) return null;
     const slot = lobby.userIdToSlot.get(tgUserId);
-    const player = slot === undefined ? undefined : lobby.players.get(slot);
+    if (slot === undefined) return null;
+    const player = lobby.players.get(slot);
     if (!player || player.ws !== closingWs) return null;
     if (player.disconnectedAtMs !== undefined) return lobby;
 
