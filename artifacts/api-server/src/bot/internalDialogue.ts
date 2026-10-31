@@ -1,12 +1,5 @@
 export type DialogueRole = 'crewmate' | 'impostor';
 
-export interface PublicDialoguePlayer {
-  slot: number;
-  username: string;
-  alive: boolean;
-  isBot: boolean;
-}
-
 export interface InternalDialogueContext {
   username: string;
   role: DialogueRole;
@@ -113,17 +106,3 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
   return withSpeaker(neutral[stableIndex(seed, neutral.length)]);
 }
 
-/** One bot answers a bot's turn, creating a conversation without a reply storm. */
-export function isNextBotResponder(
-  players: readonly PublicDialoguePlayer[],
-  speakerSlot: number,
-  responderSlot: number,
-): boolean {
-  const bots = players
-    .filter(player => player.alive && player.isBot && player.slot !== speakerSlot)
-    .map(player => player.slot)
-    .sort((a, b) => a - b);
-  if (bots.length === 0) return false;
-  const next = bots.find(slot => slot > speakerSlot) ?? bots[0];
-  return next === responderSlot;
-}
