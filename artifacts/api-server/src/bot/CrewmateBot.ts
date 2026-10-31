@@ -206,13 +206,11 @@ export class CrewmateBot extends BotAgent {
       if (this._nextStep(lobby, self, taskId) !== null) {
         if (this._targetTaskId !== taskId) {
           this._targetTaskId = taskId;
-          this._ghostDwellTicks = 0;
         }
         return taskId;
       }
     }
     this._targetTaskId = null;
-    this._ghostDwellTicks = 0;
     return null;
   }
 
