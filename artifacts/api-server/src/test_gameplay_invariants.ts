@@ -555,13 +555,35 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.ok(movedX * dx > 0 && movedY * dy > 0, 'ghost movement must progress toward the task');
 
   for (let tick = 0; tick < 100 && lobby.phase !== 'GAMEOVER'; tick++) {
-    bot.ghostTick(lobby, ghost.player, manager);
+    bot.tick(lobby, ghost.player, manager);
   }
   assert.equal(lobby.completedTaskSteps.has(`0:${task.id}:0`), true,
     'ghost should complete its assigned task even when the straight route crosses walls');
   assert.equal(lobby.phase, 'GAMEOVER', 'ghost task completion can win the crew game');
   manager.disposeLobby(lobby);
   void distance;
+}
+
+// Regression for the 100-game timeout trace: a dead crewmate bot was already
+// within task range but left the final Download Data step unfinished.
+{
+  const task = TASK_DEFS.find(def => def.id === 1)!;
+  const ghost = makePlayer(0, 'crewmate', 2190, 353);
+  ghost.player.alive = false;
+  ghost.player.assignedTasks = [task.id];
+  const lobby = makeLobby([ghost.player]);
+  lobby.totalTaskSteps = task.steps;
+  const manager = new LobbyManager();
+  const bot = new CrewmateBot();
+
+  for (let tick = 0; tick < 10 && lobby.phase !== 'GAMEOVER'; tick++) {
+    bot.tick(lobby, ghost.player, manager);
+  }
+  assert.equal(lobby.completedTaskSteps.has(`0:${task.id}:0`), true,
+    'dead crewmate bot must complete an in-range final task through the normal tick dispatcher');
+  assert.equal(lobby.phase, 'GAMEOVER',
+    'the last ghost task must trigger the crew task-win condition');
+  manager.disposeLobby(lobby);
 }
 
 // 9. Living bots can navigate to far custom-map tasks instead of silently stalling at blocked waypoints.
