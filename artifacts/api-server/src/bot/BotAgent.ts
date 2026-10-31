@@ -378,7 +378,7 @@ export abstract class BotAgent {
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
         isPlayerPositionWalkable(movementGrid, x, y) &&
-        isSpawnReachable(x, y + FEET_OFFSET_Y)
+        isBotNavigationReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
     // Spawn is verified walkable; it is safer than a potentially disconnected map centre.
