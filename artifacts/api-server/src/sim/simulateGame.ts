@@ -23,7 +23,6 @@ import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import { buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
-import { VENT_DEFS } from '@workspace/shared/vents';
 import type { SimGameResult, SimWinner } from './types.js';
 
 export interface SimBatchOptions {
@@ -45,15 +44,12 @@ export interface SimBatchOptions {
 
 const simulationCollisionGrid = buildPreciseCollisionGrid();
 
-/** Vent traversal and standing on an open vent mouth are valid non-walkable collision-grid states. */
+/** Only an actual vent occupant is exempt from ordinary walkability checks. */
 export function isSimulationCollisionViolation(
   player: { alive: boolean; inVent?: boolean; x: number; y: number },
   collisionGrid: Uint8Array,
 ): boolean {
-  const isAtVentOpening = VENT_DEFS.some(vent =>
-    Math.hypot(player.x - vent.x, player.y - vent.y) <= 8,
-  );
-  return player.alive && player.inVent !== true && !isAtVentOpening &&
+  return player.alive && player.inVent !== true &&
     !isPlayerPositionWalkable(collisionGrid, player.x, player.y);
 }
 
