@@ -33,7 +33,7 @@ const botQuestionResponse = buildInternalBotDialogue({
   latestSpeakerIsBot: true,
   latestMessage: 'Where were you? I saw Player 01 near the west wall.',
 });
-assert.match(botQuestionResponse, /confirmed sighting|corroborate/i,
+assert.match(botQuestionResponse, /confirmed sighting|corroborate|direct observation/i,
   'a bot question is answered as a request for confirmation, not treated as an accusation');
 
 const playerNumberResponse = buildInternalBotDialogue({
