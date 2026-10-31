@@ -366,7 +366,8 @@ function applyManualWalkableReplacementZones(grid: Grid): void {
 
 export function buildPreciseCollisionGrid(): Grid {
   if (_fineCached) return _fineCached;
-  _fineCached = decodeFineRuns(FINE_RLE_BASE64);\n  applyManualWalkableReplacementZones(_fineCached);
+  _fineCached = decodeFineRuns(FINE_RLE_BASE64);
+  applyManualWalkableReplacementZones(_fineCached);
   return _fineCached;
 }
 
