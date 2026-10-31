@@ -828,8 +828,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'the packet flood guard must allow exactly its configured initial burst');
   assert.equal(floodLimited, true, 'excessive movement packet spam is rate limited');
 
-  const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
-  const legalStep = validateMovementIntent(base, base.x + legalStepDistance, base.y, 1_050, grid);
+    const legalStep = validateMovementIntent(base, base.x + legalStepDistance, base.y, 1_050, grid);
   assert.equal(legalStep.accepted, true, 'a normal target within the elapsed movement budget is accepted');
   assert.ok(legalStep.x > base.x, 'an accepted movement intent advances authoritative position');
 
