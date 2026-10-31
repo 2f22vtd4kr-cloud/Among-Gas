@@ -252,6 +252,12 @@ assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2
   'compact production props expose merged silhouette segments within a mobile-safe budget');
 const vehicleCell = fineCell(2120, 1150);
 assert.equal(realFineGrid[vehicleCell], 1, 'the vehicle remains a solid movement-collision obstacle');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2120, 1150), false,
+  'the van body remains blocked after replacing its oversized source footprint');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2000, 1150), true,
+  'the player can use the left-side clearance in the vehicle bay');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2250, 1150), true,
+  'the player can use the right-side clearance in the vehicle bay');
 assert.equal(realFineShadowGrid[vehicleCell], 0, 'the vehicle is not rasterized into a broad square shadow');
 assert.ok(realFineShadowSegments.some(segment =>
   [segment.ax, segment.bx].some(x => x >= 1990 && x <= 2260) &&
