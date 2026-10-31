@@ -377,7 +377,7 @@ export class PathCache {
     return result;
   }
 
-  invalidate(goal: Point): void {
+  invalidate(goal: Point, geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY): void {
     const gc  = pixelToCell(goal.x, goal.y, geometry);
     const suffix = `→${gc.col},${gc.row}`;
     for (const key of this.cache.keys()) {
