@@ -18,6 +18,7 @@
  * on today.
  */
 import { LobbyManager, type Lobby, type LobbyEvent } from '../ws/lobby.js';
+import { BotAgent } from '../bot/BotAgent.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
@@ -78,6 +79,32 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
 
   const manager = new LobbyManager();
   const perGameHandlers = new Map<string, (event: LobbyEvent) => void>();
+  type BotDiagnostic = {
+    tickCount: number;
+    ghostTickCount: number;
+    lastPhase: string;
+    lastAlive: boolean;
+    lastX: number;
+    lastY: number;
+    ghostBefore?: { x: number; y: number };
+    ghostAfter?: { x: number; y: number };
+    lastTargetTaskId?: number | null;
+    lastTaskAttempt?: { taskId: number; step: number; accepted: boolean; x: number; y: number };
+  };
+  const diagnosticsByLobby = new Map<string, Map<number, BotDiagnostic>>();
+  const originalApplyTaskStep = manager.applyTaskStep.bind(manager);
+  manager.applyTaskStep = (lobby, slot, taskId, stepIndex) => {
+    const accepted = originalApplyTaskStep(lobby, slot, taskId, stepIndex);
+    const player = lobby.players.get(slot);
+    const diagnostic = diagnosticsByLobby.get(lobby.code)?.get(slot);
+    if (diagnostic && player) {
+      diagnostic.lastTaskAttempt = {
+        taskId, step: stepIndex, accepted,
+        x: Math.round(player.x), y: Math.round(player.y),
+      };
+    }
+    return accepted;
+  };
   manager.setEventListener((event) => perGameHandlers.get(event.code)?.(event));
 
   const results: SimGameResult[] = [];
@@ -95,6 +122,8 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       let settled = false;
       let collisionMonitor: ReturnType<typeof setInterval> | null = null;
       let collisionViolation: { slot: number; x: number; y: number } | undefined;
+      const botDiagnostics = new Map<number, BotDiagnostic>();
+      diagnosticsByLobby.set(lobby.code, botDiagnostics);
 
       let deadlineAt = startedAt + timeoutMs;
       let criticalSabotageExtensionUsed = false;
@@ -123,6 +152,9 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
             x: Math.round(player.x),
             y: Math.round(player.y),
             inVent: player.inVent === true,
+            isBot: player.isBot === true,
+            botAgent: player.botAgent?.constructor.name ?? null,
+            botDiagnostics: botDiagnostics.get(player.slot) ?? null,
             unfinishedTasks: player.assignedTasks.flatMap(taskId => {
               const task = TASK_DEFS.find(def => def.id === taskId);
               if (!task) return [];
@@ -136,6 +168,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         // callback can't fire after the lobby is gone or misattribute an
         // event to a different game if this code is ever reused.
         manager.disposeLobby(lobby);
+        diagnosticsByLobby.delete(lobby.code);
 
         const impostorCount = Array.from(lobby.players.values()).filter(p => p.role === 'impostor').length;
         const result: SimGameResult = {
@@ -180,6 +213,33 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       }
       manager.startGame(lobby, impostors);
       assignBotAgentsByRole(lobby);
+      for (const player of lobby.players.values()) {
+        const agent = player.botAgent as BotAgent | undefined;
+        if (!player.isBot || !agent) continue;
+        const diagnostic: BotDiagnostic = {
+          tickCount: 0, ghostTickCount: 0, lastPhase: lobby.phase,
+          lastAlive: player.alive, lastX: Math.round(player.x), lastY: Math.round(player.y),
+        };
+        botDiagnostics.set(player.slot, diagnostic);
+        const originalTick = agent.tick.bind(agent);
+        const originalGhostTick = agent.ghostTick.bind(agent);
+        agent.ghostTick = (currentLobby, currentPlayer, currentManager) => {
+          diagnostic.ghostTickCount++;
+          diagnostic.ghostBefore = { x: Math.round(currentPlayer.x), y: Math.round(currentPlayer.y) };
+          diagnostic.lastTargetTaskId = (agent as unknown as { _targetTaskId?: number | null })._targetTaskId ?? null;
+          originalGhostTick(currentLobby, currentPlayer, currentManager);
+          diagnostic.ghostAfter = { x: Math.round(currentPlayer.x), y: Math.round(currentPlayer.y) };
+          diagnostic.lastTargetTaskId = (agent as unknown as { _targetTaskId?: number | null })._targetTaskId ?? null;
+        };
+        agent.tick = (currentLobby, currentPlayer, currentManager) => {
+          diagnostic.tickCount++;
+          diagnostic.lastPhase = currentLobby.phase;
+          diagnostic.lastAlive = currentPlayer.alive;
+          originalTick(currentLobby, currentPlayer, currentManager);
+          diagnostic.lastX = Math.round(currentPlayer.x);
+          diagnostic.lastY = Math.round(currentPlayer.y);
+        };
+      }
 
       // Independently audit every living bot position throughout the real
       // simulation loop. This catches collision/pathfinding regressions that
