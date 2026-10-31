@@ -347,10 +347,10 @@ export default function GameMap() {
   const {
     phase, mySlot, players, myRole, impostorSlots, deadSlots, killCooldownMs, gameplayReady,
     meeting, hasVoted, voteResult, myTasks, globalTaskProgress,
-    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, corpsePositions, lastKill,
+    sabotage, sabotageCooldownMs, myVentId, meetingMessages, emergencyMeetingUsed, groqApiKeyConfigured, corpsePositions, lastKill,
   } = useGameState();
   const {
-    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep, markGameplayReady,
+    sendKill, reportBody, callEmergencyMeeting, castVote, clearVoteResult, completeTaskStep, markGameplayReady, setGroqApiKey,
     triggerSabotage, repairSabotage,
     enterVent, travelVent, exitVent, sendMeetingChat,
   } = useGameActions();
@@ -2164,6 +2164,8 @@ export default function GameMap() {
           setSettingsOpen(false);
           setLeaveConfirmOpen(true);
         }}
+        onGroqApiKeyChange={setGroqApiKey}
+        groqApiKeyConfigured={groqApiKeyConfigured}
       />
 
       {leaveConfirmOpen && !killAnimation && (
