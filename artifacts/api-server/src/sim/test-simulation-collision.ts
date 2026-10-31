@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { FINE_COLS, FINE_ROWS, MAP_W, MAP_H } from '@workspace/shared/collisionMap';
 import { VENT_DEFS } from '@workspace/shared/vents';
+import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { isSimulationCollisionViolation } from './simulateGame.js';
 
 const blockedGrid = new Uint8Array(FINE_COLS * FINE_ROWS);
@@ -24,7 +25,7 @@ const cellX = MAP_W / FINE_COLS;
 const cellY = MAP_H / FINE_ROWS;
 for (const vent of VENT_DEFS) {
   const col = Math.floor(vent.x / cellX);
-  const row = Math.floor(vent.y / cellY);
+  const row = Math.floor((vent.y + FEET_OFFSET_Y) / cellY);
   ventGrid[row * FINE_COLS + col] = 1;
   assert.equal(isSimulationCollisionViolation(
     { alive: true, inVent: true, x: vent.x, y: vent.y }, ventGrid,
