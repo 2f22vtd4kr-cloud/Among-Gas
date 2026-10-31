@@ -6,7 +6,7 @@ import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
 
-const task = TASK_DEFS.find(candidate => isPlayerPositionWalkable(grid, candidate.x, candidate.y));
+const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
 assert.ok(task, 'at least one task console must be a walkable bot stand-off position');
 
 const fakeSocket = {
