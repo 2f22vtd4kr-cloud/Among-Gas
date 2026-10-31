@@ -386,9 +386,10 @@ export function buildFineShadowGrid(collisionGrid: Grid): Grid {
   const shadowGrid = new Uint8Array(total);
   const visited = new Uint8Array(total);
   const queue = new Int32Array(total);
-  // 1,800 fine cells ≈ 7,200 source-reference pixels; this excludes isolated
-  // benches/props and the statue base while retaining substantial wall geometry.
-  const minComponentCells = 1_800;
+  // 8,000 fine cells ≈ 32,000 source-reference pixels. Large architectural
+  // partitions stay in the fast grid; props, vehicles and medium objects use
+  // exact merged outline segments instead of square cell shadows.
+  const minComponentCells = 8_000;
   for (let start = 0; start < total; start++) {
     if (collisionGrid[start] !== 1 || visited[start]) continue;
     let head = 0;
@@ -461,8 +462,9 @@ export function buildFineShadowSegments(collisionGrid: Grid): VisualOccluderSegm
     }
 
     // Large architecture is already represented by buildFineShadowGrid.
-    // Tiny single-pixel noise is not a reliable visual occluder.
-    if (component.length < 4 || component.length >= 1_800) continue;
+    // Medium/compact props and vehicle silhouettes are represented by edges;
+    // tiny single-pixel noise is not a reliable visual occluder.
+    if (component.length < 4 || component.length >= 8_000) continue;
     const cells = new Set(component);
     const horizontal = new Map<number, number[]>();
     const vertical = new Map<number, number[]>();
