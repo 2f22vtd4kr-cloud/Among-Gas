@@ -149,7 +149,6 @@ export const BOT_SPEED_PX = 80;
 export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
-const ARRIVAL_SQ = 25 * 25;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
