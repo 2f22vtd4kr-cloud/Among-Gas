@@ -39,13 +39,26 @@ try {
   assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal((request.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
   assert.equal(JSON.parse(String(request.init?.body)).model, 'llama-3.3-70b-versatile');
+  // A lobby key may be shared by several bots; serialize requests and apply a per-key cooldown.
+  const throttledKey = 'gsk_' + 'B'.repeat(48);
+  let releaseConcurrent: ((response: Response) => void) | undefined;
+  globalThis.fetch = (async () => new Promise<Response>(resolve => { releaseConcurrent = resolve; })) as typeof fetch;
+  const firstRequest = requestGroqDialogue(throttledKey, []);
+  assert.equal(await requestGroqDialogue(throttledKey, []), null, 'concurrent bot requests sharing a key are rejected');
+  assert.equal(releaseConcurrent !== undefined, true);
+  releaseConcurrent!(new Response(JSON.stringify({ choices: [{ message: { content: 'I can corroborate that route.' } }] }), { status: 200, headers: { 'content-type': 'application/json' } }));
+  assert.equal(await firstRequest, 'I can corroborate that route.');
+  assert.equal(await requestGroqDialogue(throttledKey, []), null, 'per-key cooldown prevents burst requests');
 
+
+  const rateLimitedKey = 'gsk_' + 'C'.repeat(48);
   globalThis.fetch = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
-  assert.equal(await requestGroqDialogue(validKey, []), null,
+  assert.equal(await requestGroqDialogue(rateLimitedKey, []), null,
     'provider rate limits must return to the deterministic fallback');
 
+  const networkErrorKey = 'gsk_' + 'D'.repeat(48);
   globalThis.fetch = (async () => { throw new Error('network unavailable'); }) as typeof fetch;
-  assert.equal(await requestGroqDialogue(validKey, []), null,
+  assert.equal(await requestGroqDialogue(networkErrorKey, []), null,
     'network errors must return to the deterministic fallback');
   console.log('PASS: Groq key validation, server endpoint/auth, response sanitization and provider fallback');
 } finally {
