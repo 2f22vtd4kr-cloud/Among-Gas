@@ -1700,7 +1700,9 @@ export class LobbyManager {
       );
       return false;
     }
-    if (!isLineOfSightToInteractionTarget(
+    // Ghosts intentionally phase through walls and retain their task rights;
+    // line-of-sight only constrains living crewmates interacting with consoles.
+    if (player.alive && !isLineOfSightToInteractionTarget(
       INTERACTION_COLLISION_GRID,
       player.x, player.y + FEET_OFFSET_Y,
       def.x, def.y + FEET_OFFSET_Y,
