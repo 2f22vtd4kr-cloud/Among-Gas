@@ -7,10 +7,10 @@ assert.equal(isValidGroqApiKey('not-a-key'), false);
 assert.equal(isValidGroqApiKey('gsk_short'), false);
 
 const originalFetch = globalThis.fetch;
-let captured: { url: string; init?: RequestInit } | null = null;
+const captured: Array<{ url: string; init?: RequestInit }> = [];
 try {
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    captured = { url: String(input), init };
+    captured.push({ url: String(input), init });
     return new Response(JSON.stringify({
       choices: [{ message: { content: 'Nova, I was near the west hall. Who saw the report?' } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -21,10 +21,11 @@ try {
     { role: 'user', content: 'Nova: I saw someone leave the west hall.' },
   ]);
   assert.equal(reply, 'Nova, I was near the west hall. Who saw the report?');
-  assert.ok(captured);
-  assert.equal(captured.url, 'https://api.groq.com/openai/v1/chat/completions');
-  assert.equal((captured.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
-  assert.equal(JSON.parse(String(captured.init?.body)).model, 'llama-3.3-70b-versatile');
+  assert.equal(captured.length, 1);
+  const request = captured[0];
+  assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
+  assert.equal((request.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
+  assert.equal(JSON.parse(String(request.init?.body)).model, 'llama-3.3-70b-versatile');
 
   globalThis.fetch = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
   assert.equal(await requestGroqDialogue(validKey, []), null,
