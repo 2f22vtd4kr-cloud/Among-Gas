@@ -42,7 +42,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
   );
   const playerNumberMatch = lower.match(/\bplayer\s*#?0*(\d{1,2})\b|\bslot\s*#?0*(\d{1,2})\b|#0*(\d{1,2})\b/);
   const mentionedPlayerNumber = playerNumberMatch
-    ? `Player${Number(playerNumberMatch[1] ?? playerNumberMatch[2] ?? playerNumberMatch[3])}`
+    ? `Player${Math.max(0, Number(playerNumberMatch[1] ?? playerNumberMatch[2] ?? playerNumberMatch[3]) - 1)}`
     : undefined;
   const mentionedSubject = otherPlayer ?? mentionedPlayerNumber;
   const mentionsSelf = lower.includes(context.username.toLocaleLowerCase());
