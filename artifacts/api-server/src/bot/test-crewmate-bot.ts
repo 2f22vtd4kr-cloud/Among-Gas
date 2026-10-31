@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
-import { grid } from './BotAgent.js';
+import { isBotNavigationReachable } from './BotAgent.js';
+import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
+import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
-import { TASK_DEFS } from '@workspace/shared/tasks';
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
+const grid = buildPreciseCollisionGrid();
 const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
 assert.ok(task, 'at least one task console must be a walkable bot stand-off position');
 
@@ -74,4 +78,134 @@ try {
 } finally {
   if (lobby.sabotage) clearTimeout(lobby.sabotage.timeoutTimer);
   manager.disposeLobby(lobby);
+}
+
+ 
+// Regression: Fuel Engine is beside a solid car. The bot must search far enough
+// inside the real interaction radius and arrive precisely, rather than stopping
+// at a nearer non-visible stand-off point and retrying a rejected task forever.
+{
+  const fuelTask = TASK_DEFS.find(candidate => candidate.id === 7)!;
+  class InspectableCrewmateBot extends CrewmateBot {
+    approach(target: { x: number; y: number }, radius: number) {
+      return this.nearestApproachPoint(target, radius);
+    }
+  }
+  const fuelBot = new InspectableCrewmateBot();
+  const safeRadius = TASK_INTERACTION_RANGE_PX - 8;
+  let reachableVisibleApproach: { x: number; y: number } | null = null;
+  for (let dy = -safeRadius; dy <= safeRadius && !reachableVisibleApproach; dy += 4) {
+    for (let dx = -safeRadius; dx <= safeRadius; dx += 4) {
+      if (dx * dx + dy * dy > safeRadius * safeRadius) continue;
+      const candidate = { x: fuelTask.x + dx, y: fuelTask.y + dy };
+      if (!isPlayerPositionWalkable(grid, candidate.x, candidate.y)) continue;
+      if (!isBotNavigationReachable(candidate.x, candidate.y + FEET_OFFSET_Y)) continue;
+      if (!isLineOfSightToInteractionTarget(
+        grid, candidate.x, candidate.y + FEET_OFFSET_Y,
+        fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
+      )) continue;
+      reachableVisibleApproach = candidate;
+      break;
+    }
+  }
+  assert.ok(reachableVisibleApproach,
+    'Fuel Engine must have a bot-navigation-reachable, visible stand-off point inside the safe interaction radius');
+  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, safeRadius);
+  assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
+    'Fuel Engine approach must be connected to the real spawn');
+  assert.equal(isLineOfSightToInteractionTarget(
+    grid, approach.x, approach.y + FEET_OFFSET_Y,
+    fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
+  ), true, 'Fuel Engine bot approach must be actually visible, not the nearest non-visible fallback');
+  const player: LobbyPlayer = {
+    slot: 0,
+    tgUserId: -11,
+    username: 'Fuel Engine bot',
+    ws: fakeSocket,
+    x: SPAWN_X,
+    y: SPAWN_Y,
+    lastBroadcastWireX: 0,
+    lastBroadcastWireY: 0,
+    role: 'crewmate',
+    alive: true,
+    killCooldownMs: 0,
+    assignedTasks: [fuelTask.id],
+    isBot: true,
+    botAgent: fuelBot,
+  };
+  const fuelLobby = {
+    code: 'FUEL01',
+    phase: 'ROAMING',
+    players: new Map([[0, player]]),
+    userIdToSlot: new Map([[-11, 0]]),
+    hostSlot: 0,
+    meeting: null,
+    completedTaskSteps: new Set<string>(),
+    totalTaskSteps: fuelTask.steps,
+    sabotage: null,
+    sabotageCooldownMs: 0,
+  } as unknown as Lobby;
+  const fuelManager = new LobbyManager();
+  try {
+    for (let tick = 0; tick < 600 && fuelLobby.phase === 'ROAMING'; tick++) {
+      fuelBot.roamingTick(fuelLobby, player, fuelManager);
+    }
+    assert.equal(fuelLobby.completedTaskSteps.size, fuelTask.steps,
+      `a bot starting at the real spawn must complete both Fuel Engine steps (position=${player.x.toFixed(0)},${player.y.toFixed(0)} distance=${Math.hypot(player.x - fuelTask.x, player.y - fuelTask.y).toFixed(0)} goal=${approach.x.toFixed(0)},${approach.y.toFixed(0)})`);
+    assert.equal(fuelLobby.phase, 'GAMEOVER',
+      'finishing the only assigned Fuel Engine task must end the test round');
+    console.log('PASS: bot reaches the visible Fuel Engine stand-off point and completes both steps');
+  } finally {
+    fuelManager.disposeLobby(fuelLobby);
+  }
+}
+
+ 
+// Regression: a ghost can start just inside the server's 171px task range.
+// Moving to range-1 can round to 170.00000000000003 and never enter the
+// strict client-side threshold; the 8px safety margin must complete both steps.
+{
+  const distributorTask = TASK_DEFS.find(candidate => candidate.id === 2)!;
+  const ghostBot = new CrewmateBot();
+  const ghost: LobbyPlayer = {
+    slot: 0,
+    tgUserId: -12,
+    username: 'Distributor ghost',
+    ws: fakeSocket,
+    x: distributorTask.x + 94,
+    y: distributorTask.y - 142,
+    lastBroadcastWireX: 0,
+    lastBroadcastWireY: 0,
+    role: 'crewmate',
+    alive: false,
+    killCooldownMs: 0,
+    assignedTasks: [distributorTask.id],
+    isBot: true,
+    botAgent: ghostBot,
+  };
+  const ghostLobby = {
+    code: 'GHOST1',
+    phase: 'ROAMING',
+    players: new Map([[0, ghost]]),
+    userIdToSlot: new Map([[-12, 0]]),
+    hostSlot: 0,
+    meeting: null,
+    completedTaskSteps: new Set<string>(),
+    totalTaskSteps: distributorTask.steps,
+    sabotage: null,
+    sabotageCooldownMs: 0,
+  } as unknown as Lobby;
+  const ghostManager = new LobbyManager();
+  try {
+    for (let tick = 0; tick < 10 && ghostLobby.phase === 'ROAMING'; tick++) {
+      ghostBot.tick(ghostLobby, ghost, ghostManager);
+    }
+    assert.equal(ghostLobby.completedTaskSteps.size, distributorTask.steps,
+      'a ghost just inside task range must complete both Calibrate Distributor steps');
+    assert.equal(ghostLobby.phase, 'GAMEOVER',
+      'the final ghost task step must end the round');
+    console.log('PASS: ghost task completion keeps a safe margin inside interaction range');
+  } finally {
+    ghostManager.disposeLobby(ghostLobby);
+  }
 }

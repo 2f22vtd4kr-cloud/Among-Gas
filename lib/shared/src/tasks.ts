@@ -22,6 +22,8 @@ export interface TaskDef {
   readonly name: string;
   readonly zone: TaskZone;
   readonly steps: number;
+  /** Radius of the solid interaction prop's visible perimeter; defaults to 24px. */
+  readonly interactionTargetRadiusPx?: number;
   /** Pixel centre of the task console on the map (MAP_W × MAP_H space). */
   readonly x: number;
   readonly y: number;
@@ -49,7 +51,7 @@ export const TASK_DEFS: readonly TaskDef[] = [
   // balaclava characters and map artwork remain untouched.
   { id: 5,  name: 'Stabilize Navigation',   zone: 'lobby',        steps: 1, ...ref(675, 179) },
   { id: 6,  name: 'Reboot WiFi',            zone: 'office_e',     steps: 2, ...ref(915, 259) },
-  { id: 7,  name: 'Fuel Engine',            zone: 'garage_nw',    steps: 2, ...ref(175,  99) },
+  { id: 7,  name: 'Fuel Engine',            zone: 'garage_nw',    steps: 2, interactionTargetRadiusPx: 100, ...ref(175,  99) },
   { id: 8,  name: 'Start Reactor',          zone: 'industrial',   steps: 1, ...ref(45,  209) },
   { id: 9,  name: 'Align Engine',           zone: 'industrial',   steps: 2, ...ref(245, 239) },
   { id: 10, name: 'Clear Asteroids',        zone: 'park',         steps: 1, ...ref(685, 439) },

@@ -24,7 +24,7 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
-import { buildCollisionGrid } from '@workspace/shared/collisionMap';
+import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
 import {
   fromWire,
   toWire,
@@ -89,7 +89,7 @@ function sanitizeUsername(raw: string): string {
 const lobbyManager = new LobbyManager();
 
 /** Collision grid — built once at startup, shared across all validations. */
-const collisionGrid = buildCollisionGrid();
+const collisionGrid = buildPreciseCollisionGrid();
 
 export function attachWsServer(httpServer: HttpServer): WebSocketServer {
   validateAuthConfig();

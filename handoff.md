@@ -1893,3 +1893,33 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - No temporary runtime state or environment overrides.
+
+
+
+### 2026-10-31 — Five-agent integration, Issue #39 disposition, and release-candidate hardening
+
+**Integrated / verified in the release candidate**
+- Consolidated the five-agent work and the useful follow-up PRs into one release candidate: Node 20/Replit runtime, full-stack Replit dev and production serving, Telegram HMAC auth and invite start parameters, WebSocket reconnect/resume, fine-grid movement and vision, sprite atlas/corpse restoration, Settings/leave-match UX, audio lazy loading, meeting/voting/chat, and server-authoritative gameplay interactions.
+- Audited Agent 5 / PR #39 follow-ups. Node 20, empty-schema post-merge behavior, lazy audio loading, runtime atlas browser assertion, reconnect/resume, and Telegram invite parsing are implemented and included in the integrated CI path. Added a disposition comment to PR #39.
+- Explicitly deferred rather than misrepresented: durable/shared lobby persistence and horizontal scaling. The server still uses process-local match state; process restart ends active matches. Replit Autoscale must remain capped at one instance until shared state exists. The connected Replit workspace is not accessible from this session, so the live max-instance setting cannot be verified or changed.
+- Real iOS/Android Telegram WebView QA and mobile performance profiling (atlas generation and vision-ray cost) remain post-deployment device checks; CI mobile Chromium is not a substitute.
+
+**Gameplay fixes found during integrated review**
+- Added server-authoritative LOS stand-off invariants for every task, vent, admin console and sabotage pad.
+- Prevented bots from stepping into fine-grid-valid positions whose coarse navigation cell is blocked, which would make their next A* search reject the start cell.
+- Relocated manual and meeting-forced vent exits to a legal player footprint, sent the explicit forced 0x22 correction to the local client, and added coverage for all six vents plus emergency-meeting release.
+- Removed the simulator's vent-radius collision exemption: only a player whose server state is actually `inVent` is exempt from walkability checks. The regression fixture marks the actual feet-baseline cell (`vent.y + FEET_OFFSET_Y`) blocked, not the sprite anchor cell.
+- Included cell dimensions in PathCache keys and added a regression test for equal grid dimensions with different world-space cell sizes.
+- Made a validated fresh Telegram invite take precedence over a saved WebView room: the stale resume key is cleared and the lobby joins the invited code. Added precedence tests.
+- Fixed the final 100-game timeout: dead crewmate bots now submit remaining ghost-task steps immediately when in range instead of relying on a dwell counter. Added a regression for the exact Download Data timeout position and exercised it through the normal bot tick dispatcher.
+- Mirrored the server's line-of-sight task-interaction rule in the client HUD. Task prompts now require both range and LOS; added a blocked-wall browser fixture proving the prompt stays hidden even when the player is numerically within task radius.
+
+**Current verification / release gate**
+- On the previous integrated head, Node 20, install, geometry/collision/vision checks, typecheck/build, Replit production/development serving, server gameplay invariants, Telegram start-param, reconnect/resume, HMAC auth, live WebSocket checks, mobile browser smoke, and visual artifact generation passed. The previous 100-game simulation was still running when the final vent-sync and cache/watchdog review fixes were added; it is not evidence for the final head.
+- Re-run the full workflow on the final release-candidate SHA. Require zero timeouts across 100 headless matches, inspect the final visual artifact, and resolve all Codex review findings before merge.
+- Do not merge into `main` or tell the user to launch until the exact final head is green. Keep exactly one active release PR; close only superseded candidates after the replacement exists.
+
+**State to restore**
+- `main` base at the start of this integration: `b06fe62e50e08b257f88b10a8abfc40faa9939ad`.
+- Latest integration branch: `integration/among-gas-release-candidate-ghost-task-final` (current head being refined). Open a fresh PR from the final SHA to trigger CI on the exact final code.
+- No Replit app matching “Among Gas” was returned by the connected Replit app search. Do not claim a live workspace launch or publish was performed.

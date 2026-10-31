@@ -23,6 +23,7 @@ import {
 import { findVent } from '@workspace/shared/vents';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
+import { readLobbyStartParam, resolveInitialRoomCode } from '../lib/telegramStartParam';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -425,6 +426,26 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
+  // Browser regression: the player is in task 7's range but a wall blocks LOS.
+  'task-interaction-blocked': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      myTasks: [{ taskId: 7, completedSteps: 0 }],
+      globalTaskProgress: 0,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // A ghost retains through-wall access to the same unfinished task.
+  'task-interaction-ghost-blocked': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], deadSlots: [0],
+      myTasks: [{ taskId: 7, completedSteps: 0 }],
+      globalTaskProgress: 0,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 6 — a dead body is nearby, report prompt should appear.
   // Positioned relative to PLAYER_SPAWN (not MAP_W/2, unlike MOCK_REMOTE_POSITIONS
   // above) since the local player's real physics position starts at spawn, and
@@ -433,7 +454,7 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     state: {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [], deadSlots: [1],
-      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 32, y: PLAYER_SPAWN.y + 65 }],
+      corpsePositions: [{ slot: 1, x: PLAYER_SPAWN.x + 40, y: PLAYER_SPAWN.y - 40 }],
     },
     remotePlayers: [
       { slot: 1, x: PLAYER_SPAWN.x + 20, y: PLAYER_SPAWN.y + 6 }, // ghost may move; body remains at this position
@@ -1078,7 +1099,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     let reconnectAttempt = 0;
     let activeSocket: WebSocket | null = null;
 
-    roomCodeRef.current = readPersistedRoomCode();
+    const telegramStartParam = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
+    const inviteCode = readLobbyStartParam(window.location.search, telegramStartParam);
+    const persistedRoomCode = readPersistedRoomCode();
+    roomCodeRef.current = resolveInitialRoomCode(inviteCode, persistedRoomCode);
+
+    // A fresh, validated invite is an explicit navigation choice. Clear the
+    // old WebView resume code so the socket authenticates into the lobby and
+    // Lobby.tsx can join the invited room instead of silently resuming the old one.
+    if (inviteCode) persistRoomCode(null);
+
     if (roomCodeRef.current) {
       reconnectBarrierRef.current = true;
       setState(s => ({

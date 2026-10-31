@@ -381,6 +381,68 @@ try {
     'the task prompt must not overlap the movement joystick',
   );
 
+  // A player may be within the numeric task radius but still be separated by
+  // a wall. The client must not expose the task action in that state.
+  const blockedTaskPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  blockedTaskPage.on('pageerror', error => failures.push(error.message));
+  blockedTaskPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await blockedTaskPage.goto(`${origin}/?mock=task-interaction-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await blockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await blockedTaskPage.waitForTimeout(450);
+  const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
+    fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
+    debug: window.__AG_TASK_DEBUG ?? null,
+    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+  }));
+  console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
+  assert.equal(blockedTaskDiagnostics.actionCount, 0,
+    'task prompt must stay hidden when the player is in range but has no line of sight');
+  await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
+  await blockedTaskPage.close();
+
+  // Ghosts are intentionally exempt from task LOS checks on the server and
+  // must retain the same through-wall task prompt on the client.
+  const ghostBlockedTaskPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  ghostBlockedTaskPage.on('pageerror', error => failures.push(error.message));
+  await ghostBlockedTaskPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await ghostBlockedTaskPage.goto(`${origin}/?mock=task-interaction-ghost-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await ghostBlockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await ghostBlockedTaskPage.waitForFunction(() => {
+    const fixture = window.__AG_TASK_FIXTURE_POSITION;
+    return fixture !== undefined &&
+      document.querySelectorAll('[data-testid="gameplay-task-action"]').length === 1;
+  }, undefined, { timeout: 5_000 });
+  const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
+    debug: window.__AG_TASK_DEBUG ?? null,
+    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+  }));
+  assert.equal(ghostBlockedTaskDiagnostics.debug?.isGhost, true,
+    'the occluded fixture must run as a server-authoritative ghost');
+  assert.ok(ghostBlockedTaskDiagnostics.debug?.distance <= ghostBlockedTaskDiagnostics.debug?.range,
+    'the ghost fixture must be within the task interaction range');
+  assert.equal(ghostBlockedTaskDiagnostics.actionCount, 1,
+    'a ghost must retain the task prompt through a wall when the task is within interaction range');
+  await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
+  await ghostBlockedTaskPage.close();
+
   // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
   for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1365, height: 768 }]) {
     await page.setViewportSize(size);
@@ -1240,7 +1302,7 @@ try {
         assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
           'impostor role reveal must show a living character, not the corpse sprite');
         const spriteClip = await revealSprite.evaluate(element => getComputedStyle(element).clipPath);
-        assert.ok(spriteClip.includes('49%') && spriteClip.includes('68%'),
+        assert.ok(spriteClip.includes('49%') && spriteClip.includes('58.5%'),
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
       const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
@@ -1383,6 +1445,22 @@ try {
   );
   assert.ok(playerMovementSamples.length >= 3 && sampledMovementDistance > 30,
     `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} frames over ${sampledMovementDistance.toFixed(1)}px)`);
+
+  // A large cumulative displacement can still hide an early collision stop:
+  // require the final quarter of the held-pointer trace to keep moving. This
+  // catches a fixture that reaches an obstacle, then measures a stationary
+  // camera for the remainder of the interaction.
+  const tailStartIndex = Math.floor(movementTrace.length * 0.75);
+  const sustainedTail = movementTrace.slice(tailStartIndex);
+  const tailMovementFrames = sustainedTail.filter((sample, index) => index > 0 &&
+    Math.hypot(sample.playerX - sustainedTail[index - 1].playerX,
+      sample.playerY - sustainedTail[index - 1].playerY) > 0.25);
+  const sustainedTailDistance = Math.hypot(
+    sustainedTail[sustainedTail.length - 1].playerX - sustainedTail[0].playerX,
+    sustainedTail[sustainedTail.length - 1].playerY - sustainedTail[0].playerY,
+  );
+  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 30,
+    `camera movement fixture must remain unobstructed through the final quarter of the hold (changed ${tailMovementFrames.length} frames over ${sustainedTailDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));

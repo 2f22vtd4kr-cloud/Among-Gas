@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, buildCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, FINE_COLS, FINE_ROWS, MAP_W, MAP_H, buildPreciseCollisionGrid, isPlayerPositionWalkable, isLineOfSightClear, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import {
   isMovementPathWalkable,
   validateMovementIntent,
@@ -29,6 +29,32 @@ grid[wallRow * COLS + wallCol] = 1;
 const wallLeft = wallCol * CELL_X;
 const wallTop = wallRow * CELL_Y;
 const feetY = wallTop + CELL_Y / 2;
+
+// Authoritative interaction rays must reject a target across even a thin wall.
+assert.equal(isLineOfSightClear(grid, wallLeft - 24, feetY, wallLeft + CELL_X + 24, feetY), false,
+  'line of sight must not pass through a blocked wall cell');
+assert.equal(isLineOfSightClear(grid, wallLeft - 24, feetY, wallLeft - 4, feetY), true,
+  'line of sight on the same side of a wall must remain clear');
+
+// Solid consoles are targeted through their reachable perimeter, not through
+// their blocked centre. A full wall separating the player and console rejects
+// every perimeter ray, while an unobstructed approach remains usable.
+const interactionGrid = new Uint8Array(COLS * ROWS);
+const targetCol = wallCol + 3;
+const targetRow = wallRow;
+const targetX = (targetCol + 0.5) * CELL_X;
+const targetY = (targetRow + 0.5) * CELL_Y;
+interactionGrid[targetRow * COLS + targetCol] = 1;
+const interactionPlayerX = targetX - CELL_X * 2;
+assert.equal(isLineOfSightToInteractionTarget(
+  interactionGrid, interactionPlayerX, targetY, targetX, targetY, 24,
+), true, 'a console may be approached from a clear side without raycasting through its solid centre');
+for (let row = targetRow - 2; row <= targetRow + 2; row++) {
+  if (row >= 0 && row < ROWS) interactionGrid[row * COLS + targetCol - 1] = 1;
+}
+assert.equal(isLineOfSightToInteractionTarget(
+  interactionGrid, interactionPlayerX, targetY, targetX, targetY, 24,
+), false, 'a wall between the player and every console approach ray must reject interaction');
 const worldY = feetY - FEET_OFFSET_Y;
 const startX = wallLeft - 24;
 const state = {
@@ -318,8 +344,8 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
 // The decorative garden remains walkable around the statue. The statue's
 // small 2×2 RLE footprint remains blocked without a planter-wide polygon.
 {
- const canonical=buildCollisionGrid();
- assert.equal(canonical[10*COLS+55],0,'manual outline must not rasterize an open base cell');
+ const canonical=buildPreciseCollisionGrid();
+ assert.equal(canonical.length,FINE_COLS*FINE_ROWS,'canonical movement mask must use the full 680×392 fine grid');
  assert.equal(isPlayerPositionWalkable(canonical,1640,449),true,'western garden path stays walkable');
  assert.equal(isPlayerPositionWalkable(canonical,1810,449),true,'eastern garden path stays walkable');
  assert.equal(isPlayerPositionWalkable(canonical,1735,449),true,'the decorative garden floor remains walkable');

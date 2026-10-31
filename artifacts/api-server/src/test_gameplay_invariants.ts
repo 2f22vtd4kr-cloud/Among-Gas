@@ -4,9 +4,11 @@
  * Run with: pnpm --filter @workspace/api-server run test:gameplay
  */
 import assert from 'node:assert/strict';
+import { PathCache } from '@workspace/shared';
 import {
-  buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
+  isLineOfSightToInteractionTarget,
   isPlayerSpawnPositionClear,
   MAP_W,
   MAP_H,
@@ -54,6 +56,8 @@ import {
 import {
   LobbyManager,
   MAX_PLAYERS,
+  SPAWN_X,
+  SPAWN_Y,
   buildCorpsePacket,
   type Lobby,
   type LobbyPlayer,
@@ -68,7 +72,26 @@ import {
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
-const grid = buildCollisionGrid();
+const grid = buildPreciseCollisionGrid();
+
+// A cached path is valid only for the exact world-space grid geometry. Two
+// grids may share row/column counts while mapping the same cells to different
+// pixel positions; those queries must never share cached waypoints.
+{
+  const cache = new PathCache();
+  const syntheticGrid = new Uint8Array(25);
+  const start = { x: 5, y: 5 };
+  const goal = { x: 35, y: 35 };
+  const first = cache.find(syntheticGrid, start, goal, false, {
+    cols: 5, rows: 5, cellX: 10, cellY: 10,
+  });
+  const second = cache.find(syntheticGrid, start, goal, false, {
+    cols: 5, rows: 5, cellX: 100, cellY: 100,
+  });
+  assert.ok(first && second);
+  assert.notDeepEqual(second.waypoints, first.waypoints,
+    'PathCache must include cell dimensions in its key, not only grid row/column counts');
+}
 
 function assertClientWalkable(x: number, y: number, label: string): void {
   assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
@@ -82,20 +105,31 @@ function assertClientWalkable(x: number, y: number, label: string): void {
 function assertInteractionApproachWalkable(
   target: { x: number; y: number; name: string },
   interactionRangePx: number,
+  targetRadiusPx = 24,
 ): void {
   const step = 8;
+  // Bot navigation uses an 8px final arrival tolerance, so require a visible
+  // stand-off point inside the matching safe search radius, not merely inside
+  // the server's absolute interaction radius.
+  const botSearchRadiusPx = interactionRangePx - 8;
   let hasApproach = false;
-  for (let dy = -interactionRangePx; dy <= interactionRangePx && !hasApproach; dy += step) {
-    for (let dx = -interactionRangePx; dx <= interactionRangePx; dx += step) {
-      if (dx * dx + dy * dy > interactionRangePx * interactionRangePx) continue;
-      if (isPlayerPositionWalkable(grid, target.x + dx, target.y + dy)) {
-        hasApproach = true;
-        break;
-      }
+  for (let dy = -botSearchRadiusPx; dy <= botSearchRadiusPx && !hasApproach; dy += step) {
+    for (let dx = -botSearchRadiusPx; dx <= botSearchRadiusPx; dx += step) {
+      if (dx * dx + dy * dy > botSearchRadiusPx * botSearchRadiusPx) continue;
+      const x = target.x + dx;
+      const y = target.y + dy;
+      if (!isPlayerPositionWalkable(grid, x, y)) continue;
+      if (!isLineOfSightToInteractionTarget(
+        grid, x, y + FEET_OFFSET_Y,
+        target.x, target.y + FEET_OFFSET_Y,
+        targetRadiusPx,
+      )) continue;
+      hasApproach = true;
+      break;
     }
   }
   assert.ok(hasApproach,
-    `${target.name} must have a walkable player approach within ${interactionRangePx}px of its console`);
+    `${target.name} must have a walkable, line-of-sight player approach within ${botSearchRadiusPx}px of its console`);
 }
 
 function fakeSocket() {
@@ -190,7 +224,7 @@ assert.equal(TASK_DEFS.length, 11, 'expected five original and six ported base-g
 assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'task IDs must be unique');
 for (const task of TASK_DEFS) {
   assert.ok(task.steps >= 1 && Number.isInteger(task.steps), task.name + ' has a valid step count');
-  assertInteractionApproachWalkable(task, TASK_INTERACTION_RANGE_PX);
+  assertInteractionApproachWalkable(task, TASK_INTERACTION_RANGE_PX, task.interactionTargetRadiusPx ?? 24);
 }
 
 assert.equal(ADMIN_TABLE_DEFS.length, 1, 'expected one Admin Table console on the custom map');
@@ -202,7 +236,7 @@ for (const consoleDef of ADMIN_TABLE_DEFS) {
 assert.equal(VENT_DEFS.length, 6, 'expected six vents on the custom map');
 assert.ok(VENT_INTERACTION_RANGE_PX > 0, 'vent interaction range must be positive');
 for (const vent of VENT_DEFS) {
-  assertInteractionApproachWalkable(vent, VENT_INTERACTION_RANGE_PX);
+  assertInteractionApproachWalkable(vent, VENT_INTERACTION_RANGE_PX, 20);
   assert.ok(findVent(vent.id), 'vent IDs must resolve');
   for (const targetId of vent.connections) {
     assert.ok(findVent(targetId), 'vent connection must point to an existing vent');
@@ -274,11 +308,58 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.exitVent(lobby, 0), true);
   assert.equal(impostor.player.inVent, false);
   assert.equal(impostor.player.ventId, undefined);
+  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+    'vent exit must place the impostor at a legal player footprint');
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x01));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x02));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x03));
+  assert.ok(impostor.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
+    'manual vent exit must force the local client to the authoritative relocated position');
   manager.disposeLobby(lobby);
+
+  // Every authored vent anchor must release the impostor onto a valid
+  // footprint; several anchors intentionally sit on blocked fine-grid cells.
+  for (const vent of VENT_DEFS) {
+    const exiting = makePlayer(0, 'impostor', vent.x, vent.y);
+    exiting.player.inVent = true;
+    exiting.player.ventId = vent.id;
+    const exitLobby = makeLobby([exiting.player, makePlayer(1, 'crewmate', SPAWN_X, SPAWN_Y).player]);
+    const exitManager = new LobbyManager();
+    assert.equal(exitManager.exitVent(exitLobby, 0), true, `vent ${vent.id} must have a legal exit point`);
+    assert.equal(exiting.player.inVent, false);
+    assert.equal(exiting.player.ventId, undefined);
+    assert.equal(isPlayerPositionWalkable(grid, exiting.player.x, exiting.player.y), true,
+      `vent ${vent.id} exit must be walkable for the complete player footprint`);
+    assert.ok(exiting.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
+      `vent ${vent.id} exit must send a forced local position correction`);
+    exitManager.disposeLobby(exitLobby);
+  }
   void vent2;
+}
+
+// A meeting-triggered release must use the same legal exit and force the
+// disconnected-from-prediction client to the server's relocated coordinates.
+{
+  const reporter = makePlayer(0, 'crewmate', SPAWN_X, SPAWN_Y);
+  const vent = findVent(1)!;
+  const impostor = makePlayer(1, 'impostor', vent.x, vent.y);
+  impostor.player.inVent = true;
+  impostor.player.ventId = vent.id;
+  const lobby = makeLobby([reporter.player, impostor.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.callMeeting(lobby, reporter.player.slot, NO_TARGET), true,
+    'a valid emergency meeting should start while another player is vented');
+  assert.equal(lobby.phase, 'MEETING');
+  assert.equal(impostor.player.inVent, false, 'meeting must release the vent occupant');
+  assert.equal(impostor.player.ventId, undefined);
+  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+    'meeting-forced release must choose a legal player footprint');
+  const forcedCorrection = impostor.packets.find(packet => packet[0] === 0x22);
+  assert.ok(forcedCorrection && forcedCorrection.length === 5,
+    'meeting-forced release must send a forced 0x22 correction to the released player');
+  assert.equal(forcedCorrection!.readUInt16LE(1), toWire(impostor.player.x, MAP_W));
+  assert.equal(forcedCorrection!.readUInt16LE(3), toWire(impostor.player.y, MAP_H));
+  manager.disposeLobby(lobby);
 }
 
 // 4. Living players can post meeting chat; all lobby members, including ghosts, can read it.
@@ -307,12 +388,12 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 
 // 5. Bot reporting follows the immutable corpse, not the ghost's later position.
 {
-  const reporter = makePlayer(0, 'crewmate', 110, 100);
+  const reporter = makePlayer(0, 'crewmate', SPAWN_X, SPAWN_Y);
   const ghost = makePlayer(1, 'crewmate', 900, 900);
   const impostor = makePlayer(2, 'impostor', 500, 500);
   ghost.player.alive = false;
-  ghost.player.corpseX = 100;
-  ghost.player.corpseY = 100;
+  ghost.player.corpseX = SPAWN_X;
+  ghost.player.corpseY = SPAWN_Y;
   const lobby = makeLobby([reporter.player, ghost.player, impostor.player]);
   const manager = new LobbyManager();
   new CrewmateBot().roamingTick(lobby, reporter.player, manager);
@@ -478,7 +559,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.ok(movedX * dx > 0 && movedY * dy > 0, 'ghost movement must progress toward the task');
 
   for (let tick = 0; tick < 100 && lobby.phase !== 'GAMEOVER'; tick++) {
-    bot.ghostTick(lobby, ghost.player, manager);
+    bot.tick(lobby, ghost.player, manager);
   }
   assert.equal(lobby.completedTaskSteps.has(`0:${task.id}:0`), true,
     'ghost should complete its assigned task even when the straight route crosses walls');
@@ -487,11 +568,33 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   void distance;
 }
 
+// Regression for the 100-game timeout trace: a dead crewmate bot was already
+// within task range but left the final Download Data step unfinished.
+{
+  const task = TASK_DEFS.find(def => def.id === 1)!;
+  const ghost = makePlayer(0, 'crewmate', 2190, 353);
+  ghost.player.alive = false;
+  ghost.player.assignedTasks = [task.id];
+  const lobby = makeLobby([ghost.player]);
+  lobby.totalTaskSteps = task.steps;
+  const manager = new LobbyManager();
+  const bot = new CrewmateBot();
+
+  for (let tick = 0; tick < 10 && lobby.phase !== 'GAMEOVER'; tick++) {
+    bot.tick(lobby, ghost.player, manager);
+  }
+  assert.equal(lobby.completedTaskSteps.has(`0:${task.id}:0`), true,
+    'dead crewmate bot must complete an in-range final task through the normal tick dispatcher');
+  assert.equal(lobby.phase, 'GAMEOVER',
+    'the last ghost task must trigger the crew task-win condition');
+  manager.disposeLobby(lobby);
+}
+
 // 9. Living bots can navigate to far custom-map tasks instead of silently stalling at blocked waypoints.
 {
   const spawn = {
-    x: Math.round(350 * MAP_W / 1040),
-    y: Math.round(150 * MAP_H / 580),
+    x: SPAWN_X,
+    y: SPAWN_Y,
   };
   for (const taskId of [2, 10]) {
     const task = TASK_DEFS.find(def => def.id === taskId)!;
@@ -757,21 +860,37 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 // 15. Client movement packets are constrained by elapsed time and swept collision.
 {
   const vent = findVent(0)!;
+  const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
+  let movementStart: { x: number; y: number } | undefined;
+  for (let radius = 0; radius <= VENT_INTERACTION_RANGE_PX && !movementStart; radius += 4) {
+    const samples = radius === 0 ? 1 : Math.max(16, Math.ceil(2 * Math.PI * radius / 4));
+    for (let sample = 0; sample < samples; sample++) {
+      const angle = sample / samples * Math.PI * 2;
+      const x = vent.x + Math.cos(angle) * radius;
+      const y = vent.y + Math.sin(angle) * radius;
+      if (!isWalkableMovementPoint(grid, x, y)) continue;
+      if (!isMovementPathWalkable(grid, x, y, x + legalStepDistance, y)) continue;
+      movementStart = { x, y };
+      break;
+    }
+  }
+  assert.ok(movementStart,
+    'a vent must have a reachable stand-off position with a clear legal movement step');
   const base = {
-    x: vent.x,
-    y: vent.y,
+    x: movementStart!.x,
+    y: movementStart!.y,
     alive: true,
     movementCreditPx: 0,
     movementCreditUpdatedAtMs: 1_000,
     lastMovementPacketAtMs: 1_000,
   };
 
-  const teleport = validateMovementIntent(base, vent.x + 500, vent.y, 1_100, grid);
+  const teleport = validateMovementIntent(base, base.x + 500, base.y, 1_100, grid);
   assert.equal(teleport.accepted, false, 'a forged long-distance movement target is rejected');
-  assert.equal(teleport.x, vent.x, 'a rejected teleport does not move the authoritative player');
+  assert.equal(teleport.x, base.x, 'a rejected teleport does not move the authoritative player');
   assert.equal(teleport.sendCorrection, true, 'a rejected target asks the server to correct prediction');
 
-  const closePacket = validateMovementIntent(base, vent.x + 1, vent.y, 1_005, grid);
+  const closePacket = validateMovementIntent(base, base.x + 1, base.y, 1_005, grid);
   assert.equal(closePacket.rateLimited, false,
     'an ordered movement packet arriving inside 12ms must not be dropped solely due to arrival spacing');
   assert.equal(closePacket.accepted, true,
@@ -782,7 +901,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   let acceptedFloodPackets = 0;
   let floodLimited = false;
   for (let packet = 0; packet < MOVEMENT_PACKET_BURST_CAPACITY + 2; packet++) {
-    const decision = validateMovementIntent(floodState, vent.x, vent.y, 1_000, grid);
+    const decision = validateMovementIntent(floodState, base.x, base.y, 1_000, grid);
     if (decision.rateLimited) {
       floodLimited = true;
       break;
@@ -801,25 +920,24 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     'the packet flood guard must allow exactly its configured initial burst');
   assert.equal(floodLimited, true, 'excessive movement packet spam is rate limited');
 
-  const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
-  const legalStep = validateMovementIntent(base, vent.x + legalStepDistance, vent.y, 1_050, grid);
+  const legalStep = validateMovementIntent(base, base.x + legalStepDistance, base.y, 1_050, grid);
   assert.equal(legalStep.accepted, true, 'a normal target within the elapsed movement budget is accepted');
-  assert.ok(legalStep.x > vent.x, 'an accepted movement intent advances authoritative position');
+  assert.ok(legalStep.x > base.x, 'an accepted movement intent advances authoritative position');
 
   const ghostStep = validateMovementIntent(
     { ...base, alive: false },
-    vent.x + legalStepDistance,
-    vent.y,
+    base.x + legalStepDistance,
+    base.y,
     1_050,
     grid,
   );
   assert.equal(ghostStep.accepted, true, 'ghost movement still works through the speed budget');
 
-  const correction = buildMovementCorrectionPacket(toWire(vent.x, MAP_W), toWire(vent.y, MAP_H));
+  const correction = buildMovementCorrectionPacket(toWire(base.x, MAP_W), toWire(base.y, MAP_H));
   assert.equal(correction.length, 5, 'movement correction has the expected five-byte frame');
   assert.equal(correction.readUInt8(0), 0x22, 'movement correction uses its dedicated opcode');
-  assert.equal(correction.readUInt16LE(1), toWire(vent.x, MAP_W));
-  assert.equal(correction.readUInt16LE(3), toWire(vent.y, MAP_H));
+  assert.equal(correction.readUInt16LE(1), toWire(base.x, MAP_W));
+  assert.equal(correction.readUInt16LE(3), toWire(base.y, MAP_H));
 
   // The actual map has wall segments with walkable endpoints. Find one at
   // runtime so this regression remains tied to the canonical collision map.

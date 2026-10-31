@@ -10,7 +10,8 @@
     "test:character-geometry": "tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts && tsx ../artifacts/telegram-game/src/game/characterAnimation.test.ts && tsx ./test-character-atlas.ts",
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test:character-atlas": "tsx ./test-character-atlas.ts"
+    "test:character-atlas": "tsx ./test-character-atlas.ts",
+    "test:telegram-start-param": "tsx ./test-telegram-start-param.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

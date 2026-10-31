@@ -10,9 +10,12 @@
 import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerFootprintWalkableAtFeet,
   isPlayerPositionWalkable,
   isPlayerPathWalkable,
+  isLineOfSightClear,
+  isLineOfSightToInteractionTarget,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import {
@@ -21,7 +24,7 @@ import {
   MAP_H,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
-import type { Point } from '@workspace/shared';
+import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
@@ -30,6 +33,17 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
+const movementGrid = buildPreciseCollisionGrid();
+const NAV_COLS = COLS * 2;
+const NAV_ROWS = ROWS * 2;
+const NAV_CELL_X = CELL_X / 2;
+const NAV_CELL_Y = CELL_Y / 2;
+const navigationGeometry: PathGridGeometry = {
+  cols: NAV_COLS,
+  rows: NAV_ROWS,
+  cellX: NAV_CELL_X,
+  cellY: NAV_CELL_Y,
+};
 
 /** Same three-circle foot footprint used by client prediction and server authority. */
 function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
@@ -43,31 +57,27 @@ function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean
  * rejects (the old failure mode left a bot stationary forever at a task).
  */
 function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(collision.length);
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      const index = row * COLS + col;
-      if (collision[index] !== 0) {
-        result[index] = 1;
-        continue;
-      }
-      const x = (col + 0.5) * CELL_X;
-      const y = (row + 0.5) * CELL_Y;
+  const result = new Uint8Array(NAV_COLS * NAV_ROWS);
+  for (let row = 0; row < NAV_ROWS; row++) {
+    for (let col = 0; col < NAV_COLS; col++) {
+      const index = row * NAV_COLS + col;
+      const x = (col + 0.5) * NAV_CELL_X;
+      const y = (row + 0.5) * NAV_CELL_Y;
       result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
     }
   }
   return result;
 }
 
-const navigationGrid = buildNavigationGrid(grid);
+const navigationGrid = buildNavigationGrid(movementGrid);
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
-  const reachable = new Uint8Array(COLS * ROWS);
-  const startCol = Math.floor(SPAWN_X / CELL_X);
-  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / CELL_Y);
-  if (startCol < 0 || startCol >= COLS || startRow < 0 || startRow >= ROWS) return reachable;
-  const startIndex = startRow * COLS + startCol;
+  const reachable = new Uint8Array(NAV_COLS * NAV_ROWS);
+  const startCol = Math.floor(SPAWN_X / NAV_CELL_X);
+  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / NAV_CELL_Y);
+  if (startCol < 0 || startCol >= NAV_COLS || startRow < 0 || startRow >= NAV_ROWS) return reachable;
+  const startIndex = startRow * NAV_COLS + startCol;
   if (navigationGrid[startIndex] !== 0) return reachable;
 
   const queue = [startIndex];
@@ -78,17 +88,17 @@ function buildSpawnReachability(): Uint8Array {
   ];
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
-    const row = Math.floor(index / COLS);
-    const col = index - row * COLS;
+    const row = Math.floor(index / NAV_COLS);
+    const col = index - row * NAV_COLS;
     for (const [dc, dr, diagonal] of directions) {
       const nextCol = col + dc;
       const nextRow = row + dr;
-      if (nextCol < 0 || nextCol >= COLS || nextRow < 0 || nextRow >= ROWS) continue;
-      const nextIndex = nextRow * COLS + nextCol;
+      if (nextCol < 0 || nextCol >= NAV_COLS || nextRow < 0 || nextRow >= NAV_ROWS) continue;
+      const nextIndex = nextRow * NAV_COLS + nextCol;
       if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
       if (diagonal) {
-        if (navigationGrid[row * COLS + nextCol] !== 0 ||
-            navigationGrid[nextRow * COLS + col] !== 0) continue;
+        if (navigationGrid[row * NAV_COLS + nextCol] !== 0 ||
+            navigationGrid[nextRow * NAV_COLS + col] !== 0) continue;
       }
       reachable[nextIndex] = 1;
       queue.push(nextIndex);
@@ -99,19 +109,32 @@ function buildSpawnReachability(): Uint8Array {
 
 const spawnReachability = buildSpawnReachability();
 
-function isSpawnReachable(feetX: number, feetY: number): boolean {
-  const col = Math.floor(feetX / CELL_X);
-  const row = Math.floor(feetY / CELL_Y);
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
-  return spawnReachability[row * COLS + col] === 1;
+export function isBotNavigationReachable(feetX: number, feetY: number): boolean {
+  const col = Math.floor(feetX / NAV_CELL_X);
+  const row = Math.floor(feetY / NAV_CELL_Y);
+  if (col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) return false;
+  return spawnReachability[row * NAV_COLS + col] === 1;
+}
+
+/** Keep the bot inside navigation cells that A* can represent. */
+function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
+  const col = Math.floor(feetX / NAV_CELL_X);
+  const row = Math.floor(feetY / NAV_CELL_Y);
+  return col >= 0 && col < NAV_COLS && row >= 0 && row < NAV_ROWS &&
+    navigationGrid[row * NAV_COLS + col] === 0;
 }
 
 /** Use the exact same 2px swept footprint check as human prediction and server authority. */
 function canTraverse(from: Point, to: Point): boolean {
+  // A fine-grid-valid point can still fall inside a blocked 2× navigation cell
+  // whose centre fails the bot's clearance test. Entering such a cell strands
+  // the bot because the next A* search rejects its start cell. Keep every bot
+  // endpoint in a cell that the navigation graph itself considers walkable.
+  if (!isNavigationPositionWalkable(to.x, to.y)) return false;
   // Bot waypoints are stored in feet-space; the shared helper accepts the
   // sprite anchor and applies the canonical feet offset internally.
   return isPlayerPathWalkable(
-    grid,
+    movementGrid,
     from.x,
     from.y - FEET_OFFSET_Y,
     to.x,
@@ -126,7 +149,6 @@ export const BOT_SPEED_PX = 80;
 export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
-const ARRIVAL_SQ = 25 * 25;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
@@ -276,14 +298,14 @@ export abstract class BotAgent {
    * nearly every real path (see .agents/memory/ for the investigation).
    * Fix: do the whole search in feet-space, then shift back once at the end.
    */
-  protected navigateTo(self: LobbyPlayer, goal: Point): boolean {
+  protected navigateTo(self: LobbyPlayer, goal: Point, arrivalTolerancePx = 25): boolean {
     const dxGoal = goal.x - self.x;
     const dyGoal = goal.y - self.y;
-    if (dxGoal * dxGoal + dyGoal * dyGoal <= ARRIVAL_SQ) return true;
+    if (dxGoal * dxGoal + dyGoal * dyGoal <= arrivalTolerancePx * arrivalTolerancePx) return true;
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal);
+    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry);
     const waypoint = result?.waypoints[0] ?? feetGoal;
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
@@ -354,8 +376,8 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        isPlayerPositionWalkable(grid, x, y) &&
-        isSpawnReachable(x, y + FEET_OFFSET_Y)
+        isPlayerPositionWalkable(movementGrid, x, y) &&
+        isBotNavigationReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
     // Spawn is verified walkable; it is safer than a potentially disconnected map centre.
@@ -383,30 +405,55 @@ export abstract class BotAgent {
    * Results are memoized per target since both the grid and spawn point are
    * static for the lifetime of the process.
    */
-  protected nearestApproachPoint(target: Point, maxRadius: number): Point {
-    const key = `${target.x},${target.y}`;
+  protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
+    return isLineOfSightClear(
+      movementGrid,
+      from.x, from.y + FEET_OFFSET_Y,
+      to.x, to.y + FEET_OFFSET_Y,
+    );
+  }
+
+  /**
+   * Find a spawn-reachable, walkable approach point that can actually see the
+   * interaction target. This mirrors the server's fine-grid LOS contract so
+   * bots do not repeatedly submit actions from behind a wall.
+   */
+  protected nearestApproachPoint(target: Point, maxRadius: number, targetRadiusPx = 24): Point {
+    const key = `${target.x},${target.y},${maxRadius},${targetRadiusPx}`;
     const cached = BotAgent._approachCache.get(key);
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      isPlayerPositionWalkable(grid, p.x, p.y) &&
-      isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
+      isPlayerPositionWalkable(movementGrid, p.x, p.y) &&
+      isBotNavigationReachable(p.x, p.y + FEET_OFFSET_Y);
+    const visible = (p: Point): boolean =>
+      isLineOfSightToInteractionTarget(
+        movementGrid,
+        p.x, p.y + FEET_OFFSET_Y,
+        target.x, target.y + FEET_OFFSET_Y,
+        targetRadiusPx,
+      );
 
-    let result = target;
-    if (!reachable(target)) {
-      const step = 8;
+    let result: Point | null = reachable(target) && visible(target) ? target : null;
+    let nearestReachable: Point | null = reachable(target) ? target : null;
+    if (result === null) {
+      const step = 4;
       outer: for (let r = step; r <= maxRadius; r += step) {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
           const candidate = { x: target.x + Math.cos(angle) * r, y: target.y + Math.sin(angle) * r };
-          if (reachable(candidate)) {
-            result = candidate;
-            break outer;
-          }
+          if (!reachable(candidate)) continue;
+          nearestReachable ??= candidate;
+          if (!visible(candidate)) continue;
+          result = candidate;
+          break outer;
         }
       }
     }
+    // Preserve the previous best-effort fallback for unusual geometry, but
+    // prefer a visible approach whenever one exists inside interaction range.
+    result ??= nearestReachable ?? target;
     BotAgent._approachCache.set(key, result);
     return result;
   }

@@ -27,31 +27,40 @@ interface Cell {
   row: number;
 }
 
+export interface PathGridGeometry {
+  cols: number;
+  rows: number;
+  cellX: number;
+  cellY: number;
+}
+
+const DEFAULT_PATH_GRID_GEOMETRY: PathGridGeometry = { cols: COLS, rows: ROWS, cellX: CELL_X, cellY: CELL_Y };
+
 // ─── Coordinate conversion ────────────────────────────────────────────────────
 
 /** Pixel → grid cell (clamped to valid range). */
-function pixelToCell(px: number, py: number): Cell {
+function pixelToCell(px: number, py: number, geometry: PathGridGeometry): Cell {
   return {
-    col: Math.max(0, Math.min(COLS - 1, Math.floor(px / CELL_X))),
-    row: Math.max(0, Math.min(ROWS - 1, Math.floor(py / CELL_Y))),
+    col: Math.max(0, Math.min(geometry.cols - 1, Math.floor(px / geometry.cellX))),
+    row: Math.max(0, Math.min(geometry.rows - 1, Math.floor(py / geometry.cellY))),
   };
 }
 
 /** Grid cell → pixel centre. */
-function cellCentre(col: number, row: number): Point {
+function cellCentre(col: number, row: number, geometry: PathGridGeometry): Point {
   return {
-    x: (col + 0.5) * CELL_X,
-    y: (row + 0.5) * CELL_Y,
+    x: (col + 0.5) * geometry.cellX,
+    y: (row + 0.5) * geometry.cellY,
   };
 }
 
-function cellIndex(col: number, row: number): number {
-  return row * COLS + col;
+function cellIndex(col: number, row: number, geometry: PathGridGeometry): number {
+  return row * geometry.cols + col;
 }
 
-function isWalkable(grid: Grid, col: number, row: number): boolean {
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return false;
-  return grid[cellIndex(col, row)] === 0;
+function isWalkable(grid: Grid, col: number, row: number, geometry: PathGridGeometry): boolean {
+  if (col < 0 || col >= geometry.cols || row < 0 || row >= geometry.rows) return false;
+  return grid[cellIndex(col, row, geometry)] === 0;
 }
 
 // ─── Heuristic ────────────────────────────────────────────────────────────────
@@ -60,9 +69,9 @@ function isWalkable(grid: Grid, col: number, row: number): boolean {
  * Octile (diagonal) heuristic in pixel space.
  * Accounts for non-square cells (CELL_X ≠ CELL_Y).
  */
-function heuristic(ac: number, ar: number, bc: number, br: number): number {
-  const dx = Math.abs(ac - bc) * CELL_X;
-  const dy = Math.abs(ar - br) * CELL_Y;
+function heuristic(ac: number, ar: number, bc: number, br: number, geometry: PathGridGeometry): number {
+  const dx = Math.abs(ac - bc) * geometry.cellX;
+  const dy = Math.abs(ar - br) * geometry.cellY;
   const D  = 1;
   const D2 = Math.SQRT2;
   return D * (dx + dy) + (D2 - 2 * D) * Math.min(dx, dy);
@@ -134,9 +143,10 @@ function astar(
   grid: Grid,
   startCol: number, startRow: number,
   goalCol:  number, goalRow:  number,
+  geometry: PathGridGeometry,
 ): Cell[] | null {
-  if (!isWalkable(grid, startCol, startRow) ||
-      !isWalkable(grid, goalCol,  goalRow)) {
+  if (!isWalkable(grid, startCol, startRow, geometry) ||
+      !isWalkable(grid, goalCol,  goalRow, geometry)) {
     return null;
   }
 
@@ -144,15 +154,15 @@ function astar(
     return [{ col: startCol, row: startRow }];
   }
 
-  const N = COLS * ROWS;
+  const N = geometry.cols * geometry.rows;
   const gScore  = new Float32Array(N).fill(Infinity);
   const fScore  = new Float32Array(N).fill(Infinity);
   const parent  = new Int32Array(N).fill(-1);
   const closed  = new Uint8Array(N);
 
-  const startIdx = cellIndex(startCol, startRow);
+  const startIdx = cellIndex(startCol, startRow, geometry);
   gScore[startIdx] = 0;
-  fScore[startIdx] = heuristic(startCol, startRow, goalCol, goalRow);
+  fScore[startIdx] = heuristic(startCol, startRow, goalCol, goalRow, geometry);
 
   const open = new MinHeap();
   open.push({ f: fScore[startIdx], g: 0, idx: startIdx });
@@ -169,16 +179,16 @@ function astar(
     if (closed[curIdx]) continue;
     closed[curIdx] = 1;
 
-    const curRow = Math.floor(curIdx / COLS);
-    const curCol = curIdx - curRow * COLS;
+    const curRow = Math.floor(curIdx / geometry.cols);
+    const curCol = curIdx - curRow * geometry.cols;
 
     if (curCol === goalCol && curRow === goalRow) {
       // Reconstruct
       const path: Cell[] = [];
       let i = curIdx;
       while (i !== -1) {
-        const r = Math.floor(i / COLS);
-        const c = i - r * COLS;
+        const r = Math.floor(i / geometry.cols);
+        const c = i - r * geometry.cols;
         path.push({ col: c, row: r });
         i = parent[i];
       }
@@ -188,24 +198,24 @@ function astar(
     for (const [dc, dr, diagonal] of DIRS) {
       const nc = curCol + dc;
       const nr = curRow + dr;
-      if (!isWalkable(grid, nc, nr)) continue;
+      if (!isWalkable(grid, nc, nr, geometry)) continue;
 
       // No corner-cutting: both axis-aligned neighbours must be free
       if (diagonal &&
-          (!isWalkable(grid, curCol + dc, curRow) ||
-           !isWalkable(grid, curCol,      curRow + dr))) continue;
+          (!isWalkable(grid, curCol + dc, curRow, geometry) ||
+           !isWalkable(grid, curCol,      curRow + dr, geometry))) continue;
 
-      const ni = cellIndex(nc, nr);
+      const ni = cellIndex(nc, nr, geometry);
       if (closed[ni]) continue;
 
       const moveCost = diagonal
-        ? Math.sqrt((dc * CELL_X) ** 2 + (dr * CELL_Y) ** 2)
-        : (dc !== 0 ? CELL_X : CELL_Y);
+        ? Math.sqrt((dc * geometry.cellX) ** 2 + (dr * geometry.cellY) ** 2)
+        : (dc !== 0 ? geometry.cellX : geometry.cellY);
 
       const tentativeG = gScore[curIdx] + moveCost;
       if (tentativeG < gScore[ni]) {
         gScore[ni]  = tentativeG;
-        fScore[ni]  = tentativeG + heuristic(nc, nr, goalCol, goalRow);
+        fScore[ni]  = tentativeG + heuristic(nc, nr, goalCol, goalRow, geometry);
         parent[ni]  = curIdx;
         open.push({ f: fScore[ni], g: tentativeG, idx: ni });
       }
@@ -234,6 +244,7 @@ function hasLineOfSight(
   grid: Grid,
   c0: number, r0: number,
   c1: number, r1: number,
+  geometry: PathGridGeometry,
 ): boolean {
   let dc = Math.abs(c1 - c0);
   let dr = Math.abs(r1 - r0);
@@ -244,14 +255,14 @@ function hasLineOfSight(
   let r = r0;
 
   for (;;) {
-    if (!isWalkable(grid, c, r)) return false;
+    if (!isWalkable(grid, c, r, geometry)) return false;
     if (c === c1 && r === r1) return true;
     const e2 = 2 * err;
     const stepC = e2 > -dr;
     const stepR = e2 < dc;
     if (stepC && stepR) {
       // Diagonal Bresenham step — no corner-cutting through a blocked pair.
-      if (!isWalkable(grid, c + sc, r) || !isWalkable(grid, c, r + sr)) return false;
+      if (!isWalkable(grid, c + sc, r, geometry) || !isWalkable(grid, c, r + sr, geometry)) return false;
     }
     if (stepC) { err -= dr; c += sc; }
     if (stepR) { err += dc; r += sr; }
@@ -262,13 +273,13 @@ function hasLineOfSight(
  * Greedy path-smoothing: skip waypoints that can be reached directly
  * with line-of-sight from the current anchor.
  */
-function smooth(grid: Grid, raw: Cell[]): Cell[] {
+function smooth(grid: Grid, raw: Cell[], geometry: PathGridGeometry): Cell[] {
   if (raw.length <= 2) return raw;
   const result: Cell[] = [raw[0]];
   let anchor = 0;
 
   for (let i = 2; i < raw.length; i++) {
-    if (!hasLineOfSight(grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row)) {
+    if (!hasLineOfSight(grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row, geometry)) {
       result.push(raw[i - 1]);
       anchor = i - 1;
     }
@@ -303,21 +314,22 @@ export function findPath(
   grid: Grid,
   start: Point,
   goal:  Point,
+  geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
 ): PathResult | null {
-  const sc = pixelToCell(start.x, start.y);
-  const gc = pixelToCell(goal.x,  goal.y);
+  const sc = pixelToCell(start.x, start.y, geometry);
+  const gc = pixelToCell(goal.x,  goal.y, geometry);
 
-  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row);
+  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry);
   if (!raw) return null;
 
-  const smoothed = smooth(grid, raw);
-  const waypoints = smoothed.map(cell => cellCentre(cell.col, cell.row));
+  const smoothed = smooth(grid, raw, geometry);
+  const waypoints = smoothed.map(cell => cellCentre(cell.col, cell.row, geometry));
 
   // Drop the first waypoint if it's effectively the start position's cell centre
   // (bots should move *towards* the next meaningful cell, not stand still).
   const start_wp = waypoints[0];
   const distSq = (start_wp.x - start.x) ** 2 + (start_wp.y - start.y) ** 2;
-  const cellDiagSq = CELL_X ** 2 + CELL_Y ** 2;
+  const cellDiagSq = geometry.cellX ** 2 + geometry.cellY ** 2;
   const trimmed = distSq < cellDiagSq * 0.25 && waypoints.length > 1
     ? waypoints.slice(1)
     : waypoints;
@@ -350,22 +362,23 @@ export class PathCache {
     start: Point,
     goal:  Point,
     forceRefresh = false,
+    geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
   ): PathResult | null {
-    const sc  = pixelToCell(start.x, start.y);
-    const gc  = pixelToCell(goal.x,  goal.y);
-    const key = `${sc.col},${sc.row}→${gc.col},${gc.row}`;
+    const sc  = pixelToCell(start.x, start.y, geometry);
+    const gc  = pixelToCell(goal.x,  goal.y, geometry);
+    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
 
     if (!forceRefresh && this.cache.has(key)) {
       return this.cache.get(key)!;
     }
 
-    const result = findPath(grid, start, goal);
+    const result = findPath(grid, start, goal, geometry);
     this.cache.set(key, result);
     return result;
   }
 
-  invalidate(goal: Point): void {
-    const gc  = pixelToCell(goal.x, goal.y);
+  invalidate(goal: Point, geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY): void {
+    const gc  = pixelToCell(goal.x, goal.y, geometry);
     const suffix = `→${gc.col},${gc.row}`;
     for (const key of this.cache.keys()) {
       if (key.endsWith(suffix)) this.cache.delete(key);

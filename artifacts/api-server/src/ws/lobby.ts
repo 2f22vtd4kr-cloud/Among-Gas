@@ -14,8 +14,10 @@
  */
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
+import { buildMovementCorrectionPacket } from './movement.js';
 import {
   MAP_W, MAP_H,
+  FEET_OFFSET_Y,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
   PLAYER_SPAWN_MIN_SEPARATION_PX,
@@ -26,8 +28,11 @@ import {
   NO_TARGET,
 } from '@workspace/shared/coords';
 import {
-  buildCollisionGrid,
+  buildPreciseCollisionGrid,
+  isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
+  isLineOfSightClear,
+  isLineOfSightToInteractionTarget,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
 } from '@workspace/shared/collisionMap';
@@ -50,6 +55,9 @@ import {
   findVent,
 } from '@workspace/shared/vents';
 
+// Reuse the canonical fine-grid geometry for every server-authoritative interaction.
+const INTERACTION_COLLISION_GRID = buildPreciseCollisionGrid();
+
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 const CODE_LENGTH = 6;
@@ -71,7 +79,7 @@ export const SPAWN_X = PLAYER_SPAWN_X;
 export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
-const spawnGrid = buildCollisionGrid();
+const spawnGrid = buildPreciseCollisionGrid();
 
 /**
  * Compute a spread spawn position for player `index` of `total`.
@@ -869,6 +877,12 @@ export class LobbyManager {
     const dx = player.x - vent.x;
     const dy = player.y - vent.y;
     if (dx * dx + dy * dy > VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX) return false;
+    if (!isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      vent.x, vent.y + FEET_OFFSET_Y,
+      20,
+    )) return false;
 
     player.inVent = true;
     player.ventId = ventId;
@@ -898,18 +912,70 @@ export class LobbyManager {
     return true;
   }
 
-  /** Exit at the current vent; the following delta includes the visible position. */
+  /** Find the nearest legal standing point around an authored vent anchor. */
+  private _findVentExitPosition(ventId: number): { x: number; y: number } | null {
+    const vent = findVent(ventId);
+    if (!vent) return null;
+    if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, vent.x, vent.y)) {
+      return { x: vent.x, y: vent.y };
+    }
+
+    const step = 4;
+    for (let radius = step; radius <= 64; radius += step) {
+      const samples = Math.max(16, Math.ceil((2 * Math.PI * radius) / step));
+      for (let i = 0; i < samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        const candidate = {
+          x: vent.x + Math.cos(angle) * radius,
+          y: vent.y + Math.sin(angle) * radius,
+        };
+        if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, candidate.x, candidate.y)) {
+          return candidate;
+        }
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Release a vent occupant at a legal player footprint and synchronize the
+   * relocation immediately. A normal 0xFF delta is only an acknowledgement;
+   * the local prediction loop needs the explicit forced 0x22 correction.
+   */
+  private _releaseVentPlayer(lobby: Lobby, player: LobbyPlayer): boolean {
+    if (!player.inVent || player.ventId === undefined) return false;
+    const ventId = player.ventId;
+    const exit = this._findVentExitPosition(ventId);
+    // Fail closed: retain vent state if no legal exit can be established.
+    if (!exit) return false;
+
+    const now = Date.now();
+    player.x = exit.x;
+    player.y = exit.y;
+    player.inVent = false;
+    player.ventId = undefined;
+    player.movementCreditPx = 0;
+    player.movementCreditUpdatedAtMs = now;
+    player.lastMovementPacketAtMs = now;
+    player.lastMovementCorrectionAtMs = now;
+    player.lastBroadcastWireX = -100_000;
+    player.lastBroadcastWireY = -100_000;
+    this._broadcastVentState(lobby, 0x03, player.slot, ventId);
+    if (player.ws.readyState === /* OPEN */ 1) {
+      player.ws.send(buildMovementCorrectionPacket(
+        toWire(player.x, MAP_W),
+        toWire(player.y, MAP_H),
+      ));
+    }
+    return true;
+  }
+
+  /** Exit at a nearby legal standing point; vent anchors may overlap blocked floor cells. */
   exitVent(lobby: Lobby, playerSlot: number): boolean {
     const player = lobby.players.get(playerSlot);
     if (lobby.phase !== 'ROAMING' || !player || !player.alive ||
         player.role !== 'impostor' || !player.inVent || player.ventId === undefined) return false;
-    const ventId = player.ventId;
-    player.inVent = false;
-    player.ventId = undefined;
-    player.lastBroadcastWireX = -100_000;
-    player.lastBroadcastWireY = -100_000;
-    this._broadcastVentState(lobby, 0x03, playerSlot, ventId);
-    return true;
+    return this._releaseVentPlayer(lobby, player);
   }
 
   private _broadcastVentState(lobby: Lobby, sub: 0x01 | 0x02 | 0x03, playerSlot: number, ventId: number): void {
@@ -1410,6 +1476,11 @@ export class LobbyManager {
     const dx = attacker.x - victim.x;
     const dy = attacker.y - victim.y;
     if (dx * dx + dy * dy > KILL_RANGE_PX * KILL_RANGE_PX) return false;
+    if (!isLineOfSightClear(
+      INTERACTION_COLLISION_GRID,
+      attacker.x, attacker.y + FEET_OFFSET_Y,
+      victim.x, victim.y + FEET_OFFSET_Y,
+    )) return false;
 
     victim.corpseX = victim.x;
     victim.corpseY = victim.y;
@@ -1570,6 +1641,12 @@ export class LobbyManager {
     if (dx * dx + dy * dy > SABOTAGE_INTERACTION_RANGE_PX * SABOTAGE_INTERACTION_RANGE_PX) {
       return 'rejected';
     }
+    if (!isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      pad.x, pad.y + FEET_OFFSET_Y,
+      24,
+    )) return 'rejected';
 
     if (def.pads.length === 1) {
       // Single-pad systems (Lights): any one interaction fixes it immediately.
@@ -1677,6 +1754,14 @@ export class LobbyManager {
       );
       return false;
     }
+    // Ghosts intentionally phase through walls and retain their task rights;
+    // line-of-sight only constrains living crewmates interacting with consoles.
+    if (player.alive && !isLineOfSightToInteractionTarget(
+      INTERACTION_COLLISION_GRID,
+      player.x, player.y + FEET_OFFSET_Y,
+      def.x, def.y + FEET_OFFSET_Y,
+      def.interactionTargetRadiusPx ?? 24,
+    )) return false;
 
     // Steps must be completed in order
     for (let i = 0; i < stepIndex; i++) {
@@ -1730,6 +1815,11 @@ export class LobbyManager {
       if (reportDx * reportDx + reportDy * reportDy > REPORT_RANGE_PX * REPORT_RANGE_PX) {
         return false; // the reporter must be within the authoritative corpse interaction radius
       }
+      if (!isLineOfSightClear(
+        INTERACTION_COLLISION_GRID,
+        reporter.x, reporter.y + FEET_OFFSET_Y,
+        body.corpseX, body.corpseY + FEET_OFFSET_Y,
+      )) return false;
       if (body.bodyReported) return false; // already voted on this corpse — nothing new to report
       body.bodyReported = true;
     } else {
@@ -1742,16 +1832,10 @@ export class LobbyManager {
     }
 
     // A called meeting forcibly releases any impostor hiding in a vent.
-    // Clear server state before broadcasting the meeting, so the client closes
-    // its vent selector and the player's sprite remains visible during voting.
+    // Reuse the same legal exit and forced position correction as a manual
+    // exit so a blocked vent anchor cannot strand the player after voting.
     for (const player of lobby.players.values()) {
-      if (!player.inVent || player.ventId === undefined) continue;
-      const ventId = player.ventId;
-      player.inVent = false;
-      player.ventId = undefined;
-      player.lastBroadcastWireX = -100_000;
-      player.lastBroadcastWireY = -100_000;
-      this._broadcastVentState(lobby, 0x03, player.slot, ventId);
+      if (player.inVent) this._releaseVentPlayer(lobby, player);
     }
 
     const meeting: MeetingState = {

@@ -1,8 +1,7 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
-  buildCollisionGrid,
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
@@ -46,11 +45,13 @@ import {
 import {
   toWire,
   fromWire,
+  FEET_OFFSET_Y,
   NO_TARGET,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import { isLineOfSightClear, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
@@ -270,6 +271,7 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
+  const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -507,13 +509,22 @@ export default function GameMap() {
         const dx = pad.x - myPos.x;
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          pad.x, pad.y + FEET_OFFSET_Y,
+          24,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) {
+          best = { systemId: active.systemId, padId };
+          bestDistSq = distSq;
+        }
       });
       setNearestRepairPad(best);
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, amIImpostor, sabotage]);
+  }, [amIDead, amIImpostor, sabotage, taskInteractionGrid]);
 
   // Local countdown clock for the sabotage banner, ticked independently of
   // the canvas rAF loop — same pattern as meetingNow above.
@@ -551,13 +562,18 @@ export default function GameMap() {
         const dx = body.x - myPos.x;
         const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = body.slot; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightClear(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          body.x, body.y + FEET_OFFSET_Y,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = body.slot; bestDistSq = distSq; }
       }
       setNearestBody(best);
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting]);
+  }, [amIDead, meeting, taskInteractionGrid]);
 
   // Local countdown clock for the meeting overlay, ticked independently of
   // the canvas rAF loop (this UI lives outside the canvas).
@@ -603,13 +619,18 @@ export default function GameMap() {
         const dx = rp.x - myPos.x;
         const dy = rp.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = rp.slot; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightClear(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          rp.x, rp.y + FEET_OFFSET_Y,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = rp.slot; bestDistSq = distSq; }
       }
       setNearestTarget(best);
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIImpostor, amIDead]);
+  }, [amIImpostor, amIDead, taskInteractionGrid]);
 
   // ── Task system (Phase 7) ─────────────────────────────────────────────────
   // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
@@ -651,8 +672,9 @@ export default function GameMap() {
   }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
+    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      new URLSearchParams(window.location.search).get('mock') === 'task-interaction';
+      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked');
     if (taskMockActive) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
@@ -682,18 +704,27 @@ export default function GameMap() {
         const dx = def.x - myPos.x;
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) {
+        // Ghosts intentionally keep through-wall task access on both client and server.
+        const hasLineOfSight = amIDead || isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x,
+          myPos.y + FEET_OFFSET_Y,
+          def.x,
+          def.y + FEET_OFFSET_Y,
+          def.interactionTargetRadiusPx ?? 24,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) {
           best = { taskId: t.taskId, stepIndex: t.completedSteps };
           bestDistSq = distSq;
         }
       }
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
-      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-          new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
-        const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+      if (taskMockActive) {
+        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode?.includes('blocked') ? 7 : 4));
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
+          isGhost: amIDead,
           meeting: meeting !== null,
           assignedTasks: myTasksRef.current,
           player: { x: myPos.x, y: myPos.y },
@@ -706,7 +737,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage]);
+  }, [meeting, myRole, sabotage, amIDead, taskInteractionGrid]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1030,12 +1061,18 @@ export default function GameMap() {
         const dx = vent.x - myPos.x;
         const dy = vent.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = vent.id; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          vent.x, vent.y + FEET_OFFSET_Y,
+          20,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = vent.id; bestDistSq = distSq; }
       }
       setNearestVentId(best);
     }, 150);
     return () => clearInterval(id);
-  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner, taskInteractionGrid]);
 
 
   useEffect(() => {
@@ -1063,10 +1100,13 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = buildCollisionGrid();
+    const grid = taskInteractionGrid;
+    const fineGrid = grid;
+    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
-      const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
+      const blockedFixture = taskMockMode?.includes('blocked') === true;
+      const fixtureTask = TASK_DEFS.find(task => task.id === (blockedFixture ? 7 : 4));
       if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
       let nearest: { x: number; y: number; distanceSq: number } | null = null;
       const range = TASK_INTERACTION_RANGE_PX - 8;
@@ -1076,22 +1116,27 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(grid, x, y)) continue;
+          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
+          const hasLineOfSight = isLineOfSightToInteractionTarget(
+            fineGrid, x, y + FEET_OFFSET_Y,
+            fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
+            fixtureTask.interactionTargetRadiusPx ?? 24,
+          );
+          if (blockedFixture === hasLineOfSight) continue;
           nearest = { x, y, distanceSq };
         }
       }
-      if (!nearest) throw new Error('Task interaction fixture has no walkable player position within interaction range');
+      if (!nearest) throw new Error(blockedFixture
+        ? 'Occluded task fixture has no walkable in-range position without line of sight'
+        : 'Task interaction fixture has no walkable, visible player position within interaction range');
       playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
       (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
     }
-    // Keep the compact grid for the existing movement/A* path while the
-    // live vision mask uses the canonical fine geometry. This keeps low
-    // furniture (notably the upper-atrium table) collidable without casting
-    // square shadows, and preserves the measured narrow statue occluder.
-    const fineGrid = buildPreciseCollisionGrid();
+    // Player prediction and visual occlusion share the canonical fine grid.
+    // Compact geometry remains available to navigation consumers that need A*.
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    if (!isSpawnWalkable(grid)) {
+    if (!isSpawnWalkable(fineGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
@@ -1139,8 +1184,16 @@ export default function GameMap() {
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
-        grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
+      // The ghost-only browser fixture deliberately starts behind a wall.
+      // Keep its test position after physics so React mount ordering cannot
+      // make the first living-player frame snap it back to the spawn.
+      if (taskMockMode === 'task-interaction-ghost-blocked' &&
+          deadSlotsRef.current.has(mySlotRef.current ?? -1)) {
+        const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
+        if (fixture) playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
+      }
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
       if (
         (pose === 'walk-1' || pose === 'walk-2') &&

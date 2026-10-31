@@ -180,7 +180,7 @@ export class ImpostorBot extends BotAgent {
     const raw = pool[Math.floor(Math.random() * pool.length)];
     // Consoles are often wall-mounted (see CrewmateBot._handleTask) — approach
     // within range rather than navigating to the exact, possibly-unwalkable pixel.
-    this._fakeTarget = this.nearestApproachPoint(raw, TASK_INTERACTION_RANGE_PX - 30);
+    this._fakeTarget = this.nearestApproachPoint(raw, TASK_INTERACTION_RANGE_PX - 3);
     this._fakeDwellTicks = 0;
     this.clearPath();
   }
@@ -308,7 +308,8 @@ export class ImpostorBot extends BotAgent {
       this._ventTargetId = nearest.id;
       this._ventApproachGoal = this.nearestApproachPoint(
         { x: nearest.x, y: nearest.y },
-        VENT_INTERACTION_RANGE_PX - 30,
+        VENT_INTERACTION_RANGE_PX - 3,
+        20,
       );
       this._ventApproachTicks = 0;
       this._ventMode = 'approaching';

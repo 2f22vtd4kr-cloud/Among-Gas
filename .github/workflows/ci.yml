@@ -136,6 +136,9 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Verify Telegram Mini App lobby invite start parameters
+        run: pnpm --filter @workspace/scripts run test:telegram-start-param
+
       - name: Verify WebSocket reconnect grace, slot recovery and resume snapshot isolation
         run: pnpm --filter @workspace/api-server exec tsx src/test_reconnect.ts
 
