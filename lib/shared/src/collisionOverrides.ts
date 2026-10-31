@@ -25,6 +25,14 @@ export const MANUAL_WALKABLE_REPLACEMENT_ZONES: readonly {
       [2035, 1215],
     ]],
   },
+  {
+    id: 'east-generator-approach-aisle',
+    // The room's central floor is visually open; the source red-line mask
+    // accidentally filled this entire aisle. Keep the perimeter equipment
+    // and lower generator bank outside this measured walkable strip.
+    bounds: [2780, 850, 3100, 950],
+    blockedPolygons: [],
+  },
 ];
 
 export const MANUAL_BLOCKED_POLYGONS: readonly {
