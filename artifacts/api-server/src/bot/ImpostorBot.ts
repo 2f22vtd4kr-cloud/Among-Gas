@@ -309,6 +309,7 @@ export class ImpostorBot extends BotAgent {
       this._ventApproachGoal = this.nearestApproachPoint(
         { x: nearest.x, y: nearest.y },
         VENT_INTERACTION_RANGE_PX - 30,
+        20,
       );
       this._ventApproachTicks = 0;
       this._ventMode = 'approaching';
