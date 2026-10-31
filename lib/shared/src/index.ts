@@ -40,7 +40,7 @@ export {
 export type { TaskZone, TaskDef } from './tasks.js';
 
 export { findPath, PathCache } from './pathfinding.js';
-export type { Point, PathResult } from './pathfinding.js';
+export type { Point, PathResult, PathGridGeometry } from './pathfinding.js';
 
 export {
   SABOTAGE_LIGHTS,
