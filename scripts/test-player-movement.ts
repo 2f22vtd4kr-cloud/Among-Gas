@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, buildCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
-import { isMovementPathWalkable, validateMovementIntent } from '../artifacts/api-server/src/ws/movement.js';
+import {
+  isMovementPathWalkable,
+  validateMovementIntent,
+  MOVEMENT_PACKET_BURST_CAPACITY,
+  type MovementBudgetState,
+} from '../artifacts/api-server/src/ws/movement.js';
 import {
   FEET_OFFSET_Y,
   PLAYER_HALF_WIDTH,
@@ -216,6 +221,90 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
   assert.ok(decision.y >= 0, 'server ghost movement must never produce a negative wire y coordinate');
 }
 
+
+// Ordered 25Hz WebSocket position packets may be delivered in a tight burst
+// after a short event-loop/network stall. They must be validated against the
+// accumulated distance budget rather than dropped by an arrival-spacing guard.
+{
+  const burstGrid = new Uint8Array(COLS * ROWS);
+  const burstStartX = MAP_W / 4;
+  const burstY = MAP_H / 2 - FEET_OFFSET_Y;
+  const packetStepPx = PLAYER_SPEED_PX_PER_SEC * 0.04;
+  let burstState: MovementBudgetState = {
+    x: burstStartX,
+    y: burstY,
+    alive: true,
+    movementCreditPx: 0,
+    movementCreditUpdatedAtMs: 1_000,
+    lastMovementPacketAtMs: 1_000,
+  };
+  for (let packet = 1; packet <= 5; packet++) {
+    const decision = validateMovementIntent(
+      burstState,
+      burstStartX + packetStepPx * packet,
+      burstY,
+      1_200 + packet - 1,
+      burstGrid,
+    );
+    assert.equal(decision.rateLimited, false,
+      `buffered movement packet ${packet} must pass the independent packet token bucket`);
+    assert.equal(decision.accepted, true,
+      `buffered movement packet ${packet} must consume only its 40ms share of the accumulated 200ms budget`);
+    burstState = {
+      ...burstState,
+      x: decision.x,
+      y: decision.y,
+      movementCreditPx: decision.movementCreditPx,
+      movementCreditUpdatedAtMs: decision.movementCreditUpdatedAtMs,
+      lastMovementPacketAtMs: decision.lastMovementPacketAtMs,
+      movementPacketTokens: decision.movementPacketTokens,
+      movementPacketTokensUpdatedAtMs: decision.movementPacketTokensUpdatedAtMs,
+    };
+  }
+  assert.ok(Math.abs(burstState.x - (burstStartX + PLAYER_SPEED_PX_PER_SEC * 0.2)) < 0.01,
+    'a 200ms queued movement burst must be accepted without a forced rollback');
+}
+
+// The independent packet token bucket still bounds pathological packet floods.
+{
+  const floodGrid = new Uint8Array(COLS * ROWS);
+  const floodStartX = MAP_W / 4;
+  const floodY = MAP_H / 2 - FEET_OFFSET_Y;
+  let floodState: MovementBudgetState = {
+    x: floodStartX,
+    y: floodY,
+    alive: true,
+    movementCreditPx: 0,
+    movementCreditUpdatedAtMs: 2_000,
+  };
+  let acceptedPackets = 0;
+  let floodWasLimited = false;
+  for (let packet = 0; packet < MOVEMENT_PACKET_BURST_CAPACITY + 2; packet++) {
+    const decision = validateMovementIntent(floodState, floodStartX, floodY, 2_000, floodGrid);
+    if (decision.rateLimited) {
+      floodWasLimited = true;
+      break;
+    }
+    acceptedPackets++;
+    floodState = {
+      ...floodState,
+      movementCreditPx: decision.movementCreditPx,
+      movementCreditUpdatedAtMs: decision.movementCreditUpdatedAtMs,
+      lastMovementPacketAtMs: decision.lastMovementPacketAtMs,
+      movementPacketTokens: decision.movementPacketTokens,
+      movementPacketTokensUpdatedAtMs: decision.movementPacketTokensUpdatedAtMs,
+    };
+  }
+  assert.equal(acceptedPackets, MOVEMENT_PACKET_BURST_CAPACITY,
+    'the packet token bucket must allow its configured burst and no more');
+  assert.equal(floodWasLimited, true,
+    'the independent packet token bucket must still reject an excessive burst');
+  const refilledPacket = validateMovementIntent(
+    floodState, floodStartX, floodY, 2_020, floodGrid,
+  );
+  assert.equal(refilledPacket.rateLimited, false,
+    'the packet token bucket must refill at its configured sustained rate');
+}
 
 // Delayed/duplicate ordinary 0xFF echoes cannot rollback newer prediction.
 {

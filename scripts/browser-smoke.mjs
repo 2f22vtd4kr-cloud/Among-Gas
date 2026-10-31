@@ -1287,19 +1287,38 @@ try {
   assert.ok(joystickBox, 'the movement joystick must be visible for camera-follow testing');
   const joystickX = joystickBox.x + joystickBox.width / 2;
   const joystickY = joystickBox.y + joystickBox.height / 2;
+  // Capture diagnostics on every animation frame before starting the pointer
+  // drag. Starting the trace only after mouse.move() misses most of the walk:
+  // Playwright's stepped drag can already carry the player to nearby geometry.
+  await cameraPage.evaluate(() => {
+    const trace = { active: true, samples: [] };
+    window.__AG_CAMERA_TRACE = trace;
+    const capture = () => {
+      if (!trace.active) return;
+      const sample = window.__AG_CAMERA_DEBUG ?? null;
+      if (sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY) &&
+          Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY)) {
+        trace.samples.push({ ...sample });
+      }
+      requestAnimationFrame(capture);
+    };
+    requestAnimationFrame(capture);
+  });
+  await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
   await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
-  await cameraPage.waitForTimeout(550);
-  const cameraSamples = [];
-  for (let i = 0; i < 6; i++) {
-    const sample = await readCameraTransform();
-    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY),
-      'camera render diagnostics must remain available during movement');
-    cameraSamples.push(sample);
-    await cameraPage.waitForTimeout(70);
-  }
+  // Keep the pointer held for the entire trace window so the browser samples
+  // include both acceleration/motion and the camera-follow response.
+  await cameraPage.waitForTimeout(420);
   await cameraPage.mouse.up();
+  const cameraSamples = await cameraPage.evaluate(() => {
+    const trace = window.__AG_CAMERA_TRACE;
+    if (trace) trace.active = false;
+    return trace?.samples ?? [];
+  });
+  assert.ok(cameraSamples.length >= 8,
+    'camera-follow trace must capture at least eight animation frames');
   const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
   console.log('Camera follow diagnostic:', JSON.stringify({
@@ -1315,6 +1334,16 @@ try {
   const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
   assert.ok(worldChangeRatio > 0.02,
     `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
+  const movementTrace = [cameraBaseline, ...cameraSamples];
+  const playerMovementSamples = movementTrace.filter((sample, index) => index > 0 &&
+    Math.hypot(sample.playerX - movementTrace[index - 1].playerX,
+      sample.playerY - movementTrace[index - 1].playerY) > 0.25);
+  const sampledMovementDistance = Math.hypot(
+    movementTrace[movementTrace.length - 1].playerX - movementTrace[0].playerX,
+    movementTrace[movementTrace.length - 1].playerY - movementTrace[0].playerY,
+  );
+  assert.ok(playerMovementSamples.length >= 3 && sampledMovementDistance > 30,
+    `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} frames over ${sampledMovementDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
@@ -1324,6 +1353,30 @@ try {
   assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
     `camera-following player screen position must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
+
+  // Keep a pointer actively held while a blocking overlay opens. The joystick
+  // must unmount, clear its direction, and not inherit that pointer on remount.
+  await cameraPage.mouse.move(joystickX, joystickY);
+  await cameraPage.mouse.down();
+  await cameraPage.mouse.move(joystickX + 38, joystickY, { steps: 4 });
+  const settingsButton = cameraPage.locator('[aria-label="Settings"], [aria-label="Настройки"]');
+  await settingsButton.evaluate(element => element.click());
+  const leaveMatchButton = cameraPage.getByRole('button', { name: /Leave match|Выйти из матча/ });
+  await leaveMatchButton.waitFor({ state: 'visible' });
+  await leaveMatchButton.evaluate(element => element.click());
+  await cameraPage.getByRole('dialog', { name: /Leave this match|Выйти из матча/ }).waitFor();
+  assert.equal(await joystick.count(), 0,
+    'joystick must unmount while the leave-match confirmation is open');
+  await cameraPage.getByRole('button', { name: /Stay|Остаться/ }).evaluate(element => element.click());
+  await joystick.waitFor({ state: 'visible' });
+  await cameraPage.mouse.move(joystickX + 42, joystickY);
+  await cameraPage.waitForTimeout(100);
+  const remountedKnobTransform = await cameraPage.locator('[data-testid="joystick-knob"]').evaluate(
+    element => element.style.transform,
+  );
+  assert.equal(remountedKnobTransform, 'translate(-50%, -50%)',
+    'a remounted joystick must not inherit the pointer that was held before the modal opened');
+  await cameraPage.mouse.up();
   await cameraPage.close();
 
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
