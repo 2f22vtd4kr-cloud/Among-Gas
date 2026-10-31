@@ -159,3 +159,53 @@ try {
     fuelManager.disposeLobby(fuelLobby);
   }
 }
+
+ 
+// Regression: a ghost can start just inside the server's 171px task range.
+// Moving to range-1 can round to 170.00000000000003 and never enter the
+// strict client-side threshold; the 8px safety margin must complete both steps.
+{
+  const distributorTask = TASK_DEFS.find(candidate => candidate.id === 2)!;
+  const ghostBot = new CrewmateBot();
+  const ghost: LobbyPlayer = {
+    slot: 0,
+    tgUserId: -12,
+    username: 'Distributor ghost',
+    ws: fakeSocket,
+    x: distributorTask.x + 94,
+    y: distributorTask.y - 142,
+    lastBroadcastWireX: 0,
+    lastBroadcastWireY: 0,
+    role: 'crewmate',
+    alive: false,
+    killCooldownMs: 0,
+    assignedTasks: [distributorTask.id],
+    isBot: true,
+    botAgent: ghostBot,
+  };
+  const ghostLobby = {
+    code: 'GHOST1',
+    phase: 'ROAMING',
+    players: new Map([[0, ghost]]),
+    userIdToSlot: new Map([[-12, 0]]),
+    hostSlot: 0,
+    meeting: null,
+    completedTaskSteps: new Set<string>(),
+    totalTaskSteps: distributorTask.steps,
+    sabotage: null,
+    sabotageCooldownMs: 0,
+  } as unknown as Lobby;
+  const ghostManager = new LobbyManager();
+  try {
+    for (let tick = 0; tick < 10 && ghostLobby.phase === 'ROAMING'; tick++) {
+      ghostBot.tick(ghostLobby, ghost, ghostManager);
+    }
+    assert.equal(ghostLobby.completedTaskSteps.size, distributorTask.steps,
+      'a ghost just inside task range must complete both Calibrate Distributor steps');
+    assert.equal(ghostLobby.phase, 'GAMEOVER',
+      'the final ghost task step must end the round');
+    console.log('PASS: ghost task completion keeps a safe margin inside interaction range');
+  } finally {
+    ghostManager.disposeLobby(ghostLobby);
+  }
+}
