@@ -109,7 +109,7 @@ function buildSpawnReachability(): Uint8Array {
 
 const spawnReachability = buildSpawnReachability();
 
-function isSpawnReachable(feetX: number, feetY: number): boolean {
+export function isBotNavigationReachable(feetX: number, feetY: number): boolean {
   const col = Math.floor(feetX / NAV_CELL_X);
   const row = Math.floor(feetY / NAV_CELL_Y);
   if (col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) return false;
@@ -149,7 +149,7 @@ export const BOT_SPEED_PX = 80;
 export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
-const ARRIVAL_SQ = 25 * 25;
+const ARRIVAL_SQ = 8 * 8;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
@@ -426,7 +426,7 @@ export abstract class BotAgent {
 
     const reachable = (p: Point): boolean =>
       isPlayerPositionWalkable(movementGrid, p.x, p.y) &&
-      isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
+      isBotNavigationReachable(p.x, p.y + FEET_OFFSET_Y);
     const visible = (p: Point): boolean =>
       isLineOfSightToInteractionTarget(
         movementGrid,
