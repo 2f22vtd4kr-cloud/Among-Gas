@@ -431,15 +431,14 @@ export default function GameMap() {
 
   const [emergencyCallStatus, setEmergencyCallStatus] = useState<'calling' | 'confirmed' | 'failed' | null>(null);
   const emergencyCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previousMeetingRef = useRef(meeting);
   useEffect(() => {
-    if (!meeting || meeting.bodySlot !== NO_TARGET) return;
+    const previousMeeting = previousMeetingRef.current;
+    previousMeetingRef.current = meeting;
+    if (previousMeeting || !meeting || meeting.bodySlot !== NO_TARGET) return;
     if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
     setEmergencyCallStatus('confirmed');
     emergencyCallTimerRef.current = setTimeout(() => setEmergencyCallStatus(null), 2200);
-    return () => {
-      if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
-      emergencyCallTimerRef.current = null;
-    };
   }, [meeting]);
   useEffect(() => () => {
     if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
