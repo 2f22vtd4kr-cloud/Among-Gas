@@ -1063,6 +1063,7 @@ export default function GameMap() {
     if (!fogCtx) return;
 
     const grid = buildPreciseCollisionGrid();
+    const fineGrid = grid;
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
       const fixtureTask = TASK_DEFS.find(task => task.id === 4);
@@ -1085,7 +1086,6 @@ export default function GameMap() {
     }
     // Player prediction and visual occlusion share the canonical fine grid.
     // Compact geometry remains available to navigation consumers that need A*.
-    const fineGrid = grid;
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
     if (!isSpawnWalkable(fineGrid)) {
