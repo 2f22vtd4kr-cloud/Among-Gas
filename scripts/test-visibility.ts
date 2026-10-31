@@ -4,6 +4,7 @@ import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
   buildFineCollisionGridFromRle,
+  buildPreciseCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
   FINE_CELL_X,
@@ -245,9 +246,12 @@ assert.ok(statueRay.x>1707&&statueRay.x<1711,'vision ray stops at the narrow sta
 const realFineGrid = buildPreciseCollisionGrid();
 const independentlyDecodedFineGrid = decodeCanonicalFineRle(FINE_RLE_BASE64, FINE_COLS, FINE_ROWS);
 const productionDecodedFineGrid = buildFineCollisionGridFromRle(FINE_RLE_BASE64);
+const candidateFineGrid = buildPreciseCollisionGridFromRle(FINE_RLE_BASE64);
 assert.equal(FINE_COLS * FINE_ROWS, 680 * 392, 'canonical dimensions are 680×392');
 assert.deepEqual(productionDecodedFineGrid, independentlyDecodedFineGrid,
   'the production RLE decoder exactly matches the independently decoded committed payload');
+assert.deepEqual(candidateFineGrid, realFineGrid,
+  'candidate payloads receive the same hand-traced geometry overrides as the live runtime');
 // The live grid intentionally applies the hand-traced van-bay replacement
 // after decoding. Keep that explicit edit bounded to its authored rectangle.
 let overrideDifferences = 0;
