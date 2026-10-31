@@ -6,6 +6,7 @@ export interface InternalDialogueContext {
   meetingType: 'body report' | 'emergency call';
   livingRoster: readonly string[];
   latestSpeaker?: string;
+  latestSpeakerIsBot?: boolean;
   latestMessage?: string;
 }
 
@@ -56,6 +57,15 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
           'I would rather establish a timeline than rush into an unsupported vote.',
         ];
     return opening[stableIndex(seed, opening.length)];
+  }
+
+  if (context.latestSpeakerIsBot && (asksLocation || asksForEvidence || isQuestion)) {
+    const replies = [
+      'was that a confirmed sighting or an inference from the route?',
+      'can someone corroborate the location and time?',
+      'what direct observation supports that part of the timeline?',
+    ];
+    return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
 
   if (mentionedSubject) {
