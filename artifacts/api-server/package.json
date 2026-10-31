@@ -10,8 +10,9 @@
     "start:dev": "NODE_ENV=development node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "simulate": "LOG_LEVEL=silent tsx src/sim/cli.ts",
-    "test:gameplay": "tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/bot/test-groq-dialogue.ts && tsx src/bot/test-navigation.ts && tsx src/sim/test-simulation-collision.ts",
-    "test:groq": "tsx src/bot/test-groq-dialogue.ts"
+    "test:gameplay": "tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/bot/test-groq-dialogue.ts && tsx src/bot/test-navigation.ts && tsx src/sim/test-simulation-collision.ts && tsx src/test-remote-player-delta.ts",
+    "test:groq": "tsx src/bot/test-groq-dialogue.ts",
+    "test:remote-delta": "tsx src/test-remote-player-delta.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
