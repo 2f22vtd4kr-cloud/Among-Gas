@@ -266,7 +266,7 @@ const realFineShadowGrid = buildShadowGrid(realFineGrid);
 const realFineShadowSegments = buildFineShadowSegments(realFineGrid);
 assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2000,
   'compact production props expose merged silhouette segments within a mobile-safe budget');
-const vehicleCell = fineCell(2120, 1150);
+const vehicleCell = Math.floor(1150 / FINE_CELL_Y) * FINE_COLS + Math.floor(2120 / FINE_CELL_X);
 assert.equal(realFineGrid[vehicleCell], 1, 'the vehicle remains a solid movement-collision obstacle');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 2120, 1150), false,
   'the van body remains blocked after replacing its oversized source footprint');
