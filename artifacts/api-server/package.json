@@ -10,7 +10,7 @@
     "start:dev": "NODE_ENV=development node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "simulate": "LOG_LEVEL=silent tsx src/sim/cli.ts",
-    "test:gameplay": "tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/sim/test-simulation-collision.ts"
+    "test:gameplay": "tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/bot/test-navigation.ts && tsx src/sim/test-simulation-collision.ts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
