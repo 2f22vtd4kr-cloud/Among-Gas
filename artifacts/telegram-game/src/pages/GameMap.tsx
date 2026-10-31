@@ -512,7 +512,7 @@ export default function GameMap() {
         if (distSq <= bestDistSq && isLineOfSightToInteractionTarget(
           interactionGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
-          def.x, def.y + FEET_OFFSET_Y,
+          pad.x, pad.y + FEET_OFFSET_Y,
           24,
         )) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
       });
@@ -520,7 +520,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, amIImpostor, sabotage]);
+  }, [amIDead, amIImpostor, sabotage, interactionGrid]);
 
   // Local countdown clock for the sabotage banner, ticked independently of
   // the canvas rAF loop — same pattern as meetingNow above.
