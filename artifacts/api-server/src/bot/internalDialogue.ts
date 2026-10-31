@@ -40,7 +40,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
     name.toLocaleLowerCase() !== context.latestSpeaker?.toLocaleLowerCase() &&
     lower.includes(name.toLocaleLowerCase()),
   );
-  const playerNumberMatch = lower.match(/\\bplayer\\s*#?0*(\\d{1,2})\\b|\\bslot\\s*#?0*(\\d{1,2})\\b|#0*(\\d{1,2})\\b/);
+  const playerNumberMatch = lower.match(/\bplayer\s*#?0*(\d{1,2})\b|\bslot\s*#?0*(\d{1,2})\b|#0*(\d{1,2})\b/);
   const mentionedPlayerNumber = playerNumberMatch
     ? `Player${Number(playerNumberMatch[1] ?? playerNumberMatch[2] ?? playerNumberMatch[3])}`
     : undefined;
@@ -67,11 +67,11 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
 
   if (mentionedSubject) {
     const replies = [
-      `${context.latestSpeaker ?? 'Player'}, what did ${mentionedSubject} do that you personally observed?`,
-      `Is there a specific sighting connecting ${otherPlayer} to this, or is that only a suspicion?`,
-      `Can someone independently confirm the detail about ${otherPlayer}?`,
+      \`What did \${mentionedSubject} do that you personally observed?\`,
+      \`Is there a specific sighting connecting \${mentionedSubject} to this, or is that only a suspicion?\`,
+      \`Can someone independently confirm the detail about \${mentionedSubject}?\`,
     ];
-    return replies[stableIndex(seed, replies.length)];
+    return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
 
   if (mentionsSelf) {
