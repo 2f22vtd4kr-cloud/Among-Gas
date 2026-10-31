@@ -22,7 +22,7 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
-import { buildCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import type { SimGameResult, SimWinner } from './types.js';
 
 export interface SimBatchOptions {
@@ -42,7 +42,7 @@ export interface SimBatchOptions {
   onGameResult?: (result: SimGameResult) => void;
 }
 
-const simulationCollisionGrid = buildCollisionGrid();
+const simulationCollisionGrid = buildPreciseCollisionGrid();
 
 const BOT_NAMES = [
   'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta',
