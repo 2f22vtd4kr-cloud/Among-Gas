@@ -768,21 +768,37 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 // 15. Client movement packets are constrained by elapsed time and swept collision.
 {
   const vent = findVent(0)!;
+  const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
+  let movementStart: { x: number; y: number } | undefined;
+  for (let radius = 0; radius <= VENT_INTERACTION_RANGE_PX && !movementStart; radius += 4) {
+    const samples = radius === 0 ? 1 : Math.max(16, Math.ceil(2 * Math.PI * radius / 4));
+    for (let sample = 0; sample < samples; sample++) {
+      const angle = sample / samples * Math.PI * 2;
+      const x = vent.x + Math.cos(angle) * radius;
+      const y = vent.y + Math.sin(angle) * radius;
+      if (!isWalkableMovementPoint(grid, x, y)) continue;
+      if (!isMovementPathWalkable(grid, x, y, x + legalStepDistance, y)) continue;
+      movementStart = { x, y };
+      break;
+    }
+  }
+  assert.ok(movementStart,
+    'a vent must have a reachable stand-off position with a clear legal movement step');
   const base = {
-    x: vent.x,
-    y: vent.y,
+    x: movementStart!.x,
+    y: movementStart!.y,
     alive: true,
     movementCreditPx: 0,
     movementCreditUpdatedAtMs: 1_000,
     lastMovementPacketAtMs: 1_000,
   };
 
-  const teleport = validateMovementIntent(base, vent.x + 500, vent.y, 1_100, grid);
+  const teleport = validateMovementIntent(base, base.x + 500, base.y, 1_100, grid);
   assert.equal(teleport.accepted, false, 'a forged long-distance movement target is rejected');
-  assert.equal(teleport.x, vent.x, 'a rejected teleport does not move the authoritative player');
+  assert.equal(teleport.x, base.x, 'a rejected teleport does not move the authoritative player');
   assert.equal(teleport.sendCorrection, true, 'a rejected target asks the server to correct prediction');
 
-  const closePacket = validateMovementIntent(base, vent.x + 1, vent.y, 1_005, grid);
+  const closePacket = validateMovementIntent(base, base.x + 1, base.y, 1_005, grid);
   assert.equal(closePacket.rateLimited, false,
     'an ordered movement packet arriving inside 12ms must not be dropped solely due to arrival spacing');
   assert.equal(closePacket.accepted, true,
@@ -793,7 +809,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   let acceptedFloodPackets = 0;
   let floodLimited = false;
   for (let packet = 0; packet < MOVEMENT_PACKET_BURST_CAPACITY + 2; packet++) {
-    const decision = validateMovementIntent(floodState, vent.x, vent.y, 1_000, grid);
+    const decision = validateMovementIntent(floodState, base.x, base.y, 1_000, grid);
     if (decision.rateLimited) {
       floodLimited = true;
       break;
@@ -813,24 +829,24 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(floodLimited, true, 'excessive movement packet spam is rate limited');
 
   const legalStepDistance = PLAYER_SPEED_PX_PER_SEC * 0.05;
-  const legalStep = validateMovementIntent(base, vent.x + legalStepDistance, vent.y, 1_050, grid);
+  const legalStep = validateMovementIntent(base, base.x + legalStepDistance, base.y, 1_050, grid);
   assert.equal(legalStep.accepted, true, 'a normal target within the elapsed movement budget is accepted');
-  assert.ok(legalStep.x > vent.x, 'an accepted movement intent advances authoritative position');
+  assert.ok(legalStep.x > base.x, 'an accepted movement intent advances authoritative position');
 
   const ghostStep = validateMovementIntent(
     { ...base, alive: false },
-    vent.x + legalStepDistance,
-    vent.y,
+    base.x + legalStepDistance,
+    base.y,
     1_050,
     grid,
   );
   assert.equal(ghostStep.accepted, true, 'ghost movement still works through the speed budget');
 
-  const correction = buildMovementCorrectionPacket(toWire(vent.x, MAP_W), toWire(vent.y, MAP_H));
+  const correction = buildMovementCorrectionPacket(toWire(base.x, MAP_W), toWire(base.y, MAP_H));
   assert.equal(correction.length, 5, 'movement correction has the expected five-byte frame');
   assert.equal(correction.readUInt8(0), 0x22, 'movement correction uses its dedicated opcode');
-  assert.equal(correction.readUInt16LE(1), toWire(vent.x, MAP_W));
-  assert.equal(correction.readUInt16LE(3), toWire(vent.y, MAP_H));
+  assert.equal(correction.readUInt16LE(1), toWire(base.x, MAP_W));
+  assert.equal(correction.readUInt16LE(3), toWire(base.y, MAP_H));
 
   // The actual map has wall segments with walkable endpoints. Find one at
   // runtime so this regression remains tied to the canonical collision map.
