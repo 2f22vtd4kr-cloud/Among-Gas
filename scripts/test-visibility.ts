@@ -250,6 +250,13 @@ const realFineShadowGrid = buildShadowGrid(realFineGrid);
 const realFineShadowSegments = buildFineShadowSegments(realFineGrid);
 assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2000,
   'compact production props expose merged silhouette segments within a mobile-safe budget');
+const vehicleCell = fineCell(2120, 1150);
+assert.equal(realFineGrid[vehicleCell], 1, 'the vehicle remains a solid movement-collision obstacle');
+assert.equal(realFineShadowGrid[vehicleCell], 0, 'the vehicle is not rasterized into a broad square shadow');
+assert.ok(realFineShadowSegments.some(segment =>
+  [segment.ax, segment.bx].some(x => x >= 1990 && x <= 2260) &&
+  [segment.ay, segment.by].some(y => y >= 1050 && y <= 1260)
+), 'the vehicle casts a silhouette shadow from its measured fine-grid outline');
 assert.equal(realFineGrid.length, FINE_COLS * FINE_ROWS, 'fine collision grid has complete declared coverage');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1640, 449), true, 'fine western garden path is walkable');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1810, 449), true, 'fine eastern garden path is walkable');
