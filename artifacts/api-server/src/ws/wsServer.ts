@@ -280,8 +280,13 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (!lobby) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
+        const wasAlreadyGameplayReady = lobby.gameplayReady === true;
         const ready = lobbyManager.markGameplayReady(lobby, slot);
-        if (ready && ws.readyState === ws.OPEN) ws.send(Buffer.from([0x24, 0x01]));
+        // Initial barrier completion broadcasts 0x24 to the whole lobby.
+        // Only a late reconnect needs a targeted one-player acknowledgement.
+        if (ready && wasAlreadyGameplayReady && ws.readyState === ws.OPEN) {
+          ws.send(Buffer.from([0x24, 0x01]));
+        }
         return;
       }
 
