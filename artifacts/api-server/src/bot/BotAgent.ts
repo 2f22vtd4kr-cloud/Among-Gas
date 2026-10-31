@@ -14,6 +14,8 @@ import {
   isPlayerFootprintWalkableAtFeet,
   isPlayerPositionWalkable,
   isPlayerPathWalkable,
+  isLineOfSightClear,
+  isLineOfSightToInteractionTarget,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import {
@@ -391,30 +393,55 @@ export abstract class BotAgent {
    * Results are memoized per target since both the grid and spawn point are
    * static for the lifetime of the process.
    */
-  protected nearestApproachPoint(target: Point, maxRadius: number): Point {
-    const key = `${target.x},${target.y}`;
+  protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
+    return isLineOfSightClear(
+      movementGrid,
+      from.x, from.y + FEET_OFFSET_Y,
+      to.x, to.y + FEET_OFFSET_Y,
+    );
+  }
+
+  /**
+   * Find a spawn-reachable, walkable approach point that can actually see the
+   * interaction target. This mirrors the server's fine-grid LOS contract so
+   * bots do not repeatedly submit actions from behind a wall.
+   */
+  protected nearestApproachPoint(target: Point, maxRadius: number, targetRadiusPx = 24): Point {
+    const key = `${target.x},${target.y},${maxRadius},${targetRadiusPx}`;
     const cached = BotAgent._approachCache.get(key);
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
       isPlayerPositionWalkable(movementGrid, p.x, p.y) &&
       isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
+    const visible = (p: Point): boolean =>
+      isLineOfSightToInteractionTarget(
+        movementGrid,
+        p.x, p.y + FEET_OFFSET_Y,
+        target.x, target.y + FEET_OFFSET_Y,
+        targetRadiusPx,
+      );
 
-    let result = target;
-    if (!reachable(target)) {
+    let result: Point | null = reachable(target) && visible(target) ? target : null;
+    let nearestReachable: Point | null = reachable(target) ? target : null;
+    if (result === null) {
       const step = 8;
       outer: for (let r = step; r <= maxRadius; r += step) {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
           const candidate = { x: target.x + Math.cos(angle) * r, y: target.y + Math.sin(angle) * r };
-          if (reachable(candidate)) {
-            result = candidate;
-            break outer;
-          }
+          if (!reachable(candidate)) continue;
+          nearestReachable ??= candidate;
+          if (!visible(candidate)) continue;
+          result = candidate;
+          break outer;
         }
       }
     }
+    // Preserve the previous best-effort fallback for unusual geometry, but
+    // prefer a visible approach whenever one exists inside interaction range.
+    result ??= nearestReachable ?? target;
     BotAgent._approachCache.set(key, result);
     return result;
   }
