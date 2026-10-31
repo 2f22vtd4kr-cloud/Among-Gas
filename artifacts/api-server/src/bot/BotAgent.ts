@@ -437,7 +437,7 @@ export abstract class BotAgent {
     let result: Point | null = reachable(target) && visible(target) ? target : null;
     let nearestReachable: Point | null = reachable(target) ? target : null;
     if (result === null) {
-      const step = 8;
+      const step = 4;
       outer: for (let r = step; r <= maxRadius; r += step) {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
