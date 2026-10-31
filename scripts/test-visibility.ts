@@ -262,8 +262,10 @@ for (let index = 0; index < realFineGrid.length; index++) {
   const row = Math.floor(index / FINE_COLS);
   const x = (col + 0.5) * FINE_CELL_X;
   const y = (row + 0.5) * FINE_CELL_Y;
-  assert.ok(x >= 1985 && x <= 2260 && y >= 1055 && y <= 1260,
-    'manual collision edits remain inside the measured van-bay replacement zone');
+  const insideVanBay = x >= 1985 && x <= 2260 && y >= 1055 && y <= 1260;
+  const insideEastAisle = x >= 2780 && x <= 3100 && y >= 850 && y <= 950;
+  assert.ok(insideVanBay || insideEastAisle,
+    'manual collision edits remain inside one of the measured sector-specific replacement zones');
 }
 assert.ok(overrideDifferences > 0, 'the authored van-bay correction is applied to the live collision grid');
 
