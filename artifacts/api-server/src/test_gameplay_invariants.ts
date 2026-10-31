@@ -4,6 +4,7 @@
  * Run with: pnpm --filter @workspace/api-server run test:gameplay
  */
 import assert from 'node:assert/strict';
+import { PathCache } from '@workspace/shared';
 import {
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
@@ -72,6 +73,25 @@ import {
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
 const grid = buildPreciseCollisionGrid();
+
+// A cached path is valid only for the exact world-space grid geometry. Two
+// grids may share row/column counts while mapping the same cells to different
+// pixel positions; those queries must never share cached waypoints.
+{
+  const cache = new PathCache();
+  const syntheticGrid = new Uint8Array(25);
+  const start = { x: 5, y: 5 };
+  const goal = { x: 35, y: 35 };
+  const first = cache.find(syntheticGrid, start, goal, false, {
+    cols: 5, rows: 5, cellX: 10, cellY: 10,
+  });
+  const second = cache.find(syntheticGrid, start, goal, false, {
+    cols: 5, rows: 5, cellX: 100, cellY: 100,
+  });
+  assert.ok(first && second);
+  assert.notDeepEqual(second.waypoints, first.waypoints,
+    'PathCache must include cell dimensions in its key, not only grid row/column counts');
+}
 
 function assertClientWalkable(x: number, y: number, label: string): void {
   assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
