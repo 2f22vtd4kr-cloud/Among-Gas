@@ -5,7 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import {
-  buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   MAP_W,
@@ -54,6 +54,8 @@ import {
 import {
   LobbyManager,
   MAX_PLAYERS,
+  SPAWN_X,
+  SPAWN_Y,
   buildCorpsePacket,
   type Lobby,
   type LobbyPlayer,
@@ -68,7 +70,7 @@ import {
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
-const grid = buildCollisionGrid();
+const grid = buildPreciseCollisionGrid();
 
 function assertClientWalkable(x: number, y: number, label: string): void {
   assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
@@ -490,8 +492,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 // 9. Living bots can navigate to far custom-map tasks instead of silently stalling at blocked waypoints.
 {
   const spawn = {
-    x: Math.round(350 * MAP_W / 1040),
-    y: Math.round(150 * MAP_H / 580),
+    x: SPAWN_X,
+    y: SPAWN_Y,
   };
   for (const taskId of [2, 10]) {
     const task = TASK_DEFS.find(def => def.id === taskId)!;
