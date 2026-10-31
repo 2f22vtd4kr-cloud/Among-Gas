@@ -46,6 +46,12 @@
       "import": "./src/sabotage.ts",
       "default": "./src/sabotage.ts"
     },
+    "./remotePlayerDelta": {
+      "types": "./dist/remotePlayerDelta.d.ts",
+      "workspace": "./src/remotePlayerDelta.ts",
+      "import": "./src/remotePlayerDelta.ts",
+      "default": "./src/remotePlayerDelta.ts"
+    },
     "./vents": {
       "types": "./dist/vents.d.ts",
       "workspace": "./src/vents.ts",
