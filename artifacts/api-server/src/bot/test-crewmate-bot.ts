@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
+import { isBotNavigationReachable } from './BotAgent.js';
 import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
@@ -91,7 +92,27 @@ try {
     }
   }
   const fuelBot = new InspectableCrewmateBot();
-  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, TASK_INTERACTION_RANGE_PX - 8);
+  const safeRadius = TASK_INTERACTION_RANGE_PX - 8;
+  let reachableVisibleApproach: { x: number; y: number } | null = null;
+  for (let dy = -safeRadius; dy <= safeRadius && !reachableVisibleApproach; dy += 4) {
+    for (let dx = -safeRadius; dx <= safeRadius; dx += 4) {
+      if (dx * dx + dy * dy > safeRadius * safeRadius) continue;
+      const candidate = { x: fuelTask.x + dx, y: fuelTask.y + dy };
+      if (!isPlayerPositionWalkable(grid, candidate.x, candidate.y)) continue;
+      if (!isBotNavigationReachable(candidate.x, candidate.y + FEET_OFFSET_Y)) continue;
+      if (!isLineOfSightToInteractionTarget(
+        grid, candidate.x, candidate.y + FEET_OFFSET_Y,
+        fuelTask.x, fuelTask.y + FEET_OFFSET_Y, 24,
+      )) continue;
+      reachableVisibleApproach = candidate;
+      break;
+    }
+  }
+  assert.ok(reachableVisibleApproach,
+    'Fuel Engine must have a bot-navigation-reachable, visible stand-off point inside the safe interaction radius');
+  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, safeRadius);
+  assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
+    'Fuel Engine approach must be connected to the real spawn');
   assert.equal(isLineOfSightToInteractionTarget(
     grid, approach.x, approach.y + FEET_OFFSET_Y,
     fuelTask.x, fuelTask.y + FEET_OFFSET_Y, 24,
