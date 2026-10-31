@@ -493,6 +493,17 @@ try {
     'Emergency and Settings must not overlap on a mobile viewport',
   );
 
+  // A tap must immediately show the emergency-call splash while awaiting the
+  // authoritative 0x1B server confirmation (or explicit rejection).
+  await emergencyButton.click();
+  const emergencySplash = page.getByTestId('emergency-call-splash');
+  await emergencySplash.waitFor({ state: 'visible' });
+  assert.match(await emergencySplash.innerText(), /Emergency call|Экстренный вызов/i);
+  await page.screenshot({ path: join(visualQaDir, 'emergency-call-splash.png'), fullPage: true });
+  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
+
   // Tactical map: rendered over the custom Among Gas map and safely dismissible.
   await page.getByRole('button', { name: /КАРТА/ }).click();
   const mapDialog = page.getByRole('dialog', { name: 'Карта Among Gas' });

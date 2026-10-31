@@ -185,7 +185,47 @@ async function main() {
       'bot movement deltas must resume after the human acknowledges decoded map and sprites',
     );
 
-    console.log('--- Allow a fresh socket to replace an existing lobby session ---');
+    console.log('--- Verify a live emergency call broadcasts a meeting and is single-use ---');
+    const emergencyHost = await connect(90005, 'EmergencyHost');
+    const emergencyGuest = await connect(90006, 'EmergencyGuest');
+    const emergencyThird = await connect(90007, 'EmergencyThird');
+    players.push(emergencyHost, emergencyGuest, emergencyThird);
+    send(emergencyHost, [0x10, 0x01]);
+    await waitFor(emergencyHost, b => b[0] === 0x10 && b[1] === 0x05);
+    const emergencyRoom = await waitFor(emergencyHost, b => b[0] === 0x10 && b[1] === 0x03);
+    const emergencyCode = emergencyRoom.slice(4, 10).toString('ascii').trim();
+    for (const [player, expectedSlot] of [[emergencyGuest, 1], [emergencyThird, 2]]) {
+      send(player, [0x10, 0x02, ...Buffer.from(emergencyCode, 'ascii')]);
+      await waitFor(player, b => b[0] === 0x10 && b[1] === 0x05);
+      await waitFor(player, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === expectedSlot + 1);
+    }
+    send(emergencyHost, [0x12]);
+    await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+      waitFor(player, b => b[0] === 0x1A, 5000)));
+    for (const player of [emergencyHost, emergencyGuest, emergencyThird]) send(player, [0x23]);
+    await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+      waitFor(player, b => b[0] === 0x24 && b[1] === 0x01, 2000)));
+    send(emergencyHost, [0x13, 0xff]);
+    const emergencyAck = await waitFor(emergencyHost, b => b[0] === 0x20 && b[1] === 0x01);
+    assert.equal(emergencyAck[2], emergencyHost.slot, 'server confirms the caller identity');
+    const meetingStarts = await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+      waitFor(player, b => b[0] === 0x1b)));
+    for (const packet of meetingStarts) {
+      assert.equal(packet[1], emergencyHost.slot, 'meeting broadcast identifies the real caller');
+      assert.equal(packet[2], 0xff, '0xFF body slot denotes an emergency meeting, not a corpse report');
+    }
+    const meetingStartCounts = [emergencyHost, emergencyGuest, emergencyThird].map(player =>
+      player.msgs.filter(packet => packet[0] === 0x1b).length);
+    const ackCount = emergencyHost.msgs.filter(packet => packet[0] === 0x20 && packet[1] === 0x01).length;
+    send(emergencyHost, [0x13, 0xff]);
+    await sleep(180);
+    assert.deepEqual([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+      player.msgs.filter(packet => packet[0] === 0x1b).length), meetingStartCounts,
+      'the same player cannot start a second emergency meeting');
+    assert.equal(emergencyHost.msgs.filter(packet => packet[0] === 0x20 && packet[1] === 0x01).length,
+      ackCount, 'rejected repeat calls are not confirmed by the server');
+
+        console.log('--- Allow a fresh socket to replace an existing lobby session ---');
     const previousHost = await connect(90101, 'ReconnectHost');
     players.push(previousHost);
     send(previousHost, [0x10, 0x01]);
