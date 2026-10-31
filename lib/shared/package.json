@@ -52,6 +52,12 @@
       "import": "./src/vents.ts",
       "default": "./src/vents.ts"
     },
+    "./remotePlayerDelta": {
+      "types": "./dist/remotePlayerDelta.d.ts",
+      "workspace": "./src/remotePlayerDelta.ts",
+      "import": "./src/remotePlayerDelta.ts",
+      "default": "./src/remotePlayerDelta.ts"
+    },
     "./adminTable": {
       "types": "./dist/adminTable.d.ts",
       "workspace": "./src/adminTable.ts",
