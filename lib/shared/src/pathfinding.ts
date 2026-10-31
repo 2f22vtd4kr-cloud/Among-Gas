@@ -187,8 +187,8 @@ function astar(
       const path: Cell[] = [];
       let i = curIdx;
       while (i !== -1) {
-        const r = Math.floor(i / COLS);
-        const c = i - r * COLS;
+        const r = Math.floor(i / geometry.cols);
+        const c = i - r * geometry.cols;
         path.push({ col: c, row: r });
         i = parent[i];
       }
