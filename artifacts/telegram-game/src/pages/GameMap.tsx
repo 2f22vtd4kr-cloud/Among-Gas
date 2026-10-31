@@ -2,7 +2,6 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
-  buildCollisionGrid,
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
@@ -1063,7 +1062,7 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = buildCollisionGrid();
+    const grid = buildPreciseCollisionGrid();
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
       const fixtureTask = TASK_DEFS.find(task => task.id === 4);
@@ -1076,7 +1075,7 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(grid, x, y)) continue;
+          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
           nearest = { x, y, distanceSq };
         }
       }
@@ -1084,14 +1083,12 @@ export default function GameMap() {
       playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
       (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
     }
-    // Keep the compact grid for the existing movement/A* path while the
-    // live vision mask uses the canonical fine geometry. This keeps low
-    // furniture (notably the upper-atrium table) collidable without casting
-    // square shadows, and preserves the measured narrow statue occluder.
-    const fineGrid = buildPreciseCollisionGrid();
+    // Player prediction and visual occlusion share the canonical fine grid.
+    // Compact geometry remains available to navigation consumers that need A*.
+    const fineGrid = grid;
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    if (!isSpawnWalkable(grid)) {
+    if (!isSpawnWalkable(fineGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
@@ -1139,7 +1136,7 @@ export default function GameMap() {
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
-        grid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
       if (
