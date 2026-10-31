@@ -1,9 +1,10 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
+  isLineOfSightToInteractionTarget,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
@@ -48,6 +49,7 @@ import {
   NO_TARGET,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
+  FEET_OFFSET_Y,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import {
@@ -269,6 +271,7 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
+  const interactionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -506,7 +509,12 @@ export default function GameMap() {
         const dx = pad.x - myPos.x;
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
+        if (distSq <= bestDistSq && isLineOfSightToInteractionTarget(
+          interactionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          def.x, def.y + FEET_OFFSET_Y,
+          24,
+        )) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
       });
       setNearestRepairPad(best);
     }, 150);
@@ -705,7 +713,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage]);
+  }, [meeting, myRole, sabotage, interactionGrid]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1062,7 +1070,7 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = buildPreciseCollisionGrid();
+    const grid = interactionGrid;
     const fineGrid = grid;
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
