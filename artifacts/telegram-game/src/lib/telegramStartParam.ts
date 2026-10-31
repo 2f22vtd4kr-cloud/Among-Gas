@@ -28,5 +28,5 @@ export function resolveInitialRoomCode(
   inviteCode: string | null,
   persistedRoomCode: string | null,
 ): string | null {
-  return inviteCode ?? persistedRoomCode;
+  return inviteCode ? null : persistedRoomCode;
 }
