@@ -179,6 +179,7 @@ export default function Lobby() {
   const { language } = useLanguage();
   const en = language === 'en';
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [activeMenuTab, setActiveMenuTab] = useState<'play' | 'guide'>('play');
   const [botCount,     setBotCount]     = useState(4);
   const [joinExpanded, setJoinExpanded] = useState(false);
   const [code,         setCode]         = useState('');
@@ -324,7 +325,7 @@ export default function Lobby() {
           </div>
         )}
 
-        <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative' }}>
+      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative' }}>
 
           {/* Room code */}
           <div style={{
@@ -459,7 +460,38 @@ export default function Lobby() {
         </div>
       )}
 
-      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative' }}>
+      <nav
+      aria-label={en ? 'Main menu sections' : 'Разделы главного меню'}
+      style={{
+        width: 'min(100%, 340px)', display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 8, marginBottom: 12, zIndex: 1, position: 'relative',
+      }}
+      >
+      {(['play', 'guide'] as const).map(tab => {
+        const selected = activeMenuTab === tab;
+        const label = tab === 'play' ? (en ? 'PLAY' : 'ИГРАТЬ') : (en ? 'HOW TO PLAY' : 'КАК ИГРАТЬ');
+        return (
+          <button
+            key={tab}
+            type="button"
+            data-testid={`main-menu-tab-${tab}`}
+            aria-pressed={selected}
+            onClick={() => { setActiveMenuTab(tab); haptic.tap(); sfx('uiSelect', 0.25); }}
+            style={{
+              minHeight: 44, borderRadius: 11, border: `1.5px solid ${selected ? 'rgba(70,220,202,.85)' : 'rgba(170,205,211,.24)'}`,
+              background: selected ? 'linear-gradient(180deg, rgba(29,132,123,.92), rgba(16,75,74,.95))' : 'rgba(5,15,23,.42)',
+              color: selected ? '#f3fffd' : 'rgba(230,244,245,.68)',
+              fontFamily: "'Fredoka One', sans-serif", fontSize: 14, letterSpacing: '0.06em',
+              fontWeight: 800, cursor: 'pointer', boxShadow: selected ? '0 3px 0 rgba(0,0,0,.35)' : 'none',
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+      </nav>
+
+      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative', display: activeMenuTab === 'play' ? 'block' : 'none' }}>
 
         {/* ── СОЗДАТЬ КОМНАТУ ─────────────────────────────────────────── */}
         <button
@@ -559,19 +591,36 @@ export default function Lobby() {
         )}
       </div>
 
-      <a
-        href="https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/main/artifacts/telegram-game/HOW_TO_PLAY.md"
-        target="_blank"
-        rel="noreferrer"
-        className="au-btn-ghost"
-        style={{
-          zIndex: 1, position: 'relative', marginTop: 12, padding: '11px 18px',
-          textAlign: 'center', textDecoration: 'none', fontFamily: "'Fredoka One', sans-serif",
-          fontSize: 13, letterSpacing: '0.04em',
-        }}
-      >
-        {en ? 'HOW TO PLAY' : 'КАК ИГРАТЬ'}
-      </a>
+      {activeMenuTab === 'guide' && (
+        <section
+          aria-labelledby="ag-main-menu-guide-title"
+          data-testid="main-menu-guide"
+          style={{
+            width: 'min(100%, 340px)', boxSizing: 'border-box', zIndex: 1, position: 'relative',
+            marginTop: 2, padding: '18px 18px 16px', borderRadius: 16,
+            border: '1.5px solid rgba(0,0,0,.45)', background: 'rgba(4,20,20,.76)',
+            color: '#eaf6f5', fontFamily: "'Fredoka One', sans-serif",
+          }}
+        >
+          <h2 id="ag-main-menu-guide-title" style={{ margin: '0 0 12px', fontSize: 20, textAlign: 'center' }}>
+            {en ? 'How to Play' : 'Как играть'}
+          </h2>
+          <ol style={{ margin: 0, paddingLeft: 22, display: 'grid', gap: 10, fontSize: 14, lineHeight: 1.35 }}>
+            <li>{en ? 'Move around the station and finish your assigned tasks.' : 'Перемещайтесь по станции и выполняйте задания.'}</li>
+            <li>{en ? 'Watch other players. Report a body or call an emergency meeting.' : 'Следите за игроками. Сообщите о теле или созовите экстренное собрание.'}</li>
+            <li>{en ? 'Discuss evidence and vote during meetings.' : 'Обсуждайте улики и голосуйте на собраниях.'}</li>
+            <li>{en ? 'Crewmates win by finishing tasks or ejecting every impostor.' : 'Экипаж побеждает, выполнив задания или изгнав всех предателей.'}</li>
+            <li>{en ? 'Impostors sabotage systems, mislead the crew and eliminate players.' : 'Предатели саботируют системы, вводят экипаж в заблуждение и устраняют игроков.'}</li>
+          </ol>
+          <a
+            href="https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/main/artifacts/telegram-game/HOW_TO_PLAY.md"
+            target="_blank" rel="noreferrer"
+            style={{ display: 'block', marginTop: 14, color: '#6fe0d0', textAlign: 'center', fontSize: 12 }}
+          >
+            {en ? 'Full rules and controls' : 'Полные правила и управление'}
+          </a>
+        </section>
+      )}
 
       {/* Version footer */}
       <p style={{

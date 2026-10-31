@@ -107,6 +107,11 @@ try {
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
   await lobbySettings.getByTestId('joystick-side-left').click();
   await page.getByRole('button', { name: 'Close settings' }).click();
+  await page.getByTestId('main-menu-tab-guide').click();
+  await page.getByTestId('main-menu-guide').waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: 'How to Play' }).waitFor({ state: 'visible' });
+  await page.getByTestId('main-menu-tab-play').click();
+  await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
 
   // Preserve the three distinct waiting-room states for visual QA as well.
