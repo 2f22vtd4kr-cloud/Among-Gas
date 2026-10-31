@@ -325,38 +325,7 @@ export default function Lobby() {
           </div>
         )}
 
-        <nav
-        aria-label={en ? 'Main menu sections' : 'Разделы главного меню'}
-        style={{
-          width: 'min(100%, 340px)', display: 'grid', gridTemplateColumns: '1fr 1fr',
-          gap: 8, marginBottom: 12, zIndex: 1, position: 'relative',
-        }}
-      >
-        {(['play', 'guide'] as const).map(tab => {
-          const selected = activeMenuTab === tab;
-          const label = tab === 'play' ? (en ? 'PLAY' : 'ИГРАТЬ') : (en ? 'HOW TO PLAY' : 'КАК ИГРАТЬ');
-          return (
-            <button
-              key={tab}
-              type="button"
-              data-testid={`main-menu-tab-${tab}`}
-              aria-pressed={selected}
-              onClick={() => { setActiveMenuTab(tab); haptic.tap(); sfx('uiSelect', 0.25); }}
-              style={{
-                minHeight: 44, borderRadius: 11, border: `1.5px solid ${selected ? 'rgba(70,220,202,.85)' : 'rgba(170,205,211,.24)'}`,
-                background: selected ? 'linear-gradient(180deg, rgba(29,132,123,.92), rgba(16,75,74,.95))' : 'rgba(5,15,23,.42)',
-                color: selected ? '#f3fffd' : 'rgba(230,244,245,.68)',
-                fontFamily: "'Fredoka One', sans-serif", fontSize: 14, letterSpacing: '0.06em',
-                fontWeight: 800, cursor: 'pointer', boxShadow: selected ? '0 3px 0 rgba(0,0,0,.35)' : 'none',
-              }}
-            >
-              {label}
-            </button>
-          );
-        })}
-      </nav>
-
-      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative', display: activeMenuTab === 'play' ? 'block' : 'none' }}>
+      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative' }}>
 
           {/* Room code */}
           <div style={{
@@ -491,7 +460,38 @@ export default function Lobby() {
         </div>
       )}
 
-      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative' }}>
+      <nav
+      aria-label={en ? 'Main menu sections' : 'Разделы главного меню'}
+      style={{
+        width: 'min(100%, 340px)', display: 'grid', gridTemplateColumns: '1fr 1fr',
+        gap: 8, marginBottom: 12, zIndex: 1, position: 'relative',
+      }}
+      >
+      {(['play', 'guide'] as const).map(tab => {
+        const selected = activeMenuTab === tab;
+        const label = tab === 'play' ? (en ? 'PLAY' : 'ИГРАТЬ') : (en ? 'HOW TO PLAY' : 'КАК ИГРАТЬ');
+        return (
+          <button
+            key={tab}
+            type="button"
+            data-testid={`main-menu-tab-${tab}`}
+            aria-pressed={selected}
+            onClick={() => { setActiveMenuTab(tab); haptic.tap(); sfx('uiSelect', 0.25); }}
+            style={{
+              minHeight: 44, borderRadius: 11, border: `1.5px solid ${selected ? 'rgba(70,220,202,.85)' : 'rgba(170,205,211,.24)'}`,
+              background: selected ? 'linear-gradient(180deg, rgba(29,132,123,.92), rgba(16,75,74,.95))' : 'rgba(5,15,23,.42)',
+              color: selected ? '#f3fffd' : 'rgba(230,244,245,.68)',
+              fontFamily: "'Fredoka One', sans-serif", fontSize: 14, letterSpacing: '0.06em',
+              fontWeight: 800, cursor: 'pointer', boxShadow: selected ? '0 3px 0 rgba(0,0,0,.35)' : 'none',
+            }}
+          >
+            {label}
+          </button>
+        );
+      })}
+      </nav>
+
+      <div className="au-panel" style={{ maxWidth: 340, zIndex: 1, position: 'relative', display: activeMenuTab === 'play' ? 'block' : 'none' }}>
 
         {/* ── СОЗДАТЬ КОМНАТУ ─────────────────────────────────────────── */}
         <button
