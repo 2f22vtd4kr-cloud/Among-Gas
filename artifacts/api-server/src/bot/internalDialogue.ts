@@ -34,6 +34,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
   const text = (context.latestMessage ?? '').trim();
   const lower = text.toLocaleLowerCase();
   const seed = context.username + '|' + text + '|' + context.meetingType;
+  const withSpeaker = (reply: string) => context.latestSpeaker ? `${context.latestSpeaker}, ${reply}` : reply;
   const otherPlayer = context.livingRoster.find(name =>
     name.toLocaleLowerCase() !== context.username.toLocaleLowerCase() &&
     name.toLocaleLowerCase() !== context.latestSpeaker?.toLocaleLowerCase() &&
@@ -83,7 +84,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
       'Was that a direct sighting or something inferred from the route?',
       'Who else was close enough to independently confirm that location?',
     ];
-    return replies[stableIndex(seed, replies.length)];
+    return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
 
   if (asksForEvidence || isQuestion) {
@@ -92,7 +93,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
       'Can we name the witness and the exact event rather than guess?',
       'I would compare that claim with the public timeline before voting.',
     ];
-    return replies[stableIndex(seed, replies.length)];
+    return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
 
   const neutral = context.role === 'impostor'
@@ -106,7 +107,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
         'Let us keep track of who witnessed that directly and who is repeating it.',
         'Can we compare that with the last confirmed sighting before voting?',
       ];
-  return neutral[stableIndex(seed, neutral.length)];
+  return withSpeaker(neutral[stableIndex(seed, neutral.length)]);
 }
 
 /** One bot answers a bot's turn, creating a conversation without a reply storm. */
