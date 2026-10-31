@@ -1760,7 +1760,7 @@ export class LobbyManager {
       INTERACTION_COLLISION_GRID,
       player.x, player.y + FEET_OFFSET_Y,
       def.x, def.y + FEET_OFFSET_Y,
-      24,
+      def.interactionTargetRadiusPx ?? 24,
     )) return false;
 
     // Steps must be completed in order
