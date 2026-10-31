@@ -18,6 +18,7 @@ import {
   LobbyManager,
   buildJoinErrorPacket,
   buildSlotAssignedPacket,
+  type LobbyResumeSnapshotV1,
 } from './lobby.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
@@ -48,6 +49,22 @@ const HANDSHAKE_TIMEOUT_MS = 10_000;
  * layer before they ever reach application code.
  */
 const MAX_PAYLOAD_BYTES = 4096;
+
+/** Outbound one-off state snapshot cap; normal client frames remain capped at 4KB. */
+const MAX_RESUME_SNAPSHOT_BYTES = 64 * 1024;
+
+/**
+ * 0x25 / v1 — authoritative state snapshot sent only to a successfully
+ * reattached player, after room + slot assignment. WebSocket message framing
+ * supplies the packet boundary; bytes after [0x25, 0x01] are UTF-8 JSON.
+ */
+function buildResumeSnapshotPacket(snapshot: LobbyResumeSnapshotV1): Buffer {
+  const payload = Buffer.from(JSON.stringify(snapshot), 'utf8');
+  if (payload.byteLength > MAX_RESUME_SNAPSHOT_BYTES) {
+    throw new Error('Reconnect snapshot exceeds the configured outbound size limit');
+  }
+  return Buffer.concat([Buffer.from([0x25, 0x01]), payload]);
+}
 
 /**
  * Usernames are written into buildRoomUpdatePacket as a UInt8 length prefix,
@@ -202,6 +219,14 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           ws.playerSlotId = result.userIdToSlot.get(tgUserId)!;
           ws.send(buildSlotAssignedPacket(ws.playerSlotId));
           lobbyManager.broadcastRoomUpdate(result);
+          const resumeSnapshot = lobbyManager.buildResumeSnapshot(result, ws.playerSlotId);
+          if (resumeSnapshot) {
+            ws.send(buildResumeSnapshotPacket(resumeSnapshot));
+          } else {
+            // 0x25 / v0 confirms a successful WAITING-lobby rejoin. This makes
+            // lobby-vs-active resume deterministic without a client-side timer.
+            ws.send(Buffer.from([0x25, 0x00]));
+          }
           logger.info(`[WS] Join room ${roomCode} → slot=${ws.playerSlotId} (userId=${tgUserId})`);
           return;
         }
@@ -261,7 +286,13 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (!lobby) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
         if (slot === undefined) return;
-        lobbyManager.markGameplayReady(lobby, slot);
+        const wasAlreadyGameplayReady = lobby.gameplayReady === true;
+        const ready = lobbyManager.markGameplayReady(lobby, slot);
+        // Initial barrier completion broadcasts 0x24 to the whole lobby.
+        // Only a late reconnect needs a targeted one-player acknowledgement.
+        if (ready && wasAlreadyGameplayReady && ws.readyState === ws.OPEN) {
+          ws.send(Buffer.from([0x24, 0x01]));
+        }
         return;
       }
 
@@ -278,7 +309,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         if (lobby.phase !== 'ROAMING' || !lobbyManager.isGameplayReady(lobby)) return;
 
         const slot = lobby.userIdToSlot.get(tgUserId);
-        if (slot === undefined) return;
+        if (slot === undefined || !lobbyManager.isPlayerReady(lobby, slot)) return;
         const player = lobby.players.get(slot);
         if (!player || player.inVent) return;
 
@@ -334,7 +365,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
-        if (slot === undefined) return;
+        if (slot === undefined || !lobbyManager.isPlayerReady(lobby, slot)) return;
 
         if ((sub === 0x01 || sub === 0x02) && raw.length === 3) {
           const ventId = raw.readUInt8(2);
@@ -362,7 +393,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby) return;
         const slot = lobby.userIdToSlot.get(tgUserId);
-        if (slot === undefined) return;
+        if (slot === undefined || !lobbyManager.isPlayerReady(lobby, slot)) return;
         lobbyManager.sendMeetingChat(lobby, slot, text);
         return;
       }
@@ -375,7 +406,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const attackerSlot = lobby.userIdToSlot.get(tgUserId);
-        if (attackerSlot === undefined) return;
+        if (attackerSlot === undefined || !lobbyManager.isPlayerReady(lobby, attackerSlot)) return;
 
         // 0x01 — Kill (impostor only; server re-validates role/cooldown/range).
         if (sub === 0x01) {
@@ -435,7 +466,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const reporterSlot = lobby.userIdToSlot.get(tgUserId);
-        if (reporterSlot === undefined) return;
+        if (reporterSlot === undefined || !lobbyManager.isPlayerReady(lobby, reporterSlot)) return;
 
         const bodySlot = raw.readUInt8(1);
         const started = lobbyManager.callMeeting(lobby, reporterSlot, bodySlot);
@@ -453,7 +484,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         const lobby = lobbyManager.getLobbyForUser(tgUserId);
         if (!lobby || !lobbyManager.isGameplayReady(lobby)) return;
         const voterSlot = lobby.userIdToSlot.get(tgUserId);
-        if (voterSlot === undefined) return;
+        if (voterSlot === undefined || !lobbyManager.isPlayerReady(lobby, voterSlot)) return;
 
         const targetSlot = raw.readUInt8(1);
         lobbyManager.castVote(lobby, voterSlot, targetSlot);
@@ -478,7 +509,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
       clearTimeout(handshakeTimer);
 
       if (ws.tgUserId !== undefined) {
-        const updatedLobby = lobbyManager.removePlayer(ws.tgUserId, ws);
+        const updatedLobby = lobbyManager.markPlayerDisconnected(ws.tgUserId, ws);
         if (updatedLobby) {
           lobbyManager.broadcastRoomUpdate(updatedLobby);
         }

@@ -23,6 +23,27 @@ export const DEV_MODE =
 const MAX_AUTH_AGE_SECONDS = 24 * 60 * 60;
 
 /**
+ * Telegram user objects are signed input, but they still cross a trust boundary:
+ * never allow a malformed signed/mock object to introduce non-numeric IDs into
+ * the numeric lobby maps or non-string display fields into packet construction.
+ */
+function parseTelegramUser(value: unknown): TelegramUser | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+
+  const candidate = value as Record<string, unknown>;
+  const id = candidate.id;
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) return null;
+  if (candidate.first_name !== undefined && typeof candidate.first_name !== 'string') return null;
+  if (candidate.username !== undefined && typeof candidate.username !== 'string') return null;
+
+  return {
+    id,
+    ...(typeof candidate.first_name === 'string' ? { first_name: candidate.first_name } : {}),
+    ...(typeof candidate.username === 'string' ? { username: candidate.username } : {}),
+  };
+}
+
+/**
  * Call at server startup.  Fails hard in production if the bot token is absent,
  * preventing the server from accepting connections with an insecure bypass.
  */
@@ -53,12 +74,11 @@ export function verifyTelegramAuth(initData: string): TelegramUser | null {
   // ── Dev path ──────────────────────────────────────────────────────────────
   if (DEV_MODE) {
     try {
-      const parsed = JSON.parse(initData) as TelegramUser;
-      if (typeof parsed.id === 'number') return parsed;
+      return parseTelegramUser(JSON.parse(initData) as unknown);
     } catch {
       // not JSON — reject cleanly
+      return null;
     }
-    return null;
   }
 
   // ── Production path: Telegram HMAC-SHA256 ────────────────────────────────
@@ -69,16 +89,16 @@ export function verifyTelegramAuth(initData: string): TelegramUser | null {
 
     // auth_date freshness check — reject replayed tokens
     const authDateRaw = params.get('auth_date');
-    if (!authDateRaw) return null;
+    if (!authDateRaw || !/^\d+$/.test(authDateRaw)) return null;
     const authDate = Number(authDateRaw);
-    if (!Number.isFinite(authDate)) return null;
+    if (!Number.isSafeInteger(authDate)) return null;
     const ageSeconds = Math.floor(Date.now() / 1000) - authDate;
     if (ageSeconds < 0 || ageSeconds > MAX_AUTH_AGE_SECONDS) return null;
 
     params.delete('hash');
 
     const entries: string[] = [];
-    params.forEach((val, key) => entries.push(`${key}=${val}`));
+    params.forEach((val, key) => entries.push(key + '=' + val));
     entries.sort();
 
     // Key derivation: HMAC-SHA256("WebAppData", botToken)
@@ -93,7 +113,7 @@ export function verifyTelegramAuth(initData: string): TelegramUser | null {
     if (!timingSafeEqual(computed, expectedBuf)) return null;
 
     const userStr = params.get('user');
-    return userStr ? (JSON.parse(userStr) as TelegramUser) : null;
+    return userStr ? parseTelegramUser(JSON.parse(userStr) as unknown) : null;
   } catch {
     return null;
   }

@@ -57,6 +57,8 @@ export interface CorpsePosition {
 
 export type GamePhase = 'connecting' | 'lobby' | 'playing' | 'error';
 
+export type GameConnectionStatus = 'connecting' | 'online' | 'reconnecting' | 'resuming' | 'offline';
+
 export type PlayerRole = 'crewmate' | 'impostor';
 
 /**
@@ -119,6 +121,8 @@ export interface GameState {
   hostSlot: number;
   players: LobbyPlayer[];
   errorMessage: string | null;
+  /** Transport/session status; gameplay controls remain gated while reconnecting or resuming. */
+  connectionStatus: GameConnectionStatus;
   /** Server-confirmed readiness after all connected human clients load assets. */
   gameplayReady: boolean;
   /** Set by the server's 0x1A packet at game start. Never trust other clients. */
@@ -197,6 +201,7 @@ const DEFAULT_STATE: GameState = {
   hostSlot: 0,
   players: [],
   errorMessage: null,
+  connectionStatus: 'connecting',
   gameplayReady: false,
   myRole: null,
   impostorSlots: [],
@@ -611,6 +616,248 @@ function parseRoomUpdate(
   return { playerCount, hostSlot, roomCode, players };
 }
 
+
+const ROOM_SESSION_STORAGE_KEY = 'among-gas:resume-room-code';
+
+function readPersistedRoomCode(): string | null {
+  try {
+    const code = window.sessionStorage.getItem(ROOM_SESSION_STORAGE_KEY)?.toUpperCase() ?? '';
+    return /^[A-HJ-NP-Z2-9]{6}$/.test(code) ? code : null;
+  } catch {
+    return null;
+  }
+}
+
+function persistRoomCode(code: string | null): void {
+  try {
+    if (code) window.sessionStorage.setItem(ROOM_SESSION_STORAGE_KEY, code);
+    else window.sessionStorage.removeItem(ROOM_SESSION_STORAGE_KEY);
+  } catch {
+    // Private browsing / storage-disabled contexts still retain the in-memory
+    // room code for socket reconnects; only full-page recovery is unavailable.
+  }
+}
+
+interface ResumeSabotageV1 {
+  systemId: number;
+  elapsedMs: number;
+  fixedPads: number[];
+  lockedTaskIds: number[];
+}
+
+interface ResumeMeetingV1 {
+  reporterSlot: number;
+  bodySlot: number;
+  elapsedMs: number;
+  votingOpen: boolean;
+  hasVoted: boolean;
+  votes: Array<{ slot: number; targetSlot: number }>;
+  messages: Array<{ slot: number; text: string; sentAtMs: number }>;
+}
+
+interface ResumeSnapshotV1 {
+  version: 1;
+  roomCode: string;
+  phase: 'ROAMING' | 'MEETING' | 'GAMEOVER';
+  hostSlot: number;
+  mySlot: number;
+  players: LobbyPlayer[];
+  playerPositions: Array<{ slot: number; wireX: number; wireY: number; inVent: boolean; ventId?: number }>;
+  myRole: PlayerRole;
+  impostorSlots: number[];
+  deadSlots: number[];
+  corpsePositions: Array<{ slot: number; wireX: number; wireY: number }>;
+  myTasks: MyTask[];
+  globalTaskProgress: number;
+  killCooldownMs: number;
+  sabotageCooldownMs: number;
+  myVentId: number | null;
+  emergencyMeetingUsed: boolean;
+  sabotage: ResumeSabotageV1 | null;
+  meeting: ResumeMeetingV1 | null;
+  gameOverResult: null | { ejectedSlot: number; winFlag: 0 | 1 | 2 };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isIntegerInRange(value: unknown, minimum: number, maximum: number): value is number {
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= minimum &&
+    value <= maximum;
+}
+
+function isSlot(value: unknown): value is number {
+  return isIntegerInRange(value, 0, 14);
+}
+
+/** Strictly validate server-supplied resume state before mutating live client state. */
+function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
+  if (data.byteLength < 3) return null;
+  const view = new DataView(data);
+  if (view.getUint8(0) !== 0x25 || view.getUint8(1) !== 0x01) return null;
+
+  let raw: unknown;
+  try {
+    raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(
+      new Uint8Array(data, 2),
+    ));
+  } catch {
+    return null;
+  }
+  if (!isRecord(raw) || raw.version !== 1) return null;
+  if (typeof raw.roomCode !== 'string' || !/^[A-HJ-NP-Z2-9]{6}$/.test(raw.roomCode)) return null;
+  if (raw.phase !== 'ROAMING' && raw.phase !== 'MEETING' && raw.phase !== 'GAMEOVER') return null;
+  if (!isSlot(raw.hostSlot) || !isSlot(raw.mySlot)) return null;
+  if (raw.myRole !== 'crewmate' && raw.myRole !== 'impostor') return null;
+  if (!Array.isArray(raw.players) || raw.players.length < 1 || raw.players.length > 15) return null;
+  const players: LobbyPlayer[] = [];
+  for (const entry of raw.players) {
+    if (!isRecord(entry) || !isSlot(entry.slot) ||
+        typeof entry.username !== 'string' || entry.username.length > 96) return null;
+    players.push({ slot: entry.slot, username: entry.username });
+  }
+  if (!players.some(player => player.slot === raw.mySlot)) return null;
+
+  if (!Array.isArray(raw.playerPositions) || raw.playerPositions.length > 15) return null;
+  const playerPositions: ResumeSnapshotV1['playerPositions'] = [];
+  for (const entry of raw.playerPositions) {
+    if (!isRecord(entry) || !isSlot(entry.slot) ||
+        !isIntegerInRange(entry.wireX, 0, 32_000) ||
+        !isIntegerInRange(entry.wireY, 0, 32_000) ||
+        typeof entry.inVent !== 'boolean') return null;
+    if (entry.ventId !== undefined && !isIntegerInRange(entry.ventId, 0, 255)) return null;
+    playerPositions.push({
+      slot: entry.slot,
+      wireX: entry.wireX,
+      wireY: entry.wireY,
+      inVent: entry.inVent,
+      ...(entry.ventId !== undefined ? { ventId: entry.ventId as number } : {}),
+    });
+  }
+  if (!playerPositions.some(position => position.slot === raw.mySlot)) return null;
+
+  const parseSlots = (value: unknown): number[] | null => {
+    if (!Array.isArray(value) || value.length > 15 || !value.every(isSlot)) return null;
+    return value as number[];
+  };
+  const impostorSlots = parseSlots(raw.impostorSlots);
+  const deadSlots = parseSlots(raw.deadSlots);
+  if (!impostorSlots || !deadSlots) return null;
+  // A crewmate snapshot must never expose the impostor roster.
+  if (raw.myRole === 'crewmate' && impostorSlots.length !== 0) return null;
+
+  if (!Array.isArray(raw.corpsePositions) || raw.corpsePositions.length > 15) return null;
+  const corpsePositions: ResumeSnapshotV1['corpsePositions'] = [];
+  for (const entry of raw.corpsePositions) {
+    if (!isRecord(entry) || !isSlot(entry.slot) ||
+        !isIntegerInRange(entry.wireX, 0, 32_000) ||
+        !isIntegerInRange(entry.wireY, 0, 32_000)) return null;
+    corpsePositions.push({ slot: entry.slot, wireX: entry.wireX, wireY: entry.wireY });
+  }
+
+  if (!Array.isArray(raw.myTasks) || raw.myTasks.length > 32) return null;
+  const myTasks: MyTask[] = [];
+  for (const task of raw.myTasks) {
+    if (!isRecord(task) || !isIntegerInRange(task.taskId, 0, 255) ||
+        !isIntegerInRange(task.completedSteps, 0, 255)) return null;
+    myTasks.push({ taskId: task.taskId, completedSteps: task.completedSteps });
+  }
+
+  if (!isIntegerInRange(raw.globalTaskProgress, 0, 100) ||
+      !isIntegerInRange(raw.killCooldownMs, 0, 600_000) ||
+      !isIntegerInRange(raw.sabotageCooldownMs, 0, 600_000) ||
+      !(raw.myVentId === null || isIntegerInRange(raw.myVentId, 0, 255)) ||
+      typeof raw.emergencyMeetingUsed !== 'boolean') return null;
+
+  let sabotage: ResumeSnapshotV1['sabotage'] = null;
+  if (raw.sabotage !== null) {
+    const value = raw.sabotage;
+    if (!isRecord(value) ||
+        !isIntegerInRange(value.systemId, 0, 255) ||
+        !isIntegerInRange(value.elapsedMs, 0, 86_400_000)) return null;
+    const fixedPads = value.fixedPads;
+    const lockedTaskIds = value.lockedTaskIds;
+    if (!Array.isArray(fixedPads) || fixedPads.length > 16 ||
+        !fixedPads.every(value => isIntegerInRange(value, 0, 255)) ||
+        !Array.isArray(lockedTaskIds) || lockedTaskIds.length > 32 ||
+        !lockedTaskIds.every(value => isIntegerInRange(value, 0, 255))) return null;
+    sabotage = {
+      systemId: value.systemId,
+      elapsedMs: value.elapsedMs,
+      fixedPads: fixedPads as number[],
+      lockedTaskIds: lockedTaskIds as number[],
+    };
+  }
+
+  let meeting: ResumeSnapshotV1['meeting'] = null;
+  if (raw.meeting !== null) {
+    const value = raw.meeting;
+    if (!isRecord(value) || !isSlot(value.reporterSlot) ||
+        !isIntegerInRange(value.bodySlot, 0, 255) ||
+        !isIntegerInRange(value.elapsedMs, 0, 86_400_000) ||
+        typeof value.votingOpen !== 'boolean' || typeof value.hasVoted !== 'boolean' ||
+        !Array.isArray(value.votes) || value.votes.length > 15 ||
+        !Array.isArray(value.messages) || value.messages.length > 60) return null;
+    const votes: ResumeMeetingV1['votes'] = [];
+    for (const vote of value.votes) {
+      if (!isRecord(vote) || !isSlot(vote.slot) ||
+          !isIntegerInRange(vote.targetSlot, 0, 255)) return null;
+      votes.push({ slot: vote.slot, targetSlot: vote.targetSlot });
+    }
+    const messages: ResumeMeetingV1['messages'] = [];
+    for (const message of value.messages) {
+      if (!isRecord(message) || !isSlot(message.slot) ||
+          typeof message.text !== 'string' || message.text.length > 200 ||
+          !isIntegerInRange(message.sentAtMs, 0, Number.MAX_SAFE_INTEGER)) return null;
+      messages.push({ slot: message.slot, text: message.text, sentAtMs: message.sentAtMs });
+    }
+    meeting = {
+      reporterSlot: value.reporterSlot,
+      bodySlot: value.bodySlot,
+      elapsedMs: value.elapsedMs,
+      votingOpen: value.votingOpen,
+      hasVoted: value.hasVoted,
+      votes,
+      messages,
+    };
+  }
+
+  let gameOverResult: ResumeSnapshotV1['gameOverResult'] = null;
+  if (raw.gameOverResult !== null) {
+    const value = raw.gameOverResult;
+    if (!isRecord(value) ||
+        !isIntegerInRange(value.ejectedSlot, 0, 255) ||
+        !isIntegerInRange(value.winFlag, 0, 2)) return null;
+    gameOverResult = { ejectedSlot: value.ejectedSlot, winFlag: value.winFlag as 0 | 1 | 2 };
+  }
+
+  return {
+    version: 1,
+    roomCode: raw.roomCode,
+    phase: raw.phase,
+    hostSlot: raw.hostSlot,
+    mySlot: raw.mySlot,
+    players,
+    playerPositions,
+    myRole: raw.myRole,
+    impostorSlots,
+    deadSlots,
+    corpsePositions,
+    myTasks,
+    globalTaskProgress: raw.globalTaskProgress,
+    killCooldownMs: raw.killCooldownMs,
+    sabotageCooldownMs: raw.sabotageCooldownMs,
+    myVentId: raw.myVentId,
+    emergencyMeetingUsed: raw.emergencyMeetingUsed,
+    sabotage,
+    meeting,
+    gameOverResult,
+  };
+}
+
 /**
  * Parse 0xFF delta sync packet and update the remote players map.
  *
@@ -668,23 +915,43 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   // Pending server correction for local player — read & cleared by GameMap's rAF loop
   const correctionRef = useRef<{ wireX: number; wireY: number; force?: boolean } | null>(null);
+  const roomCodeRef = useRef<string | null>(null);
+  const reconnectBarrierRef = useRef(false);
+  const shouldReconnectRef = useRef(true);
 
   const send = useCallback((buf: Uint8Array | number[]) => {
     const ws = socketRef.current;
-    if (ws?.readyState === WebSocket.OPEN) {
-      ws.send(buf instanceof Uint8Array ? buf : new Uint8Array(buf));
+    const packet = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
+    if (reconnectBarrierRef.current) {
+      const isRoomRejoin = packet[0] === 0x10 && packet[1] === 0x02;
+      const isReadinessAck = packet[0] === 0x23;
+      if (!isRoomRejoin && !isReadinessAck) return;
     }
+    if (ws?.readyState === WebSocket.OPEN) ws.send(packet);
   }, []);
 
-  const createRoom = useCallback(() => { send([0x10, 0x01]); }, [send]);
+  const createRoom = useCallback(() => {
+    roomCodeRef.current = null;
+    persistRoomCode(null);
+    reconnectBarrierRef.current = false;
+    send([0x10, 0x01]);
+  }, [send]);
 
   const createSolo = useCallback((botCount: number = 4) => {
+    roomCodeRef.current = null;
+    persistRoomCode(null);
+    reconnectBarrierRef.current = false;
     const count = Math.max(1, Math.min(14, Math.round(botCount)));
     send([0x10, 0x06, count]);
   }, [send]);
 
   const joinRoom = useCallback((code: string) => {
     const codeUpper = code.toUpperCase().slice(0, 6).padEnd(6, ' ');
+    const trimmedCode = codeUpper.trim();
+    if (/^[A-HJ-NP-Z2-9]{6}$/.test(trimmedCode)) {
+      roomCodeRef.current = trimmedCode;
+      persistRoomCode(trimmedCode);
+    }
     const buf = new Uint8Array(8);
     buf[0] = 0x10; buf[1] = 0x02;
     const codeBytes = new TextEncoder().encode(codeUpper);
@@ -801,412 +1068,625 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
       if (mock.remotePlayers) {
         remotePlayersRef.current = new Map(mock.remotePlayers.map(rp => [rp.slot, rp]));
       }
-      setState(s => ({ ...s, ...mock.state }));
-      console.log(`[mock] Forced state:`, mock.state);
+      setState(s => ({ ...s, ...mock.state, connectionStatus: 'online' }));
+      console.log('[mock] Forced state:', mock.state);
       return () => {};
     }
 
-    const ws = new WebSocket(getWsUrl());
-    ws.binaryType = 'arraybuffer';
-    socketRef.current = ws;
+    let disposed = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let reconnectAttempt = 0;
+    let activeSocket: WebSocket | null = null;
 
-    ws.onopen = () => {
-      const initData = getInitData();
-      if (!initData) {
-        setState(s => ({
-          ...s,
-          phase: 'error',
-          errorMessage: 'Откройте Among Gas через Telegram, чтобы войти в игру.',
-        }));
-        ws.close(1008, 'Telegram Mini App initData required');
-        return;
-      }
-      ws.send(new TextEncoder().encode(initData));
+    roomCodeRef.current = readPersistedRoomCode();
+    if (roomCodeRef.current) {
+      reconnectBarrierRef.current = true;
+      setState(s => ({
+        ...s,
+        roomCode: roomCodeRef.current,
+        connectionStatus: 'reconnecting',
+        gameplayReady: false,
+        errorMessage: 'Reconnecting to your game…',
+      }));
+    }
+
+    const clearSavedRoom = () => {
+      roomCodeRef.current = null;
+      persistRoomCode(null);
+      reconnectBarrierRef.current = false;
     };
 
-    ws.onmessage = (event: MessageEvent<ArrayBuffer>) => {
-      if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 1) return;
-      const view = new DataView(event.data);
-      const opcode = view.getUint8(0);
+    const connect = () => {
+      if (disposed) return;
+      const roomToRejoin = roomCodeRef.current;
+      const isRejoin = roomToRejoin !== null;
+      reconnectBarrierRef.current = isRejoin;
 
-      // ── 0x00: auth failure ──────────────────────────────────────────────
-      if (opcode === 0x00) {
-        setState(s => ({ ...s, phase: 'error', errorMessage: 'Authentication failed' }));
-        return;
-      }
-
-      // ── 0x01: handshake ACK ─────────────────────────────────────────────
-      if (opcode === 0x01 && event.data.byteLength >= 2) {
-        const slot = view.getUint8(1);
-        mySlotRef.current = slot;
-        setState(s => ({ ...s, phase: 'lobby', mySlot: slot }));
-        console.log(`[WS] ✅ handshake OK — assigned slot ${slot}`);
-        return;
-      }
-
-      // ── 0x10: lobby control ─────────────────────────────────────────────
-      if (opcode === 0x10 && event.data.byteLength >= 2) {
-        const sub = view.getUint8(1);
-
-        // 0x03: room update
-        if (sub === 0x03) {
-          const parsed = parseRoomUpdate(view);
-          if (!parsed) return;
-          const activeSlots = new Set(parsed.players.map(p => p.slot));
-          setState(s => ({
-            ...s,
-            roomCode: parsed.roomCode,
-            hostSlot: parsed.hostSlot,
-            players: parsed.players,
-            errorMessage: null,
-            corpsePositions: s.corpsePositions.filter(body => activeSlots.has(body.slot)),
-          }));
-          // Prune remote players that are no longer in the room.
-          // This prevents departed players from rendering as ghost circles.
-          const mySlot = mySlotRef.current;
-          for (const slot of remotePlayersRef.current.keys()) {
-            if (!activeSlots.has(slot) || slot === mySlot) {
-              remotePlayersRef.current.delete(slot);
-            }
-          }
-          return;
-        }
-
-        // 0x04: join error
-        if (sub === 0x04 && event.data.byteLength >= 3) {
-          const errCode = view.getUint8(2);
-          const messages: Record<number, string> = {
-            0x01: 'Room not found',
-            0x02: 'Game already in progress',
-            0x03: 'Room is full',
-          };
-          setState(s => ({ ...s, errorMessage: messages[errCode] ?? 'Unknown error' }));
-          return;
-        }
-
-        // 0x05: authoritative slot assignment
-        if (sub === 0x05 && event.data.byteLength >= 3) {
-          const slot = view.getUint8(2);
-          mySlotRef.current = slot;
-          setState(s => ({ ...s, mySlot: slot }));
-          return;
-        }
-      }
-
-      // ── 0x1A: role reveal → transition to playing ───────────────────────
-      // Crewmate: [0x1A, 0x00]
-      // Impostor: [0x1A, 0x01, impostorCount, slot_0, slot_1, ...]
-      if (opcode === 0x1A && event.data.byteLength >= 2) {
-        const roleByte = view.getUint8(1);
-        const myRole: PlayerRole = roleByte === 1 ? 'impostor' : 'crewmate';
-        // Keep ref in sync so win/loss haptic in 0x1C can read role without stale closure.
-        myRoleRef.current = myRole;
-        // Haptic: impostor reveal is a warning; crewmate reveal is a success pulse.
-        if (myRole === 'impostor') haptic.warning(); else haptic.success();
-
-        const impostorSlots: number[] = [];
-        if (roleByte === 1 && event.data.byteLength >= 3) {
-          const count = view.getUint8(2);
-          for (let i = 0; i < count && 3 + i < event.data.byteLength; i++) {
-            impostorSlots.push(view.getUint8(3 + i));
-          }
-        }
-
-        // Clear stale remote player data from the previous session
-        remotePlayersRef.current.clear();
-        // Mirror the server's initial cooldown so the local Kill button is
-        // disabled until the authoritative opening cooldown expires.
-        setState(s => ({
-          ...s, phase: 'playing', myRole, impostorSlots,
-          gameplayReady: false,
-          deadSlots: [],
-          lastKill: null,
-          killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
-          meeting: null,
-          hasVoted: false,
-          voteResult: null,
-          myTasks: [],
-          globalTaskProgress: 0,
-          sabotage: null,
-          sabotageCooldownMs: 0,
-          myVentId: null,
-          meetingMessages: [],
-          emergencyMeetingUsed: false,
-          corpsePositions: [],
-        }));
-        console.log(`[WS] 🎮 Role reveal received — role=${myRole}`);
-        return;
-      }
-
-      // ── 0x24: all connected clients are ready for gameplay ───────────────
-      if (opcode === 0x24 && event.data.byteLength >= 2 && view.getUint8(1) === 0x01) {
-        setState(s => ({ ...s, gameplayReady: true }));
-        return;
-      }
-
-      // ── 0x21: immutable corpse drop ───────────────────────────────────────
-      // [0x21, victimSlot, wireX(UInt16LE), wireY(UInt16LE)].
-      if (opcode === 0x21 && event.data.byteLength === 6) {
-        const slot = view.getUint8(1);
-        const x = fromWire(view.getUint16(2, true), MAP_W);
-        const y = fromWire(view.getUint16(4, true), MAP_H);
+      if (isRejoin) {
         setState(s => ({
           ...s,
-          corpsePositions: [
-            ...s.corpsePositions.filter(body => body.slot !== slot),
-            { slot, x, y },
-          ],
+          connectionStatus: 'reconnecting',
+          gameplayReady: false,
+          errorMessage: 'Reconnecting to your game…',
         }));
-        return;
+      } else {
+        setState(s => ({
+          ...s,
+          connectionStatus: reconnectAttempt === 0 ? 'connecting' : 'reconnecting',
+        }));
       }
 
-      // ── 0x22: forced authoritative movement correction ─────────────────
-      // [0x22, wireX(UInt16LE), wireY(UInt16LE)]. Unlike a 0xFF echo, this is
-      // explicit: discard local prediction because the server clamped or rejected
-      // a speed/path-invalid movement target.
-      if (opcode === 0x22 && event.data.byteLength === 5) {
-        correctionRef.current = {
-          wireX: view.getUint16(1, true),
-          wireY: view.getUint16(3, true),
-          force: true,
-        };
-        return;
-      }
+      const ws = new WebSocket(getWsUrl());
+      activeSocket = ws;
+      socketRef.current = ws;
+      ws.binaryType = 'arraybuffer';
 
-      // ── 0xFF: delta sync — update remote player positions ───────────────
-      if (opcode === 0xFF) {
-        applyDeltaPacket(
-          view,
-          mySlotRef.current,
-          remotePlayersRef.current,
-          (wireX, wireY, force) => { correctionRef.current = { wireX, wireY, force }; },
-        );
-        return;
-      }
+      ws.onopen = () => {
+        const initData = getInitData();
+        if (!initData) {
+          shouldReconnectRef.current = false;
+          setState(s => ({
+            ...s,
+            phase: 'error',
+            connectionStatus: 'offline',
+            errorMessage: 'Откройте Among Gas через Telegram, чтобы войти в игру.',
+          }));
+          ws.close(1008, 'Telegram Mini App initData required');
+          return;
+        }
+        ws.send(new TextEncoder().encode(initData));
+      };
 
-      // ── 0x15: RPC event ──────────────────────────────────────────────────
-      if (opcode === 0x15 && event.data.byteLength >= 2) {
-        const sub = view.getUint8(1);
+      ws.onmessage = (event: MessageEvent<ArrayBuffer>) => {
+        if (!(event.data instanceof ArrayBuffer) || event.data.byteLength < 1) return;
+        const view = new DataView(event.data);
+        const opcode = view.getUint8(0);
 
-        // 0x01 — Kill broadcast: [0x15, 0x01, victimSlot, attackerSlot]
-        if (sub === 0x01 && event.data.byteLength >= 3) {
-          const victimSlot = view.getUint8(2);
-          const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
-            // Haptics gated inside the functional updater so replayed broadcast
-          // packets don't retrigger after the victim is already in deadSlots.
+        // ── 0x00: auth failure ──────────────────────────────────────────────
+        if (opcode === 0x00) {
+          shouldReconnectRef.current = false;
+          reconnectBarrierRef.current = false;
+          setState(s => ({
+            ...s,
+            phase: 'error',
+            connectionStatus: 'offline',
+            errorMessage: 'Authentication failed',
+          }));
+          ws.close(1008, 'Telegram authentication failed');
+          return;
+        }
+
+        // ── 0x01: authenticated handshake; rejoin the last room if one exists ─
+        if (opcode === 0x01 && event.data.byteLength >= 2) {
+          const slot = view.getUint8(1);
+          const roomToRejoinNow = roomCodeRef.current;
+          mySlotRef.current = slot;
+          reconnectAttempt = 0;
+          if (roomToRejoinNow) {
+            reconnectBarrierRef.current = true;
+            const codeBytes = new TextEncoder().encode(roomToRejoinNow);
+            const joinPacket = new Uint8Array(8);
+            joinPacket[0] = 0x10;
+            joinPacket[1] = 0x02;
+            joinPacket.set(codeBytes.slice(0, 6), 2);
+            ws.send(joinPacket);
+            setState(s => ({
+              ...s,
+              phase: s.phase === 'playing' ? 'playing' : 'lobby',
+              mySlot: slot,
+              connectionStatus: 'resuming',
+              gameplayReady: false,
+              errorMessage: null,
+            }));
+          } else {
+            reconnectBarrierRef.current = false;
+            setState(s => ({
+              ...s,
+              phase: 'lobby',
+              mySlot: slot,
+              connectionStatus: 'online',
+              errorMessage: null,
+            }));
+          }
+          console.log('[WS] authenticated — assigned slot ' + slot);
+          return;
+        }
+
+        // ── 0x10: lobby control ─────────────────────────────────────────────
+        if (opcode === 0x10 && event.data.byteLength >= 2) {
+          const sub = view.getUint8(1);
+
+          // 0x03: authoritative room update. The following 0x25 frame tells
+          // us whether this was a WAITING lobby or an active-match resume.
+          if (sub === 0x03) {
+            const parsed = parseRoomUpdate(view);
+            if (!parsed) return;
+            roomCodeRef.current = parsed.roomCode;
+            persistRoomCode(parsed.roomCode);
+            const activeSlots = new Set(parsed.players.map(p => p.slot));
+            setState(s => ({
+              ...s,
+              roomCode: parsed.roomCode,
+              hostSlot: parsed.hostSlot,
+              players: parsed.players,
+              connectionStatus: reconnectBarrierRef.current ? 'resuming' : 'online',
+              errorMessage: null,
+              corpsePositions: s.corpsePositions.filter(body => activeSlots.has(body.slot)),
+            }));
+            // Prune remote players that are no longer in the room.
+            for (const slot of remotePlayersRef.current.keys()) {
+              if (!activeSlots.has(slot) || slot === mySlotRef.current) {
+                remotePlayersRef.current.delete(slot);
+              }
+            }
+            return;
+          }
+
+          // 0x04: join error — do not keep retrying an expired/invalid room.
+          if (sub === 0x04 && event.data.byteLength >= 3) {
+            const errCode = view.getUint8(2);
+            const messages: Record<number, string> = {
+              0x01: 'Room not found',
+              0x02: 'Game already in progress',
+              0x03: 'Room is full',
+            };
+            clearSavedRoom();
+            setState(s => ({
+              ...s,
+              connectionStatus: 'online',
+              gameplayReady: false,
+              errorMessage: messages[errCode] ?? 'Unknown error',
+            }));
+            return;
+          }
+
+          // 0x05: authoritative slot assignment
+          if (sub === 0x05 && event.data.byteLength >= 3) {
+            const slot = view.getUint8(2);
+            mySlotRef.current = slot;
+            setState(s => ({ ...s, mySlot: slot }));
+            return;
+          }
+        }
+
+        // ── 0x25: versioned session resume ──────────────────────────────────
+        if (opcode === 0x25 && event.data.byteLength >= 2) {
+          const version = view.getUint8(1);
+          if (version === 0x00 && event.data.byteLength === 2) {
+            // WAITING lobby: roster/slot have been restored; no match snapshot
+            // is needed and normal lobby controls can be re-enabled.
+            reconnectBarrierRef.current = false;
+            setState(s => ({
+              ...s,
+              phase: 'lobby',
+              connectionStatus: 'online',
+              gameplayReady: false,
+              errorMessage: null,
+            }));
+            return;
+          }
+          if (version !== 0x01) return;
+
+          const snapshot = parseResumeSnapshotV1(event.data);
+          if (!snapshot) {
+            shouldReconnectRef.current = false;
+            setState(s => ({
+              ...s,
+              connectionStatus: 'offline',
+              gameplayReady: false,
+              errorMessage: 'The server sent an invalid resume snapshot. Please reload the game.',
+            }));
+            ws.close(1008, 'Invalid resume snapshot');
+            return;
+          }
+
+          const ownPosition = snapshot.playerPositions.find(position => position.slot === snapshot.mySlot);
+          if (!ownPosition) return;
+
+          mySlotRef.current = snapshot.mySlot;
+          myRoleRef.current = snapshot.myRole;
+          roomCodeRef.current = snapshot.roomCode;
+          persistRoomCode(snapshot.roomCode);
+
+          const restoredRemotePlayers = new Map<number, RemotePlayer>();
+          for (const position of snapshot.playerPositions) {
+            if (position.slot === snapshot.mySlot) continue;
+            const vent = position.inVent && position.ventId !== undefined
+              ? findVent(position.ventId)
+              : undefined;
+            restoredRemotePlayers.set(position.slot, {
+              slot: position.slot,
+              x: vent?.x ?? fromWire(position.wireX, MAP_W),
+              y: vent?.y ?? fromWire(position.wireY, MAP_H),
+              inVent: position.inVent,
+            });
+          }
+          remotePlayersRef.current = restoredRemotePlayers;
+
+          // Seed the local rAF reconciliation path with the authoritative
+          // position. GameMap consumes this before its next movement/camera step.
+          correctionRef.current = {
+            wireX: ownPosition.wireX,
+            wireY: ownPosition.wireY,
+            force: true,
+          };
+
+          const restoredMeeting: MeetingInfo | null = snapshot.meeting
+            ? {
+                reporterSlot: snapshot.meeting.reporterSlot,
+                bodySlot: snapshot.meeting.bodySlot,
+                startedAtMs: Date.now() - snapshot.meeting.elapsedMs,
+              }
+            : null;
+          const restoredMeetingMessages: MeetingChatMessage[] = snapshot.meeting
+            ? snapshot.meeting.messages.map(message => ({
+                slot: message.slot,
+                text: message.text,
+                receivedAt: message.sentAtMs,
+              }))
+            : [];
+          const restoredSabotage: SabotageInfo | null = snapshot.sabotage
+            ? {
+                systemId: snapshot.sabotage.systemId,
+                startedAtMs: Date.now() - snapshot.sabotage.elapsedMs,
+                fixedPads: snapshot.sabotage.fixedPads,
+                lockedTaskIds: snapshot.sabotage.lockedTaskIds,
+              }
+            : null;
+          const winner = snapshot.gameOverResult?.winFlag === 1
+            ? 'crewmates'
+            : snapshot.gameOverResult?.winFlag === 2
+              ? 'impostors'
+              : null;
+
+          reconnectBarrierRef.current = true;
+          setState(s => ({
+            ...s,
+            phase: 'playing',
+            connectionStatus: 'resuming',
+            mySlot: snapshot.mySlot,
+            roomCode: snapshot.roomCode,
+            hostSlot: snapshot.hostSlot,
+            players: snapshot.players,
+            errorMessage: null,
+            gameplayReady: false,
+            myRole: snapshot.myRole,
+            impostorSlots: snapshot.impostorSlots,
+            deadSlots: snapshot.deadSlots,
+            lastKill: null,
+            killCooldownMs: snapshot.killCooldownMs,
+            meeting: restoredMeeting,
+            hasVoted: snapshot.meeting?.hasVoted ?? false,
+            voteResult: snapshot.phase === 'GAMEOVER' && snapshot.gameOverResult
+              ? { ejectedSlot: snapshot.gameOverResult.ejectedSlot, winner }
+              : null,
+            myTasks: snapshot.myTasks,
+            globalTaskProgress: snapshot.globalTaskProgress,
+            sabotage: restoredSabotage,
+            sabotageCooldownMs: snapshot.sabotageCooldownMs,
+            myVentId: snapshot.myVentId,
+            meetingMessages: restoredMeetingMessages,
+            emergencyMeetingUsed: snapshot.emergencyMeetingUsed,
+            corpsePositions: snapshot.corpsePositions.map(corpse => ({
+              slot: corpse.slot,
+              x: fromWire(corpse.wireX, MAP_W),
+              y: fromWire(corpse.wireY, MAP_H),
+            })),
+          }));
+          return;
+        }
+
+        // ── 0x1A: role reveal → transition to playing ───────────────────────
+        // Crewmate: [0x1A, 0x00]
+        // Impostor: [0x1A, 0x01, impostorCount, slot_0, slot_1, ...]
+        if (opcode === 0x1A && event.data.byteLength >= 2) {
+          const roleByte = view.getUint8(1);
+          const myRole: PlayerRole = roleByte === 1 ? 'impostor' : 'crewmate';
+          myRoleRef.current = myRole;
+          if (myRole === 'impostor') haptic.warning(); else haptic.success();
+
+          const impostorSlots: number[] = [];
+          if (roleByte === 1 && event.data.byteLength >= 3) {
+            const count = view.getUint8(2);
+            for (let i = 0; i < count && 3 + i < event.data.byteLength; i++) {
+              impostorSlots.push(view.getUint8(3 + i));
+            }
+          }
+
+          remotePlayersRef.current.clear();
+          correctionRef.current = null;
+          setState(s => ({
+            ...s, phase: 'playing', connectionStatus: 'online', myRole, impostorSlots,
+            gameplayReady: false,
+            deadSlots: [],
+            lastKill: null,
+            killCooldownMs: myRole === 'impostor' ? KILL_COOLDOWN_MS : 0,
+            meeting: null,
+            hasVoted: false,
+            voteResult: null,
+            myTasks: [],
+            globalTaskProgress: 0,
+            sabotage: null,
+            sabotageCooldownMs: 0,
+            myVentId: null,
+            meetingMessages: [],
+            emergencyMeetingUsed: false,
+            corpsePositions: [],
+          }));
+          console.log('[WS] role reveal received — role=' + myRole);
+          return;
+        }
+
+        // ── 0x24: server confirmed this player's gameplay readiness ───────
+        if (opcode === 0x24 && event.data.byteLength >= 2 && view.getUint8(1) === 0x01) {
+          reconnectBarrierRef.current = false;
+          setState(s => ({
+            ...s,
+            connectionStatus: 'online',
+            gameplayReady: true,
+            errorMessage: null,
+          }));
+          return;
+        }
+
+        // ── 0x21: immutable corpse drop ───────────────────────────────────────
+        // [0x21, victimSlot, wireX(UInt16LE), wireY(UInt16LE)].
+        if (opcode === 0x21 && event.data.byteLength === 6) {
+          const slot = view.getUint8(1);
+          const x = fromWire(view.getUint16(2, true), MAP_W);
+          const y = fromWire(view.getUint16(4, true), MAP_H);
+          setState(s => ({
+            ...s,
+            corpsePositions: [
+              ...s.corpsePositions.filter(body => body.slot !== slot),
+              { slot, x, y },
+            ],
+          }));
+          return;
+        }
+
+        // ── 0x22: forced authoritative movement correction ─────────────────
+        if (opcode === 0x22 && event.data.byteLength === 5) {
+          correctionRef.current = {
+            wireX: view.getUint16(1, true),
+            wireY: view.getUint16(3, true),
+            force: true,
+          };
+          return;
+        }
+
+        // ── 0xFF: delta sync — update remote player positions ───────────────
+        if (opcode === 0xFF) {
+          applyDeltaPacket(
+            view,
+            mySlotRef.current,
+            remotePlayersRef.current,
+            (wireX, wireY, force) => { correctionRef.current = { wireX, wireY, force }; },
+          );
+          return;
+        }
+
+        // ── 0x15: RPC event ──────────────────────────────────────────────────
+        if (opcode === 0x15 && event.data.byteLength >= 2) {
+          const sub = view.getUint8(1);
+
+          // Kill broadcast: [0x15, 0x01, victimSlot, attackerSlot]
+          if (sub === 0x01 && event.data.byteLength >= 3) {
+            const victimSlot = view.getUint8(2);
+            const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
+            setState(s => {
+              if (s.deadSlots.includes(victimSlot)) return s;
+              if (victimSlot === mySlotRef.current) haptic.kill();
+              else if (attackerSlot === mySlotRef.current) haptic.medium();
+              return {
+                ...s,
+                deadSlots: [...s.deadSlots, victimSlot],
+                lastKill: { victimSlot, attackerSlot, occurredAtMs: Date.now() },
+                killCooldownMs: attackerSlot === mySlotRef.current
+                  ? KILL_COOLDOWN_MS
+                  : s.killCooldownMs,
+              };
+            });
+            return;
+          }
+
+          // Task progress broadcast (S→C, 3 bytes).
+          if (sub === 0x03 && event.data.byteLength === 3) {
+            const percent = view.getUint8(2);
+            setState(s => ({ ...s, globalTaskProgress: percent }));
+            return;
+          }
+          return;
+        }
+
+        // ── 0x16: sabotage control ──────────────────────────────────────────
+        if (opcode === 0x16 && event.data.byteLength >= 3) {
+          const sub = view.getUint8(1);
+          const systemId = view.getUint8(2);
+          if (sub === 0x01) {
+            const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
+            haptic.warning();
+            setState(s => ({
+              ...s,
+              sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [], lockedTaskIds: [] },
+              sabotageCooldownMs: attackerSlot === mySlotRef.current
+                ? SABOTAGE_COOLDOWN_MS
+                : s.sabotageCooldownMs,
+            }));
+            return;
+          }
+          if (sub === 0x02 && event.data.byteLength >= 4) {
+            const padId = view.getUint8(3);
+            setState(s => (
+              !s.sabotage || s.sabotage.systemId !== systemId || s.sabotage.fixedPads.includes(padId)
+                ? s
+                : { ...s, sabotage: { ...s.sabotage, fixedPads: [...s.sabotage.fixedPads, padId] } }
+            ));
+            return;
+          }
+          if (sub === 0x03) {
+            haptic.success();
+            setState(s => (s.sabotage?.systemId === systemId ? { ...s, sabotage: null } : s));
+            return;
+          }
+          if (sub === 0x04 && event.data.byteLength >= 3) {
+            const count = view.getUint8(3);
+            const lockedTaskIds: number[] = [];
+            for (let i = 0; i < count && 4 + i < event.data.byteLength; i++) {
+              lockedTaskIds.push(view.getUint8(4 + i));
+            }
+            setState(s => (
+              !s.sabotage || s.sabotage.systemId !== systemId
+                ? s
+                : { ...s, sabotage: { ...s.sabotage, lockedTaskIds } }
+            ));
+            return;
+          }
+          return;
+        }
+
+        // ── 0x20: emergency-use confirmation ────────────────────────────────
+        if (opcode === 0x20 && event.data.byteLength >= 3 &&
+            view.getUint8(1) === 0x01 && view.getUint8(2) === mySlotRef.current) {
+          setState(s => ({ ...s, emergencyMeetingUsed: true }));
+          return;
+        }
+
+        // ── 0x18: vent state broadcast ──────────────────────────────────────
+        if (opcode === 0x18 && event.data.byteLength >= 4) {
+          const sub = view.getUint8(1);
+          const slot = view.getUint8(2);
+          const ventId = view.getUint8(3);
+          const vent = findVent(ventId);
+          if (!vent || (sub !== 0x01 && sub !== 0x02 && sub !== 0x03)) return;
+          const inVent = sub !== 0x03;
+          if (slot === mySlotRef.current) {
+            remotePlayersRef.current.delete(slot);
+            setState(s => ({ ...s, myVentId: inVent ? ventId : null }));
+          } else {
+            remotePlayersRef.current.set(slot, { slot, x: vent.x, y: vent.y, inVent });
+          }
+          return;
+        }
+
+        // ── 0x19: meeting chat broadcast ────────────────────────────────────
+        if (opcode === 0x19 && event.data.byteLength >= 4 && view.getUint8(1) === 0x02) {
+          const slot = view.getUint8(2);
+          const length = view.getUint8(3);
+          if (length === 0 || event.data.byteLength !== 4 + length) return;
+          const text = new TextDecoder().decode(new Uint8Array(event.data, 4, length));
+          setState(s => ({
+            ...s,
+            meetingMessages: [...s.meetingMessages, { slot, text, receivedAt: Date.now() }].slice(-60),
+          }));
+          return;
+        }
+
+        // ── 0x1D: task assignment ───────────────────────────────────────────
+        if (opcode === 0x1D && event.data.byteLength >= 2) {
+          const taskCount = view.getUint8(1);
+          const taskIds: number[] = [];
+          for (let i = 0; i < taskCount && 2 + i < event.data.byteLength; i++) {
+            taskIds.push(view.getUint8(2 + i));
+          }
+          setState(s => ({
+            ...s,
+            myTasks: taskIds.map(id => ({ taskId: id, completedSteps: 0 })),
+          }));
+          return;
+        }
+
+        // ── 0x1B: meeting start ─────────────────────────────────────────────
+        if (opcode === 0x1B && event.data.byteLength >= 3) {
+          const reporterSlot = view.getUint8(1);
+          const bodySlot = view.getUint8(2);
           setState(s => {
-            if (s.deadSlots.includes(victimSlot)) return s;
-            // I was killed — strong error pulse.
-            if (victimSlot === mySlotRef.current) haptic.kill();
-            // I executed the kill — medium confirmation pulse.
-            else if (attackerSlot === mySlotRef.current) haptic.medium();
+            if (s.meeting !== null) return s;
+            haptic.meeting();
             return {
               ...s,
-              deadSlots: [...s.deadSlots, victimSlot],
-              lastKill: { victimSlot, attackerSlot, occurredAtMs: Date.now() },
-              killCooldownMs: attackerSlot === mySlotRef.current
-                ? KILL_COOLDOWN_MS
-                : s.killCooldownMs,
+              meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
+              hasVoted: false,
+              voteResult: null,
+              meetingMessages: [],
+              corpsePositions: bodySlot === NO_TARGET
+                ? s.corpsePositions
+                : s.corpsePositions.filter(body => body.slot !== bodySlot),
             };
           });
           return;
         }
 
-        // 0x03 — Task progress broadcast (S→C, 3 bytes): [0x15, 0x03, progressPercent]
-        // Phase 7: server broadcasts updated global task completion after each step.
-        // 3-byte length distinguishes this from C→S task-step (4 bytes).
-        if (sub === 0x03 && event.data.byteLength === 3) {
-          const percent = view.getUint8(2);
-          setState(s => ({ ...s, globalTaskProgress: percent }));
-          return;
-        }
-
-        return;
-      }
-
-      // ── 0x16: sabotage control (Phase 8, GAME_SPEC.md §10) ──────────────
-      // sub 0x01 — Started: [0x16, 0x01, systemId, attackerSlot]
-      // sub 0x02 — Pad fixed (progress): [0x16, 0x02, systemId, padId]
-      // sub 0x03 — Fixed / cleared: [0x16, 0x03, systemId]
-      if (opcode === 0x16 && event.data.byteLength >= 3) {
-        const sub = view.getUint8(1);
-        const systemId = view.getUint8(2);
-
-        if (sub === 0x01) {
-          const attackerSlot = event.data.byteLength >= 4 ? view.getUint8(3) : null;
-          haptic.warning();
+        // ── 0x1C: vote result / eject ──────────────────────────────────────
+        if (opcode === 0x1C && event.data.byteLength >= 3) {
+          const ejectedSlot = view.getUint8(1);
+          const winByte = view.getUint8(2);
+          const winner: 'crewmates' | 'impostors' | null =
+            winByte === 1 ? 'crewmates' : winByte === 2 ? 'impostors' : null;
+          if (winner) {
+            const localWon = (winner === 'crewmates' && myRoleRef.current === 'crewmate') ||
+                             (winner === 'impostors' && myRoleRef.current === 'impostor');
+            if (localWon) haptic.success(); else haptic.warning();
+          }
           setState(s => ({
             ...s,
-            sabotage: { systemId, startedAtMs: Date.now(), fixedPads: [], lockedTaskIds: [] },
-            // Only the triggering client resets its own cooldown UI.
-            sabotageCooldownMs: attackerSlot === mySlotRef.current
-              ? SABOTAGE_COOLDOWN_MS
-              : s.sabotageCooldownMs,
+            meeting: null,
+            myVentId: null,
+            corpsePositions: ejectedSlot === NO_TARGET
+              ? s.corpsePositions
+              : s.corpsePositions.filter(body => body.slot !== ejectedSlot),
+            deadSlots: ejectedSlot !== NO_TARGET && !s.deadSlots.includes(ejectedSlot)
+              ? [...s.deadSlots, ejectedSlot]
+              : s.deadSlots,
+            voteResult: { ejectedSlot, winner },
           }));
           return;
         }
+      };
 
-        if (sub === 0x02 && event.data.byteLength >= 4) {
-          const padId = view.getUint8(3);
-          setState(s => (
-            !s.sabotage || s.sabotage.systemId !== systemId || s.sabotage.fixedPads.includes(padId)
-              ? s
-              : { ...s, sabotage: { ...s.sabotage, fixedPads: [...s.sabotage.fixedPads, padId] } }
-          ));
-          return;
-        }
-
-        if (sub === 0x03) {
-          haptic.success();
-          setState(s => (s.sabotage?.systemId === systemId ? { ...s, sabotage: null } : s));
-          return;
-        }
-
-        // Doors sabotage sends the affected task IDs after the start packet:
-        // [0x16, 0x04, count, taskId...].
-        if (sub === 0x04 && event.data.byteLength >= 3) {
-          const count = view.getUint8(3);
-          const lockedTaskIds: number[] = [];
-          for (let i = 0; i < count && 4 + i < event.data.byteLength; i++) {
-            lockedTaskIds.push(view.getUint8(4 + i));
-          }
-          setState(s => (
-            !s.sabotage || s.sabotage.systemId !== systemId
-              ? s
-              : { ...s, sabotage: { ...s.sabotage, lockedTaskIds } }
-          ));
-          return;
-        }
-
-        return;
-      }
-
-      // ── 0x20: emergency-use confirmation, targeted to the caller ─────────
-      // [0x20, 0x01, playerSlot].
-      if (opcode === 0x20 && event.data.byteLength >= 3 &&
-          view.getUint8(1) === 0x01 && view.getUint8(2) === mySlotRef.current) {
-        setState(s => ({ ...s, emergencyMeetingUsed: true }));
-        return;
-      }
-
-      // ── 0x18: vent state broadcast ──────────────────────────────────────
-      // [0x18, sub, playerSlot, ventId]; sub 1 enter, 2 travel, 3 exit.
-      if (opcode === 0x18 && event.data.byteLength >= 4) {
-        const sub = view.getUint8(1);
-        const slot = view.getUint8(2);
-        const ventId = view.getUint8(3);
-        const vent = findVent(ventId);
-        if (!vent || (sub !== 0x01 && sub !== 0x02 && sub !== 0x03)) return;
-        const inVent = sub !== 0x03;
-        if (slot === mySlotRef.current) {
-          remotePlayersRef.current.delete(slot);
-          setState(s => ({ ...s, myVentId: inVent ? ventId : null }));
-        } else {
-          remotePlayersRef.current.set(slot, { slot, x: vent.x, y: vent.y, inVent });
-        }
-        return;
-      }
-
-      // ── 0x19: meeting chat broadcast ────────────────────────────────────
-      // [0x19, 0x02, senderSlot, utf8Length, utf8Bytes...].
-      if (opcode === 0x19 && event.data.byteLength >= 4 && view.getUint8(1) === 0x02) {
-        const slot = view.getUint8(2);
-        const length = view.getUint8(3);
-        if (length === 0 || event.data.byteLength !== 4 + length) return;
-        const text = new TextDecoder().decode(new Uint8Array(event.data, 4, length));
+      ws.onclose = () => {
+        if (socketRef.current !== ws || disposed) return;
+        remotePlayersRef.current.clear();
+        correctionRef.current = null;
+        reconnectBarrierRef.current = roomCodeRef.current !== null;
         setState(s => ({
           ...s,
-          meetingMessages: [...s.meetingMessages, { slot, text, receivedAt: Date.now() }].slice(-60),
+          connectionStatus: 'reconnecting',
+          gameplayReady: false,
+          errorMessage: 'Connection lost. Reconnecting…',
         }));
-        return;
-      }
-
-      // ── 0x1D: task assignment (S→C, crewmates only) ─────────────────────
-      // Phase 7: layout [0x1D, taskCount, taskId_0, taskId_1, ...]
-      if (opcode === 0x1D && event.data.byteLength >= 2) {
-        const taskCount = view.getUint8(1);
-        const taskIds: number[] = [];
-        for (let i = 0; i < taskCount && 2 + i < event.data.byteLength; i++) {
-          taskIds.push(view.getUint8(2 + i));
+        if (!shouldReconnectRef.current) {
+          setState(s => ({ ...s, connectionStatus: 'offline' }));
+          return;
         }
+        const delayMs = Math.min(8_000, 500 * (2 ** Math.min(reconnectAttempt, 4)));
+        reconnectAttempt += 1;
+        reconnectTimer = setTimeout(connect, delayMs);
+      };
+
+      ws.onerror = () => {
+        if (socketRef.current !== ws || disposed) return;
         setState(s => ({
           ...s,
-          myTasks: taskIds.map(id => ({ taskId: id, completedSteps: 0 })),
+          connectionStatus: 'reconnecting',
+          errorMessage: 'WebSocket interrupted. Reconnecting…',
         }));
-        console.log(`[WS] 📋 Tasks assigned: [${taskIds.join(', ')}]`);
-        return;
-      }
-
-      // ── 0x1B: meeting start ──────────────────────────────────────────────
-      // Layout: [0x1B, reporterSlot, bodySlot]
-      if (opcode === 0x1B && event.data.byteLength >= 3) {
-        const reporterSlot = view.getUint8(1);
-        const bodySlot = view.getUint8(2);
-        setState(s => {
-          // Ignore duplicate 0x1B while a meeting is already active — prevents
-          // a network replay from resetting the countdown, hasVoted flag, and haptic.
-          if (s.meeting !== null) return s;
-          haptic.meeting(); // first receipt only
-          return {
-            ...s,
-            meeting: { reporterSlot, bodySlot, startedAtMs: Date.now() },
-            hasVoted: false,
-            voteResult: null,
-            meetingMessages: [],
-            corpsePositions: bodySlot === NO_TARGET
-              ? s.corpsePositions
-              : s.corpsePositions.filter(body => body.slot !== bodySlot),
-          };
-        });
-        return;
-      }
-
-      // ── 0x1C: vote result / eject (also used for a kill-triggered end) ──
-      // Layout: [0x1C, ejectedSlot, winFlag]  (winFlag: 0 none, 1 crew, 2 impostor)
-      if (opcode === 0x1C && event.data.byteLength >= 3) {
-        const ejectedSlot = view.getUint8(1);
-        const winByte = view.getUint8(2);
-        const winner: 'crewmates' | 'impostors' | null =
-          winByte === 1 ? 'crewmates' : winByte === 2 ? 'impostors' : null;
-        // Haptic: success on a local win, warning on a local loss.
-        if (winner) {
-          const localWon = (winner === 'crewmates' && myRoleRef.current === 'crewmate') ||
-                           (winner === 'impostors' && myRoleRef.current === 'impostor');
-          if (localWon) haptic.success(); else haptic.warning();
-        }
-
-        setState(s => ({
-          ...s,
-          meeting: null,
-          myVentId: null,
-          corpsePositions: ejectedSlot === NO_TARGET
-            ? s.corpsePositions
-            : s.corpsePositions.filter(body => body.slot !== ejectedSlot),
-          deadSlots: ejectedSlot !== NO_TARGET && !s.deadSlots.includes(ejectedSlot)
-            ? [...s.deadSlots, ejectedSlot]
-            : s.deadSlots,
-          voteResult: { ejectedSlot, winner },
-        }));
-        return;
-      }
-
-      return;
+      };
     };
 
-    ws.onclose = () => {
-      setState(s => ({
-        ...s,
-        phase: s.phase === 'lobby' || s.phase === 'connecting' ? 'error' : s.phase,
-        errorMessage: s.errorMessage ?? 'Connection lost',
-      }));
-    };
+    connect();
 
-    ws.onerror = () => {
-      setState(s => ({ ...s, phase: 'error', errorMessage: 'WebSocket error' }));
+    return () => {
+      disposed = true;
+      shouldReconnectRef.current = false;
+      if (reconnectTimer !== null) clearTimeout(reconnectTimer);
+      const current = activeSocket;
+      if (current && current.readyState < WebSocket.CLOSING) {
+        current.close(1000, 'Game provider disposed');
+      }
+      if (socketRef.current === current) socketRef.current = null;
     };
-
-    return () => ws.close();
-  }, []); // socket is created once
+  }, []);
 
   // Client-side kill cooldown countdown display (server is authoritative for
   // the actual kill validation; this just drives the impostor's UI timer).
