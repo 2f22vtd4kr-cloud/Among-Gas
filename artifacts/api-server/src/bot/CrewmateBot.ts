@@ -242,6 +242,7 @@ export class CrewmateBot extends BotAgent {
     const goal = this.nearestApproachPoint(
       { x: def.x, y: def.y },
       TASK_INTERACTION_RANGE_PX - 8,
+      def.interactionTargetRadiusPx ?? 24,
     );
     const arrived = this.navigateTo(self, goal, 8);
     if (!arrived) return;
