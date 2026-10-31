@@ -102,7 +102,7 @@ try {
       if (!isBotNavigationReachable(candidate.x, candidate.y + FEET_OFFSET_Y)) continue;
       if (!isLineOfSightToInteractionTarget(
         grid, candidate.x, candidate.y + FEET_OFFSET_Y,
-        fuelTask.x, fuelTask.y + FEET_OFFSET_Y, 24,
+        fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
       )) continue;
       reachableVisibleApproach = candidate;
       break;
@@ -115,7 +115,7 @@ try {
     'Fuel Engine approach must be connected to the real spawn');
   assert.equal(isLineOfSightToInteractionTarget(
     grid, approach.x, approach.y + FEET_OFFSET_Y,
-    fuelTask.x, fuelTask.y + FEET_OFFSET_Y, 24,
+    fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
   ), true, 'Fuel Engine bot approach must be actually visible, not the nearest non-visible fallback');
   const player: LobbyPlayer = {
     slot: 0,
