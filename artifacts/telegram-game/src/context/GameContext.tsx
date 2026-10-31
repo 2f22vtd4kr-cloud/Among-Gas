@@ -23,6 +23,7 @@ import {
 import { findVent } from '@workspace/shared/vents';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
+import { readLobbyStartParam, resolveInitialRoomCode } from '../lib/telegramStartParam';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -1078,7 +1079,16 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     let reconnectAttempt = 0;
     let activeSocket: WebSocket | null = null;
 
-    roomCodeRef.current = readPersistedRoomCode();
+    const telegramStartParam = (window as any).Telegram?.WebApp?.initDataUnsafe?.start_param;
+    const inviteCode = readLobbyStartParam(window.location.search, telegramStartParam);
+    const persistedRoomCode = readPersistedRoomCode();
+    roomCodeRef.current = resolveInitialRoomCode(inviteCode, persistedRoomCode);
+
+    // A fresh, validated invite is an explicit navigation choice. Clear the
+    // old WebView resume code so the socket authenticates into the lobby and
+    // Lobby.tsx can join the invited room instead of silently resuming the old one.
+    if (inviteCode) persistRoomCode(null);
+
     if (roomCodeRef.current) {
       reconnectBarrierRef.current = true;
       setState(s => ({
