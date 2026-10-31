@@ -317,7 +317,8 @@ assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must keep its verified 
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
-assert.match(gameMapSource, /const grid = buildPreciseCollisionGrid\(\)/, 'GameMap must construct the canonical fine grid for live movement');
+assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => buildPreciseCollisionGrid\(\), \[\]\)/, 'GameMap must build one shared fine grid for task LOS and live movement');
+assert.match(gameMapSource, /const grid = taskInteractionGrid/, 'live prediction and vision must reuse the task interaction grid');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
 assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
 assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
