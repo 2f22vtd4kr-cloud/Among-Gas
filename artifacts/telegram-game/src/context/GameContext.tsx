@@ -156,6 +156,8 @@ export interface GameState {
   meetingMessages: MeetingChatMessage[];
   /** True after the server confirms this player's one emergency call this round. */
   emergencyMeetingUsed: boolean;
+  /** True after the server accepts a session-only Groq key for this lobby player. */
+  groqApiKeyConfigured: boolean;
   /** Bodies persist at the kill location while ghosts move independently. */
   corpsePositions: CorpsePosition[];
 }
@@ -193,6 +195,8 @@ export interface GameActions {
   travelVent: (ventId: number) => void;
   exitVent: () => void;
   sendMeetingChat: (text: string) => void;
+  /** Configure or clear a Groq key; it is held in memory and sent only to the authenticated server. */
+  setGroqApiKey: (apiKey: string) => void;
 }
 
 const DEFAULT_STATE: GameState = {
@@ -219,6 +223,7 @@ const DEFAULT_STATE: GameState = {
   myVentId: null,
   meetingMessages: [],
   emergencyMeetingUsed: false,
+  groqApiKeyConfigured: false,
   corpsePositions: [],
 };
 
@@ -244,6 +249,7 @@ const GameActionsCtx = createContext<GameActions>({
   travelVent: () => {},
   exitVent: () => {},
   sendMeetingChat: () => {},
+  setGroqApiKey: () => {},
 });
 
 /** Mutable ref holding the latest remote-player positions (slot → RemotePlayer).
@@ -939,6 +945,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const roomCodeRef = useRef<string | null>(null);
   const reconnectBarrierRef = useRef(false);
   const shouldReconnectRef = useRef(true);
+  // Never persist this credential in browser storage; re-send it after authenticated slot assignment/reconnect.
+  const groqApiKeyRef = useRef('');
 
   const send = useCallback((buf: Uint8Array | number[]) => {
     const ws = socketRef.current;
@@ -992,6 +1000,24 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     }
     send([0x23]);
   }, [send]);
+
+  const sendGroqApiKey = useCallback((apiKey: string) => {
+    const normalized = apiKey.trim();
+    groqApiKeyRef.current = normalized;
+    if (state.mySlot === null) return;
+    const bytes = new TextEncoder().encode(normalized);
+    if (bytes.length > 240) {
+      setState(s => ({ ...s, groqApiKeyConfigured: false }));
+      return;
+    }
+    send(new Uint8Array([0x18, bytes.length, ...bytes]));
+  }, [send, state.mySlot]);
+
+  useEffect(() => {
+    if (state.mySlot === null) return;
+    const bytes = new TextEncoder().encode(groqApiKeyRef.current);
+    send(new Uint8Array([0x18, bytes.length, ...bytes]));
+  }, [state.mySlot, send]);
 
   const sendMove = useCallback((wireX: number, wireY: number) => {
     const buf = new Uint8Array(5);
@@ -1582,6 +1608,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // ── 0x18: session-only Groq key acknowledgement ─────────────────────
+        if (opcode === 0x18 && event.data.byteLength === 3 && view.getUint8(1) === 0x01) {
+          setState(s => ({ ...s, groqApiKeyConfigured: view.getUint8(2) === 1 }));
+          return;
+        }
+
         // ── 0x18: vent state broadcast ──────────────────────────────────────
         if (opcode === 0x18 && event.data.byteLength >= 4) {
           const sub = view.getUint8(1);
@@ -1744,7 +1776,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     createRoom, createSolo, joinRoom, startGame, markGameplayReady, sendMove, sendKill,
     reportBody, callEmergencyMeeting, castVote, clearVoteResult,
     completeTaskStep, triggerSabotage, repairSabotage,
-    enterVent, travelVent, exitVent, sendMeetingChat,
+    enterVent, travelVent, exitVent, sendMeetingChat, setGroqApiKey: sendGroqApiKey,
   };
 
   return (
