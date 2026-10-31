@@ -724,6 +724,7 @@ export default function GameMap() {
         const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode?.includes('blocked') ? 7 : 4));
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
+          isGhost: amIDead,
           meeting: meeting !== null,
           assignedTasks: myTasksRef.current,
           player: { x: myPos.x, y: myPos.y },
@@ -1043,6 +1044,16 @@ export default function GameMap() {
   // Task fixture placement is resolved against the real collision grid below.
   // Production state always starts at the shared lobby spawn.
   const playerStateRef = useRef(initialPlayerState);
+
+  // GameContext commits mock dead-slot state after mount. Re-apply the
+  // occluded ghost fixture after deadSlotsRef has observed that state, so the
+  // first rAF collision step cannot snap a not-yet-marked ghost back to spawn.
+  useEffect(() => {
+    if (!amIDead || new URLSearchParams(window.location.search).get('mock') !== 'task-interaction-ghost-blocked') return;
+    const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
+    if (!fixture) return;
+    playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
+  }, [amIDead]);
 
   // Nearest vent is recomputed at low frequency; the server still checks range.
   const [nearestVentId, setNearestVentId] = useState<number | null>(null);
