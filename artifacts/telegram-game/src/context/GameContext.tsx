@@ -21,6 +21,7 @@ import {
   SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
 } from '@workspace/shared/sabotage';
 import { findVent } from '@workspace/shared/vents';
+import { applyDeltaPacket } from '@workspace/shared/remotePlayerDelta';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
 import { readLobbyStartParam, resolveInitialRoomCode } from '../lib/telegramStartParam';
@@ -893,39 +894,6 @@ function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
  *   Byte 1:   N (player count)
  *   [× N]:  slot(Uint8) + X(Int16LE) + Y(Int16LE)
  */
-function applyDeltaPacket(
-  view: DataView,
-  mySlot: number | null,
-  remotePlayersMap: Map<number, RemotePlayer>,
-  onCorrection: (wireX: number, wireY: number, force?: boolean) => void,
-): void {
-  if (view.byteLength < 2) return;
-  const count = view.getUint8(1);
-  let off = 2;
-
-  for (let i = 0; i < count; i++) {
-    if (off + 5 > view.byteLength) break;
-    const slot = view.getUint8(off++);
-    const wireX = view.getInt16(off, true); off += 2;
-    const wireY = view.getInt16(off, true); off += 2;
-
-    if (slot === mySlot) {
-      // Echo of the server's last-accepted position for our own player.
-      // This is NOT necessarily a "correction" — most of the time it's
-      // just an ack of a position we already sent (and have since moved
-      // past locally, since local movement isn't paused waiting for
-      // acks). Pass raw wire ints; the consumer (GameMap's rAF loop)
-      // reconciles against its own recently-sent history to tell a real
-      // wall-clip rejection apart from ordinary round-trip lag.
-      onCorrection(wireX, wireY);
-    } else {
-      const x = fromWire(wireX, MAP_W);
-      const y = fromWire(wireY, MAP_H);
-      const previous = remotePlayersMap.get(slot);
-      remotePlayersMap.set(slot, { slot, x, y, inVent: previous?.inVent ?? false });
-    }
-  }
-}
 
 // ── Provider ─────────────────────────────────────────────────────────────────
 
@@ -1217,6 +1185,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const slot = view.getUint8(1);
           const roomToRejoinNow = roomCodeRef.current;
           mySlotRef.current = slot;
+          remotePlayersRef.current.delete(slot);
           reconnectAttempt = 0;
           if (roomToRejoinNow) {
             reconnectBarrierRef.current = true;
@@ -1300,6 +1269,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (sub === 0x05 && event.data.byteLength >= 3) {
             const slot = view.getUint8(2);
             mySlotRef.current = slot;
+            remotePlayersRef.current.delete(slot);
             setState(s => ({ ...s, mySlot: slot }));
             return;
           }
