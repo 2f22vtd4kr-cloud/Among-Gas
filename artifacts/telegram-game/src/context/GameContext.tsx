@@ -887,7 +887,7 @@ function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
  *   Byte 1:   N (player count)
  *   [× N]:  slot(Uint8) + X(Int16LE) + Y(Int16LE)
  */
-function applyDeltaPacket(
+export function applyDeltaPacket(
   view: DataView,
   mySlot: number | null,
   remotePlayersMap: Map<number, RemotePlayer>,
@@ -904,6 +904,10 @@ function applyDeltaPacket(
     const wireY = view.getInt16(off, true); off += 2;
 
     if (slot === mySlot) {
+      // A delta can arrive before the authoritative slot-assignment packet.
+      // Remove any stale pre-assignment entry so the local player is never
+      // rendered twice (one idle remote sprite plus one predicted local sprite).
+      remotePlayersMap.delete(slot);
       // Echo of the server's last-accepted position for our own player.
       // This is NOT necessarily a "correction" — most of the time it's
       // just an ack of a position we already sent (and have since moved
@@ -1191,6 +1195,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           const slot = view.getUint8(1);
           const roomToRejoinNow = roomCodeRef.current;
           mySlotRef.current = slot;
+          remotePlayersRef.current.delete(slot);
           reconnectAttempt = 0;
           if (roomToRejoinNow) {
             reconnectBarrierRef.current = true;
@@ -1274,6 +1279,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           if (sub === 0x05 && event.data.byteLength >= 3) {
             const slot = view.getUint8(2);
             mySlotRef.current = slot;
+            remotePlayersRef.current.delete(slot);
             setState(s => ({ ...s, mySlot: slot }));
             return;
           }
