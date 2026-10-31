@@ -317,12 +317,12 @@ assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must keep its verified 
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
-assert.match(gameMapSource, /const fineGrid = buildPreciseCollisionGrid\(\)/, 'GameMap must construct the canonical fine grid for live vision');
+assert.match(gameMapSource, /const grid = buildPreciseCollisionGrid\(\)/, 'GameMap must construct the canonical fine grid for live movement');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
 assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
 assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
-assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
+assert.match(gameMapSource, /stepPlayer\(\s*fineGrid,/, 'Client prediction must use the canonical fine collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
 assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
