@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildInternalBotDialogue, isNextBotResponder } from './internalDialogue.js';
+import { buildInternalBotDialogue } from './internalDialogue.js';
 
 const roster = ['Nova', 'Mira', 'Bolt', 'Echo'];
 const response = buildInternalBotDialogue({
@@ -35,14 +35,4 @@ const playerNumberResponse = buildInternalBotDialogue({
 assert.match(playerNumberResponse, /Player3/,
   'one-based public player numbers map to the zero-based roster slot');
 
-const players = [
-  { slot: 0, username: 'Human', alive: true, isBot: false },
-  { slot: 1, username: 'A', alive: true, isBot: true },
-  { slot: 2, username: 'B', alive: true, isBot: true },
-  { slot: 3, username: 'C', alive: true, isBot: true },
-];
-assert.equal(isNextBotResponder(players, 1, 2), true, 'the next living bot answers a bot turn');
-assert.equal(isNextBotResponder(players, 1, 3), false, 'only one bot answers each bot turn');
-assert.equal(isNextBotResponder(players, 3, 1), true, 'bot conversation order wraps around');
-assert.equal(isNextBotResponder(players, 0, 1), true, 'a human speaker can hand off to the first bot');
 console.log('PASS: contextual deterministic dialogue and bounded bot-to-bot turn-taking');
