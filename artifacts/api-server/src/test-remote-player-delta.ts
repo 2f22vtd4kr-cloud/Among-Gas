@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { applyDeltaPacket } from '../../telegram-game/src/context/GameContext.tsx';
+import { applyDeltaPacket } from '../../telegram-game/src/context/remotePlayerDelta.js';
 
 const players = new Map<number, { slot: number; x: number; y: number; inVent?: boolean }>([
   [0, { slot: 0, x: 100, y: 100 }],
