@@ -674,7 +674,7 @@ export default function GameMap() {
   useEffect(() => {
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked');
+      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked');
     if (taskMockActive) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
@@ -721,7 +721,7 @@ export default function GameMap() {
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
       if (taskMockActive) {
-        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode === 'task-interaction-blocked' ? 7 : 4));
+        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode?.includes('blocked') ? 7 : 4));
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
           meeting: meeting !== null,
@@ -1103,8 +1103,8 @@ export default function GameMap() {
     const fineGrid = grid;
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked')) {
-      const blockedFixture = taskMockMode === 'task-interaction-blocked';
+        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
+      const blockedFixture = taskMockMode?.includes('blocked') === true;
       const fixtureTask = TASK_DEFS.find(task => task.id === (blockedFixture ? 7 : 4));
       if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
       let nearest: { x: number; y: number; distanceSq: number } | null = null;
