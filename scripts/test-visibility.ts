@@ -3,6 +3,7 @@ import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
+  buildFineCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
   FINE_CELL_X,
@@ -243,9 +244,24 @@ assert.ok(statueRay.x>1707&&statueRay.x<1711,'vision ray stops at the narrow sta
 // The 680×392 grid is authoritative for movement and visual occlusion.
 const realFineGrid = buildPreciseCollisionGrid();
 const independentlyDecodedFineGrid = decodeCanonicalFineRle(FINE_RLE_BASE64, FINE_COLS, FINE_ROWS);
+const productionDecodedFineGrid = buildFineCollisionGridFromRle(FINE_RLE_BASE64);
 assert.equal(FINE_COLS * FINE_ROWS, 680 * 392, 'canonical dimensions are 680×392');
-assert.deepEqual(independentlyDecodedFineGrid, realFineGrid,
-  'the production decoder exactly matches the independently decoded committed payload');
+assert.deepEqual(productionDecodedFineGrid, independentlyDecodedFineGrid,
+  'the production RLE decoder exactly matches the independently decoded committed payload');
+// The live grid intentionally applies the hand-traced van-bay replacement
+// after decoding. Keep that explicit edit bounded to its authored rectangle.
+let overrideDifferences = 0;
+for (let index = 0; index < realFineGrid.length; index++) {
+  if (realFineGrid[index] === independentlyDecodedFineGrid[index]) continue;
+  overrideDifferences++;
+  const col = index % FINE_COLS;
+  const row = Math.floor(index / FINE_COLS);
+  const x = (col + 0.5) * FINE_CELL_X;
+  const y = (row + 0.5) * FINE_CELL_Y;
+  assert.ok(x >= 1985 && x <= 2260 && y >= 1055 && y <= 1260,
+    'manual collision edits remain inside the measured van-bay replacement zone');
+}
+assert.ok(overrideDifferences > 0, 'the authored van-bay correction is applied to the live collision grid');
 const realFineShadowGrid = buildShadowGrid(realFineGrid);
 const realFineShadowSegments = buildFineShadowSegments(realFineGrid);
 assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2000,
