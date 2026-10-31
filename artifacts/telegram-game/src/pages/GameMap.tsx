@@ -1045,16 +1045,6 @@ export default function GameMap() {
   // Production state always starts at the shared lobby spawn.
   const playerStateRef = useRef(initialPlayerState);
 
-  // GameContext commits mock dead-slot state after mount. Re-apply the
-  // occluded ghost fixture after deadSlotsRef has observed that state, so the
-  // first rAF collision step cannot snap a not-yet-marked ghost back to spawn.
-  useEffect(() => {
-    if (!amIDead || new URLSearchParams(window.location.search).get('mock') !== 'task-interaction-ghost-blocked') return;
-    const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
-    if (!fixture) return;
-    playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
-  }, [amIDead]);
-
   // Nearest vent is recomputed at low frequency; the server still checks range.
   const [nearestVentId, setNearestVentId] = useState<number | null>(null);
   useEffect(() => {
@@ -1196,6 +1186,14 @@ export default function GameMap() {
       playerStateRef.current = stepPlayer(
         fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
+      // The ghost-only browser fixture deliberately starts behind a wall.
+      // Keep its test position after physics so React mount ordering cannot
+      // make the first living-player frame snap it back to the spawn.
+      if (taskMockMode === 'task-interaction-ghost-blocked' &&
+          deadSlotsRef.current.has(mySlotRef.current ?? -1)) {
+        const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
+        if (fixture) playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
+      }
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
       if (
         (pose === 'walk-1' || pose === 'walk-2') &&
