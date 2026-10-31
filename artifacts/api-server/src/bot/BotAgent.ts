@@ -299,10 +299,10 @@ export abstract class BotAgent {
    * nearly every real path (see .agents/memory/ for the investigation).
    * Fix: do the whole search in feet-space, then shift back once at the end.
    */
-  protected navigateTo(self: LobbyPlayer, goal: Point): boolean {
+  protected navigateTo(self: LobbyPlayer, goal: Point, arrivalTolerancePx = 25): boolean {
     const dxGoal = goal.x - self.x;
     const dyGoal = goal.y - self.y;
-    if (dxGoal * dxGoal + dyGoal * dyGoal <= ARRIVAL_SQ) return true;
+    if (dxGoal * dxGoal + dyGoal * dyGoal <= arrivalTolerancePx * arrivalTolerancePx) return true;
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
