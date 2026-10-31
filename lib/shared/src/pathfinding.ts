@@ -366,7 +366,7 @@ export class PathCache {
   ): PathResult | null {
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
-    const key = `${geometry.cols}x${geometry.rows}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
+    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
 
     if (!forceRefresh && this.cache.has(key)) {
       return this.cache.get(key)!;
