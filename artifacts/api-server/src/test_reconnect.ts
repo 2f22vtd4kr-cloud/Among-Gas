@@ -231,8 +231,8 @@ function wait(ms: number): Promise<void> {
   assert.equal(manager.joinLobby(lobby.code, users[2], 'Player 2', sockets[2].ws), lobby);
   manager.startGame(lobby, 1);
 
-  assert.equal(manager.markGameplayReady(lobby, 0), true === lobby.gameplayReady,
-    'first ready acknowledgement returns current readiness state');
+  assert.equal(manager.markGameplayReady(lobby, 0), false,
+    'first ready acknowledgement does not release the other two connected players');
   assert.equal(manager.markGameplayReady(lobby, 1), false,
     'the third still-connected human is required before initial readiness');
 
