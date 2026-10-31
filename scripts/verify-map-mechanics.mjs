@@ -318,6 +318,7 @@ assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living
 assert.match(botAgentSource, /arrivalTolerancePx = 25/, 'bot navigation must support precise task arrival without changing other goals');
 assert.match(crewmateBotSource, /TASK_INTERACTION_RANGE_PX - 8/, 'task approach search must cover the server interaction radius with an 8px safety margin');
 assert.match(crewmateBotSource, /navigateTo\(self, goal, 8\)/, 'task bots must arrive precisely enough to remain inside the authoritative interaction radius');
+assert.match(crewmateBotSource, /SABOTAGE_INTERACTION_RANGE_PX - 8/, 'sabotage repair bots must use the same safe-radius approach strategy');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => buildPreciseCollisionGrid\(\), \[\]\)/, 'GameMap must build one shared fine grid for task LOS and live movement');
