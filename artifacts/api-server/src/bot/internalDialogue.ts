@@ -40,6 +40,11 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
     name.toLocaleLowerCase() !== context.latestSpeaker?.toLocaleLowerCase() &&
     lower.includes(name.toLocaleLowerCase()),
   );
+  const playerNumberMatch = lower.match(/\\bplayer\\s*#?0*(\\d{1,2})\\b|\\bslot\\s*#?0*(\\d{1,2})\\b|#0*(\\d{1,2})\\b/);
+  const mentionedPlayerNumber = playerNumberMatch
+    ? `Player${Number(playerNumberMatch[1] ?? playerNumberMatch[2] ?? playerNumberMatch[3])}`
+    : undefined;
+  const mentionedSubject = otherPlayer ?? mentionedPlayerNumber;
   const mentionsSelf = lower.includes(context.username.toLocaleLowerCase());
   const asksLocation = /where|location|route|hall|room|last saw|last seen|near|saw/.test(lower);
   const asksForEvidence = /evidence|proof|why|because|suspect|vote|accus|impostor|suspicious/.test(lower);
@@ -60,9 +65,9 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
     return opening[stableIndex(seed, opening.length)];
   }
 
-  if (otherPlayer) {
+  if (mentionedSubject) {
     const replies = [
-      `${context.latestSpeaker ?? 'Player'}, what did ${otherPlayer} do that you personally observed?`,
+      `${context.latestSpeaker ?? 'Player'}, what did ${mentionedSubject} do that you personally observed?`,
       `Is there a specific sighting connecting ${otherPlayer} to this, or is that only a suspicion?`,
       `Can someone independently confirm the detail about ${otherPlayer}?`,
     ];
