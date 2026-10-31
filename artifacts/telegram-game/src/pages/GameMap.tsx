@@ -689,7 +689,12 @@ export default function GameMap() {
         const dx = def.x - myPos.x;
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) {
+        if (distSq <= bestDistSq && isLineOfSightToInteractionTarget(
+          interactionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          def.x, def.y + FEET_OFFSET_Y,
+          24,
+        )) {
           best = { taskId: t.taskId, stepIndex: t.completedSteps };
           bestDistSq = distSq;
         }
