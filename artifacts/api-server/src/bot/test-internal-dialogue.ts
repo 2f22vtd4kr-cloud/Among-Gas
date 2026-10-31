@@ -24,6 +24,17 @@ const addressed = buildInternalBotDialogue({
 });
 assert.match(addressed, /Nova|exact|place|time/i, 'direct questions are acknowledged without fabricated location claims');
 
+const playerNumberResponse = buildInternalBotDialogue({
+  username: 'Nova',
+  role: 'crewmate',
+  meetingType: 'body report',
+  livingRoster: ['Nova', 'Player3'],
+  latestSpeaker: 'Player0',
+  latestMessage: 'I saw Player 04 near the west wall.',
+});
+assert.match(playerNumberResponse, /Player3/,
+  'one-based public player numbers map to the zero-based roster slot');
+
 const players = [
   { slot: 0, username: 'Human', alive: true, isBot: false },
   { slot: 1, username: 'A', alive: true, isBot: true },
