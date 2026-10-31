@@ -409,6 +409,29 @@ try {
   await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
   await blockedTaskPage.close();
 
+  // Ghosts are intentionally exempt from task LOS checks on the server and
+  // must retain the same through-wall task prompt on the client.
+  const ghostBlockedTaskPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  ghostBlockedTaskPage.on('pageerror', error => failures.push(error.message));
+  await ghostBlockedTaskPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await ghostBlockedTaskPage.goto(`${origin}/?mock=task-interaction-ghost-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await ghostBlockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await ghostBlockedTaskPage.waitForTimeout(450);
+  const ghostBlockedTaskCount = await ghostBlockedTaskPage.locator('[data-testid="gameplay-task-action"]').count();
+  assert.equal(ghostBlockedTaskCount, 1,
+    'a ghost must retain the task prompt through a wall when the task is within interaction range');
+  await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
+  await ghostBlockedTaskPage.close();
+
   // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
   for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1365, height: 768 }]) {
     await page.setViewportSize(size);
