@@ -55,11 +55,11 @@ for (const color of CHARACTER_COLORS) {
   }
 }
 
-assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.56,
+assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.585,
   'idle leg-gap mask must remove the stray black hook while preserving the right foot');
 const idleClipPercentages = [...(getCharacterClipPath('idle') ?? '').matchAll(/(-?\d+(?:\.\d+)?)%/g)]
   .map(([, value]) => Number(value));
-assert.ok(idleClipPercentages.some(value => Math.abs(value - 56) < 1e-9),
+assert.ok(idleClipPercentages.some(value => Math.abs(value - 58.5) < 1e-9),
   'idle DOM and canvas renderers must preserve the full right-leg silhouette');
 assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.67,
   'corpse leg-gap mask must remove the detached horizontal bridge');
