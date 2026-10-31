@@ -80,7 +80,9 @@ export class CrewmateBot extends BotAgent {
     // Keep an 8px margin so floating-point rounding cannot strand a ghost
     // infinitesimally outside the exact interaction threshold forever.
     const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 8);
-    if (distance > interactionDistance) {
+    // A 1px arrival tolerance avoids a floating-point residue just outside
+    // the target radius being treated as a new movement request every tick.
+    if (distance > interactionDistance + 1) {
       const travel = Math.min(BOT_SPEED_PX * 1.5, distance - interactionDistance);
       self.x += (dx / distance) * travel;
       self.y += (dy / distance) * travel;
