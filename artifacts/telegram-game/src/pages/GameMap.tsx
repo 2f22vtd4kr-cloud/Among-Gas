@@ -711,7 +711,7 @@ export default function GameMap() {
           myPos.y + FEET_OFFSET_Y,
           def.x,
           def.y + FEET_OFFSET_Y,
-          24,
+          def.interactionTargetRadiusPx ?? 24,
         );
         if (distSq <= bestDistSq && hasLineOfSight) {
           best = { taskId: t.taskId, stepIndex: t.completedSteps };
@@ -1118,7 +1118,8 @@ export default function GameMap() {
           if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
           const hasLineOfSight = isLineOfSightToInteractionTarget(
             fineGrid, x, y + FEET_OFFSET_Y,
-            fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y, 24,
+            fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
+            fixtureTask.interactionTargetRadiusPx ?? 24,
           );
           if (blockedFixture === hasLineOfSight) continue;
           nearest = { x, y, distanceSq };
