@@ -242,7 +242,7 @@ export abstract class BotAgent {
       const hasConversationHook = /[?]|\\bwho\\b|\\bwhere\\b|\\bwhat\\b|\\bwhy\\b|\\bsuspect\\b|\\bvote\\b|\\baccus\\w*/.test(lower);
       return hasConversationHook && isNextBotResponder(
         Array.from(lobby.players.values()).map(player => ({
-          slot: player.slot, username: player.username, alive: player.alive, isBot: player.isBot,
+          slot: player.slot, username: player.username, alive: player.alive, isBot: player.isBot === true,
         })),
         entry.slot,
         self.slot,
