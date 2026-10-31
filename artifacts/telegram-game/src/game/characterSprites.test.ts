@@ -24,6 +24,8 @@ assert.equal(CHARACTER_SOURCE_SHEET_WIDTH, 1123, 'the original source atlas widt
 assert.equal(CHARACTER_CELL_WIDTH, 161, 'integer runtime columns avoid fractional atlas sampling');
 assert.equal(CHARACTER_SHEET_WIDTH, 2898, 'eighteen runtime columns must fit the generated atlas');
 assert.equal(CHARACTER_POSES.length, 9, 'all nine authored animation and kill poses must remain');
+assert.equal(new Set(CHARACTER_POSES).size, CHARACTER_POSES.length,
+  'every authored pose name must be unique');
 assert.equal(CHARACTER_SHEET_HEIGHT, 1401);
 
 const currentLobbyColors = Array.from({ length: 15 }, (_, slot) => getCharacterColorForSlot(slot));
@@ -61,6 +63,19 @@ assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.67,
   'corpse leg-gap mask must remove the detached horizontal bridge');
 assert.match(getCharacterClipPath('dead-body') ?? '', /67%/,
   'corpse DOM and canvas renderers must share the widened transparent gap');
+
+// Every authored pose must occupy its own measured vertical window. This
+// guards against a future uniform-row calculation or crop edit that silently
+// bleeds pixels from a neighboring pose into every palette column.
+const poseFrames = CHARACTER_POSES.map(pose => getCharacterFrameRect('teal', pose));
+assert.equal(new Set(poseFrames.map(frame => frame.y)).size, CHARACTER_POSES.length,
+  'all nine pose crops must start at distinct source rows');
+for (let index = 1; index < poseFrames.length; index++) {
+  const previous = poseFrames[index - 1];
+  const current = poseFrames[index];
+  assert.ok(current.y > previous.y + previous.height,
+    `${CHARACTER_POSES[index]} crop must start after the complete ${CHARACTER_POSES[index - 1]} crop and its transparent safety gap`);
+}
 
 const walk1 = getCharacterFrameRect('teal', 'walk-1');
 const walk2 = getCharacterFrameRect('teal', 'walk-2');
