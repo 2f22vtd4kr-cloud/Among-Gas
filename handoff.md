@@ -1910,6 +1910,7 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 - Relocated manual and meeting-forced vent exits to a legal player footprint, sent the explicit forced 0x22 correction to the local client, and added coverage for all six vents plus emergency-meeting release.
 - Removed the simulator's vent-radius collision exemption: only a player whose server state is actually `inVent` is exempt from walkability checks. The regression fixture marks the actual feet-baseline cell (`vent.y + FEET_OFFSET_Y`) blocked, not the sprite anchor cell.
 - Included cell dimensions in PathCache keys and added a regression test for equal grid dimensions with different world-space cell sizes.
+- Made a validated fresh Telegram invite take precedence over a saved WebView room: the stale resume key is cleared and the lobby joins the invited code. Added precedence tests.
 
 **Current verification / release gate**
 - On the previous integrated head, Node 20, install, geometry/collision/vision checks, typecheck/build, Replit production/development serving, server gameplay invariants, Telegram start-param, reconnect/resume, HMAC auth, live WebSocket checks, mobile browser smoke, and visual artifact generation passed. The previous 100-game simulation was still running when the final vent-sync and cache/watchdog review fixes were added; it is not evidence for the final head.
@@ -1918,5 +1919,5 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 
 **State to restore**
 - `main` base at the start of this integration: `b06fe62e50e08b257f88b10a8abfc40faa9939ad`.
-- Latest integration branch: `integration/among-gas-release-candidate-final-verification` (current head being refined). Open a fresh PR from the final SHA to trigger CI on the exact final code.
+- Latest integration branch: `integration/among-gas-release-candidate-strict-watchdog` (current head being refined). Open a fresh PR from the final SHA to trigger CI on the exact final code.
 - No Replit app matching “Among Gas” was returned by the connected Replit app search. Do not claim a live workspace launch or publish was performed.
