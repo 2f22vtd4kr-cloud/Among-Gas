@@ -24,6 +24,18 @@ const addressed = buildInternalBotDialogue({
 });
 assert.match(addressed, /Nova|exact|place|time/i, 'direct questions are acknowledged without fabricated location claims');
 
+const botQuestionResponse = buildInternalBotDialogue({
+  username: 'Nova',
+  role: 'crewmate',
+  meetingType: 'body report',
+  livingRoster: ['Nova', 'Player0', 'Player1', 'Player3'],
+  latestSpeaker: 'Player1',
+  latestSpeakerIsBot: true,
+  latestMessage: 'Where were you? I saw Player 01 near the west wall.',
+});
+assert.match(botQuestionResponse, /confirmed sighting|corroborate/i,
+  'a bot question is answered as a request for confirmation, not treated as an accusation');
+
 const playerNumberResponse = buildInternalBotDialogue({
   username: 'Nova',
   role: 'crewmate',
