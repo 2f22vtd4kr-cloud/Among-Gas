@@ -265,6 +265,7 @@ export abstract class BotAgent {
       meetingType: hasBody ? 'body report' : 'emergency call',
       livingRoster: Array.from(lobby.players.values()).filter(player => player.alive).map(player => player.username),
       latestSpeaker: speaker?.username,
+      latestSpeakerIsBot: speaker?.isBot === true,
       latestMessage: latestRelevant?.text,
     });
 
