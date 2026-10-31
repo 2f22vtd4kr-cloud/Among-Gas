@@ -289,6 +289,8 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x01));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x02));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x03));
+  assert.ok(impostor.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
+    'manual vent exit must force the local client to the authoritative relocated position');
   manager.disposeLobby(lobby);
 
   // Every authored vent anchor must release the impostor onto a valid
@@ -304,9 +306,36 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     assert.equal(exiting.player.ventId, undefined);
     assert.equal(isPlayerPositionWalkable(grid, exiting.player.x, exiting.player.y), true,
       `vent ${vent.id} exit must be walkable for the complete player footprint`);
+    assert.ok(exiting.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
+      `vent ${vent.id} exit must send a forced local position correction`);
     exitManager.disposeLobby(exitLobby);
   }
   void vent2;
+}
+
+// A meeting-triggered release must use the same legal exit and force the
+// disconnected-from-prediction client to the server's relocated coordinates.
+{
+  const reporter = makePlayer(0, 'crewmate', SPAWN_X, SPAWN_Y);
+  const vent = findVent(1)!;
+  const impostor = makePlayer(1, 'impostor', vent.x, vent.y);
+  impostor.player.inVent = true;
+  impostor.player.ventId = vent.id;
+  const lobby = makeLobby([reporter.player, impostor.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.callMeeting(lobby, reporter.player.slot, NO_TARGET), true,
+    'a valid emergency meeting should start while another player is vented');
+  assert.equal(lobby.phase, 'MEETING');
+  assert.equal(impostor.player.inVent, false, 'meeting must release the vent occupant');
+  assert.equal(impostor.player.ventId, undefined);
+  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+    'meeting-forced release must choose a legal player footprint');
+  const forcedCorrection = impostor.packets.find(packet => packet[0] === 0x22);
+  assert.ok(forcedCorrection && forcedCorrection.length === 5,
+    'meeting-forced release must send a forced 0x22 correction to the released player');
+  assert.equal(forcedCorrection!.readUInt16LE(1), toWire(impostor.player.x, MAP_W));
+  assert.equal(forcedCorrection!.readUInt16LE(3), toWire(impostor.player.y, MAP_H));
+  manager.disposeLobby(lobby);
 }
 
 // 4. Living players can post meeting chat; all lobby members, including ghosts, can read it.
