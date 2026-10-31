@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
@@ -45,11 +45,13 @@ import {
 import {
   toWire,
   fromWire,
+  FEET_OFFSET_Y,
   NO_TARGET,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
@@ -269,6 +271,7 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
+  const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -650,8 +653,9 @@ export default function GameMap() {
   }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
+    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      new URLSearchParams(window.location.search).get('mock') === 'task-interaction';
+      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked');
     if (taskMockActive) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
@@ -681,16 +685,23 @@ export default function GameMap() {
         const dx = def.x - myPos.x;
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) {
+        const hasLineOfSight = isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x,
+          myPos.y + FEET_OFFSET_Y,
+          def.x,
+          def.y + FEET_OFFSET_Y,
+          24,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) {
           best = { taskId: t.taskId, stepIndex: t.completedSteps };
           bestDistSq = distSq;
         }
       }
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
-      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-          new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
-        const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+      if (taskMockActive) {
+        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode === 'task-interaction-blocked' ? 7 : 4));
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
           meeting: meeting !== null,
@@ -1062,11 +1073,13 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = buildPreciseCollisionGrid();
+    const grid = taskInteractionGrid;
     const fineGrid = grid;
+    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        new URLSearchParams(window.location.search).get('mock') === 'task-interaction') {
-      const fixtureTask = TASK_DEFS.find(task => task.id === 4);
+        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked')) {
+      const blockedFixture = taskMockMode === 'task-interaction-blocked';
+      const fixtureTask = TASK_DEFS.find(task => task.id === (blockedFixture ? 7 : 4));
       if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
       let nearest: { x: number; y: number; distanceSq: number } | null = null;
       const range = TASK_INTERACTION_RANGE_PX - 8;
@@ -1077,10 +1090,17 @@ export default function GameMap() {
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
           if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
+          const hasLineOfSight = isLineOfSightToInteractionTarget(
+            fineGrid, x, y + FEET_OFFSET_Y,
+            fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y, 24,
+          );
+          if (blockedFixture === hasLineOfSight) continue;
           nearest = { x, y, distanceSq };
         }
       }
-      if (!nearest) throw new Error('Task interaction fixture has no walkable player position within interaction range');
+      if (!nearest) throw new Error(blockedFixture
+        ? 'Occluded task fixture has no walkable in-range position without line of sight'
+        : 'Task interaction fixture has no walkable, visible player position within interaction range');
       playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
       (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
     }
