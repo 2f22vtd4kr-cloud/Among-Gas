@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { applyDeltaPacket } from '@workspace/shared/remotePlayerDelta';
+import { fromWire, MAP_W } from '@workspace/shared/coords';
 
 const players = new Map<number, { slot: number; x: number; y: number; inVent?: boolean }>([
   [0, { slot: 0, x: 100, y: 100 }],
@@ -21,7 +22,7 @@ applyDeltaPacket(view, 0, players, () => { corrections++; });
 assert.equal(corrections, 1, 'the local authoritative echo still reconciles prediction');
 assert.equal(players.has(0), false, 'a stale local remote-sprite entry is removed');
 assert.equal(players.has(1), true, 'other players remain in the remote sprite map');
-assert.equal(players.get(1)?.x, 240 * (3224 / 32767), 'remote positions still decode from wire coordinates');
+assert.equal(players.get(1)?.x, fromWire(240, MAP_W), 'remote positions still decode from wire coordinates');
 // Truncated deltas are ignored without mutating unrelated remote state.
 const before = players.get(1);
 applyDeltaPacket(new DataView(new ArrayBuffer(4)), 0, players, () => {
