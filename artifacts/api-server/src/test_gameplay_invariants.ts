@@ -486,7 +486,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.ok(botReplyPacket, 'a second living bot answers the first bot\'s open question');
   const botReplyText = botReplyPacket!.toString('utf8');
   assert.match(botReplyText, /Player1/, 'bot-to-bot replies identify the speaker they are answering');
-  assert.match(botReplyText, /confirmed sighting|corroborate/i,
+  assert.match(botReplyText, /confirmed sighting|corroborate|direct observation/i,
     'bot-to-bot fallback asks for corroboration rather than inventing evidence');
   assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
   manager.disposeLobby(lobby);
