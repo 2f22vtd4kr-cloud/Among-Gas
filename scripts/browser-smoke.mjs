@@ -430,8 +430,15 @@ try {
     return fixture !== undefined &&
       document.querySelectorAll('[data-testid="gameplay-task-action"]').length === 1;
   }, undefined, { timeout: 5_000 });
-  const ghostBlockedTaskCount = await ghostBlockedTaskPage.locator('[data-testid="gameplay-task-action"]').count();
-  assert.equal(ghostBlockedTaskCount, 1,
+  const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
+    debug: window.__AG_TASK_DEBUG ?? null,
+    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+  }));
+  assert.equal(ghostBlockedTaskDiagnostics.debug?.isGhost, true,
+    'the occluded fixture must run as a server-authoritative ghost');
+  assert.ok(ghostBlockedTaskDiagnostics.debug?.distance <= ghostBlockedTaskDiagnostics.debug?.range,
+    'the ghost fixture must be within the task interaction range');
+  assert.equal(ghostBlockedTaskDiagnostics.actionCount, 1,
     'a ghost must retain the task prompt through a wall when the task is within interaction range');
   await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
   await ghostBlockedTaskPage.close();
