@@ -18,7 +18,7 @@ import {
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y } from '@workspace/shared/coords';
-import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 
 // Decode the committed canonical stream independently of the production
@@ -185,6 +185,23 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
  assert.ok(Math.abs(visionPropRay.x - (propVisionOriginX + CELL_X * 4)) < 1e-5,
    'a non-occluding prop must not cast a hard vision shadow');
 
+// Fine-grid compact objects cast exact outline shadows without becoming
+// inflated square shadow cells.
+{
+  const finePropGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
+  for (let row = 10; row < 12; row++) {
+    for (let col = 10; col < 12; col++) finePropGrid[row * FINE_COLS + col] = 1;
+  }
+  const outlineSegments = buildFineShadowSegments(finePropGrid);
+  assert.equal(outlineSegments.length, 4, 'a 2×2 compact object produces four merged silhouette edges');
+  const openFineShadowGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
+  const x = FINE_CELL_X * 8;
+  const y = FINE_CELL_Y * 10.5;
+  const sight = computeVisibilityPolygon(x, y, FINE_CELL_X * 10, openFineShadowGrid, [], false, outlineSegments);
+  assert.ok(Math.abs(sight[360].x - FINE_CELL_X * 10) < 1e-5,
+    'the east ray terminates at the object's exact left outline, not an expanded square');
+}
+
 // The actual custom map yields a complete visibility polygon with distinct
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
@@ -230,6 +247,9 @@ assert.equal(FINE_COLS * FINE_ROWS, 680 * 392, 'canonical dimensions are 680×39
 assert.deepEqual(independentlyDecodedFineGrid, realFineGrid,
   'the production decoder exactly matches the independently decoded committed payload');
 const realFineShadowGrid = buildShadowGrid(realFineGrid);
+const realFineShadowSegments = buildFineShadowSegments(realFineGrid);
+assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2000,
+  'compact production props expose merged silhouette segments within a mobile-safe budget');
 assert.equal(realFineGrid.length, FINE_COLS * FINE_ROWS, 'fine collision grid has complete declared coverage');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1640, 449), true, 'fine western garden path is walkable');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1810, 449), true, 'fine eastern garden path is walkable');
