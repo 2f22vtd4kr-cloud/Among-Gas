@@ -509,6 +509,15 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
       assertClientWalkable(worker.player.x, worker.player.y,
         `living bot path remains collision-safe while approaching ${task.name} (tick ${tick})`);
     }
+    if (lobby.phase !== 'GAMEOVER') {
+      console.log('[bot-nav-debug]', JSON.stringify({
+        taskId: task.id, task: task.name,
+        position: { x: worker.player.x, y: worker.player.y },
+        target: { x: task.x, y: task.y },
+        completed: Array.from(lobby.completedTaskSteps),
+        spawn: { x: SPAWN_X, y: SPAWN_Y },
+      }));
+    }
     assert.equal(
       lobby.phase,
       'GAMEOVER',
