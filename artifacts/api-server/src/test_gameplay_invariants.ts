@@ -447,11 +447,13 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const botPlayer = makePlayer(1, 'crewmate', 130, 100);
   const bodyPlayer = makePlayer(2, 'crewmate', 101, 100);
   const mentionedPlayer = makePlayer(3, 'crewmate', 300, 300);
+  const secondBotPlayer = makePlayer(4, 'crewmate', 180, 100);
   botPlayer.player.isBot = true;
+  secondBotPlayer.player.isBot = true;
   bodyPlayer.player.alive = false;
   bodyPlayer.player.corpseX = 100;
   bodyPlayer.player.corpseY = 100;
-  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player, mentionedPlayer.player]);
+  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player, mentionedPlayer.player, secondBotPlayer.player]);
   lobby.phase = 'MEETING';
   lobby.meeting = {
     reporterSlot: 0, bodySlot: 2, messages: [], votes: new Map(), votingOpen: false,
@@ -472,6 +474,20 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.doesNotMatch(chatText, /Player3 is the impostor|Player3 killed/i,
     'bot must ask for confirmation rather than inventing guilt from a chat mention');
   assert.match(chatText, /what specifically links Player3 to the report/i, 'bot should ask for evidence rather than claim it witnessed the event');
+
+  // A second bot must answer an open question from the first bot instead of
+  // ignoring all bot-to-bot dialogue unless it is explicitly name-addressed.
+  const secondBot = new CrewmateBot();
+  (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  secondBot.tick(lobby, secondBotPlayer.player, manager);
+  (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  secondBot.tick(lobby, secondBotPlayer.player, manager);
+  const botReplyPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 4);
+  assert.ok(botReplyPacket, 'a second living bot answers the first bot\'s open question');
+  const botReplyText = botReplyPacket!.toString('utf8');
+  assert.match(botReplyText, /Player1/, 'bot-to-bot replies identify the speaker they are answering');
+  assert.match(botReplyText, /confirmed sighting|corroborate/i,
+    'bot-to-bot fallback asks for corroboration rather than inventing evidence');
   assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
   manager.disposeLobby(lobby);
 }

@@ -234,9 +234,21 @@ export abstract class BotAgent {
       if (!speaker || !speaker.alive) return false;
       if (!speaker.isBot) return true;
       const lower = entry.text.toLocaleLowerCase();
-      return lower.includes(self.username.toLocaleLowerCase()) ||
+      const addressedToSelf = lower.includes(self.username.toLocaleLowerCase()) ||
         lower.includes(`#${String(self.slot + 1).padStart(2, '0')}`) ||
         lower.includes(`player ${String(self.slot + 1).padStart(2, '0')}`);
+      if (addressedToSelf) return true;
+      // Let exactly one other living bot answer a bot's open question. The
+      // message timestamp deterministically chooses the responder so a six-bot
+      // lobby does not produce six simultaneous replies or a chat storm.
+      if (!entry.text.includes('?')) return false;
+      const responderSlots = Array.from(lobby.players.values())
+        .filter(player => player.alive && player.isBot && player.slot !== entry.slot)
+        .map(player => player.slot)
+        .sort((a, b) => a - b);
+      if (responderSlots.length === 0) return false;
+      const responderIndex = Math.abs(Math.trunc(entry.sentAtMs)) % responderSlots.length;
+      return responderSlots[responderIndex] === self.slot;
     });
     const messageKey = latestRelevant
       ? `${latestRelevant.slot}:${latestRelevant.sentAtMs}`
@@ -263,7 +275,11 @@ export abstract class BotAgent {
           humanText.includes(`player ${slotNumber}`) ||
           humanText.includes(`slot ${slotNumber}`);
       });
-      if (mentionedPlayer) {
+      if (speaker.isBot) {
+        fallback = humanText.includes(self.username.toLocaleLowerCase())
+          ? `${speaker.username}, I am ${self.username}. I cannot confirm that claim yet; what did you personally observe?`
+          : `${speaker.username}, I do not have a confirmed sighting. Can anyone corroborate that before we vote?`;
+      } else if (mentionedPlayer) {
         fallback = `${speaker.username}, what specifically links ${mentionedPlayer.username} to the report?`;
       } else if (humanText.includes(self.username.toLocaleLowerCase())) {
         fallback = `${speaker.username}, I am ${self.username}. I can explain my route, but what evidence are you basing that on?`;
