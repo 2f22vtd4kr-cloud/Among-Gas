@@ -108,10 +108,14 @@ function assertInteractionApproachWalkable(
   targetRadiusPx = 24,
 ): void {
   const step = 8;
+  // Bot navigation uses an 8px final arrival tolerance, so require a visible
+  // stand-off point inside the matching safe search radius, not merely inside
+  // the server's absolute interaction radius.
+  const botSearchRadiusPx = interactionRangePx - 8;
   let hasApproach = false;
-  for (let dy = -interactionRangePx; dy <= interactionRangePx && !hasApproach; dy += step) {
-    for (let dx = -interactionRangePx; dx <= interactionRangePx; dx += step) {
-      if (dx * dx + dy * dy > interactionRangePx * interactionRangePx) continue;
+  for (let dy = -botSearchRadiusPx; dy <= botSearchRadiusPx && !hasApproach; dy += step) {
+    for (let dx = -botSearchRadiusPx; dx <= botSearchRadiusPx; dx += step) {
+      if (dx * dx + dy * dy > botSearchRadiusPx * botSearchRadiusPx) continue;
       const x = target.x + dx;
       const y = target.y + dy;
       if (!isPlayerPositionWalkable(grid, x, y)) continue;
@@ -125,7 +129,7 @@ function assertInteractionApproachWalkable(
     }
   }
   assert.ok(hasApproach,
-    `${target.name} must have a walkable, line-of-sight player approach within ${interactionRangePx}px of its console`);
+    `${target.name} must have a walkable, line-of-sight player approach within ${botSearchRadiusPx}px of its console`);
 }
 
 function fakeSocket() {
