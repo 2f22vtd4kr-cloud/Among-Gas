@@ -116,8 +116,21 @@ function isSpawnReachable(feetX: number, feetY: number): boolean {
   return spawnReachability[row * NAV_COLS + col] === 1;
 }
 
+/** Keep the bot inside navigation cells that A* can represent. */
+function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
+  const col = Math.floor(feetX / NAV_CELL_X);
+  const row = Math.floor(feetY / NAV_CELL_Y);
+  return col >= 0 && col < NAV_COLS && row >= 0 && row < NAV_ROWS &&
+    navigationGrid[row * NAV_COLS + col] === 0;
+}
+
 /** Use the exact same 2px swept footprint check as human prediction and server authority. */
 function canTraverse(from: Point, to: Point): boolean {
+  // A fine-grid-valid point can still fall inside a blocked 2× navigation cell
+  // whose centre fails the bot's clearance test. Entering such a cell strands
+  // the bot because the next A* search rejects its start cell. Keep every bot
+  // endpoint in a cell that the navigation graph itself considers walkable.
+  if (!isNavigationPositionWalkable(to.x, to.y)) return false;
   // Bot waypoints are stored in feet-space; the shared helper accepts the
   // sprite anchor and applies the canonical feet offset internally.
   return isPlayerPathWalkable(
