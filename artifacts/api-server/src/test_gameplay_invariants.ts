@@ -276,10 +276,28 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.exitVent(lobby, 0), true);
   assert.equal(impostor.player.inVent, false);
   assert.equal(impostor.player.ventId, undefined);
+  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+    'vent exit must place the impostor at a legal player footprint');
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x01));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x02));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x03));
   manager.disposeLobby(lobby);
+
+  // Every authored vent anchor must release the impostor onto a valid
+  // footprint; several anchors intentionally sit on blocked fine-grid cells.
+  for (const vent of VENT_DEFS) {
+    const exiting = makePlayer(0, 'impostor', vent.x, vent.y);
+    exiting.player.inVent = true;
+    exiting.player.ventId = vent.id;
+    const exitLobby = makeLobby([exiting.player, makePlayer(1, 'crewmate', SPAWN_X, SPAWN_Y).player]);
+    const exitManager = new LobbyManager();
+    assert.equal(exitManager.exitVent(exitLobby, 0), true, `vent ${vent.id} must have a legal exit point`);
+    assert.equal(exiting.player.inVent, false);
+    assert.equal(exiting.player.ventId, undefined);
+    assert.equal(isPlayerPositionWalkable(grid, exiting.player.x, exiting.player.y), true,
+      `vent ${vent.id} exit must be walkable for the complete player footprint`);
+    exitManager.disposeLobby(exitLobby);
+  }
   void vent2;
 }
 
