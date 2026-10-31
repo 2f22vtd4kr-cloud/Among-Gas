@@ -196,18 +196,62 @@ export abstract class BotAgent {
     }
     if (this.discussionMessageSent || Date.now() < this.nextDiscussionChatAtMs) return;
 
-    // The server has access to every player's coordinates, but bots do not
-    // maintain a witnessed-player history. Do not infer accusations from the
-    // authoritative global positions: that would give bots omniscient evidence.
-    // Only use facts available to everyone from the meeting itself.
+    // Bots may use only the public meeting transcript, never hidden role or
+    // global-position data. Respond to the latest human message when possible.
+    const latestHumanMessage = [...meeting.messages].reverse().find(entry => {
+      const speaker = lobby.players.get(entry.slot);
+      return speaker !== undefined && speaker.alive && !speaker.isBot && speaker.slot !== self.slot;
+    });
+
     const hasBody = meeting.bodySlot !== NO_TARGET;
-    const message = hasBody
-      ? (self.role === 'impostor'
-          ? 'I was moving around the station. Did anyone actually see what happened?'
-          : 'A body was reported, but I did not witness the elimination. Did anyone see something useful?')
-      : (self.role === 'impostor'
-          ? 'I was moving around the station. Did anyone notice anything suspicious before the call?'
-          : 'I was focused on my tasks. Did anyone notice anything suspicious before the call?');
+    const bodyLines = self.role === 'impostor'
+      ? [
+          'I was moving around the station. Did anyone actually see what happened?',
+          'Let us hear the reporter\'s timeline before deciding.',
+          'We should not rush a vote without a clear sighting.',
+        ]
+      : [
+          'A body was reported, but I did not witness the elimination. Who last saw them alive?',
+          'Let us establish a timeline before voting. Where was everyone just before the report?',
+          'I do not have enough evidence yet. Did anyone see someone leave the area?',
+        ];
+    const emergencyLines = self.role === 'impostor'
+      ? [
+          'I was moving around the station. Did anyone notice anything suspicious before the call?',
+          'Let us not rush. What did anyone actually see?',
+          'We need a clear timeline before accusing someone.',
+        ]
+      : [
+          'I was focused on tasks. Did anyone notice anything suspicious before the call?',
+          'Can we compare last-known locations before voting?',
+          'Does anyone have a concrete observation?',
+        ];
+
+    let message = (hasBody ? bodyLines : emergencyLines)[self.slot % 3];
+    if (latestHumanMessage) {
+      const speaker = lobby.players.get(latestHumanMessage.slot)!;
+      const lower = latestHumanMessage.text.toLocaleLowerCase();
+      const mentionedPlayer = Array.from(lobby.players.values()).find(player => {
+        if (!player.alive || player.slot === self.slot || player.slot === speaker.slot) return false;
+        const slotNumber = String(player.slot + 1).padStart(2, '0');
+        return lower.includes(player.username.toLocaleLowerCase()) ||
+          lower.includes(`#${slotNumber}`) ||
+          lower.includes(`player ${slotNumber}`) ||
+          lower.includes(`slot ${slotNumber}`);
+      });
+      const mentionsColour = /\b(red|blue|green|pink|orange|yellow|black|white|purple|brown|cyan)\b/i.test(lower);
+
+      if (mentionedPlayer) {
+        message = `I heard ${speaker.username} mention ${mentionedPlayer.username}. Can anyone confirm where they were?`;
+      } else if (mentionsColour) {
+        message = `${speaker.username}, can you include the player's slot number too? Colours can be hard to distinguish.`;
+      } else if (lower.includes(self.username.toLocaleLowerCase()) ||
+                 lower.includes(`#${String(self.slot + 1).padStart(2, '0')}`)) {
+        message = `${speaker.username}, I'm ${self.username}. I did not witness the elimination, so please share what you saw.`;
+      } else {
+        message = `${speaker.username}, that's useful. Can you give a player number or a specific location?`;
+      }
+    }
 
     this.discussionMessageSent = true;
     manager.sendMeetingChat(lobby, self.slot, message);

@@ -2666,8 +2666,7 @@ export default function GameMap() {
             </div>
           )}
 
-          {!amIDead && (
-            <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ width: 'min(440px, 94vw)', display: 'flex', flexDirection: 'column', gap: 8 }}>
               {inDiscussion && (
                 <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', textAlign: 'center' }}>
                   {en ? 'Voting begins after discussion' : 'Голосование начнётся после обсуждения'}
@@ -2690,6 +2689,7 @@ export default function GameMap() {
                   </div>
                 ))}
               </div>
+              {!amIDead && (
               <form onSubmit={e => {
                 e.preventDefault();
                 if (!chatDraft.trim()) return;
@@ -2721,8 +2721,8 @@ export default function GameMap() {
                   touchAction: 'manipulation',
                 }}>➤</button>
               </form>
+              )}
             </div>
-          )}
 
           {!inDiscussion && !amIDead && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: 'min(320px, 90vw)' }}>

@@ -179,10 +179,18 @@ export interface LobbyPlayer {
  * `votes` maps voterSlot → targetSlot (NO_TARGET = skip). Both timers are
  * server-authoritative; the client only mirrors them for its countdown UI.
  */
+export interface MeetingChatEntry {
+  slot: number;
+  text: string;
+  sentAtMs: number;
+}
+
 export interface MeetingState {
   reporterSlot: number;
   /** NO_TARGET (0xFF) = emergency button, no specific body. */
   bodySlot: number;
+  /** Public discussion transcript retained server-side so bots can respond to real chat. */
+  messages: MeetingChatEntry[];
   votes: Map<number, number>;
   /** Becomes true once the discussion window elapses; votes are rejected before then. */
   votingOpen: boolean;
@@ -714,9 +722,10 @@ export class LobbyManager {
     }
   }
 
-  /** Send meeting chat during discussion or voting; dead players are excluded. */
+  /** Living players can send meeting chat; all connected lobby members can receive it. */
   sendMeetingChat(lobby: Lobby, playerSlot: number, rawText: string): boolean {
     if (lobby.phase !== 'MEETING' || !lobby.meeting) return false;
+    const meeting = lobby.meeting;
     const sender = lobby.players.get(playerSlot);
     if (!sender || !sender.alive) return false;
     const now = Date.now();
@@ -727,6 +736,8 @@ export class LobbyManager {
     const safeText = payload.toString('utf8').trim();
     if (!safeText) return false;
     const body = Buffer.from(safeText, 'utf8');
+    meeting.messages.push({ slot: playerSlot, text: safeText, sentAtMs: now });
+    if (meeting.messages.length > 60) meeting.messages.splice(0, meeting.messages.length - 60);
     this._chatLastSentAt.set(sender.tgUserId, now);
     const packet = Buffer.alloc(4 + body.length);
     packet[0] = 0x19;
@@ -734,8 +745,10 @@ export class LobbyManager {
     packet[2] = playerSlot;
     packet[3] = body.length;
     body.copy(packet, 4);
+    // Meeting chat is public to the whole lobby, including eliminated
+    // spectators. The sender check above still prevents ghosts from posting.
     for (const player of lobby.players.values()) {
-      if (player.alive && player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
+      if (player.ws.readyState === /* OPEN */ 1) player.ws.send(packet);
     }
     return true;
   }
@@ -1491,6 +1504,7 @@ export class LobbyManager {
     const meeting: MeetingState = {
       reporterSlot,
       bodySlot,
+      messages: [],
       votes: new Map(),
       votingOpen: false,
       discussionTimer: null,

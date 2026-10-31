@@ -252,7 +252,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   void vent2;
 }
 
-// 4. Meeting chat is only available to living players during discussion.
+// 4. Living players can post meeting chat; all lobby members, including ghosts, can read it.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
   const ghost = makePlayer(1, 'crewmate', 120, 100);
@@ -261,7 +261,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const lobby = makeLobby([host.player, ghost.player, speaker.player]);
   lobby.phase = 'MEETING';
   lobby.meeting = {
-    reporterSlot: 0, bodySlot: NO_TARGET, votes: new Map(), votingOpen: false,
+    reporterSlot: 0, bodySlot: NO_TARGET, messages: [], votes: new Map(), votingOpen: false,
     discussionTimer: null, votingTimer: null,
   };
   const manager = new LobbyManager();
@@ -272,7 +272,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.sendMeetingChat(lobby, 2, 'voting started'), true, 'chat remains available during voting in the base game');
   assert.ok(host.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
   assert.ok(speaker.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02));
-  assert.equal(ghost.packets.filter(packet => packet[0] === 0x19).length, 0, 'ghost does not receive discussion chat');
+  assert.ok(ghost.packets.some(packet => packet[0] === 0x19 && packet[1] === 0x02), 'ghost receives meeting chat as a read-only spectator');
   manager.disposeLobby(lobby);
 }
 
@@ -336,26 +336,32 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   const host = makePlayer(0, 'crewmate', 100, 100);
   const botPlayer = makePlayer(1, 'crewmate', 130, 100);
   const bodyPlayer = makePlayer(2, 'crewmate', 101, 100);
+  const mentionedPlayer = makePlayer(3, 'crewmate', 300, 300);
   botPlayer.player.isBot = true;
   bodyPlayer.player.alive = false;
   bodyPlayer.player.corpseX = 100;
   bodyPlayer.player.corpseY = 100;
-  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player]);
+  const lobby = makeLobby([host.player, botPlayer.player, bodyPlayer.player, mentionedPlayer.player]);
   lobby.phase = 'MEETING';
   lobby.meeting = {
-    reporterSlot: 0, bodySlot: 2, votes: new Map(), votingOpen: false,
+    reporterSlot: 0, bodySlot: 2, messages: [], votes: new Map(), votingOpen: false,
     discussionTimer: null, votingTimer: null,
   };
   const manager = new LobbyManager();
   const bot = new CrewmateBot();
+  assert.equal(manager.sendMeetingChat(lobby, host.player.slot, 'I saw Player 04 near the west wall.'), true,
+    'human discussion messages are retained as public bot context');
   bot.tick(lobby, botPlayer.player, manager);
   (bot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
   bot.tick(lobby, botPlayer.player, manager);
   const chatPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 1);
   assert.ok(chatPacket, 'living bot contributes a discussion message to human clients');
   const chatText = chatPacket!.toString('utf8');
-  assert.doesNotMatch(chatText, new RegExp(host.player.username), 'bot must not accuse a nearby player based on omniscient coordinates');
-  assert.match(chatText, /body was reported|did not witness/i, 'body discussion should use public meeting context without fabricated sightings');
+  assert.match(chatText, /Player0/, 'bot should acknowledge the human speaker rather than ignore the message');
+  assert.match(chatText, /Player3/, 'bot should recognise the player number mentioned in public chat');
+  assert.doesNotMatch(chatText, /Player3 is the impostor|Player3 killed/i,
+    'bot must ask for confirmation rather than inventing guilt from a chat mention');
+  assert.match(chatText, /Can anyone confirm where they were/i, 'bot should ask for corroboration rather than claim it witnessed the event');
   assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
   manager.disposeLobby(lobby);
 }
@@ -398,7 +404,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   lobby.totalTaskSteps = task.steps;
   lobby.phase = 'MEETING';
   lobby.meeting = {
-    reporterSlot: 2, bodySlot: NO_TARGET, votes: new Map(), votingOpen: true,
+    reporterSlot: 2, bodySlot: NO_TARGET, messages: [], votes: new Map(), votingOpen: true,
     discussionTimer: null, votingTimer: null,
   };
   const manager = new LobbyManager();
@@ -884,6 +890,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     lobby.meeting = {
       reporterSlot: 0,
       bodySlot: NO_TARGET,
+      messages: [],
       votes: new Map(),
       votingOpen: true,
       discussionTimer: null,
