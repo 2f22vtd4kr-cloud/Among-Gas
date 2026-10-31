@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildPreciseCollisionGrid,
-  buildFineCollisionGridFromRle,
+  buildPreciseCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
   MAP_W,
@@ -61,7 +61,7 @@ const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-ove
 const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 const tileDir = path.join(root, 'artifacts/telegram-game/collision-qa-tiles');
 
-const grid = useCandidatePayload && candidatePayload ? buildFineCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
+const grid = useCandidatePayload && candidatePayload ? buildPreciseCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
 const shadowGrid = buildShadowGrid(grid);
 const narrowOccluders = buildNarrowShadowOccluders(grid, true);
 const narrowSegments = buildFineShadowSegments(grid);
