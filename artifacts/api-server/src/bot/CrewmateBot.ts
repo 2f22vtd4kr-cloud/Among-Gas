@@ -237,11 +237,13 @@ export class CrewmateBot extends BotAgent {
     // to be within TASK_INTERACTION_RANGE_PX, same as the server's own check.
     // Cap the search radius below that range, minus navigateTo's ~25px arrival
     // tolerance, so "arrived at approach point" always implies "in range".
+    // Search almost the full server interaction radius for a visible stand-off
+    // point. Arrive precisely so the final position remains inside that radius.
     const goal = this.nearestApproachPoint(
       { x: def.x, y: def.y },
-      TASK_INTERACTION_RANGE_PX - 30,
+      TASK_INTERACTION_RANGE_PX - 8,
     );
-    const arrived = this.navigateTo(self, goal);
+    const arrived = this.navigateTo(self, goal, 8);
     if (!arrived) return;
 
     // Dwell briefly at the console before submitting each step (looks natural)
