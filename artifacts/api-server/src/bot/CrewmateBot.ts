@@ -128,7 +128,11 @@ export class CrewmateBot extends BotAgent {
       // the moving ghost.
       if (p.alive || p.bodyReported || p.corpseX === undefined || p.corpseY === undefined) continue;
       const dSq = CrewmateBot.distSq(self.x, self.y, p.corpseX, p.corpseY);
-      if (dSq <= REPORT_RANGE_PX * REPORT_RANGE_PX) return p.slot;
+      if (dSq > REPORT_RANGE_PX * REPORT_RANGE_PX) continue;
+      // Do not spam a rejected report from behind a wall; wait until the corpse
+      // is actually visible from the bot's feet-space position.
+      if (!this.hasLineOfSightToPoint(self, { x: p.corpseX, y: p.corpseY })) continue;
+      return p.slot;
     }
     return null;
   }
