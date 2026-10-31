@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { CELL_X, CELL_Y, COLS, ROWS, MAP_W, MAP_H, COLS, ROWS, FINE_COLS, FINE_ROWS, buildCollisionGrid, buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, FINE_COLS, FINE_ROWS, MAP_W, MAP_H, buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import {
   isMovementPathWalkable,
   validateMovementIntent,
