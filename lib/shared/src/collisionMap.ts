@@ -348,6 +348,54 @@ export function isBlocked(grid: Grid, px: number, py: number): boolean {
   );
 }
 
+/** Server-safe ray test against the same canonical collision geometry used by movement. */
+export function isLineOfSightClear(
+  grid: Grid,
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number,
+  sampleSpacingPx = 2,
+): boolean {
+  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) || sampleSpacingPx <= 0) {
+    return false;
+  }
+  const distance = Math.hypot(toX - fromX, toY - fromY);
+  const steps = Math.max(1, Math.ceil(distance / sampleSpacingPx));
+  for (let step = 0; step <= steps; step++) {
+    const t = step / steps;
+    if (isBlocked(grid, fromX + (toX - fromX) * t, fromY + (toY - fromY) * t)) return false;
+  }
+  return true;
+}
+
+/**
+ * Check visibility to the reachable perimeter of a solid interaction prop.
+ * Testing several perimeter points avoids treating the console/vent itself as
+ * an occluder while still rejecting every approach whose rays cross a wall.
+ */
+export function isLineOfSightToInteractionTarget(
+  grid: Grid,
+  fromX: number,
+  fromY: number,
+  targetX: number,
+  targetY: number,
+  targetRadiusPx = 24,
+): boolean {
+  if (![fromX, fromY, targetX, targetY, targetRadiusPx].every(Number.isFinite) || targetRadiusPx < 0) {
+    return false;
+  }
+  if (targetRadiusPx === 0) return isLineOfSightClear(grid, fromX, fromY, targetX, targetY);
+  const samples = 16;
+  for (let i = 0; i < samples; i++) {
+    const angle = (i / samples) * Math.PI * 2;
+    const x = targetX + Math.cos(angle) * targetRadiusPx;
+    const y = targetY + Math.sin(angle) * targetRadiusPx;
+    if (isLineOfSightClear(grid, fromX, fromY, x, y)) return true;
+  }
+  return false;
+}
+
 /**
  * Can an entity with the given radius move to pixel position (cx, cy)?
  * Samples the center plus points around the circle's circumference.
