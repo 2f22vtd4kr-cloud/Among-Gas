@@ -29,6 +29,7 @@ import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { buildPublicBotDialogueMessages, requestGroqDialogue } from './groqDialogue.js';
+import { buildInternalBotDialogue, isNextBotResponder } from './internalDialogue.js';
 
 export { NO_TARGET };
 
@@ -234,9 +235,18 @@ export abstract class BotAgent {
       if (!speaker || !speaker.alive) return false;
       if (!speaker.isBot) return true;
       const lower = entry.text.toLocaleLowerCase();
-      return lower.includes(self.username.toLocaleLowerCase()) ||
+      const directlyAddressed = lower.includes(self.username.toLocaleLowerCase()) ||
         lower.includes(`#${String(self.slot + 1).padStart(2, '0')}`) ||
         lower.includes(`player ${String(self.slot + 1).padStart(2, '0')}`);
+      if (directlyAddressed) return true;
+      const hasConversationHook = /[?]|\\bwho\\b|\\bwhere\\b|\\bwhat\\b|\\bwhy\\b|\\bsuspect\\b|\\bvote\\b|\\baccus\\w*/.test(lower);
+      return hasConversationHook && isNextBotResponder(
+        Array.from(lobby.players.values()).map(player => ({
+          slot: player.slot, username: player.username, alive: player.alive, isBot: player.isBot,
+        })),
+        entry.slot,
+        self.slot,
+      );
     });
     const messageKey = latestRelevant
       ? `${latestRelevant.slot}:${latestRelevant.sentAtMs}`
@@ -246,31 +256,14 @@ export abstract class BotAgent {
     const hasBody = meeting.bodySlot !== NO_TARGET;
     const speaker = latestRelevant ? lobby.players.get(latestRelevant.slot) : undefined;
     const humanText = latestRelevant?.text.toLocaleLowerCase() ?? '';
-    let fallback = hasBody
-      ? (self.role === 'impostor'
-        ? 'I did not see the elimination. What is the reporter certain about?'
-        : 'Who last saw the victim alive, and which route did they take?')
-      : (self.role === 'impostor'
-        ? 'Before we vote, can we establish where everyone was?'
-        : 'Let us compare last-known locations before making an accusation.');
-
-    if (speaker && latestRelevant) {
-      const mentionedPlayer = Array.from(lobby.players.values()).find(player => {
-        if (!player.alive || player.slot === self.slot || player.slot === speaker.slot) return false;
-        const slotNumber = String(player.slot + 1).padStart(2, '0');
-        return humanText.includes(player.username.toLocaleLowerCase()) ||
-          humanText.includes(`#${slotNumber}`) ||
-          humanText.includes(`player ${slotNumber}`) ||
-          humanText.includes(`slot ${slotNumber}`);
-      });
-      if (mentionedPlayer) {
-        fallback = `${speaker.username}, what specifically links ${mentionedPlayer.username} to the report?`;
-      } else if (humanText.includes(self.username.toLocaleLowerCase())) {
-        fallback = `${speaker.username}, I am ${self.username}. I can explain my route, but what evidence are you basing that on?`;
-      } else {
-        fallback = `${speaker.username}, that is useful. Can you name the player or give a specific location?`;
-      }
-    }
+    const fallback = buildInternalBotDialogue({
+      username: self.username,
+      role: self.role,
+      meetingType: hasBody ? 'body report' : 'emergency call',
+      livingRoster: Array.from(lobby.players.values()).filter(player => player.alive).map(player => player.username),
+      latestSpeaker: speaker?.username,
+      latestMessage: latestRelevant?.text,
+    });
 
     this.lastDiscussionMessageKey = messageKey;
     this.lastDiscussionReplyAtMs = now;
