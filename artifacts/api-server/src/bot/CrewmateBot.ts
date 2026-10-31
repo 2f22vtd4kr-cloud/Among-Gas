@@ -29,8 +29,6 @@ export class CrewmateBot extends BotAgent {
   private _targetPadId: number | null = null;
   /** Ticks spent dwelling at current task console. */
   private _dwellTicks = 0;
-  /** Separate dwell counter for ghost tasks, which bypass walls and door locks. */
-  private _ghostDwellTicks = 0;
   /** Wander target (used when all tasks are complete). */
   private _wanderTarget: Point | null = null;
 
@@ -72,7 +70,31 @@ export class CrewmateBot extends BotAgent {
     // Communications sabotage still blocks task progress in the base game.
     if (lobby.sabotage?.systemId === SABOTAGE_COMMS) return;
     const taskId = this._pickGhostTask(lobby, self);
-    if (taskId !== null) this._handleGhostTask(lobby, self, manager, taskId);
+    if (taskId === null) return;
+
+    const def = TASK_DEFS.find(task => task.id === taskId);
+    if (!def) return;
+    const dx = def.x - self.x;
+    const dy = def.y - self.y;
+    const distance = Math.hypot(dx, dy);
+    const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 1);
+    if (distance > interactionDistance) {
+      const travel = Math.min(BOT_SPEED_PX * 1.5, distance - interactionDistance);
+      self.x += (dx / distance) * travel;
+      self.y += (dy / distance) * travel;
+      return;
+    }
+
+    // Ghosts ignore walls and do not need a console dwell animation. Submit
+    // the pending step as soon as the authoritative range check can succeed;
+    // this prevents a killed bot's final task from stalling the crew win.
+    const step = this._nextStep(lobby, self, taskId);
+    if (step !== null && !manager.applyTaskStep(lobby, self.slot, taskId, step)) {
+      // Keep the retry deterministic if rounding or a future server-side
+      // interaction rule changes the exact boundary.
+      self.x = def.x;
+      self.y = def.y;
+    }
   }
 
   override chooseVote(lobby: Lobby, self: LobbyPlayer): number {
@@ -192,35 +214,6 @@ export class CrewmateBot extends BotAgent {
     this._targetTaskId = null;
     this._ghostDwellTicks = 0;
     return null;
-  }
-
-  /** Ghost movement ignores collision/pathfinding, matching base-game wall phasing. */
-  private _handleGhostTask(
-    lobby: Lobby,
-    self: LobbyPlayer,
-    manager: LobbyManager,
-    taskId: number,
-  ): void {
-    const def = TASK_DEFS.find(task => task.id === taskId);
-    if (!def) return;
-
-    const dx = def.x - self.x;
-    const dy = def.y - self.y;
-    const distance = Math.hypot(dx, dy);
-    const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 5);
-    if (distance > interactionDistance) {
-      const travel = Math.min(BOT_SPEED_PX * 1.5, distance - interactionDistance);
-      self.x += (dx / distance) * travel;
-      self.y += (dy / distance) * travel;
-      this._ghostDwellTicks = 0;
-      return;
-    }
-
-    this._ghostDwellTicks++;
-    if (this._ghostDwellTicks < TASK_DWELL_TICKS) return;
-    this._ghostDwellTicks = 0;
-    const step = this._nextStep(lobby, self, taskId);
-    if (step !== null) manager.applyTaskStep(lobby, self.slot, taskId, step);
   }
 
   /** Returns the next step index to complete for taskId, or null if all done. */
