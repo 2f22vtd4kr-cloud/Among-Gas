@@ -326,6 +326,13 @@ export function buildFineCollisionGridFromRle(encoded: string): Grid {
   return decodeFineRuns(encoded);
 }
 
+/** Decode a candidate fine payload and apply the same authored geometry overrides used at runtime. */
+export function buildPreciseCollisionGridFromRle(encoded: string): Grid {
+  const grid = decodeFineRuns(encoded);
+  applyManualWalkableReplacementZones(grid);
+  return grid;
+}
+
 function applyManualWalkableReplacementZones(grid: Grid): void {
   for (const zone of MANUAL_WALKABLE_REPLACEMENT_ZONES) {
     const [minX, minY, maxX, maxY] = zone.bounds;
@@ -366,7 +373,7 @@ function applyManualWalkableReplacementZones(grid: Grid): void {
 
 export function buildPreciseCollisionGrid(): Grid {
   if (_fineCached) return _fineCached;
-  _fineCached = decodeFineRuns(FINE_RLE_BASE64);
+  _fineCached = buildPreciseCollisionGridFromRle(FINE_RLE_BASE64);
   applyManualWalkableReplacementZones(_fineCached);
   return _fineCached;
 }
