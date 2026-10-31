@@ -45,10 +45,15 @@ export class CrewmateBot extends BotAgent {
     this._targetPadId = null;
 
     // ── 2. Report a nearby body ───────────────────────────────────────────
-    const body = this._nearbyDeadBody(lobby, self);
-    if (body !== null) {
-      manager.callMeeting(lobby, self.slot, body);
-      return;
+    // Meetings are rejected while sabotage is active. Do not return after a
+    // rejected report attempt: during Doors sabotage the bot can still work
+    // on every task that is not explicitly locked by the sabotage.
+    if (lobby.sabotage === null) {
+      const body = this._nearbyDeadBody(lobby, self);
+      if (body !== null) {
+        manager.callMeeting(lobby, self.slot, body);
+        return;
+      }
     }
 
     // ── 3. Work on an assigned task ───────────────────────────────────────
