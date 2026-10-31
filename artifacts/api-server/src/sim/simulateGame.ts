@@ -44,6 +44,15 @@ export interface SimBatchOptions {
 
 const simulationCollisionGrid = buildPreciseCollisionGrid();
 
+/** Vent occupants are in a separate traversal state and must not be judged against ordinary map collision. */
+export function isSimulationCollisionViolation(
+  player: { alive: boolean; inVent?: boolean; x: number; y: number },
+  collisionGrid: Uint8Array,
+): boolean {
+  return player.alive && player.inVent !== true &&
+    !isPlayerPositionWalkable(collisionGrid, player.x, player.y);
+}
+
 const BOT_NAMES = [
   'Alpha', 'Beta', 'Gamma', 'Delta', 'Epsilon', 'Zeta', 'Eta', 'Theta',
   'Iota', 'Kappa', 'Lambda', 'Mu', 'Nu', 'Xi', 'Omicron',
@@ -178,9 +187,8 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       collisionMonitor = setInterval(() => {
         if (settled) return;
         for (const player of lobby.players.values()) {
-          if (!player.alive) continue; // ghosts intentionally ignore walls
-          if (player.inVent) continue; // vent occupancy is a separate traversal state, not ordinary map collision
-          if (!isPlayerPositionWalkable(simulationCollisionGrid, player.x, player.y)) {
+          if (!isSimulationCollisionViolation(player, simulationCollisionGrid)) continue;
+          {
             collisionViolation = {
               slot: player.slot,
               x: Math.round(player.x),
