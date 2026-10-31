@@ -21,6 +21,7 @@ import {
   type LobbyResumeSnapshotV1,
 } from './lobby.js';
 import { CrewmateBot } from '../bot/CrewmateBot.js';
+import { isValidGroqApiKey } from '../bot/groqDialogue.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
@@ -275,6 +276,35 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           return;
         }
 
+        return;
+      }
+
+      // ── 0x18: set/clear the authenticated player's session-only Groq key ──
+      // Layout: [0x18, utf8Length(UInt8), utf8Bytes...]; zero length clears it.
+      // The key is never logged, persisted, broadcast, or included in snapshots.
+      if (opcode === 0x18) {
+        if (raw.length < 2) return;
+        const length = raw.readUInt8(1);
+        if (length > 240 || raw.length !== 2 + length) return;
+        const tgUserId = ws.tgUserId!;
+        const lobby = lobbyManager.getLobbyForUser(tgUserId);
+        if (!lobby) {
+          if (ws.readyState === ws.OPEN) ws.send(Buffer.from([0x18, 0x00]));
+          return;
+        }
+        const slot = lobby.userIdToSlot.get(tgUserId);
+        const player = slot === undefined ? undefined : lobby.players.get(slot);
+        if (!player || player.isBot) {
+          if (ws.readyState === ws.OPEN) ws.send(Buffer.from([0x18, 0x00]));
+          return;
+        }
+        const key = raw.subarray(2).toString('utf8');
+        if (length > 0 && !isValidGroqApiKey(key)) {
+          if (ws.readyState === ws.OPEN) ws.send(Buffer.from([0x18, 0x00]));
+          return;
+        }
+        player.groqApiKey = length === 0 ? undefined : key;
+        if (ws.readyState === ws.OPEN) ws.send(Buffer.from([0x18, 0x01, length > 0 ? 1 : 0]));
         return;
       }
 
