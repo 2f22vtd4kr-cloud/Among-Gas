@@ -1267,22 +1267,38 @@ try {
   assert.ok(joystickBox, 'the movement joystick must be visible for camera-follow testing');
   const joystickX = joystickBox.x + joystickBox.width / 2;
   const joystickY = joystickBox.y + joystickBox.height / 2;
+  // Capture diagnostics on every animation frame before starting the pointer
+  // drag. Starting the trace only after mouse.move() misses most of the walk:
+  // Playwright's stepped drag can already carry the player to nearby geometry.
+  await cameraPage.evaluate(() => {
+    const trace = { active: true, samples: [] };
+    window.__AG_CAMERA_TRACE = trace;
+    const capture = () => {
+      if (!trace.active) return;
+      const sample = window.__AG_CAMERA_DEBUG ?? null;
+      if (sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY) &&
+          Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY)) {
+        trace.samples.push({ ...sample });
+      }
+      requestAnimationFrame(capture);
+    };
+    requestAnimationFrame(capture);
+  });
+  await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
   await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
-  // Sample while the pointer is still held. Waiting 550ms before sampling can
-  // let the player hit a nearby wall and stop, making a stationary camera look
-  // stable even if it jitters during the actual movement interval.
-  const cameraSamples = [];
-  for (let i = 0; i < 12; i++) {
-    await cameraPage.waitForTimeout(35);
-    const sample = await readCameraTransform();
-    assert.ok(sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY) &&
-      Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY),
-    'camera and player diagnostics must remain finite during sustained movement');
-    cameraSamples.push(sample);
-  }
+  // Keep the pointer held for the entire trace window so the browser samples
+  // include both acceleration/motion and the camera-follow response.
+  await cameraPage.waitForTimeout(420);
   await cameraPage.mouse.up();
+  const cameraSamples = await cameraPage.evaluate(() => {
+    const trace = window.__AG_CAMERA_TRACE;
+    if (trace) trace.active = false;
+    return trace?.samples ?? [];
+  });
+  assert.ok(cameraSamples.length >= 8,
+    'camera-follow trace must capture at least eight animation frames');
   const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
   await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
   console.log('Camera follow diagnostic:', JSON.stringify({
@@ -1298,15 +1314,16 @@ try {
   const worldChangeRatio = changedWorldSamples / Math.max(1, worldBaseline.length);
   assert.ok(worldChangeRatio > 0.02,
     `the map must visibly scroll when the joystick moves the player (changed ${(worldChangeRatio * 100).toFixed(1)}% of sampled world pixels)`);
-  const playerMovementSamples = cameraSamples.filter((sample, index) => index > 0 &&
-    Math.hypot(sample.playerX - cameraSamples[index - 1].playerX,
-      sample.playerY - cameraSamples[index - 1].playerY) > 0.25);
+  const movementTrace = [cameraBaseline, ...cameraSamples];
+  const playerMovementSamples = movementTrace.filter((sample, index) => index > 0 &&
+    Math.hypot(sample.playerX - movementTrace[index - 1].playerX,
+      sample.playerY - movementTrace[index - 1].playerY) > 0.25);
   const sampledMovementDistance = Math.hypot(
-    cameraSamples[cameraSamples.length - 1].playerX - cameraSamples[0].playerX,
-    cameraSamples[cameraSamples.length - 1].playerY - cameraSamples[0].playerY,
+    movementTrace[movementTrace.length - 1].playerX - movementTrace[0].playerX,
+    movementTrace[movementTrace.length - 1].playerY - movementTrace[0].playerY,
   );
   assert.ok(playerMovementSamples.length >= 3 && sampledMovementDistance > 30,
-    `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} samples over ${sampledMovementDistance.toFixed(1)}px)`);
+    `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} frames over ${sampledMovementDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
