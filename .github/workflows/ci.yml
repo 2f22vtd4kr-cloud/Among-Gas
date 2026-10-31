@@ -162,6 +162,7 @@ jobs:
             exit 1
           }
           node test_sabotage.mjs
+          node test_reconnect_ws.mjs
 
       - name: Prepare Playwright for mobile and desktop browser smoke tests
         run: npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
