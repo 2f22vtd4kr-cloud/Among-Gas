@@ -63,7 +63,7 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
     const replies = [
       'was that a confirmed sighting or an inference from the route?',
       'can someone corroborate the location and time?',
-      'what direct observation supports that part of the timeline?',
+      'what confirmed sighting or corroboration supports that part of the timeline?',
     ];
     return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
