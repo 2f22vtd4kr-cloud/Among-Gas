@@ -19,7 +19,7 @@ import {
   isPlayerPositionWalkable,
   type Grid,
 } from '@workspace/shared/collisionMap';
-import { FEET_OFFSET_Y } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
 import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 
@@ -328,6 +328,104 @@ assert.equal(realPolygon.length, 720, 'custom map returns a full visibility poly
 assert.equal(roundedRealPolygon.length, realPolygon.length, 'custom map shadow smoothing preserves the complete polygon');
 assert.ok(IMPOSTOR_VISION_RADIUS_PX > NORMAL_VISION_RADIUS_PX, 'impostors have farther base-game vision');
 assert.ok(LIGHTS_CREWMATE_VISION_RADIUS_PX < NORMAL_VISION_RADIUS_PX, 'Lights reduces crewmate vision');
+
+
+/**
+ * Five-sector route audit. Sample the player's actual three-point footprint on
+ * the fine grid, then flood-fill only safe player-anchor cells. This catches
+ * corridors that are locally walkable but disconnected by an invisible wall.
+ */
+{
+  const total = FINE_COLS * FINE_ROWS;
+  const walkable = new Uint8Array(total);
+  const reachable = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  const cellCenter = (col: number, row: number) => ({
+    x: (col + 0.5) * FINE_CELL_X,
+    y: (row + 0.5) * FINE_CELL_Y,
+  });
+  for (let row = 0; row < FINE_ROWS; row++) {
+    for (let col = 0; col < FINE_COLS; col++) {
+      const point = cellCenter(col, row);
+      if (isPlayerPositionWalkable(realFineGrid, point.x, point.y)) {
+        walkable[row * FINE_COLS + col] = 1;
+      }
+    }
+  }
+  const nearestWalkable = (x: number, y: number, maxRadiusPx: number) => {
+    const minCol = Math.max(0, Math.floor((x - maxRadiusPx) / FINE_CELL_X));
+    const maxCol = Math.min(FINE_COLS - 1, Math.ceil((x + maxRadiusPx) / FINE_CELL_X));
+    const minRow = Math.max(0, Math.floor((y - maxRadiusPx) / FINE_CELL_Y));
+    const maxRow = Math.min(FINE_ROWS - 1, Math.ceil((y + maxRadiusPx) / FINE_CELL_Y));
+    let best = -1;
+    let bestDistance = maxRadiusPx * maxRadiusPx;
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const index = row * FINE_COLS + col;
+        if (!walkable[index]) continue;
+        const point = cellCenter(col, row);
+        const distance = (point.x - x) ** 2 + (point.y - y) ** 2;
+        if (distance < bestDistance) {
+          best = index;
+          bestDistance = distance;
+        }
+      }
+    }
+    return best;
+  };
+  const start = nearestWalkable(PLAYER_SPAWN_X, PLAYER_SPAWN_Y, 80);
+  assert.ok(start >= 0, 'spawn has a nearby player-footprint-safe cell');
+  let head = 0;
+  let tail = 0;
+  queue[tail++] = start;
+  reachable[start] = 1;
+  const directions: readonly [number, number, boolean][] = [
+    [0, -1, false], [0, 1, false], [-1, 0, false], [1, 0, false],
+    [-1, -1, true], [-1, 1, true], [1, -1, true], [1, 1, true],
+  ];
+  while (head < tail) {
+    const index = queue[head++];
+    const row = Math.floor(index / FINE_COLS);
+    const col = index - row * FINE_COLS;
+    for (const [dc, dr, diagonal] of directions) {
+      const nextCol = col + dc;
+      const nextRow = row + dr;
+      if (nextCol < 0 || nextCol >= FINE_COLS || nextRow < 0 || nextRow >= FINE_ROWS) continue;
+      const next = nextRow * FINE_COLS + nextCol;
+      if (reachable[next] || !walkable[next]) continue;
+      if (diagonal) {
+        if (!walkable[row * FINE_COLS + nextCol] || !walkable[nextRow * FINE_COLS + col]) continue;
+      }
+      reachable[next] = 1;
+      queue[tail++] = next;
+    }
+  }
+
+  const sectors = [
+    { id: 'A — upper-left / cafeteria-left corridors', x: 430, y: 620 },
+    { id: 'B — upper-right / generator aisle', x: 2940, y: 900 },
+    { id: 'C — central hub / emergency garden', x: 1735, y: 470 },
+    { id: 'D — lower-left / storage-electrical', x: 470, y: 1450 },
+    { id: 'E — lower-right / admin-lower corridors', x: 2760, y: 1510 },
+  ];
+  const sectorResults = sectors.map(sector => {
+    const target = nearestWalkable(sector.x, sector.y, 260);
+    assert.ok(target >= 0, `${sector.id} has a nearby player-footprint-safe cell`);
+    assert.equal(reachable[target], 1, `${sector.id} is connected to the real spawn without crossing collision`);
+    const col = target % FINE_COLS;
+    const row = Math.floor(target / FINE_COLS);
+    const point = cellCenter(col, row);
+    return { sector: sector.id, target: { x: Math.round(point.x), y: Math.round(point.y) } };
+  });
+  assert.equal(new Set(sectorResults.map(result => `${result.target.x},${result.target.y}`)).size, sectors.length,
+    'each sector probe resolves to a distinct area, not the same central corridor');
+  console.log('[map-sector-routes] ' + JSON.stringify({
+    reachableCells: tail,
+    totalCells: total,
+    sectors: sectorResults,
+  }));
+}
+
 
 console.log(JSON.stringify({
   ok: true,
