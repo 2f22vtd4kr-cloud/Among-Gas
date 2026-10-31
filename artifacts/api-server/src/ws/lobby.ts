@@ -655,7 +655,7 @@ export class LobbyManager {
       ? Array.from(lobby.players.values())
           .filter(candidate => candidate.role === 'impostor')
           .map(candidate => candidate.slot)
-          .sort((a, b) => a - b);
+          .sort((a, b) => a - b)
       : [];
 
     const myTasks = player.assignedTasks.map(taskId => {
