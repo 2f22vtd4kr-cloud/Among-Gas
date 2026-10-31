@@ -425,7 +425,11 @@ try {
   });
   await ghostBlockedTaskPage.goto(`${origin}/?mock=task-interaction-ghost-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await ghostBlockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await ghostBlockedTaskPage.waitForTimeout(450);
+  await ghostBlockedTaskPage.waitForFunction(() => {
+    const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION;
+    return fixture !== undefined &&
+      document.querySelectorAll('[data-testid="gameplay-task-action"]').length === 1;
+  }, undefined, { timeout: 5_000 });
   const ghostBlockedTaskCount = await ghostBlockedTaskPage.locator('[data-testid="gameplay-task-action"]').count();
   assert.equal(ghostBlockedTaskCount, 1,
     'a ghost must retain the task prompt through a wall when the task is within interaction range');
