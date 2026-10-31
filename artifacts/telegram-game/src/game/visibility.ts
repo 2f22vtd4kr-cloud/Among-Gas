@@ -12,6 +12,14 @@ export interface VisualOccluderCircle {
   radius: number;
 }
 
+/** Exact straight boundary edge of a small object omitted from the wall grid. */
+export interface VisualOccluderSegment {
+  ax: number;
+  ay: number;
+  bx: number;
+  by: number;
+}
+
 // A half-degree angular step keeps wall silhouettes smooth without the
 // quadratic segment-intersection cost of testing every ray against every wall.
 const VISION_RAY_COUNT = 720;
@@ -63,6 +71,22 @@ function rayCircleHitDistance(
   return null;
 }
 
+/** Exact first ray/segment hit for an authored or extracted outline edge. */
+function raySegmentHitDistance(
+  px: number, py: number, dx: number, dy: number,
+  segment: VisualOccluderSegment, maxDistance: number,
+): number | null {
+  const sx = segment.bx - segment.ax;
+  const sy = segment.by - segment.ay;
+  const qx = segment.ax - px;
+  const qy = segment.ay - py;
+  const denominator = dx * sy - dy * sx;
+  if (Math.abs(denominator) < 1e-9) return null;
+  const distance = (qx * sy - qy * sx) / denominator;
+  const t = (qx * dy - qy * dx) / denominator;
+  return distance >= 0 && distance < maxDistance && t >= 0 && t <= 1 ? distance : null;
+}
+
 /** First ray/segment hit for an authored vector outline. */
 function rayPolygonHitDistance(px: number, py: number, dx: number, dy: number,
   points: readonly (readonly [number, number])[], maxDistance: number): number | null {
@@ -93,6 +117,7 @@ export function computeVisibilityPolygon(
   grid: Grid,
   narrowOccluders: readonly VisualOccluderCircle[] = [],
   includeManualMapPolygons = false,
+  narrowSegments: readonly VisualOccluderSegment[] = [],
 ): VisionPoint[] {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(radius) || radius <= 0) {
     return [];
@@ -171,6 +196,19 @@ export function computeVisibilityPolygon(
         const hit = rayPolygonHitDistance(px, py, dx, dy, polygon.points, hitDistance);
         if (hit !== null && hit < hitDistance) hitDistance = hit;
       }
+    }
+    for (const segment of narrowSegments) {
+      // Cheap expanded-AABB reject keeps exact edge tests local to the sight ray.
+      const minX = Math.min(segment.ax, segment.bx) - 1;
+      const maxX = Math.max(segment.ax, segment.bx) + 1;
+      const minY = Math.min(segment.ay, segment.by) - 1;
+      const maxY = Math.max(segment.ay, segment.by) + 1;
+      const endX = px + dx * hitDistance;
+      const endY = py + dy * hitDistance;
+      if (Math.max(px, endX) < minX || Math.min(px, endX) > maxX ||
+          Math.max(py, endY) < minY || Math.min(py, endY) > maxY) continue;
+      const hit = raySegmentHitDistance(px, py, dx, dy, segment, hitDistance);
+      if (hit !== null && hit < hitDistance) hitDistance = hit;
     }
     points.push({ x: px + dx * hitDistance, y: py + dy * hitDistance });
   }
@@ -378,6 +416,107 @@ export function buildFineShadowGrid(collisionGrid: Grid): Grid {
     }
   }
   return shadowGrid;
+}
+
+/**
+ * Extract exact object outlines for compact fine-grid components that are
+ * deliberately omitted from the architectural shadow mask. The source fine
+ * grid remains the single authority: movement still uses its conservative
+ * occupancy, while vision tests these merged boundary segments instead of
+ * projecting a square shadow from the object's bounding box.
+ */
+export function buildFineShadowSegments(collisionGrid: Grid): VisualOccluderSegment[] {
+  const total = FINE_COLS * FINE_ROWS;
+  if (collisionGrid.length !== total) {
+    throw new RangeError('Fine shadow contours expected ' + total + ' cells; received ' + collisionGrid.length);
+  }
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  const segments: VisualOccluderSegment[] = [];
+  const cellKey = (col: number, row: number) => row * FINE_COLS + col;
+
+  for (let start = 0; start < total; start++) {
+    if (collisionGrid[start] !== 1 || visited[start]) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    visited[start] = 1;
+    const component: number[] = [];
+    while (head < tail) {
+      const index = queue[head++];
+      component.push(index);
+      const row = Math.floor(index / FINE_COLS);
+      const col = index - row * FINE_COLS;
+      const neighbors = [
+        col > 0 ? cellKey(col - 1, row) : -1,
+        col + 1 < FINE_COLS ? cellKey(col + 1, row) : -1,
+        row > 0 ? cellKey(col, row - 1) : -1,
+        row + 1 < FINE_ROWS ? cellKey(col, row + 1) : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || visited[next] || collisionGrid[next] !== 1) continue;
+        visited[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+
+    // Large architecture is already represented by buildFineShadowGrid.
+    // Tiny single-pixel noise is not a reliable visual occluder.
+    if (component.length < 4 || component.length >= 1_800) continue;
+    const cells = new Set(component);
+    const horizontal = new Map<number, number[]>();
+    const vertical = new Map<number, number[]>();
+    const addHorizontal = (row: number, col: number) => {
+      const values = horizontal.get(row) ?? [];
+      values.push(col);
+      horizontal.set(row, values);
+    };
+    const addVertical = (col: number, row: number) => {
+      const values = vertical.get(col) ?? [];
+      values.push(row);
+      vertical.set(col, values);
+    };
+
+    for (const index of component) {
+      const row = Math.floor(index / FINE_COLS);
+      const col = index - row * FINE_COLS;
+      if (row === 0 || !cells.has(cellKey(col, row - 1))) addHorizontal(row, col);
+      if (row === FINE_ROWS - 1 || !cells.has(cellKey(col, row + 1))) addHorizontal(row + 1, col);
+      if (col === 0 || !cells.has(cellKey(col - 1, row))) addVertical(col, row);
+      if (col === FINE_COLS - 1 || !cells.has(cellKey(col + 1, row))) addVertical(col + 1, row);
+    }
+
+    // Merge adjacent cell edges into long exact outline segments.
+    for (const [row, starts] of horizontal) {
+      starts.sort((a, b) => a - b);
+      let first = starts[0], last = first;
+      for (let i = 1; i <= starts.length; i++) {
+        const next = starts[i];
+        if (next === last + 1) { last = next; continue; }
+        segments.push({
+          ax: first * FINE_CELL_X, ay: row * FINE_CELL_Y,
+          bx: (last + 1) * FINE_CELL_X, by: row * FINE_CELL_Y,
+        });
+        first = next;
+        last = next;
+      }
+    }
+    for (const [col, starts] of vertical) {
+      starts.sort((a, b) => a - b);
+      let first = starts[0], last = first;
+      for (let i = 1; i <= starts.length; i++) {
+        const next = starts[i];
+        if (next === last + 1) { last = next; continue; }
+        segments.push({
+          ax: col * FINE_CELL_X, ay: first * FINE_CELL_Y,
+          bx: col * FINE_CELL_X, by: (last + 1) * FINE_CELL_Y,
+        });
+        first = next;
+        last = next;
+      }
+    }
+  }
+  return segments;
 }
 
 export function buildShadowGrid(collisionGrid: Grid): Grid {
