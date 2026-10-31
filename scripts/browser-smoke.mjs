@@ -381,6 +381,34 @@ try {
     'the task prompt must not overlap the movement joystick',
   );
 
+  // A player may be within the numeric task radius but still be separated by
+  // a wall. The client must not expose the task action in that state.
+  const blockedTaskPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  blockedTaskPage.on('pageerror', error => failures.push(error.message));
+  blockedTaskPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await blockedTaskPage.goto(`${origin}/?mock=task-interaction-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await blockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
+  await blockedTaskPage.waitForTimeout(450);
+  const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
+    fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
+    debug: window.__AG_TASK_DEBUG ?? null,
+    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+  }));
+  console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
+  assert.equal(blockedTaskDiagnostics.actionCount, 0,
+    'task prompt must stay hidden when the player is in range but has no line of sight');
+  await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
+  await blockedTaskPage.close();
+
   // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
   for (const size of [{ width: 320, height: 568 }, { width: 844, height: 390 }, { width: 1365, height: 768 }]) {
     await page.setViewportSize(size);
