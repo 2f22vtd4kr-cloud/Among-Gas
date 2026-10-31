@@ -224,7 +224,7 @@ assert.equal(TASK_DEFS.length, 11, 'expected five original and six ported base-g
 assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'task IDs must be unique');
 for (const task of TASK_DEFS) {
   assert.ok(task.steps >= 1 && Number.isInteger(task.steps), task.name + ' has a valid step count');
-  assertInteractionApproachWalkable(task, TASK_INTERACTION_RANGE_PX);
+  assertInteractionApproachWalkable(task, TASK_INTERACTION_RANGE_PX, task.interactionTargetRadiusPx ?? 24);
 }
 
 assert.equal(ADMIN_TABLE_DEFS.length, 1, 'expected one Admin Table console on the custom map');
