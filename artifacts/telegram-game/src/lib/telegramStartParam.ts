@@ -22,3 +22,11 @@ export function readLobbyStartParam(search: string, telegramStartParam?: unknown
   }
   return null;
 }
+
+/** A fresh invite takes precedence over a room remembered by this WebView. */
+export function resolveInitialRoomCode(
+  inviteCode: string | null,
+  persistedRoomCode: string | null,
+): string | null {
+  return inviteCode ?? persistedRoomCode;
+}
