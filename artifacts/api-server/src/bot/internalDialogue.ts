@@ -67,9 +67,9 @@ export function buildInternalBotDialogue(context: InternalDialogueContext): stri
 
   if (mentionedSubject) {
     const replies = [
-      \`What did \${mentionedSubject} do that you personally observed?\`,
-      \`Is there a specific sighting connecting \${mentionedSubject} to this, or is that only a suspicion?\`,
-      \`Can someone independently confirm the detail about \${mentionedSubject}?\`,
+      `What did \${mentionedSubject} do that you personally observed?`,
+      `Is there a specific sighting connecting \${mentionedSubject} to this, or is that only a suspicion?`,
+      `Can someone independently confirm the detail about \${mentionedSubject}?`,
     ];
     return withSpeaker(replies[stableIndex(seed, replies.length)]);
   }
