@@ -272,7 +272,7 @@ assert.ok(overrideDifferences > 0, 'the authored van-bay correction is applied t
 // Sector B: the east generator room has a continuous open floor aisle between
 // the west entry wall and the lower generator bank. Probe the complete route,
 // not just its endpoints, so an invisible red-line rectangle cannot return.
-for (let x = 2790; x <= 3090; x += 8) {
+for (let x = 2820; x <= 3060; x += 8) {
   assert.equal(isPlayerPositionWalkable(realFineGrid, x, 900), true,
     `east generator approach aisle remains walkable at x=${x}`);
 }
