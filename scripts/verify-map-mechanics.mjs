@@ -315,6 +315,9 @@ assert.match(sabotageSource, /LIGHTS_CREWMATE_VISION_RADIUS_PX\s*=\s*Math\.round
 assert.match(playerSource, /PLAYER_ANIM_INTERVAL_MS = 90/, 'Walking animation must run at a responsive ~11 fps rather than the previous ~7 fps');
 assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must keep its verified 5Hz tick interval');
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
+assert.match(botAgentSource, /arrivalTolerancePx = 25/, 'bot navigation must support precise task arrival without changing other goals');
+assert.match(crewmateBotSource, /TASK_INTERACTION_RANGE_PX - 8/, 'task approach search must cover the server interaction radius with an 8px safety margin');
+assert.match(crewmateBotSource, /navigateTo\(self, goal, 8\)/, 'task bots must arrive precisely enough to remain inside the authoritative interaction radius');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => buildPreciseCollisionGrid\(\), \[\]\)/, 'GameMap must build one shared fine grid for task LOS and live movement');
