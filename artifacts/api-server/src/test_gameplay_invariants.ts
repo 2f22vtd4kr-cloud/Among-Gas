@@ -303,6 +303,34 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   ejectionManager.disposeLobby(ejectionLobby);
 }
 
+// Server authority must reject a forged body report for an ejected ghost.
+// Ejection changes alive=false but does not create corpseX/corpseY.
+{
+  const reporter = makePlayer(0, 'crewmate', 100, 100);
+  const ejected = makePlayer(1, 'crewmate', 120, 100);
+  ejected.player.alive = false;
+  const lobby = makeLobby([reporter.player, ejected.player]);
+  const manager = new LobbyManager();
+  assert.equal(manager.callMeeting(lobby, reporter.player.slot, ejected.player.slot), false,
+    'server must reject reports for ejected ghosts without a dropped corpse');
+  assert.equal(ejected.player.bodyReported, undefined,
+    'a rejected report must not mark an ejected ghost as a reported corpse');
+  assert.equal(lobby.phase, 'ROAMING');
+  manager.disposeLobby(lobby);
+
+  const distantReporter = makePlayer(2, 'crewmate', 100, 100);
+  const distantCorpse = makePlayer(3, 'crewmate', 900, 900);
+  distantCorpse.player.alive = false;
+  distantCorpse.player.corpseX = 900;
+  distantCorpse.player.corpseY = 900;
+  const distantLobby = makeLobby([distantReporter.player, distantCorpse.player]);
+  const distanceManager = new LobbyManager();
+  assert.equal(distanceManager.callMeeting(distantLobby, distantReporter.player.slot, distantCorpse.player.slot), false,
+    'server must reject reports when the caller is outside corpse interaction range');
+  assert.equal(distantLobby.phase, 'ROAMING');
+  distanceManager.disposeLobby(distantLobby);
+}
+
 // Bots speak during the discussion window, without using omniscient global positions.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
