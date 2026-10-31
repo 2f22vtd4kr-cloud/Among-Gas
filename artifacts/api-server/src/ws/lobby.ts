@@ -26,7 +26,7 @@ import {
   NO_TARGET,
 } from '@workspace/shared/coords';
 import {
-  buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerSpawnPositionClear,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
@@ -71,7 +71,7 @@ export const SPAWN_X = PLAYER_SPAWN_X;
 export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
-const spawnGrid = buildCollisionGrid();
+const spawnGrid = buildPreciseCollisionGrid();
 
 /**
  * Compute a spread spawn position for player `index` of `total`.
