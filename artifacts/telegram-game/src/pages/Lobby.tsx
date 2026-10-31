@@ -174,7 +174,7 @@ function TitleBlock({ language, onSettingsClick }: {
 // ── Main Lobby ────────────────────────────────────────────────────────────────
 export default function Lobby() {
   const state = useGameState();
-  const { createRoom, createSolo, joinRoom, startGame } = useGameActions();
+  const { createRoom, createSolo, joinRoom, startGame, setGroqApiKey } = useGameActions();
   const [, navigate] = useLocation();
   const { language } = useLanguage();
   const en = language === 'en';
@@ -309,7 +309,7 @@ export default function Lobby() {
         <GasParticles />
 
         <TitleBlock language={language} onSettingsClick={() => setSettingsOpen(true)} />
-        <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+        <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onGroqApiKeyChange={setGroqApiKey} groqApiKeyConfigured={state.groqApiKeyConfigured} />
 
         {/* Error banner */}
         {state.errorMessage && (
@@ -444,7 +444,7 @@ export default function Lobby() {
       <GasParticles />
 
       <TitleBlock language={language} onSettingsClick={() => setSettingsOpen(true)} />
-      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onGroqApiKeyChange={setGroqApiKey} groqApiKeyConfigured={state.groqApiKeyConfigured} />
 
       {/* Non-fatal error */}
       {state.errorMessage && state.phase === 'lobby' && (

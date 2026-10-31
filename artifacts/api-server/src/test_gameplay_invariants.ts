@@ -471,7 +471,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.match(chatText, /Player3/, 'bot should recognise the player number mentioned in public chat');
   assert.doesNotMatch(chatText, /Player3 is the impostor|Player3 killed/i,
     'bot must ask for confirmation rather than inventing guilt from a chat mention');
-  assert.match(chatText, /Can anyone confirm where they were/i, 'bot should ask for corroboration rather than claim it witnessed the event');
+  assert.match(chatText, /what specifically links Player3 to the report/i, 'bot should ask for evidence rather than claim it witnessed the event');
   assert.equal(lobby.phase, 'MEETING', 'discussion chat must not resume movement/gameplay');
   manager.disposeLobby(lobby);
 }

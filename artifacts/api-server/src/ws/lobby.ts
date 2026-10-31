@@ -136,6 +136,8 @@ export interface LobbyPlayer {
   slot: number;
   tgUserId: number;
   username: string;
+  /** Optional Groq credential; session-memory only, never included in snapshots or broadcasts. */
+  groqApiKey?: string;
   ws: WebSocket;
   /** Wall-clock instant at which this player disconnected; slot and state are retained during grace. */
   disconnectedAtMs?: number;
