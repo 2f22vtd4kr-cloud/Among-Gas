@@ -910,14 +910,49 @@ export class LobbyManager {
     return true;
   }
 
-  /** Exit at the current vent; the following delta includes the visible position. */
+  /** Exit at a nearby legal standing point; vent anchors may overlap blocked floor cells. */
   exitVent(lobby: Lobby, playerSlot: number): boolean {
     const player = lobby.players.get(playerSlot);
     if (lobby.phase !== 'ROAMING' || !player || !player.alive ||
         player.role !== 'impostor' || !player.inVent || player.ventId === undefined) return false;
+    const vent = findVent(player.ventId);
+    if (!vent) return false;
+
+    // The authored vent centre is an interaction anchor, not necessarily a
+    // legal player footprint. Search deterministically for the nearest clear
+    // standing position before releasing movement on both server and client.
+    let exit: { x: number; y: number } | null = null;
+    if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, vent.x, vent.y)) {
+      exit = { x: vent.x, y: vent.y };
+    } else {
+      const step = 4;
+      for (let radius = step; radius <= 64 && exit === null; radius += step) {
+        const samples = Math.max(16, Math.ceil((2 * Math.PI * radius) / step));
+        for (let i = 0; i < samples; i++) {
+          const angle = (i / samples) * Math.PI * 2;
+          const candidate = {
+            x: vent.x + Math.cos(angle) * radius,
+            y: vent.y + Math.sin(angle) * radius,
+          };
+          if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, candidate.x, candidate.y)) {
+            exit = candidate;
+            break;
+          }
+        }
+      }
+    }
+    // Fail closed: never strand a living impostor at a blocked anchor with
+    // movement permanently rejected by the ordinary swept-footprint check.
+    if (!exit) return false;
+
     const ventId = player.ventId;
+    player.x = exit.x;
+    player.y = exit.y;
     player.inVent = false;
     player.ventId = undefined;
+    player.movementCreditPx = 0;
+    player.movementCreditUpdatedAtMs = Date.now();
+    player.lastMovementPacketAtMs = Date.now();
     player.lastBroadcastWireX = -100_000;
     player.lastBroadcastWireY = -100_000;
     this._broadcastVentState(lobby, 0x03, playerSlot, ventId);
