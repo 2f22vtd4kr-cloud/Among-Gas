@@ -77,7 +77,9 @@ export class CrewmateBot extends BotAgent {
     const dx = def.x - self.x;
     const dy = def.y - self.y;
     const distance = Math.hypot(dx, dy);
-    const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 1);
+    // Keep an 8px margin so floating-point rounding cannot strand a ghost
+    // infinitesimally outside the exact interaction threshold forever.
+    const interactionDistance = Math.max(1, TASK_INTERACTION_RANGE_PX - 8);
     if (distance > interactionDistance) {
       const travel = Math.min(BOT_SPEED_PX * 1.5, distance - interactionDistance);
       self.x += (dx / distance) * travel;
