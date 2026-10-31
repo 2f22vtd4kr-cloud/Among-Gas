@@ -181,8 +181,8 @@ export interface GameActions {
   /** Dismiss the vote-result overlay after a meeting concludes without ending the game. */
   clearVoteResult: () => void;
   /**
-   * Mark a minigame step as done (Phase 7). Optimistically updates local task
-   * progress and sends [0x15, 0x03, taskId, stepIndex] to the server.
+   * Submit a minigame step (Phase 7). Local progress advances only on the
+   * server-authoritative task-progress broadcast.
    */
   completeTaskStep: (taskId: number, stepIndex: number) => void;
   /** Send a 0x15 sub 0x04 Sabotage RPC (impostor only; server re-validates). */
