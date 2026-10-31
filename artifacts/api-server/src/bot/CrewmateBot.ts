@@ -106,7 +106,7 @@ export class CrewmateBot extends BotAgent {
     // than navigating to the exact (possibly unwalkable) pad pixel.
     const goal = this.nearestApproachPoint(
       { x: pad.x, y: pad.y },
-      SABOTAGE_INTERACTION_RANGE_PX - 30,
+      SABOTAGE_INTERACTION_RANGE_PX - 10,
     );
     const arrived = this.navigateTo(self, goal);
     if (!arrived) return;
@@ -248,7 +248,7 @@ export class CrewmateBot extends BotAgent {
     // tolerance, so "arrived at approach point" always implies "in range".
     const goal = this.nearestApproachPoint(
       { x: def.x, y: def.y },
-      TASK_INTERACTION_RANGE_PX - 30,
+      TASK_INTERACTION_RANGE_PX - 10,
     );
     const arrived = this.navigateTo(self, goal);
     if (!arrived) return;
