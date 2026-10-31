@@ -10,6 +10,7 @@
 import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerFootprintWalkableAtFeet,
   isPlayerPositionWalkable,
   isPlayerPathWalkable,
@@ -30,6 +31,7 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
+const movementGrid = buildPreciseCollisionGrid();
 
 /** Same three-circle foot footprint used by client prediction and server authority. */
 function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
@@ -59,7 +61,7 @@ function buildNavigationGrid(collision: Grid): Grid {
   return result;
 }
 
-const navigationGrid = buildNavigationGrid(grid);
+const navigationGrid = buildNavigationGrid(movementGrid);
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
@@ -111,7 +113,7 @@ function canTraverse(from: Point, to: Point): boolean {
   // Bot waypoints are stored in feet-space; the shared helper accepts the
   // sprite anchor and applies the canonical feet offset internally.
   return isPlayerPathWalkable(
-    grid,
+    movementGrid,
     from.x,
     from.y - FEET_OFFSET_Y,
     to.x,
@@ -354,7 +356,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        isPlayerPositionWalkable(grid, x, y) &&
+        isPlayerPositionWalkable(movementGrid, x, y) &&
         isSpawnReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
@@ -389,7 +391,7 @@ export abstract class BotAgent {
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      isPlayerPositionWalkable(grid, p.x, p.y) &&
+      isPlayerPositionWalkable(movementGrid, p.x, p.y) &&
       isSpawnReachable(p.x, p.y + FEET_OFFSET_Y);
 
     let result = target;
