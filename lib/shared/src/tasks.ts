@@ -38,7 +38,8 @@ const ref = (rx: number, ry: number) => ({ x: Math.round(rx * _sx), y: Math.roun
  */
 export const TASK_DEFS: readonly TaskDef[] = [
   // Existing Among Gas tasks, moved onto verified walkable points on the custom map.
-  { id: 0,  name: 'Fix Wiring',            zone: 'electrical',   steps: 2, ...ref(815, 479) },
+  // Shifted west onto the fine-grid clear feet corridor beside the console.
+  { id: 0,  name: 'Fix Wiring',            zone: 'electrical',   steps: 2, ...ref(799, 478) },
   { id: 1,  name: 'Download Data',          zone: 'tech_room_ne', steps: 1, ...ref(755,  89) },
   { id: 2,  name: 'Calibrate Distributor',  zone: 'industrial',   steps: 2, ...ref(125, 279) },
   { id: 3,  name: 'Empty Garbage',          zone: 'gas_station',  steps: 1, ...ref(125, 449) },

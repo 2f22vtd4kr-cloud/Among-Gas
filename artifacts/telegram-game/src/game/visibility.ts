@@ -1,5 +1,5 @@
 import type { Grid } from '@workspace/shared/collisionMap';
-import { CELL_X, CELL_Y, COLS, ROWS, MANUAL_BLOCKED_POLYGONS } from '@workspace/shared/collisionMap';
+import { CELL_X, CELL_Y, COLS, ROWS, FINE_COLS, FINE_ROWS, FINE_CELL_X, FINE_CELL_Y, MANUAL_BLOCKED_POLYGONS } from '@workspace/shared/collisionMap';
 
 export interface VisionPoint {
   x: number;
@@ -20,8 +20,21 @@ const VISION_DIRECTIONS = Array.from({ length: VISION_RAY_COUNT }, (_, index) =>
   return { dx: Math.cos(angle), dy: Math.sin(angle) };
 });
 
-function isBlocked(grid: Grid, col: number, row: number): boolean {
-  return col < 0 || col >= COLS || row < 0 || row >= ROWS || grid[row * COLS + col] === 1;
+interface VisibilityGridGeometry { cols: number; rows: number; cellX: number; cellY: number }
+
+function getVisibilityGridGeometry(grid: Grid): VisibilityGridGeometry {
+  if (grid.length === FINE_COLS * FINE_ROWS) {
+    return { cols: FINE_COLS, rows: FINE_ROWS, cellX: FINE_CELL_X, cellY: FINE_CELL_Y };
+  }
+  if (grid.length === COLS * ROWS) {
+    return { cols: COLS, rows: ROWS, cellX: CELL_X, cellY: CELL_Y };
+  }
+  throw new RangeError('Visibility grid has unexpected size ' + grid.length);
+}
+
+function isBlocked(grid: Grid, col: number, row: number, geometry: VisibilityGridGeometry): boolean {
+  return col < 0 || col >= geometry.cols || row < 0 || row >= geometry.rows ||
+    grid[row * geometry.cols + col] === 1;
 }
 
 /** Exact ray/circle hit used for narrow visual-only props such as light poles. */
@@ -86,23 +99,25 @@ export function computeVisibilityPolygon(
   }
 
   const points: VisionPoint[] = [];
-  const startCol = Math.floor(px / CELL_X);
-  const startRow = Math.floor(py / CELL_Y);
+  const geometry = getVisibilityGridGeometry(grid);
+  const { cellX, cellY } = geometry;
+  const startCol = Math.floor(px / cellX);
+  const startRow = Math.floor(py / cellY);
 
   for (const { dx, dy } of VISION_DIRECTIONS) {
     const stepX = dx > 0 ? 1 : dx < 0 ? -1 : 0;
     const stepY = dy > 0 ? 1 : dy < 0 ? -1 : 0;
-    const deltaX = stepX === 0 ? Infinity : CELL_X / Math.abs(dx);
-    const deltaY = stepY === 0 ? Infinity : CELL_Y / Math.abs(dy);
+    const deltaX = stepX === 0 ? Infinity : cellX / Math.abs(dx);
+    const deltaY = stepY === 0 ? Infinity : cellY / Math.abs(dy);
 
     let col = startCol;
     let row = startRow;
     let maxX = stepX === 0
       ? Infinity
-      : ((stepX > 0 ? (col + 1) * CELL_X : col * CELL_X) - px) / dx;
+      : ((stepX > 0 ? (col + 1) * cellX : col * cellX) - px) / dx;
     let maxY = stepY === 0
       ? Infinity
-      : ((stepY > 0 ? (row + 1) * CELL_Y : row * CELL_Y) - py) / dy;
+      : ((stepY > 0 ? (row + 1) * cellY : row * cellY) - py) / dy;
     let hitDistance = radius;
 
     while (true) {
@@ -114,7 +129,7 @@ export function computeVisibilityPolygon(
       if (Math.abs(maxX - maxY) < 1e-7) {
         const nextCol = col + stepX;
         const nextRow = row + stepY;
-        if (isBlocked(grid, nextCol, row) || isBlocked(grid, col, nextRow)) {
+        if (isBlocked(grid, nextCol, row, geometry) || isBlocked(grid, col, nextRow, geometry)) {
           hitDistance = next;
           break;
         }
@@ -122,7 +137,7 @@ export function computeVisibilityPolygon(
         row = nextRow;
         maxX += deltaX;
         maxY += deltaY;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, geometry)) {
           hitDistance = next;
           break;
         }
@@ -130,7 +145,7 @@ export function computeVisibilityPolygon(
         col += stepX;
         const boundaryDistance = maxX;
         maxX += deltaX;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, geometry)) {
           hitDistance = boundaryDistance;
           break;
         }
@@ -138,7 +153,7 @@ export function computeVisibilityPolygon(
         row += stepY;
         const boundaryDistance = maxY;
         maxY += deltaY;
-        if (isBlocked(grid, col, row)) {
+        if (isBlocked(grid, col, row, geometry)) {
           hitDistance = boundaryDistance;
           break;
         }
@@ -234,6 +249,9 @@ const MANUAL_NARROW_OCCLUDERS: readonly VisualOccluderCircle[] = [
     y: 8 * CELL_Y,
     radius: Math.min(CELL_X, CELL_Y) * 0.2,
   },
+  // Tall central statue: the decorative garden perimeter is walkable and
+  // does not occlude vision. Only the statue's small physical base blocks sight.
+  { x: 1735, y: 556, radius: 26 },
 ];
 
 function isNonOccludingFurniture(index: number): boolean {
@@ -256,10 +274,11 @@ export function buildNarrowShadowOccluders(
   collisionGrid: Grid,
   includeManualMapOccluders = false,
 ): VisualOccluderCircle[] {
+  if (collisionGrid.length === FINE_COLS * FINE_ROWS) {
+    return includeManualMapOccluders ? [...MANUAL_NARROW_OCCLUDERS] : [];
+  }
   if (collisionGrid.length !== COLS * ROWS) {
-    throw new RangeError(
-      `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`
-    );
+    throw new RangeError('Collision grid has unexpected size ' + collisionGrid.length);
   }
 
   const visited = new Uint8Array(COLS * ROWS);
@@ -315,7 +334,54 @@ export function buildNarrowShadowOccluders(
   return occluders;
 }
 
+/**
+ * Fine vision mask: large architectural components stay opaque while small
+ * isolated low props remain movement blockers but do not cast square shadows.
+ * The garden ring is walkable in the fine collision source; the statue is
+ * represented separately by its measured narrow visual occluder.
+ */
+export function buildFineShadowGrid(collisionGrid: Grid): Grid {
+  const total = FINE_COLS * FINE_ROWS;
+  if (collisionGrid.length !== total) {
+    throw new RangeError('Fine shadow grid expected ' + total + ' cells; received ' + collisionGrid.length);
+  }
+  const shadowGrid = new Uint8Array(total);
+  const visited = new Uint8Array(total);
+  const queue = new Int32Array(total);
+  // 1,800 fine cells ≈ 7,200 source-reference pixels; this excludes isolated
+  // benches/props and the statue base while retaining substantial wall geometry.
+  const minComponentCells = 1_800;
+  for (let start = 0; start < total; start++) {
+    if (collisionGrid[start] !== 1 || visited[start]) continue;
+    let head = 0;
+    let tail = 0;
+    queue[tail++] = start;
+    visited[start] = 1;
+    while (head < tail) {
+      const index = queue[head++];
+      const row = Math.floor(index / FINE_COLS);
+      const col = index - row * FINE_COLS;
+      const neighbors = [
+        col > 0 ? index - 1 : -1,
+        col + 1 < FINE_COLS ? index + 1 : -1,
+        row > 0 ? index - FINE_COLS : -1,
+        row + 1 < FINE_ROWS ? index + FINE_COLS : -1,
+      ];
+      for (const next of neighbors) {
+        if (next < 0 || visited[next] || collisionGrid[next] !== 1) continue;
+        visited[next] = 1;
+        queue[tail++] = next;
+      }
+    }
+    if (tail >= minComponentCells) {
+      for (let i = 0; i < tail; i++) shadowGrid[queue[i]] = 1;
+    }
+  }
+  return shadowGrid;
+}
+
 export function buildShadowGrid(collisionGrid: Grid): Grid {
+  if (collisionGrid.length === FINE_COLS * FINE_ROWS) return buildFineShadowGrid(collisionGrid);
   if (collisionGrid.length !== COLS * ROWS) {
     throw new RangeError(
       `Collision grid has ${collisionGrid.length} cells; expected ${COLS * ROWS}.`

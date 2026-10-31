@@ -25,7 +25,7 @@ import {
   NO_TARGET,
   toWire,
 } from '@workspace/shared/coords';
-import { TASK_DEFS } from '@workspace/shared/tasks';
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { BOT_SPEED_PX } from './bot/BotAgent.js';
 import { CrewmateBot } from './bot/CrewmateBot.js';
 import { ImpostorBot } from './bot/ImpostorBot.js';
@@ -38,6 +38,7 @@ import {
 } from '@workspace/shared/vents';
 import {
   SABOTAGE_DEFS,
+  SABOTAGE_INTERACTION_RANGE_PX,
   SABOTAGE_LIGHTS,
   SABOTAGE_O2,
   SABOTAGE_REACTOR,
@@ -71,6 +72,30 @@ const grid = buildCollisionGrid();
 
 function assertClientWalkable(x: number, y: number, label: string): void {
   assert.equal(isPlayerPositionWalkable(grid, x, y), true, label + ' complete feet footprint');
+}
+
+/**
+ * Solid task/admin consoles need not be walkable at their centre. Validate
+ * that a player can stand at a valid feet position inside the same
+ * server-authoritative interaction radius used by the interaction handler.
+ */
+function assertInteractionApproachWalkable(
+  target: { x: number; y: number; name: string },
+  interactionRangePx: number,
+): void {
+  const step = 8;
+  let hasApproach = false;
+  for (let dy = -interactionRangePx; dy <= interactionRangePx && !hasApproach; dy += step) {
+    for (let dx = -interactionRangePx; dx <= interactionRangePx; dx += step) {
+      if (dx * dx + dy * dy > interactionRangePx * interactionRangePx) continue;
+      if (isPlayerPositionWalkable(grid, target.x + dx, target.y + dy)) {
+        hasApproach = true;
+        break;
+      }
+    }
+  }
+  assert.ok(hasApproach,
+    `${target.name} must have a walkable player approach within ${interactionRangePx}px of its console`);
 }
 
 function fakeSocket() {
@@ -152,8 +177,10 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
     'the western path through the central garden must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1810, 449), true,
     'the eastern path through the central garden must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1735, 449), false,
-    'the central statue footprint must remain blocked');
+  assert.equal(isPlayerPositionWalkable(grid, 1735, 449), true,
+    'the decorative garden floor must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1735, 556 - FEET_OFFSET_Y), false,
+    'the central statue base must remain blocked at its feet-space position');
   assert.equal(isPlayerPositionWalkable(grid, 1450, 449), true,
     'the open lobby floor west of the garden must remain walkable');
 }
@@ -163,19 +190,19 @@ assert.equal(TASK_DEFS.length, 11, 'expected five original and six ported base-g
 assert.equal(new Set(TASK_DEFS.map(task => task.id)).size, TASK_DEFS.length, 'task IDs must be unique');
 for (const task of TASK_DEFS) {
   assert.ok(task.steps >= 1 && Number.isInteger(task.steps), task.name + ' has a valid step count');
-  assertClientWalkable(task.x, task.y, 'task ' + task.name);
+  assertInteractionApproachWalkable(task, TASK_INTERACTION_RANGE_PX);
 }
 
 assert.equal(ADMIN_TABLE_DEFS.length, 1, 'expected one Admin Table console on the custom map');
 assert.ok(ADMIN_TABLE_INTERACTION_RANGE_PX > 0, 'Admin Table interaction range must be positive');
 for (const consoleDef of ADMIN_TABLE_DEFS) {
-  assertClientWalkable(consoleDef.x, consoleDef.y, 'Admin Table console ' + consoleDef.name);
+  assertInteractionApproachWalkable(consoleDef, ADMIN_TABLE_INTERACTION_RANGE_PX);
 }
 
 assert.equal(VENT_DEFS.length, 6, 'expected six vents on the custom map');
 assert.ok(VENT_INTERACTION_RANGE_PX > 0, 'vent interaction range must be positive');
 for (const vent of VENT_DEFS) {
-  assertClientWalkable(vent.x, vent.y, 'vent ' + vent.name);
+  assertInteractionApproachWalkable(vent, VENT_INTERACTION_RANGE_PX);
   assert.ok(findVent(vent.id), 'vent IDs must resolve');
   for (const targetId of vent.connections) {
     assert.ok(findVent(targetId), 'vent connection must point to an existing vent');
@@ -198,7 +225,7 @@ assert.equal(canTravelVent(0, 2), false, 'vent travel must reject non-adjacent d
 
 for (const [systemId, definition] of Object.entries(SABOTAGE_DEFS)) {
   for (const [index, pad] of definition.pads.entries()) {
-    assertClientWalkable(pad.x, pad.y, 'sabotage system ' + systemId + ' pad ' + index);
+    assertInteractionApproachWalkable({ ...pad, name: 'sabotage system ' + systemId + ' pad ' + index }, SABOTAGE_INTERACTION_RANGE_PX);
   }
 }
 assert.equal(KILL_COOLDOWN_MS, 15_000, 'base-game kill cooldown parity');

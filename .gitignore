@@ -47,3 +47,12 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Generated map geometry QA overlays (archived as CI artifacts)
+/artifacts/telegram-game/collision-qa-overlay.png
+/artifacts/telegram-game/collision-shadow-qa-overlay.png
+/artifacts/telegram-game/collision-vision-qa-overlay.png
+/artifacts/telegram-game/collision-qa-overlay-webp.png
+/artifacts/telegram-game/collision-reference-overlay.png
+/artifacts/telegram-game/collision-qa-tiles/
+/lib/shared/src/collisionDataFine.generated-preview.ts

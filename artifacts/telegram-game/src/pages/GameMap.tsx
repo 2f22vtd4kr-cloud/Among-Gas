@@ -3,6 +3,7 @@ import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
@@ -1083,10 +1084,13 @@ export default function GameMap() {
       playerStateRef.current = { ...playerStateRef.current, x: nearest.x, y: nearest.y };
       (window as Window & { __AG_TASK_FIXTURE_POSITION?: unknown }).__AG_TASK_FIXTURE_POSITION = nearest;
     }
-    // Movement still uses every solid collision cell. Vision shadows use a
-    // separate occlusion grid that ignores tiny isolated props like benches.
-    const shadowGrid = buildShadowGrid(grid);
-    const narrowOccluders = buildNarrowShadowOccluders(grid, true);
+    // Keep the compact grid for the existing movement/A* path while the
+    // live vision mask uses the canonical fine geometry. This keeps low
+    // furniture (notably the upper-atrium table) collidable without casting
+    // square shadows, and preserves the measured narrow statue occluder.
+    const fineGrid = buildPreciseCollisionGrid();
+    const shadowGrid = buildShadowGrid(fineGrid);
+    const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
     if (!isSpawnWalkable(grid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }

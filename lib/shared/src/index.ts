@@ -4,7 +4,10 @@
 export {
   MAP_W, MAP_H,
   COLS, ROWS, CELL, CELL_X, CELL_Y,
+  FINE_COLS, FINE_ROWS, FINE_CELL_X, FINE_CELL_Y,
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
+  buildFineCollisionGridFromRle,
   isBlocked,
   canMoveTo,
   resolveMovement,

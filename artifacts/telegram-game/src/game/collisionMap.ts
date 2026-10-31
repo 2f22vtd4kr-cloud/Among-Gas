@@ -2,11 +2,13 @@
 // lib/shared/src/collisionMap.ts so both the client and api-server can import it.
 export {
   MAP_W, MAP_H,
-  COLS, ROWS,
-  CELL, CELL_X, CELL_Y,
+  COLS, ROWS, FINE_COLS, FINE_ROWS,
+  CELL, CELL_X, CELL_Y, FINE_CELL_X, FINE_CELL_Y,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
+  buildFineCollisionGridFromRle,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   isPlayerFootprintWalkableAtFeet,
