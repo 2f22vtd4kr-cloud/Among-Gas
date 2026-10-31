@@ -659,7 +659,46 @@ try {
     });
   });
   assert.ok(corpseColorCoverage.every(count => count > 100),
-    `every player color must have an authored corpse/bone sprite row; alpha coverage=${corpseColorCoverage.join(',')}`);
+    `every authored player color must have a corpse/bone sprite row; alpha coverage=${corpseColorCoverage.join(',')}`);
+
+  // The production sprite source has seven authored columns, but gameplay uses
+  // the generated eighteen-column canvas atlas. Inspect that actual runtime
+  // canvas so the eleven derived palettes cannot silently disappear or render
+  // duplicate corpse colours after a browser-only regression.
+  const runtimeCorpseAtlas = await page.evaluate(() => {
+    const atlas = (window as Window & { __AG_CHARACTER_ATLAS?: HTMLCanvasElement }).__AG_CHARACTER_ATLAS;
+    if (!atlas) return null;
+    if (atlas.width !== 2898 || atlas.height !== 1401) {
+      return { width: atlas.width, height: atlas.height, columns: [] as Array<{ opaque: number; signature: string }> };
+    }
+    const context = atlas.getContext('2d', { willReadFrequently: true });
+    if (!context) throw new Error('Could not inspect the generated runtime character atlas');
+    const columns = Array.from({ length: 18 }, (_, column) => {
+      const pixels = context.getImageData(column * 161, 1067, 161, 93).data;
+      let opaque = 0;
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      for (let i = 0; i < pixels.length; i += 4) {
+        const alpha = pixels[i + 3];
+        if (alpha === 0) continue;
+        opaque++;
+        red += pixels[i];
+        green += pixels[i + 1];
+        blue += pixels[i + 2];
+      }
+      return { opaque, signature: red + ':' + green + ':' + blue };
+    });
+    return { width: atlas.width, height: atlas.height, columns };
+  });
+  assert.ok(runtimeCorpseAtlas && runtimeCorpseAtlas.width === 2898 && runtimeCorpseAtlas.height === 1401,
+    'the loaded gameplay atlas must expand the seven authored columns to eighteen 161px runtime columns');
+  assert.equal(runtimeCorpseAtlas.columns.length, 18,
+    'the generated runtime atlas must contain all eighteen palette columns');
+  assert.ok(runtimeCorpseAtlas.columns.every(column => column.opaque > 100),
+    'every runtime palette must retain the complete exposed-bone corpse silhouette');
+  assert.equal(new Set(runtimeCorpseAtlas.columns.map(column => column.signature)).size, 18,
+    'all eighteen runtime corpse palettes must render visibly distinct pixel colours');
 
   await page.goto(`${origin}/?mock=kill-animation-attacker&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
