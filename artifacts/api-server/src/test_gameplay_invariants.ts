@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import {
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
+  isLineOfSightToInteractionTarget,
   isPlayerSpawnPositionClear,
   MAP_W,
   MAP_H,
@@ -84,20 +85,27 @@ function assertClientWalkable(x: number, y: number, label: string): void {
 function assertInteractionApproachWalkable(
   target: { x: number; y: number; name: string },
   interactionRangePx: number,
+  targetRadiusPx = 24,
 ): void {
   const step = 8;
   let hasApproach = false;
   for (let dy = -interactionRangePx; dy <= interactionRangePx && !hasApproach; dy += step) {
     for (let dx = -interactionRangePx; dx <= interactionRangePx; dx += step) {
       if (dx * dx + dy * dy > interactionRangePx * interactionRangePx) continue;
-      if (isPlayerPositionWalkable(grid, target.x + dx, target.y + dy)) {
-        hasApproach = true;
-        break;
-      }
+      const x = target.x + dx;
+      const y = target.y + dy;
+      if (!isPlayerPositionWalkable(grid, x, y)) continue;
+      if (!isLineOfSightToInteractionTarget(
+        grid, x, y + FEET_OFFSET_Y,
+        target.x, target.y + FEET_OFFSET_Y,
+        targetRadiusPx,
+      )) continue;
+      hasApproach = true;
+      break;
     }
   }
   assert.ok(hasApproach,
-    `${target.name} must have a walkable player approach within ${interactionRangePx}px of its console`);
+    `${target.name} must have a walkable, line-of-sight player approach within ${interactionRangePx}px of its console`);
 }
 
 function fakeSocket() {
@@ -204,7 +212,7 @@ for (const consoleDef of ADMIN_TABLE_DEFS) {
 assert.equal(VENT_DEFS.length, 6, 'expected six vents on the custom map');
 assert.ok(VENT_INTERACTION_RANGE_PX > 0, 'vent interaction range must be positive');
 for (const vent of VENT_DEFS) {
-  assertInteractionApproachWalkable(vent, VENT_INTERACTION_RANGE_PX);
+  assertInteractionApproachWalkable(vent, VENT_INTERACTION_RANGE_PX, 20);
   assert.ok(findVent(vent.id), 'vent IDs must resolve');
   for (const targetId of vent.connections) {
     assert.ok(findVent(targetId), 'vent connection must point to an existing vent');
