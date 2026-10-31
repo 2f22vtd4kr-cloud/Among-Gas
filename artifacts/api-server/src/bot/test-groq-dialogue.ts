@@ -1,10 +1,23 @@
 import assert from 'node:assert/strict';
-import { isValidGroqApiKey, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, isValidGroqApiKey, requestGroqDialogue } from './groqDialogue.js';
 
 const validKey = 'gsk_' + 'A'.repeat(48);
 assert.equal(isValidGroqApiKey(validKey), true);
 assert.equal(isValidGroqApiKey('not-a-key'), false);
 assert.equal(isValidGroqApiKey('gsk_short'), false);
+
+const publicPrompt = buildPublicBotDialogueMessages({
+  username: 'Nova',
+  livingRoster: 'Nova, Player2',
+  meetingType: 'body report',
+  publicTranscript: 'Player2: I saw someone leave the west hall.',
+});
+const promptText = publicPrompt.map(message => message.content).join(' ');
+assert.match(promptText, /Nova/);
+assert.match(promptText, /public meeting transcript/);
+assert.doesNotMatch(promptText, /secret role is|impostor role|crewmate role/i,
+  'the provider prompt must not include any hidden role, including the bot own role');
+
 
 const originalFetch = globalThis.fetch;
 const captured: Array<{ url: string; init?: RequestInit }> = [];
