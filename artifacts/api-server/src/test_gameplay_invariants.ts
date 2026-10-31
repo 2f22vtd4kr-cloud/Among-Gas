@@ -309,12 +309,12 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 
 // 5. Bot reporting follows the immutable corpse, not the ghost's later position.
 {
-  const reporter = makePlayer(0, 'crewmate', 110, 100);
+  const reporter = makePlayer(0, 'crewmate', SPAWN_X + 10, SPAWN_Y);
   const ghost = makePlayer(1, 'crewmate', 900, 900);
   const impostor = makePlayer(2, 'impostor', 500, 500);
   ghost.player.alive = false;
-  ghost.player.corpseX = 100;
-  ghost.player.corpseY = 100;
+  ghost.player.corpseX = SPAWN_X;
+  ghost.player.corpseY = SPAWN_Y;
   const lobby = makeLobby([reporter.player, ghost.player, impostor.player]);
   const manager = new LobbyManager();
   new CrewmateBot().roamingTick(lobby, reporter.player, manager);
