@@ -509,13 +509,22 @@ export default function GameMap() {
         const dx = pad.x - myPos.x;
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = { systemId: active.systemId, padId }; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          pad.x, pad.y + FEET_OFFSET_Y,
+          24,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) {
+          best = { systemId: active.systemId, padId };
+          bestDistSq = distSq;
+        }
       });
       setNearestRepairPad(best);
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, amIImpostor, sabotage]);
+  }, [amIDead, amIImpostor, sabotage, taskInteractionGrid]);
 
   // Local countdown clock for the sabotage banner, ticked independently of
   // the canvas rAF loop — same pattern as meetingNow above.
