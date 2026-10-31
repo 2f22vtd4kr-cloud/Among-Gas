@@ -14,6 +14,7 @@
  */
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
+import { buildMovementCorrectionPacket } from './movement.js';
 import {
   MAP_W, MAP_H,
   FEET_OFFSET_Y,
@@ -911,53 +912,70 @@ export class LobbyManager {
     return true;
   }
 
-  /** Exit at a nearby legal standing point; vent anchors may overlap blocked floor cells. */
-  exitVent(lobby: Lobby, playerSlot: number): boolean {
-    const player = lobby.players.get(playerSlot);
-    if (lobby.phase !== 'ROAMING' || !player || !player.alive ||
-        player.role !== 'impostor' || !player.inVent || player.ventId === undefined) return false;
-    const vent = findVent(player.ventId);
-    if (!vent) return false;
-
-    // The authored vent centre is an interaction anchor, not necessarily a
-    // legal player footprint. Search deterministically for the nearest clear
-    // standing position before releasing movement on both server and client.
-    let exit: { x: number; y: number } | null = null;
+  /** Find the nearest legal standing point around an authored vent anchor. */
+  private _findVentExitPosition(ventId: number): { x: number; y: number } | null {
+    const vent = findVent(ventId);
+    if (!vent) return null;
     if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, vent.x, vent.y)) {
-      exit = { x: vent.x, y: vent.y };
-    } else {
-      const step = 4;
-      for (let radius = step; radius <= 64 && exit === null; radius += step) {
-        const samples = Math.max(16, Math.ceil((2 * Math.PI * radius) / step));
-        for (let i = 0; i < samples; i++) {
-          const angle = (i / samples) * Math.PI * 2;
-          const candidate = {
-            x: vent.x + Math.cos(angle) * radius,
-            y: vent.y + Math.sin(angle) * radius,
-          };
-          if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, candidate.x, candidate.y)) {
-            exit = candidate;
-            break;
-          }
+      return { x: vent.x, y: vent.y };
+    }
+
+    const step = 4;
+    for (let radius = step; radius <= 64; radius += step) {
+      const samples = Math.max(16, Math.ceil((2 * Math.PI * radius) / step));
+      for (let i = 0; i < samples; i++) {
+        const angle = (i / samples) * Math.PI * 2;
+        const candidate = {
+          x: vent.x + Math.cos(angle) * radius,
+          y: vent.y + Math.sin(angle) * radius,
+        };
+        if (isPlayerPositionWalkable(INTERACTION_COLLISION_GRID, candidate.x, candidate.y)) {
+          return candidate;
         }
       }
     }
-    // Fail closed: never strand a living impostor at a blocked anchor with
-    // movement permanently rejected by the ordinary swept-footprint check.
+    return null;
+  }
+
+  /**
+   * Release a vent occupant at a legal player footprint and synchronize the
+   * relocation immediately. A normal 0xFF delta is only an acknowledgement;
+   * the local prediction loop needs the explicit forced 0x22 correction.
+   */
+  private _releaseVentPlayer(lobby: Lobby, player: LobbyPlayer): boolean {
+    if (!player.inVent || player.ventId === undefined) return false;
+    const ventId = player.ventId;
+    const exit = this._findVentExitPosition(ventId);
+    // Fail closed: retain vent state if no legal exit can be established.
     if (!exit) return false;
 
-    const ventId = player.ventId;
+    const now = Date.now();
     player.x = exit.x;
     player.y = exit.y;
     player.inVent = false;
     player.ventId = undefined;
     player.movementCreditPx = 0;
-    player.movementCreditUpdatedAtMs = Date.now();
-    player.lastMovementPacketAtMs = Date.now();
+    player.movementCreditUpdatedAtMs = now;
+    player.lastMovementPacketAtMs = now;
+    player.lastMovementCorrectionAtMs = now;
     player.lastBroadcastWireX = -100_000;
     player.lastBroadcastWireY = -100_000;
-    this._broadcastVentState(lobby, 0x03, playerSlot, ventId);
+    this._broadcastVentState(lobby, 0x03, player.slot, ventId);
+    if (player.ws.readyState === /* OPEN */ 1) {
+      player.ws.send(buildMovementCorrectionPacket(
+        toWire(player.x, MAP_W),
+        toWire(player.y, MAP_H),
+      ));
+    }
     return true;
+  }
+
+  /** Exit at a nearby legal standing point; vent anchors may overlap blocked floor cells. */
+  exitVent(lobby: Lobby, playerSlot: number): boolean {
+    const player = lobby.players.get(playerSlot);
+    if (lobby.phase !== 'ROAMING' || !player || !player.alive ||
+        player.role !== 'impostor' || !player.inVent || player.ventId === undefined) return false;
+    return this._releaseVentPlayer(lobby, player);
   }
 
   private _broadcastVentState(lobby: Lobby, sub: 0x01 | 0x02 | 0x03, playerSlot: number, ventId: number): void {
@@ -1814,16 +1832,10 @@ export class LobbyManager {
     }
 
     // A called meeting forcibly releases any impostor hiding in a vent.
-    // Clear server state before broadcasting the meeting, so the client closes
-    // its vent selector and the player's sprite remains visible during voting.
+    // Reuse the same legal exit and forced position correction as a manual
+    // exit so a blocked vent anchor cannot strand the player after voting.
     for (const player of lobby.players.values()) {
-      if (!player.inVent || player.ventId === undefined) continue;
-      const ventId = player.ventId;
-      player.inVent = false;
-      player.ventId = undefined;
-      player.lastBroadcastWireX = -100_000;
-      player.lastBroadcastWireY = -100_000;
-      this._broadcastVentState(lobby, 0x03, player.slot, ventId);
+      if (player.inVent) this._releaseVentPlayer(lobby, player);
     }
 
     const meeting: MeetingState = {
