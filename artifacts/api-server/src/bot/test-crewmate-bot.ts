@@ -5,6 +5,7 @@ import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
+import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
 const grid = buildPreciseCollisionGrid();
 const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
@@ -75,4 +76,54 @@ try {
 } finally {
   if (lobby.sabotage) clearTimeout(lobby.sabotage.timeoutTimer);
   manager.disposeLobby(lobby);
+}
+
+ 
+// Regression: Fuel Engine is beside a solid car. The bot must search far enough
+// inside the real interaction radius and arrive precisely, rather than stopping
+// at a nearer non-visible stand-off point and retrying a rejected task forever.
+{
+  const fuelTask = TASK_DEFS.find(candidate => candidate.id === 7)!;
+  const fuelBot = new CrewmateBot();
+  const player: LobbyPlayer = {
+    slot: 0,
+    tgUserId: -11,
+    username: 'Fuel Engine bot',
+    ws: fakeSocket,
+    x: SPAWN_X,
+    y: SPAWN_Y,
+    lastBroadcastWireX: 0,
+    lastBroadcastWireY: 0,
+    role: 'crewmate',
+    alive: true,
+    killCooldownMs: 0,
+    assignedTasks: [fuelTask.id],
+    isBot: true,
+    botAgent: fuelBot,
+  };
+  const fuelLobby = {
+    code: 'FUEL01',
+    phase: 'ROAMING',
+    players: new Map([[0, player]]),
+    userIdToSlot: new Map([[-11, 0]]),
+    hostSlot: 0,
+    meeting: null,
+    completedTaskSteps: new Set<string>(),
+    totalTaskSteps: fuelTask.steps,
+    sabotage: null,
+    sabotageCooldownMs: 0,
+  } as unknown as Lobby;
+  const fuelManager = new LobbyManager();
+  try {
+    for (let tick = 0; tick < 600 && fuelLobby.phase === 'ROAMING'; tick++) {
+      fuelBot.roamingTick(fuelLobby, player, fuelManager);
+    }
+    assert.equal(fuelLobby.completedTaskSteps.size, fuelTask.steps,
+      'a bot starting at the real spawn must complete both Fuel Engine steps');
+    assert.equal(fuelLobby.phase, 'GAMEOVER',
+      'finishing the only assigned Fuel Engine task must end the test round');
+    console.log('PASS: bot reaches the visible Fuel Engine stand-off point and completes both steps');
+  } finally {
+    fuelManager.disposeLobby(fuelLobby);
+  }
 }
