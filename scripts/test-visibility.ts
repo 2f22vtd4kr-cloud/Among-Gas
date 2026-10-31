@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
+  FINE_COLS,
+  FINE_ROWS,
+  FINE_CELL_X,
+  FINE_CELL_Y,
+  isBlocked,
   CELL_X,
   CELL_Y,
   COLS,
@@ -10,8 +17,63 @@ import {
   isPlayerPositionWalkable,
   type Grid,
 } from '@workspace/shared/collisionMap';
+import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
+
+// Decode the committed canonical stream independently of the production
+// decoder. This guards dimensions, varint validity and exact cell coverage.
+function decodeCanonicalFineRle(encoded: string, cols: number, rows: number): Uint8Array {
+  assert.ok(/^[A-Za-z0-9+/]+$/.test(encoded), 'fine RLE uses only unpadded Base64 characters');
+  assert.notEqual(encoded.length % 4, 1, 'fine RLE has a valid Base64 length');
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const bytes: number[] = [];
+  let buffer = 0;
+  let bits = 0;
+  for (const character of encoded) {
+    const digit = alphabet.indexOf(character);
+    assert.notEqual(digit, -1, 'fine RLE contains a valid Base64 character');
+    buffer = (buffer << 6) | digit;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes.push((buffer >> bits) & 0xff);
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  assert.ok(bits === 0 || bits === 2 || bits === 4, 'Base64 has a valid final bit count');
+  assert.equal(buffer, 0, 'unused Base64 tail bits are zero');
+
+  const decoded = new Uint8Array(cols * rows);
+  let input = 0;
+  let output = 0;
+  let cellValue: 0 | 1 = 0;
+  let runIndex = 0;
+  while (input < bytes.length) {
+    let runLength = 0;
+    let multiplier = 1;
+    let byte = 0;
+    let byteCount = 0;
+    do {
+      assert.ok(input < bytes.length, 'RLE varint is not truncated');
+      byte = bytes[input++];
+      runLength += (byte & 0x7f) * multiplier;
+      multiplier *= 128;
+      byteCount++;
+      assert.ok(byteCount <= 4, 'RLE varint is bounded');
+    } while ((byte & 0x80) !== 0);
+    if (byteCount > 1) assert.notEqual(byte & 0x7f, 0, 'RLE varints are minimally encoded');
+    assert.ok(runLength > 0 || runIndex === 0, 'only the initial blocked cell may use a zero run');
+    assert.ok(output + runLength <= decoded.length, 'RLE does not overrun declared dimensions');
+    decoded.fill(cellValue, output, output + runLength);
+    output += runLength;
+    cellValue = cellValue === 0 ? 1 : 0;
+    runIndex++;
+  }
+  assert.equal(output, cols * rows, 'RLE covers every cell exactly');
+  return decoded;
+}
+
 import {
   IMPOSTOR_VISION_RADIUS_PX,
   LIGHTS_CREWMATE_VISION_RADIUS_PX,
@@ -130,36 +192,64 @@ const realShadowGrid = buildShadowGrid(realGrid);
 assert.equal(realGrid[10*COLS+55],0,'manual outline must not fill the old extra-blocked RLE cell');
 assert.equal(isPlayerPositionWalkable(realGrid,1640,449),true,'the western garden path remains walkable');
 assert.equal(isPlayerPositionWalkable(realGrid,1810,449),true,'the eastern garden path remains walkable');
-assert.equal(isPlayerPositionWalkable(realGrid,1735,449),false,'the central statue footprint remains solid');
-const realNarrowOccluders = buildNarrowShadowOccluders(realGrid);
+assert.equal(isPlayerPositionWalkable(realGrid,1735,449),true,'the decorative garden floor remains walkable');
+assert.equal(isPlayerPositionWalkable(realGrid,1735,556-FEET_OFFSET_Y),false,'the statue base remains solid');
+const realNarrowOccluders = buildNarrowShadowOccluders(realGrid, true);
 assert.ok(realNarrowOccluders.length > 0, 'custom map contains narrow props that need silhouette-based shadows');
 const westernGardenCell = 14 * COLS + Math.floor(1640 / CELL_X);
 const easternGardenCell = 14 * COLS + Math.floor(1810 / CELL_X);
 assert.equal(realShadowGrid[westernGardenCell], 0, 'walkable garden floor does not cast a hard shadow');
 assert.equal(realShadowGrid[easternGardenCell], 0, 'the opposite garden path also remains clear in the vision grid');
 const statueOccluder = realNarrowOccluders.find(item =>
-  Math.hypot(item.x - 56 * CELL_X, item.y - 15 * CELL_Y) < 1,
+  Math.hypot(item.x - 1735, item.y - 556) < 1,
 );
 assert.ok(statueOccluder, 'the central statue remains a dedicated narrow vision occluder');
-assert.ok(statueOccluder.radius < Math.min(CELL_X, CELL_Y) * 0.25,
-  'the statue shadow follows its small footprint instead of the full garden');
+assert.ok(statueOccluder.radius >= 20 && statueOccluder.radius <= 30,
+  'the statue vision circle follows its measured 26px base instead of the full garden');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
 const upperAtriumLeftBench = 9 * COLS + 48;
 const upperAtriumRightBench = 9 * COLS + 64;
-const upperAtriumStatue = 7 * COLS + 56;
+const upperAtriumTable = 7 * COLS + 56;
 assert.equal(realGrid[upperAtriumLeftBench], 1, 'left atrium bench remains collidable');
 assert.equal(realShadowGrid[upperAtriumLeftBench], 0, 'left atrium bench does not cast a vision shadow');
 assert.equal(realGrid[upperAtriumRightBench], 1, 'right atrium bench remains collidable');
 assert.equal(realShadowGrid[upperAtriumRightBench], 0, 'right atrium bench does not cast a vision shadow');
-assert.equal(realGrid[upperAtriumStatue], 1, 'central atrium furnishing remains collidable');
-assert.equal(realShadowGrid[upperAtriumStatue], 1, 'central statue remains a vision occluder');
+assert.equal(realGrid[upperAtriumTable], 1, 'upper-atrium table remains collidable in the compact navigation grid');
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
-const statueRay=computeVisibilityPolygon(1450,480,500,realShadowGrid,realNarrowOccluders,true)[360];
-assert.ok(statueRay.x>1728&&statueRay.x<1736,'vision ray stops at the narrow statue footprint, not the decorative garden perimeter');
+const statueRay=computeVisibilityPolygon(1450,556,500,realShadowGrid,realNarrowOccluders,true)[360];
+assert.ok(statueRay.x>1707&&statueRay.x<1711,'vision ray stops at the narrow statue footprint, not the decorative garden perimeter');
+
+// The 680×392 grid is authoritative for movement and visual occlusion.
+const realFineGrid = buildPreciseCollisionGrid();
+const independentlyDecodedFineGrid = decodeCanonicalFineRle(FINE_RLE_BASE64, FINE_COLS, FINE_ROWS);
+assert.equal(FINE_COLS * FINE_ROWS, 680 * 392, 'canonical dimensions are 680×392');
+assert.deepEqual(independentlyDecodedFineGrid, realFineGrid,
+  'the production decoder exactly matches the independently decoded committed payload');
+const realFineShadowGrid = buildShadowGrid(realFineGrid);
+assert.equal(realFineGrid.length, FINE_COLS * FINE_ROWS, 'fine collision grid has complete declared coverage');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 1640, 449), true, 'fine western garden path is walkable');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 1810, 449), true, 'fine eastern garden path is walkable');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 1735, 449), true, 'fine garden floor above the statue remains walkable');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 1735, 556 - FEET_OFFSET_Y), false, 'fine statue base blocks the player footprint');
+const fineCell = (x: number, y: number) =>
+  Math.floor(y / FINE_CELL_Y) * FINE_COLS + Math.floor(x / FINE_CELL_X);
+assert.equal(realFineShadowGrid[fineCell(1640, 449)], 0, 'fine garden floor does not cast a hard shadow');
+assert.equal(realFineShadowGrid[fineCell(1810, 449)], 0, 'opposite fine garden path remains clear');
+assert.equal(realFineShadowGrid[fineCell(1250, 600)], 1, 'architectural wall remains a precise vision occluder');
+const fineStatue = buildNarrowShadowOccluders(realFineGrid, true).find(item =>
+  Math.hypot(item.x - 1735, item.y - 556) < 1,
+);
+assert.ok(fineStatue, 'tall statue has a dedicated narrow visual occluder');
+assert.equal(realFineShadowGrid[fineCell(1735, 556)], 0, 'statue is not rasterized as a square shadow');
+assert.equal(isBlocked(realFineGrid, 1740, 210), true, 'upper-atrium table remains solid for movement');
+assert.equal(realFineShadowGrid[fineCell(1740, 210)], 0, 'upper-atrium table does not cast a broad shadow');
+const fineGardenRay = computeVisibilityPolygon(1600, 556, 220, realFineShadowGrid, [fineStatue], true)[360];
+assert.ok(fineGardenRay.x <= fineStatue.x - fineStatue.radius + 1,
+  'garden sight stops at the statue itself, not at the decorative garden perimeter');
 
 const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(

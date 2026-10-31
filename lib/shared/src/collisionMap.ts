@@ -4,17 +4,18 @@
 // The base grid is the manually edited RLE in collisionData.ts, seeded from
 // the red-line reference image. It is supplemented by explicit, high-resolution
 // obstacle polygons in collisionOverrides.ts where the legacy component-size
-// heuristic misclassified large props (notably the central fountain).
+// heuristic misclassified large props (notably the central statue garden).
 // The analyzer writes preview files only; production collision changes must
 // be reviewed against both the map art and the red-line reference before promotion.
 //
-// Grid: COLS columns × ROWS rows, each cell = CELL × CELL px.
+// The compact COLS×ROWS grid is for navigation; precise movement uses FINE_COLS×FINE_ROWS.
 //   col = Math.floor(px / CELL)   row = Math.floor(py / CELL)
 //
 // Values:  0 = walkable    1 = blocked / wall
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { CELL as _CELL, COLS, ROWS, RUNS } from './collisionData.js';
+import { FINE_COLS, FINE_ROWS, FINE_RLE_BASE64 } from './collisionDataFine.js';
 import {
   FEET_OFFSET_Y,
   PLAYER_HALF_WIDTH,
@@ -33,16 +34,20 @@ export { MANUAL_BLOCKED_POLYGONS };
 // MAP_W/MAP_H must match that asset's native pixel size exactly.
 export const MAP_W = 3224;
 export const MAP_H = 1858;
-export { COLS, ROWS };
+export { COLS, ROWS, FINE_COLS, FINE_ROWS };
 
 /**
  * Pixel size of one collision cell in each axis.
  * The underlying grid was built at COLS×ROWS cells from a 1040×580 reference
  * (CELL=10 px/cell), but the visual map is now 3224×1858, so X and Y cell
- * sizes differ slightly. All pixel-space ↔ grid-space conversions use these.
+ * sizes differ slightly. These are the compact navigation-grid cell sizes.
  */
 export const CELL_X = MAP_W / COLS;   // ≈ 31.0 px
 export const CELL_Y = MAP_H / ROWS;   // ≈ 32.03 px
+
+/** Fine authoritative collision resolution: about 4.74×4.74 world pixels per cell. */
+export const FINE_CELL_X = MAP_W / FINE_COLS;
+export const FINE_CELL_Y = MAP_H / FINE_ROWS;
 
 // Keep CELL as the average for code that needs a single representative value
 export const CELL = (_CELL * MAP_W) / (COLS * _CELL); // same as MAP_W/COLS
@@ -141,6 +146,92 @@ export const ZONES: Zone[] = [
 // Build the static collision grid
 // ─────────────────────────────────────────────────────────────────────────────
 let _cached: Grid | null = null;
+let _fineCached: Grid | null = null;
+
+interface GridGeometry {
+  cols: number;
+  rows: number;
+  cellX: number;
+  cellY: number;
+}
+
+function getGridGeometry(grid: Grid): GridGeometry {
+  if (grid.length === FINE_COLS * FINE_ROWS) {
+    return { cols: FINE_COLS, rows: FINE_ROWS, cellX: FINE_CELL_X, cellY: FINE_CELL_Y };
+  }
+  if (grid.length === COLS * ROWS) {
+    return { cols: COLS, rows: ROWS, cellX: CELL_X, cellY: CELL_Y };
+  }
+  throw new RangeError(
+    `Collision grid has ${grid.length} cells; expected ${COLS * ROWS} navigation cells or ${FINE_COLS * FINE_ROWS} precise cells.`,
+  );
+}
+
+function decodeFineRuns(encoded: string): Grid {
+  if (!/^[A-Za-z0-9+/]+$/.test(encoded) || encoded.length % 4 === 1) {
+    throw new Error('Fine collision payload must be valid unpadded Base64');
+  }
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Int16Array(128).fill(-1);
+  for (let i = 0; i < alphabet.length; i++) lookup[alphabet.charCodeAt(i)] = i;
+  const bytes = new Uint8Array(Math.floor(encoded.length * 3 / 4));
+  let byteLength = 0;
+  let buffer = 0;
+  let bits = 0;
+  for (let i = 0; i < encoded.length; i++) {
+    const code = encoded.charCodeAt(i);
+    const digit = code < 128 ? lookup[code] : -1;
+    if (digit < 0) throw new Error(`Invalid base64 character in fine collision data at offset ${i}`);
+    buffer = (buffer << 6) | digit;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      bytes[byteLength++] = (buffer >> bits) & 0xff;
+      buffer &= (1 << bits) - 1;
+    }
+  }
+  if (![0, 2, 4].includes(bits) || buffer !== 0) {
+    throw new Error('Fine collision Base64 has invalid trailing bits');
+  }
+
+  const grid = new Uint8Array(FINE_COLS * FINE_ROWS);
+  let input = 0;
+  let output = 0;
+  let value = 0;
+  let runIndex = 0;
+  while (input < byteLength) {
+    let runLength = 0;
+    let multiplier = 1;
+    let byte = 0;
+    let byteCount = 0;
+    do {
+      if (input >= byteLength || byteCount >= 4) {
+        throw new Error('Malformed or oversized varint in fine collision data');
+      }
+      byte = bytes[input++];
+      runLength += (byte & 0x7f) * multiplier;
+      multiplier *= 128;
+      byteCount++;
+    } while ((byte & 0x80) !== 0);
+    if (byteCount > 1 && (byte & 0x7f) === 0) {
+      throw new Error('Non-canonical varint in fine collision data');
+    }
+    if (runLength === 0 && runIndex !== 0) {
+      throw new Error('Only the initial fine collision RLE run may be zero-length');
+    }
+    if (output + runLength > grid.length) {
+      throw new Error('Fine collision data run exceeds the declared grid dimensions');
+    }
+    grid.fill(value, output, output + runLength);
+    output += runLength;
+    value = value === 0 ? 1 : 0;
+    runIndex++;
+  }
+  if (output !== grid.length) {
+    throw new Error(`Fine collision data decoded ${output} cells; expected ${grid.length}`);
+  }
+  return grid;
+}
 
 type PolygonPoint = readonly [number, number];
 type BlockedPolygon = { readonly id: string; readonly points: readonly PolygonPoint[] };
@@ -221,10 +312,24 @@ function circleIntersectsPolygon(cx: number, cy: number, radius: number, points:
 
 export function buildCollisionGrid(): Grid {
   if (_cached) return _cached;
-  // The reviewed RLE is the base movement mask. Hand-traced additions remain
-  // vector geometry; rasterizing them creates 31x32px square collision edges.
+  // Retain the compact legacy grid for A* navigation and the collision editor.
   _cached = decodeRuns();
   return _cached;
+}
+
+/**
+ * High-resolution authoritative movement mask traced from the map reference.
+ * The compact 104×58 grid remains available for navigation, while player
+ * collision now resolves against ~4.74px cells instead of ~31×32px blocks.
+ */
+export function buildFineCollisionGridFromRle(encoded: string): Grid {
+  return decodeFineRuns(encoded);
+}
+
+export function buildPreciseCollisionGrid(): Grid {
+  if (_fineCached) return _fineCached;
+  _fineCached = decodeFineRuns(FINE_RLE_BASE64);
+  return _fineCached;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -233,11 +338,12 @@ export function buildCollisionGrid(): Grid {
 
 /** Is the cell at pixel (px, py) blocked? Returns true if outside map bounds. */
 export function isBlocked(grid: Grid, px: number, py: number): boolean {
-  const col = Math.floor(px / CELL_X);
-  const row = Math.floor(py / CELL_Y);
-  if (col < 0 || col >= COLS || row < 0 || row >= ROWS) return true;
-  if (grid[row * COLS + col] === 1) return true;
-  return grid === _cached && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+  const geometry = getGridGeometry(grid);
+  const col = Math.floor(px / geometry.cellX);
+  const row = Math.floor(py / geometry.cellY);
+  if (col < 0 || col >= geometry.cols || row < 0 || row >= geometry.rows) return true;
+  if (grid[row * geometry.cols + col] === 1) return true;
+  return (grid === _cached || grid === _fineCached) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
     pointInPolygon(px, py, polygon.points as readonly PolygonPoint[])
   );
 }
@@ -253,7 +359,8 @@ export function canMoveTo(
 ): boolean {
   if (isBlocked(grid, cx, cy)) return false;
 
-  const minCell = Math.min(CELL_X, CELL_Y);
+  const geometry = getGridGeometry(grid);
+  const minCell = Math.min(geometry.cellX, geometry.cellY);
   const samples = Math.max(8, Math.ceil((2 * Math.PI * radius) / (minCell * 0.5)));
   for (let i = 0; i < samples; i++) {
     const angle = (i / samples) * Math.PI * 2;
@@ -261,7 +368,7 @@ export function canMoveTo(
     const py = cy + Math.sin(angle) * radius;
     if (isBlocked(grid, px, py)) return false;
   }
-  if (grid === _cached && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+  if ((grid === _cached || grid === _fineCached) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
     circleIntersectsPolygon(cx, cy, radius, polygon.points as readonly PolygonPoint[])
   )) return false;
   return true;
@@ -289,7 +396,7 @@ export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): bool
  * Spawn-only visual clearance. Unlike normal movement (which correctly uses
  * the feet hitbox), initial spawn placement also ensures the complete visible
  * sprite rectangle does not start inside a wall, map boundary, or manually
- * traced large prop such as the central fountain.
+ * traced statue base or map boundary.
  */
 export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): boolean {
   if (
@@ -305,13 +412,14 @@ export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): bo
   const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
   if (minX < 0 || maxX > MAP_W || minY < 0 || maxY > MAP_H) return false;
 
-  const minCol = Math.floor(minX / CELL_X);
-  const maxCol = Math.min(COLS - 1, Math.floor(maxX / CELL_X));
-  const minRow = Math.floor(minY / CELL_Y);
-  const maxRow = Math.min(ROWS - 1, Math.floor(maxY / CELL_Y));
+  const geometry = getGridGeometry(grid);
+  const minCol = Math.max(0, Math.floor(minX / geometry.cellX));
+  const maxCol = Math.min(geometry.cols - 1, Math.floor(maxX / geometry.cellX));
+  const minRow = Math.max(0, Math.floor(minY / geometry.cellY));
+  const maxRow = Math.min(geometry.rows - 1, Math.floor(maxY / geometry.cellY));
   for (let row = minRow; row <= maxRow; row++) {
     for (let col = minCol; col <= maxCol; col++) {
-      if (grid[row * COLS + col] === 1) return false;
+      if (grid[row * geometry.cols + col] === 1) return false;
     }
   }
 

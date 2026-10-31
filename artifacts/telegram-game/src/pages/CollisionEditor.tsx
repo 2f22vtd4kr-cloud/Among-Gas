@@ -10,12 +10,10 @@ import {
 // In-browser collision editor.
 //
 // A standalone dev tool (not part of the game camera/loop) for manually
-// painting collision cells on/off and persisting the result. "Commit"
-// POSTs the edited grid to a Vite dev-server-only endpoint (see
-// vite.config.ts) that rewrites `game/collisionData.ts` on disk — the same
-// file the game reads at load time. This only works while the dev server is
-// running (`import.meta.env.DEV`); it has no effect on a published static
-// build, since there is no server to write to.
+// painting the compact 104×58 navigation grid and persisting the result.
+// "Commit" rewrites `collisionData.ts`, which is used only by bot A* navigation.
+// Authoritative player movement and fine vision use collisionDataFine.ts and
+// are not changed by this legacy editor. This only works in dev mode.
 // ─────────────────────────────────────────────────────────────────────────────
 
 type Tool = 'pan' | 'add' | 'remove';
@@ -407,6 +405,7 @@ export default function CollisionEditor() {
       {/* ── Toolbar ──────────────────────────────────────────────────────── */}
       <div style={toolbarStyle}>
         <Link href="/" style={linkStyle}>← Back to game</Link>
+        <span style={{ ...hudLabelStyle, color: '#ffd166' }}>NAVIGATION GRID · 104×58 · A* ONLY</span>
         <div style={{ width: 1, alignSelf: 'stretch', background: 'rgba(255,255,255,0.12)' }} />
 
         <span style={hudLabelStyle}>Tool</span>
@@ -479,7 +478,7 @@ export default function CollisionEditor() {
         <LegendSwatch color="rgba(255,50,50,0.85)" label="Blocked" />
         <LegendSwatch color="rgba(60,220,120,0.5)" label="Walkable" />
         <span style={{ color: '#5c7d90' }}>
-          Drag with a paint tool selected to paint a swath · scroll/pinch to zoom · Commit writes straight to collisionData.ts
+          Drag to paint · scroll/pinch to zoom · Commit updates the coarse A* navigation grid only
         </span>
       </div>
     </div>

@@ -182,6 +182,10 @@ jobs:
       - name: Render production-map collision overlay for visual QA
         run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts
 
+      - name: Render fine-grid collision, shadow and vision QA
+        if: always()
+        run: pnpm --filter @workspace/scripts exec tsx renderCollisionQa.ts --candidate
+
       - name: Upload gameplay visual QA screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -193,7 +197,11 @@ jobs:
             artifacts/telegram-game/collision-reference-overlay.png
             attached_assets/IMG_2907_1783632830477.jpeg
             artifacts/telegram-game/collision-qa-overlay-webp.png
+            artifacts/telegram-game/collision-shadow-qa-overlay.png
+            artifacts/telegram-game/collision-vision-qa-overlay.png
+            artifacts/telegram-game/collision-qa-tiles/*.png
             lib/shared/src/collisionData.generated-preview.ts
+            lib/shared/src/collisionDataFine.generated-preview.ts
           if-no-files-found: warn
           retention-days: 3
 

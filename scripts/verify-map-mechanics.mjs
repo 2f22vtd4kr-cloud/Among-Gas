@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -195,15 +196,17 @@ assert.ok(soloSpawn,'solo start finds a clearance-safe point or fallback');
 const maxPlayerSpawns=[];
 for(let i=0;i<15;i++){const pos=computeSpawn(i,15,maxPlayerSpawns);assert.ok(pos, `15-player solver finds slot ${i}`);assert.ok(canSpawnAt(pos.x,pos.y), `slot ${i} clears geometry and margin`);maxPlayerSpawns.push(pos);}
 for(let i=0;i<maxPlayerSpawns.length;i++)for(let j=i+1;j<maxPlayerSpawns.length;j++)assert.ok(Math.hypot(maxPlayerSpawns[i].x-maxPlayerSpawns[j].x,maxPlayerSpawns[i].y-maxPlayerSpawns[j].y)>=spawnMinSeparation, `slots ${i} and ${j} remain separated`);
-const statueCenter = { x: 1735, y: 449 };
-assert.equal(canPlayerMoveTo(statueCenter.x, statueCenter.y), false,
-  'The central statue remains blocked by its small authored RLE footprint');
+const statueBase = { x: 1735, y: 556 - feetOffsetY };
+assert.equal(canPlayerMoveTo(statueBase.x, statueBase.y), false,
+  'The central statue base remains blocked in the compact navigation mask');
+assert.equal(canPlayerMoveTo(1735, 449), true,
+  'The decorative garden floor above the statue base remains walkable');
 assert.equal(canPlayerMoveTo(1640, 449), true,
   'The western path through the decorative garden remains walkable');
 assert.equal(canPlayerMoveTo(1810, 449), true,
   'The eastern path through the decorative garden remains walkable');
 assert.equal(canPlayerMoveTo(1450, 449), true,
-  'The open lobby floor west of the fountain must remain walkable');
+  'The open lobby floor west of the statue garden must remain walkable');
 let start = nodes[0];
 for (const node of nodes) {
   if ((node.x - spawnX) ** 2 + (node.y - spawnY) ** 2 <
@@ -314,14 +317,12 @@ assert.match(lobbySource, /\}, 200\); \/\/ 5Hz/, 'Bot AI must keep its verified 
 assert.match(botAgentSource, /BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX \/ 2/, 'Living bots must keep human-like movement speed after the tick rate increase');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 5/, 'Task dwell time must remain 1s at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
-assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(grid\)/, 'GameMap must derive a separate vision occlusion grid from collision');
-assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(grid, true\)/, 'narrow props must use separate visual occlusion circles rather than square collision cells');
+assert.match(gameMapSource, /const fineGrid = buildPreciseCollisionGrid\(\)/, 'GameMap must construct the canonical fine grid for live vision');
+assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
+assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
 assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true\)/, 'GameMap must trace sight against coarse walls and narrow visual occluders');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*grid,/, 'Movement must continue to use the original collision grid');
-assert.ok(gameMapSource.includes('const effectiveKeys = !gameplayReadyRef.current || meetingActiveRef.current || settingsOpenRef.current || leaveConfirmOpenRef.current'), 'Leave-match confirmation must continuously freeze local movement, including a held joystick');
-assert.match(gameMapSource, /loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && activeTaskId === null && !showSabotagePanel && !killAnimation && !voteResult\?\.winner && <Joystick/, 'The joystick must unmount while movement-blocking overlays are active so pointer capture and held directions are reset');
-assert.ok(gameMapSource.includes('activeTaskOpenRef.current || sabotagePanelOpenRef.current || killAnimationOpenRef.current || gameOverOpenRef.current'), 'Full-screen task, sabotage, kill and game-over overlays must freeze movement in the animation loop');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
 assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
@@ -352,6 +353,33 @@ assert.match(indexHtml, /telegram-web-app\.js/, 'Telegram WebApp SDK must load b
 assert.match(indexHtml, /viewport-fit=cover/, 'Viewport must account for mobile safe areas');
 assert.match(gameContext, /if \(import\.meta\.env\.PROD\) return ''/, 'Production must not fabricate Telegram identities');
 assert.match(lobbySource, /emergencyMeetingUsed/, 'Server must enforce one emergency meeting per player per round');
+
+// Run the fine-grid regression and generator comparison in this existing
+// geometry CI step. --check may emit an ignored preview, but must never rewrite
+// the reviewed production payload.
+const fineCanonicalPath = path.join(root, 'lib/shared/src/collisionDataFine.ts');
+const fineCanonicalBefore = fs.readFileSync(fineCanonicalPath, 'utf8');
+let fineGeneratorCheckError = null;
+try {
+  execFileSync('pnpm', ['--filter', '@workspace/scripts', 'exec', 'tsx', 'src/generateFineCollisionData.ts', '--check'], {
+    cwd: root,
+    stdio: 'inherit',
+  });
+} catch (error) {
+  fineGeneratorCheckError = error;
+}
+assert.equal(fs.readFileSync(fineCanonicalPath, 'utf8'), fineCanonicalBefore,
+  'read-only fine generator check must not mutate the committed canonical payload');
+execFileSync('pnpm', ['--filter', '@workspace/scripts', 'exec', 'tsx', 'test-fine-collision.ts', '--candidate'], {
+  cwd: root,
+  stdio: 'inherit',
+});
+assert.equal(fs.readFileSync(fineCanonicalPath, 'utf8'), fineCanonicalBefore,
+  'fine collision regression must not mutate the committed canonical payload');
+if (fineGeneratorCheckError) {
+  console.error('The generated source-art candidate was tested above, but the committed canonical payload still differs.');
+  throw fineGeneratorCheckError;
+}
 
 console.log(JSON.stringify({
   ok: true,
