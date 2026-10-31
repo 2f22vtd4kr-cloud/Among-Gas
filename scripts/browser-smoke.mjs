@@ -1240,7 +1240,7 @@ try {
         assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
           'impostor role reveal must show a living character, not the corpse sprite');
         const spriteClip = await revealSprite.evaluate(element => getComputedStyle(element).clipPath);
-        assert.ok(spriteClip.includes('49%') && spriteClip.includes('68%'),
+        assert.ok(spriteClip.includes('49%') && spriteClip.includes('58.5%'),
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
       const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
@@ -1383,6 +1383,22 @@ try {
   );
   assert.ok(playerMovementSamples.length >= 3 && sampledMovementDistance > 30,
     `camera stability must be measured across sustained actual player movement (changed ${playerMovementSamples.length} frames over ${sampledMovementDistance.toFixed(1)}px)`);
+
+  // A large cumulative displacement can still hide an early collision stop:
+  // require the final quarter of the held-pointer trace to keep moving. This
+  // catches a fixture that reaches an obstacle, then measures a stationary
+  // camera for the remainder of the interaction.
+  const tailStartIndex = Math.floor(movementTrace.length * 0.75);
+  const sustainedTail = movementTrace.slice(tailStartIndex);
+  const tailMovementFrames = sustainedTail.filter((sample, index) => index > 0 &&
+    Math.hypot(sample.playerX - sustainedTail[index - 1].playerX,
+      sample.playerY - sustainedTail[index - 1].playerY) > 0.25);
+  const sustainedTailDistance = Math.hypot(
+    sustainedTail[sustainedTail.length - 1].playerX - sustainedTail[0].playerX,
+    sustainedTail[sustainedTail.length - 1].playerY - sustainedTail[0].playerY,
+  );
+  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 30,
+    `camera movement fixture must remain unobstructed through the final quarter of the hold (changed ${tailMovementFrames.length} frames over ${sustainedTailDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
   const cameraSpreadX = Math.max(...cameraSamples.map(sample => sample.screenX)) - Math.min(...cameraSamples.map(sample => sample.screenX));
