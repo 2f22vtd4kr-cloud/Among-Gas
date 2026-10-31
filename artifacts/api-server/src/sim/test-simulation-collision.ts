@@ -32,11 +32,9 @@ for (const vent of VENT_DEFS) {
 }
 const firstVent = VENT_DEFS[0];
 const nearbyX = firstVent.x + 12;
-const nearbyCol = Math.floor(nearbyX / cellX);
-const nearbyRow = Math.floor(firstVent.y / cellY);
-ventGrid[nearbyRow * FINE_COLS + nearbyCol] = 1;
+const nearbyBlockedGrid = new Uint8Array(FINE_COLS * FINE_ROWS).fill(1);
 assert.equal(isSimulationCollisionViolation(
-  { alive: true, inVent: false, x: nearbyX, y: firstVent.y }, ventGrid,
+  { alive: true, inVent: false, x: nearbyX, y: firstVent.y }, nearbyBlockedGrid,
 ), true, 'blocked geometry just outside the vent-mouth tolerance remains a violation');
 
 console.log('PASS: simulation collision watchdog respects vent traversal and ghost state');
