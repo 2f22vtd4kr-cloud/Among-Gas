@@ -638,6 +638,23 @@ function persistRoomCode(code: string | null): void {
   }
 }
 
+interface ResumeSabotageV1 {
+  systemId: number;
+  elapsedMs: number;
+  fixedPads: number[];
+  lockedTaskIds: number[];
+}
+
+interface ResumeMeetingV1 {
+  reporterSlot: number;
+  bodySlot: number;
+  elapsedMs: number;
+  votingOpen: boolean;
+  hasVoted: boolean;
+  votes: Array<{ slot: number; targetSlot: number }>;
+  messages: Array<{ slot: number; text: string; sentAtMs: number }>;
+}
+
 interface ResumeSnapshotV1 {
   version: 1;
   roomCode: string;
@@ -656,16 +673,8 @@ interface ResumeSnapshotV1 {
   sabotageCooldownMs: number;
   myVentId: number | null;
   emergencyMeetingUsed: boolean;
-  sabotage: null | { systemId: number; elapsedMs: number; fixedPads: number[]; lockedTaskIds: number[] };
-  meeting: null | {
-    reporterSlot: number;
-    bodySlot: number;
-    elapsedMs: number;
-    votingOpen: boolean;
-    hasVoted: boolean;
-    votes: Array<{ slot: number; targetSlot: number }>;
-    messages: Array<{ slot: number; text: string; sentAtMs: number }>;
-  };
+  sabotage: ResumeSabotageV1 | null;
+  meeting: ResumeMeetingV1 | null;
   gameOverResult: null | { ejectedSlot: number; winFlag: 0 | 1 | 2 };
 }
 
@@ -792,13 +801,13 @@ function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
         typeof value.votingOpen !== 'boolean' || typeof value.hasVoted !== 'boolean' ||
         !Array.isArray(value.votes) || value.votes.length > 15 ||
         !Array.isArray(value.messages) || value.messages.length > 60) return null;
-    const votes: ResumeSnapshotV1['meeting'] extends infer T ? T extends null ? never : T['votes'] : never = [];
+    const votes: ResumeMeetingV1['votes'] = [];
     for (const vote of value.votes) {
       if (!isRecord(vote) || !isSlot(vote.slot) ||
           !isIntegerInRange(vote.targetSlot, 0, 255)) return null;
       votes.push({ slot: vote.slot, targetSlot: vote.targetSlot });
     }
-    const messages: ResumeSnapshotV1['meeting'] extends infer T ? T extends null ? never : T['messages'] : never = [];
+    const messages: ResumeMeetingV1['messages'] = [];
     for (const message of value.messages) {
       if (!isRecord(message) || !isSlot(message.slot) ||
           typeof message.text !== 'string' || message.text.length > 200 ||
