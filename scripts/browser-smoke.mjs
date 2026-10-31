@@ -666,7 +666,7 @@ try {
   // canvas so the eleven derived palettes cannot silently disappear or render
   // duplicate corpse colours after a browser-only regression.
   const runtimeCorpseAtlas = await page.evaluate(() => {
-    const atlas = (window as Window & { __AG_CHARACTER_ATLAS?: HTMLCanvasElement }).__AG_CHARACTER_ATLAS;
+    const atlas = window.__AG_CHARACTER_ATLAS;
     if (!atlas) return null;
     if (atlas.width !== 2898 || atlas.height !== 1401) {
       return { width: atlas.width, height: atlas.height, columns: [] as Array<{ opaque: number; signature: string }> };
