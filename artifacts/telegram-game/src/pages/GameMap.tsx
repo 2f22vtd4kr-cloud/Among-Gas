@@ -429,6 +429,22 @@ export default function GameMap() {
   const gameOverOpenRef = useRef(Boolean(voteResult?.winner));
   gameOverOpenRef.current = Boolean(voteResult?.winner);
 
+  const [emergencyCallStatus, setEmergencyCallStatus] = useState<'calling' | 'confirmed' | 'failed' | null>(null);
+  const emergencyCallTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!meeting || meeting.bodySlot !== NO_TARGET) return;
+    if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
+    setEmergencyCallStatus('confirmed');
+    emergencyCallTimerRef.current = setTimeout(() => setEmergencyCallStatus(null), 2200);
+    return () => {
+      if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
+      emergencyCallTimerRef.current = null;
+    };
+  }, [meeting]);
+  useEffect(() => () => {
+    if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
+  }, []);
+
   const [showSabotagePanel, setShowSabotagePanel] = useState(false);
   const sabotagePanelOpenRef = useRef(showSabotagePanel);
   sabotagePanelOpenRef.current = showSabotagePanel;
@@ -2690,7 +2706,18 @@ export default function GameMap() {
               ? (en ? 'Emergency meeting already used' : 'Экстренное собрание уже использовано')
               : (en ? 'Call emergency meeting' : 'Созвать экстренное собрание')}
             disabled={emergencyMeetingUsed}
-            onClick={() => { if (!emergencyMeetingUsed) { haptic.tap(); sfx('uiSelect', 0.3); callEmergencyMeeting(); } }}
+            onClick={() => {
+              if (emergencyMeetingUsed || emergencyCallStatus === 'calling') return;
+              haptic.tap();
+              sfx('uiSelect', 0.3);
+              setEmergencyCallStatus('calling');
+              if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
+              callEmergencyMeeting();
+              emergencyCallTimerRef.current = setTimeout(() => {
+                setEmergencyCallStatus(current => current === 'calling' ? 'failed' : current);
+                emergencyCallTimerRef.current = setTimeout(() => setEmergencyCallStatus(null), 2200);
+              }, 4000);
+            }}
             style={{
               width: 92, height: 92, padding: 8, borderRadius: '50%',
               display: 'grid', placeItems: 'center',
@@ -2704,6 +2731,40 @@ export default function GameMap() {
           >
             {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 70, height: 70, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
           </button>
+        </div>
+      )}
+
+      {emergencyCallStatus && (
+        <div
+          role="status"
+          aria-live="assertive"
+          data-testid="emergency-call-splash"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 120,
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 16, padding: 24, textAlign: 'center',
+            background: 'rgba(4, 10, 17, 0.94)',
+            color: '#fff4df', fontFamily: "'Fredoka One', sans-serif",
+          }}
+        >
+          <img
+            src={`${import.meta.env.BASE_URL}au-assets/emergency_meeting.png`}
+            alt=""
+            aria-hidden="true"
+            style={{ width: 'min(76vw, 340px)', maxHeight: '42dvh', objectFit: 'contain' }}
+          />
+          <div style={{ fontSize: 'clamp(25px, 7vw, 42px)', fontWeight: 900, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+            {emergencyCallStatus === 'calling'
+              ? (en ? 'Emergency call…' : 'Экстренный вызов…')
+              : emergencyCallStatus === 'confirmed'
+                ? (en ? 'Meeting called!' : 'Собрание созвано!')
+                : (en ? 'Call could not be completed' : 'Не удалось созвать собрание')}
+          </div>
+          {emergencyCallStatus === 'failed' && (
+            <div style={{ maxWidth: 300, fontSize: 15, color: 'rgba(255,244,223,0.78)' }}>
+              {en ? 'The server rejected the call. Check that no sabotage is active and that your emergency call is still available.' : 'Сервер отклонил вызов. Проверьте, что саботаж не активен и экстренный вызов ещё доступен.'}
+            </div>
+          )}
         </div>
       )}
 
