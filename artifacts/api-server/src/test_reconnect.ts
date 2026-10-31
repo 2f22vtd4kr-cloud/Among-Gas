@@ -194,7 +194,7 @@ function wait(ms: number): Promise<void> {
 }
 
 {
-  const { manager, lobby, sockets, users } = createMatch(174_185_200);
+  const { manager, lobby, sockets } = createMatch(174_185_200);
   const departingCrew = Array.from(lobby.players.values()).find(player => player.role === 'crewmate')!;
   const departingUserId = departingCrew.tgUserId;
   const departingSocket = sockets[departingCrew.slot];
