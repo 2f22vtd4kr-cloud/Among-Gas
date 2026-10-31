@@ -7,6 +7,8 @@ import {
   buildPreciseCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
+  FINE_CELL_X,
+  FINE_CELL_Y,
   MAP_W,
   MAP_H,
   MANUAL_BLOCKED_POLYGONS,
@@ -173,7 +175,11 @@ interface VisionSample {
   points: VisionPoint[];
 }
 
-function findWalkableVisionOrigin(centerX: number, centerY: number): VisionPoint | null {
+function findWalkableVisionOrigin(
+  centerX: number,
+  centerY: number,
+  bounds: { left: number; top: number; width: number; height: number },
+): VisionPoint | null {
   if (isPlayerPositionWalkable(grid, centerX, centerY)) {
     return { x: centerX, y: centerY + FEET_OFFSET_Y };
   }
@@ -182,12 +188,35 @@ function findWalkableVisionOrigin(centerX: number, centerY: number): VisionPoint
       const angle = (angleIndex / 32) * Math.PI * 2;
       const x = centerX + Math.cos(angle) * radius;
       const anchorY = centerY + Math.sin(angle) * radius;
-      if (isPlayerPositionWalkable(grid, x, anchorY)) {
+      if (x >= bounds.left && x < bounds.left + bounds.width &&
+          anchorY >= bounds.top && anchorY < bounds.top + bounds.height &&
+          isPlayerPositionWalkable(grid, x, anchorY)) {
         return { x, y: anchorY + FEET_OFFSET_Y };
       }
     }
   }
-  return null;
+
+  // A tile can contain a real, narrow walkable corridor farther than 240px
+  // from its center (notably the upper-right equipment room). Search the
+  // complete tile at fine-grid resolution and choose the nearest safe player
+  // anchor rather than incorrectly reporting that the tile has no vision sample.
+  const minCol = Math.max(0, Math.floor(bounds.left / FINE_CELL_X));
+  const maxCol = Math.min(FINE_COLS - 1, Math.ceil((bounds.left + bounds.width) / FINE_CELL_X));
+  const minRow = Math.max(0, Math.floor(bounds.top / FINE_CELL_Y));
+  const maxRow = Math.min(FINE_ROWS - 1, Math.ceil((bounds.top + bounds.height) / FINE_CELL_Y));
+  let best: { x: number; y: number; distance: number } | null = null;
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      const x = (col + 0.5) * FINE_CELL_X;
+      const y = (row + 0.5) * FINE_CELL_Y;
+      if (x < bounds.left || x >= bounds.left + bounds.width ||
+          y < bounds.top || y >= bounds.top + bounds.height ||
+          !isPlayerPositionWalkable(grid, x, y)) continue;
+      const distance = (x - centerX) ** 2 + (y - centerY) ** 2;
+      if (!best || distance < best.distance) best = { x, y, distance };
+    }
+  }
+  return best ? { x: best.x, y: best.y + FEET_OFFSET_Y } : null;
 }
 
 function makeVisionSvg(
@@ -236,7 +265,7 @@ for (let row = 0; row < rowStarts.length; row++) {
     const top = rowStarts[row];
     const centerX = Math.min(MAP_W - 1, left + tileWidth / 2);
     const centerY = Math.min(MAP_H - 1, top + tileHeight / 2);
-    const origin = findWalkableVisionOrigin(centerX, centerY);
+    const origin = findWalkableVisionOrigin(centerX, centerY, { left, top, width: tileWidth, height: tileHeight });
     if (!origin) {
       console.warn('No walkable vision origin found for tile R' + (row + 1) + 'C' + (col + 1));
       continue;
