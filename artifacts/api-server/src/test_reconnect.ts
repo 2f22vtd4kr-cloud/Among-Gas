@@ -219,4 +219,34 @@ function wait(ms: number): Promise<void> {
   manager.disposeLobby(lobby);
 }
 
+
+// If the last unready client disconnects during the initial load barrier, the
+// remaining connected players' completed acknowledgements must release them.
+{
+  const manager = new LobbyManager();
+  const sockets = [fakeSocket(), fakeSocket(), fakeSocket()];
+  const users = [285_296_300, 285_296_301, 285_296_302];
+  const lobby = manager.createLobby(users[0], 'Player 0', sockets[0].ws);
+  assert.equal(manager.joinLobby(lobby.code, users[1], 'Player 1', sockets[1].ws), lobby);
+  assert.equal(manager.joinLobby(lobby.code, users[2], 'Player 2', sockets[2].ws), lobby);
+  manager.startGame(lobby, 1);
+
+  assert.equal(manager.markGameplayReady(lobby, 0), true === lobby.gameplayReady,
+    'first ready acknowledgement returns current readiness state');
+  assert.equal(manager.markGameplayReady(lobby, 1), false,
+    'the third still-connected human is required before initial readiness');
+
+  sockets[2].ws.close();
+  assert.equal(manager.markPlayerDisconnected(users[2], sockets[2].ws), lobby);
+  assert.equal(lobby.gameplayReady, true,
+    'disconnect recomputes the initial readiness quorum without waiting for another client message');
+  for (const readySocket of sockets.slice(0, 2)) {
+    assert.ok(
+      readySocket.packets.some(packet => packet[0] === 0x24 && packet[1] === 0x01),
+      'remaining ready clients receive the gameplay-ready release packet',
+    );
+  }
+  manager.disposeLobby(lobby);
+}
+
 console.log('PASS: authenticated reconnect grace, same-slot reattachment, stale socket isolation, per-player readiness, resume snapshot privacy/state, meeting restore/votes, implicit skips and expiry');
