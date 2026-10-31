@@ -642,6 +642,10 @@ export class LobbyManager {
 
     logger.info('[Lobby] Player disconnected; reserving slot ' + slot + ' for ' +
       graceMs + 'ms in ' + lobby.code);
+    // A disconnect during the initial loading barrier removes that socket
+    // from the required quorum. Recompute now so already-ready connected
+    // players are not left waiting for an acknowledgement that cannot arrive.
+    this.refreshGameplayReady(lobby);
     this._maybeTallyVotes(lobby);
     return lobby;
   }
