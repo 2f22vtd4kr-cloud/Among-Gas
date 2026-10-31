@@ -128,9 +128,9 @@ export class CrewmateBot extends BotAgent {
     // than navigating to the exact (possibly unwalkable) pad pixel.
     const goal = this.nearestApproachPoint(
       { x: pad.x, y: pad.y },
-      SABOTAGE_INTERACTION_RANGE_PX - 3,
+      SABOTAGE_INTERACTION_RANGE_PX - 8,
     );
-    const arrived = this.navigateTo(self, goal);
+    const arrived = this.navigateTo(self, goal, 8);
     if (!arrived) return;
 
     // Attempt repair — delegate broadcast to manager convenience method
