@@ -51,7 +51,7 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
-import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
+import { isLineOfSightClear, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
@@ -562,7 +562,12 @@ export default function GameMap() {
         const dx = body.x - myPos.x;
         const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = body.slot; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightClear(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          body.x, body.y + FEET_OFFSET_Y,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = body.slot; bestDistSq = distSq; }
       }
       setNearestBody(best);
     }, 150);
@@ -614,7 +619,12 @@ export default function GameMap() {
         const dx = rp.x - myPos.x;
         const dy = rp.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = rp.slot; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightClear(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          rp.x, rp.y + FEET_OFFSET_Y,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = rp.slot; bestDistSq = distSq; }
       }
       setNearestTarget(best);
     }, 150);
@@ -694,7 +704,8 @@ export default function GameMap() {
         const dx = def.x - myPos.x;
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        const hasLineOfSight = isLineOfSightToInteractionTarget(
+        // Ghosts intentionally keep through-wall task access on both client and server.
+        const hasLineOfSight = amIDead || isLineOfSightToInteractionTarget(
           taskInteractionGrid,
           myPos.x,
           myPos.y + FEET_OFFSET_Y,
@@ -725,7 +736,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage]);
+  }, [meeting, myRole, sabotage, amIDead]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1049,7 +1060,13 @@ export default function GameMap() {
         const dx = vent.x - myPos.x;
         const dy = vent.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        if (distSq <= bestDistSq) { best = vent.id; bestDistSq = distSq; }
+        const hasLineOfSight = isLineOfSightToInteractionTarget(
+          taskInteractionGrid,
+          myPos.x, myPos.y + FEET_OFFSET_Y,
+          vent.x, vent.y + FEET_OFFSET_Y,
+          20,
+        );
+        if (distSq <= bestDistSq && hasLineOfSight) { best = vent.id; bestDistSq = distSq; }
       }
       setNearestVentId(best);
     }, 150);
