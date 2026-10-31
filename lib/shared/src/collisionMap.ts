@@ -385,6 +385,9 @@ export function isLineOfSightToInteractionTarget(
   if (![fromX, fromY, targetX, targetY, targetRadiusPx].every(Number.isFinite) || targetRadiusPx < 0) {
     return false;
   }
+  // Exact co-location is already an interaction point; do not reject test or
+  // gameplay states that are standing on the console/vent's own anchor.
+  if (Math.hypot(targetX - fromX, targetY - fromY) <= 1) return true;
   if (targetRadiusPx === 0) return isLineOfSightClear(grid, fromX, fromY, targetX, targetY);
   const samples = 16;
   for (let i = 0; i < samples; i++) {
