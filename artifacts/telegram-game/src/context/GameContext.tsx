@@ -1006,22 +1006,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
   const completeTaskStep = useCallback((taskId: number, stepIndex: number) => {
     // Always send — server validates proximity/role/order and rejects if invalid.
     send([0x15, 0x03, taskId, stepIndex]);
-    // Optimistic update: only advance local completedSteps if the game is still
-    // in a valid state. This prevents desync when a meeting races with completion.
-    setState(s => {
-      if (s.meeting !== null) return s; // meeting started concurrently; server will reject
-      // Crewmate ghosts keep working on tasks; the server still validates
-      // assignment, proximity, step order, sabotage and role authoritatively.
-      if (s.myRole !== 'crewmate') return s;
-      return {
-        ...s,
-        myTasks: s.myTasks.map(t =>
-          t.taskId === taskId
-            ? { ...t, completedSteps: Math.max(t.completedSteps, stepIndex + 1) }
-            : t
-        ),
-      };
-    });
+    // Task progress is server-authoritative. Wait for the 0x15 task-progress
+    // broadcast before advancing local state; an optimistic update can display
+    // a completed step even when the server rejects it for LOS, range, sabotage,
+    // ordering, or a meeting that raced with the request.
   }, [send]);
 
   const triggerSabotage = useCallback((systemId: number) => {
