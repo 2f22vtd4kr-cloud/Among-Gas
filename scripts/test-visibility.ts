@@ -3,6 +3,8 @@ import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
+  buildFineCollisionGridFromRle,
+  buildPreciseCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
   FINE_CELL_X,
@@ -18,7 +20,7 @@ import {
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y } from '@workspace/shared/coords';
-import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 
 // Decode the committed canonical stream independently of the production
@@ -185,6 +187,23 @@ assert.ok(poleSight[360].x < pole.x && poleSight[360].x > pole.x - CELL_X,
  assert.ok(Math.abs(visionPropRay.x - (propVisionOriginX + CELL_X * 4)) < 1e-5,
    'a non-occluding prop must not cast a hard vision shadow');
 
+// Fine-grid compact objects cast exact outline shadows without becoming
+// inflated square shadow cells.
+{
+  const finePropGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
+  for (let row = 10; row < 12; row++) {
+    for (let col = 10; col < 12; col++) finePropGrid[row * FINE_COLS + col] = 1;
+  }
+  const outlineSegments = buildFineShadowSegments(finePropGrid);
+  assert.equal(outlineSegments.length, 4, 'a 2×2 compact object produces four merged silhouette edges');
+  const openFineShadowGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
+  const x = FINE_CELL_X * 8;
+  const y = FINE_CELL_Y * 10.5;
+  const sight = computeVisibilityPolygon(x, y, FINE_CELL_X * 10, openFineShadowGrid, [], false, outlineSegments);
+  assert.ok(Math.abs(sight[360].x - FINE_CELL_X * 10) < 1e-5,
+    "the east ray terminates at the object's exact left outline, not an expanded square");
+}
+
 // The actual custom map yields a complete visibility polygon with distinct
 // crew/impostor radii and a much smaller crew radius during Lights sabotage.
 const realGrid = buildCollisionGrid();
@@ -226,10 +245,54 @@ assert.ok(statueRay.x>1707&&statueRay.x<1711,'vision ray stops at the narrow sta
 // The 680×392 grid is authoritative for movement and visual occlusion.
 const realFineGrid = buildPreciseCollisionGrid();
 const independentlyDecodedFineGrid = decodeCanonicalFineRle(FINE_RLE_BASE64, FINE_COLS, FINE_ROWS);
+const productionDecodedFineGrid = buildFineCollisionGridFromRle(FINE_RLE_BASE64);
+const candidateFineGrid = buildPreciseCollisionGridFromRle(FINE_RLE_BASE64);
 assert.equal(FINE_COLS * FINE_ROWS, 680 * 392, 'canonical dimensions are 680×392');
-assert.deepEqual(independentlyDecodedFineGrid, realFineGrid,
-  'the production decoder exactly matches the independently decoded committed payload');
+assert.deepEqual(productionDecodedFineGrid, independentlyDecodedFineGrid,
+  'the production RLE decoder exactly matches the independently decoded committed payload');
+assert.deepEqual(candidateFineGrid, realFineGrid,
+  'candidate payloads receive the same hand-traced geometry overrides as the live runtime');
+// The live grid intentionally applies the hand-traced van-bay replacement
+// after decoding. Keep that explicit edit bounded to its authored rectangle.
+let overrideDifferences = 0;
+for (let index = 0; index < realFineGrid.length; index++) {
+  if (realFineGrid[index] === independentlyDecodedFineGrid[index]) continue;
+  overrideDifferences++;
+  const col = index % FINE_COLS;
+  const row = Math.floor(index / FINE_COLS);
+  const x = (col + 0.5) * FINE_CELL_X;
+  const y = (row + 0.5) * FINE_CELL_Y;
+  const insideVanBay = x >= 1985 && x <= 2260 && y >= 1055 && y <= 1260;
+  const insideEastAisle = x >= 2780 && x <= 3100 && y >= 850 && y <= 950;
+  assert.ok(insideVanBay || insideEastAisle,
+    'manual collision edits remain inside one of the measured sector-specific replacement zones');
+}
+assert.ok(overrideDifferences > 0, 'the authored van-bay correction is applied to the live collision grid');
+
+// Sector B: the east generator room has a continuous open floor aisle between
+// the west entry wall and the lower generator bank. Probe the complete route,
+// not just its endpoints, so an invisible red-line rectangle cannot return.
+for (let x = 2820; x <= 3060; x += 8) {
+  assert.equal(isPlayerPositionWalkable(realFineGrid, x, 900), true,
+    `east generator approach aisle remains walkable at x=${x}`);
+}
 const realFineShadowGrid = buildShadowGrid(realFineGrid);
+const realFineShadowSegments = buildFineShadowSegments(realFineGrid);
+assert.ok(realFineShadowSegments.length > 0 && realFineShadowSegments.length < 2000,
+  'compact production props expose merged silhouette segments within a mobile-safe budget');
+const vehicleCell = Math.floor(1150 / FINE_CELL_Y) * FINE_COLS + Math.floor(2120 / FINE_CELL_X);
+assert.equal(realFineGrid[vehicleCell], 1, 'the vehicle remains a solid movement-collision obstacle');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2120, 1150), false,
+  'the van body remains blocked after replacing its oversized source footprint');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2000, 1150), true,
+  'the player can use the left-side clearance in the vehicle bay');
+assert.equal(isPlayerPositionWalkable(realFineGrid, 2250, 1150), true,
+  'the player can use the right-side clearance in the vehicle bay');
+assert.equal(realFineShadowGrid[vehicleCell], 0, 'the vehicle is not rasterized into a broad square shadow');
+assert.ok(realFineShadowSegments.some(segment =>
+  [segment.ax, segment.bx].some(x => x >= 1990 && x <= 2260) &&
+  [segment.ay, segment.by].some(y => y >= 1050 && y <= 1260)
+), 'the vehicle casts a silhouette shadow from its measured fine-grid outline');
 assert.equal(realFineGrid.length, FINE_COLS * FINE_ROWS, 'fine collision grid has complete declared coverage');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1640, 449), true, 'fine western garden path is walkable');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1810, 449), true, 'fine eastern garden path is walkable');

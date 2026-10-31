@@ -65,7 +65,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
+import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
@@ -1151,6 +1151,7 @@ export default function GameMap() {
     // Compact geometry remains available to navigation consumers that need A*.
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
+    const narrowSegments = buildFineShadowSegments(fineGrid);
     if (!isSpawnWalkable(fineGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
@@ -1742,7 +1743,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   buildPreciseCollisionGrid,
-  buildFineCollisionGridFromRle,
+  buildPreciseCollisionGridFromRle,
   FINE_COLS,
   FINE_ROWS,
   MAP_W,
@@ -15,6 +15,7 @@ import {
 import {
   buildShadowGrid,
   buildNarrowShadowOccluders,
+  buildFineShadowSegments,
   computeVisibilityPolygon,
   smoothVisibilityPolygon,
   type VisionPoint,
@@ -60,9 +61,10 @@ const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-ove
 const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 const tileDir = path.join(root, 'artifacts/telegram-game/collision-qa-tiles');
 
-const grid = useCandidatePayload && candidatePayload ? buildFineCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
+const grid = useCandidatePayload && candidatePayload ? buildPreciseCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
 const shadowGrid = buildShadowGrid(grid);
 const narrowOccluders = buildNarrowShadowOccluders(grid, true);
+const narrowSegments = buildFineShadowSegments(grid);
 const map = sharp(mapPath);
 const metadata = await map.metadata();
 const webpMetadata = await sharp(webpPath).metadata();
@@ -239,7 +241,7 @@ for (let row = 0; row < rowStarts.length; row++) {
       console.warn('No walkable vision origin found for tile R' + (row + 1) + 'C' + (col + 1));
       continue;
     }
-    const raw = computeVisibilityPolygon(origin.x, origin.y, 260, shadowGrid, narrowOccluders, true);
+    const raw = computeVisibilityPolygon(origin.x, origin.y, 260, shadowGrid, narrowOccluders, true, narrowSegments);
     const points = smoothVisibilityPolygon(raw, origin, 3);
     visionSamples.push({ row, col, origin, points });
   }
