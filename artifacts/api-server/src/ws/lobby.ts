@@ -129,6 +129,10 @@ export interface LobbyPlayer {
   tgUserId: number;
   username: string;
   ws: WebSocket;
+  /** Wall-clock instant at which this player disconnected; slot and state are retained during grace. */
+  disconnectedAtMs?: number;
+  /** Expires a disconnected player's reserved slot after the reconnect grace period. */
+  disconnectTimer?: ReturnType<typeof setTimeout>;
   /** Current pixel position; collision is evaluated at the rendered feet baseline. */
   x: number;
   y: number;
@@ -192,6 +196,8 @@ export interface MeetingState {
   reporterSlot: number;
   /** NO_TARGET (0xFF) = emergency button, no specific body. */
   bodySlot: number;
+  /** Wall-clock time when the meeting began; used to restore discussion/voting countdown. */
+  startedAtMs?: number;
   /** Public discussion transcript retained server-side so bots can respond to real chat. */
   messages: MeetingChatEntry[];
   votes: Map<number, number>;
@@ -220,6 +226,8 @@ export interface SabotageState {
 export interface Lobby {
   code: string;
   phase: LobbyPhase;
+  /** Retained final result so reconnecting clients can restore the game-over screen. */
+  gameOverResult?: { ejectedSlot: number; winFlag: 0 | 1 | 2 };
   /** Wall-clock start time for match telemetry and initial cooldowns. */
   startedAtMs?: number;
   /** Client slots that have loaded the map and character atlas for this round. */
@@ -244,6 +252,41 @@ export interface Lobby {
 }
 
 export const MAX_PLAYERS = 15;
+
+/** A dropped WebSocket retains the same player slot and authoritative state for this grace period. */
+export const RECONNECT_GRACE_MS = 30_000;
+
+/** Server-to-client state restoration contract carried by WebSocket opcode 0x25/version 1. */
+export interface LobbyResumeSnapshotV1 {
+  version: 1;
+  roomCode: string;
+  phase: Exclude<LobbyPhase, 'WAITING'>;
+  hostSlot: number;
+  mySlot: number;
+  players: Array<{ slot: number; username: string }>;
+  playerPositions: Array<{ slot: number; wireX: number; wireY: number; inVent: boolean; ventId?: number }>;
+  myRole: PlayerRole;
+  impostorSlots: number[];
+  deadSlots: number[];
+  corpsePositions: Array<{ slot: number; wireX: number; wireY: number }>;
+  myTasks: Array<{ taskId: number; completedSteps: number }>;
+  globalTaskProgress: number;
+  killCooldownMs: number;
+  sabotageCooldownMs: number;
+  myVentId: number | null;
+  emergencyMeetingUsed: boolean;
+  sabotage: null | { systemId: number; elapsedMs: number; fixedPads: number[]; lockedTaskIds: number[] };
+  meeting: null | {
+    reporterSlot: number;
+    bodySlot: number;
+    elapsedMs: number;
+    votingOpen: boolean;
+    hasVoted: boolean;
+    votes: Array<{ slot: number; targetSlot: number }>;
+    messages: Array<{ slot: number; text: string; sentAtMs: number }>;
+  };
+  gameOverResult: null | { ejectedSlot: number; winFlag: 0 | 1 | 2 };
+}
 
 /**
  * Minimal interface that server-side bot agents must implement.
@@ -490,6 +533,10 @@ export class LobbyManager {
    * code is later reused — misattribute a stale event to a new game.
    */
   disposeLobby(lobby: Lobby): void {
+    for (const player of lobby.players.values()) {
+      if (player.disconnectTimer) clearTimeout(player.disconnectTimer);
+      if (!player.isBot) this.userToLobbyMap.delete(player.tgUserId);
+    }
     if (lobby.meeting) {
       if (lobby.meeting.discussionTimer) clearTimeout(lobby.meeting.discussionTimer);
       if (lobby.meeting.votingTimer) clearTimeout(lobby.meeting.votingTimer);
@@ -537,12 +584,164 @@ export class LobbyManager {
     const lobby = this.getLobbyForUser(tgUserId);
     if (!lobby) return true; // authenticated connection not yet assigned to a room
     const slot = lobby.userIdToSlot.get(tgUserId);
-    return slot !== undefined && lobby.players.get(slot)?.ws === ws;
+    const player = slot === undefined ? undefined : lobby.players.get(slot);
+    return player !== undefined && player.ws === ws && player.disconnectedAtMs === undefined;
   }
 
   /** True only for an old socket explicitly retired during session replacement. */
   isSupersededSocket(ws: WebSocket): boolean {
     return this._supersededSockets.has(ws);
+  }
+
+  /** Returns true only when this slot has completed its own current asset-readiness handshake. */
+  isPlayerReady(lobby: Lobby, slot: number): boolean {
+    const player = lobby.players.get(slot);
+    return lobby.gameplayReady === true &&
+      lobby.gameplayReadySlots?.has(slot) === true &&
+      player !== undefined &&
+      player.isBot !== true &&
+      player.disconnectedAtMs === undefined &&
+      player.ws.readyState === 1;
+  }
+
+  /**
+   * Mark a player offline without deleting their authoritative state. The
+   * closed socket identity is retained so queued packets and stale close
+   * events cannot act as the player or remove a later replacement session.
+   */
+  markPlayerDisconnected(
+    tgUserId: number,
+    closingWs: WebSocket,
+    graceMs: number = RECONNECT_GRACE_MS,
+  ): Lobby | null {
+    const lobby = this.getLobbyForUser(tgUserId);
+    if (!lobby) return null;
+    const slot = lobby.userIdToSlot.get(tgUserId);
+    const player = slot === undefined ? undefined : lobby.players.get(slot);
+    if (!player || player.ws !== closingWs) return null;
+    if (player.disconnectedAtMs !== undefined) return lobby;
+
+    const disconnectedAtMs = Date.now();
+    player.disconnectedAtMs = disconnectedAtMs;
+    player.disconnectTimer = setTimeout(() => {
+      const currentLobby = this.lobbies.get(lobby.code);
+      const currentPlayer = currentLobby?.players.get(slot);
+      // Reattachment replaces the socket and clears this timestamp. A stale
+      // timeout must never delete the recovered player or a new lobby member.
+      if (
+        currentLobby !== lobby ||
+        !currentPlayer ||
+        currentPlayer.ws !== closingWs ||
+        currentPlayer.disconnectedAtMs !== disconnectedAtMs
+      ) return;
+
+      const updatedLobby = this.removePlayer(tgUserId, closingWs);
+      if (updatedLobby) this.broadcastRoomUpdate(updatedLobby);
+    }, Math.max(0, graceMs));
+
+    logger.info('[Lobby] Player disconnected; reserving slot ' + slot + ' for ' +
+      graceMs + 'ms in ' + lobby.code);
+    this._maybeTallyVotes(lobby);
+    return lobby;
+  }
+
+  /** Build the authoritative state needed by a same-identity reconnect. */
+  buildResumeSnapshot(lobby: Lobby, mySlot: number): LobbyResumeSnapshotV1 | null {
+    const player = lobby.players.get(mySlot);
+    if (!player || player.isBot || lobby.phase === 'WAITING') return null;
+
+    const now = Date.now();
+    const impostorSlots = player.role === 'impostor'
+      ? Array.from(lobby.players.values())
+          .filter(candidate => candidate.role === 'impostor')
+          .map(candidate => candidate.slot)
+          .sort((a, b) => a - b);
+      : [];
+
+    const myTasks = player.assignedTasks.map(taskId => {
+      const definition = TASK_DEFS.find(task => task.id === taskId);
+      let completedSteps = 0;
+      if (definition) {
+        for (let step = 0; step < definition.steps; step++) {
+          if (lobby.completedTaskSteps.has(mySlot + ':' + taskId + ':' + step)) completedSteps++;
+        }
+      }
+      return { taskId, completedSteps };
+    });
+
+    const meeting = lobby.meeting
+      ? {
+          reporterSlot: lobby.meeting.reporterSlot,
+          bodySlot: lobby.meeting.bodySlot,
+          elapsedMs: Math.max(0, now - (lobby.meeting.startedAtMs ?? now)),
+          votingOpen: lobby.meeting.votingOpen,
+          hasVoted: lobby.meeting.votes.has(mySlot),
+          votes: Array.from(lobby.meeting.votes.entries()).map(([slot, targetSlot]) => ({ slot, targetSlot })),
+          messages: lobby.meeting.messages.map(message => ({
+            slot: message.slot,
+            text: message.text,
+            sentAtMs: message.sentAtMs,
+          })),
+        }
+      : null;
+
+    const sabotage = lobby.sabotage
+      ? {
+          systemId: lobby.sabotage.systemId,
+          elapsedMs: Math.max(0, now - lobby.sabotage.startedAtMs),
+          fixedPads: Array.from(lobby.sabotage.padFixedAt.keys()).sort((a, b) => a - b),
+          lockedTaskIds: [...lobby.sabotage.lockedTaskIds],
+        }
+      : null;
+
+    const globalTaskProgress = lobby.totalTaskSteps > 0
+      ? Math.max(0, Math.min(100, Math.round(
+          (lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100,
+        )))
+      : 0;
+
+    return {
+      version: 1,
+      roomCode: lobby.code,
+      phase: lobby.phase,
+      hostSlot: lobby.hostSlot,
+      mySlot,
+      players: Array.from(lobby.players.values())
+        .sort((a, b) => a.slot - b.slot)
+        .map(candidate => ({ slot: candidate.slot, username: candidate.username })),
+      playerPositions: Array.from(lobby.players.values()).map(candidate => ({
+        slot: candidate.slot,
+        wireX: toWire(candidate.x, MAP_W),
+        wireY: toWire(candidate.y, MAP_H),
+        inVent: candidate.inVent === true,
+        ...(candidate.inVent && candidate.ventId !== undefined ? { ventId: candidate.ventId } : {}),
+      })),
+      myRole: player.role,
+      // Role information remains asymmetric: crewmates never receive the impostor roster.
+      impostorSlots,
+      deadSlots: Array.from(lobby.players.values())
+        .filter(candidate => !candidate.alive)
+        .map(candidate => candidate.slot)
+        .sort((a, b) => a - b),
+      corpsePositions: Array.from(lobby.players.values())
+        .filter(candidate => candidate.corpseX !== undefined && candidate.corpseY !== undefined)
+        .map(candidate => ({
+          slot: candidate.slot,
+          wireX: toWire(candidate.corpseX!, MAP_W),
+          wireY: toWire(candidate.corpseY!, MAP_H),
+        })),
+      myTasks,
+      globalTaskProgress,
+      killCooldownMs: player.killCooldownMs,
+      sabotageCooldownMs: lobby.sabotageCooldownMs,
+      myVentId: player.inVent && player.ventId !== undefined ? player.ventId : null,
+      emergencyMeetingUsed: player.emergencyMeetingUsed === true,
+      sabotage,
+      meeting,
+      gameOverResult: lobby.phase === 'GAMEOVER' && lobby.gameOverResult
+        ? { ...lobby.gameOverResult }
+        : null,
+    };
   }
 
   // ── Bot slot management ──────────────────────────────────────────────────
@@ -857,25 +1056,50 @@ export class LobbyManager {
   ): Lobby | 'not_found' | 'in_progress' | 'full' {
     const lobby = this.lobbies.get(roomCode.toUpperCase());
     if (!lobby) return 'not_found';
-    if (lobby.phase !== 'WAITING') return 'in_progress';
 
-    // Rejoin: same user already in this lobby. The older authenticated
-    // socket must not remain capable of sending actions as this same user.
-    if (lobby.userIdToSlot.has(tgUserId)) {
-      const slot = lobby.userIdToSlot.get(tgUserId)!;
-      const existing = lobby.players.get(slot)!;
-      const previousWs = existing.ws;
-      existing.ws = ws;
-      this.userToLobbyMap.set(tgUserId, lobby.code);
-      if (previousWs !== ws) {
-        this._supersededSockets.add(previousWs);
-        if (previousWs.readyState === 1) {
-          previousWs.close(1000, 'Replaced by a newer session');
+    // An authenticated user already in this exact lobby may reclaim the same
+    // player object and slot during the reconnect grace period, including in
+    // ROAMING, MEETING or GAMEOVER. Do this before rejecting new joins to an
+    // active match; the Telegram identity must match the original player.
+    const existingSlot = lobby.userIdToSlot.get(tgUserId);
+    if (existingSlot !== undefined) {
+      const existing = lobby.players.get(existingSlot);
+      if (existing) {
+        const graceExpired = existing.disconnectedAtMs !== undefined &&
+          Date.now() - existing.disconnectedAtMs > RECONNECT_GRACE_MS;
+        if (!graceExpired) {
+          const previousWs = existing.ws;
+          if (existing.disconnectTimer) clearTimeout(existing.disconnectTimer);
+          existing.disconnectTimer = undefined;
+          existing.disconnectedAtMs = undefined;
+          existing.ws = ws;
+          existing.username = username;
+          // A resumed client must load its map/atlas and explicitly acknowledge
+          // readiness again. Keep the already-open match readiness barrier true
+          // for everyone else; readiness is now per player after initial start.
+          lobby.gameplayReadySlots?.delete(existingSlot);
+          this.userToLobbyMap.set(tgUserId, lobby.code);
+          if (previousWs !== ws) {
+            this._supersededSockets.add(previousWs);
+            if (previousWs.readyState === 1) {
+              previousWs.close(1000, 'Replaced by a newer session');
+            }
+          }
+          logger.info('[Lobby] Reattached ' + lobby.code + ' — ' + username + ' (slot=' + existingSlot + ')');
+          return lobby;
         }
+
+        // Do not resurrect state after the grace deadline, even if the timeout
+        // callback has not yet run because the event loop was busy.
+        this.removePlayer(tgUserId, existing.ws);
+        if (!this.lobbies.has(lobby.code)) return 'not_found';
+      } else {
+        lobby.userIdToSlot.delete(tgUserId);
+        this.userToLobbyMap.delete(tgUserId);
       }
-      logger.info(`[Lobby] Rejoin ${lobby.code} — ${username} (slot=${slot})`);
-      return lobby;
     }
+
+    if (lobby.phase !== 'WAITING') return 'in_progress';
 
     const slot = this.nextFreeSlot(lobby);
     if (slot === null) return 'full';
@@ -895,7 +1119,7 @@ export class LobbyManager {
     this.userToLobbyMap.set(tgUserId, roomCode);
     // (sabotage / sabotageCooldownMs are lobby-level and already initialized in createLobby)
 
-    logger.info(`[Lobby] Joined ${roomCode} — ${username} (userId=${tgUserId}, slot=${slot})`);
+    logger.info('[Lobby] Joined ' + roomCode + ' — ' + username + ' (userId=' + tgUserId + ', slot=' + slot + ')');
     return lobby;
   }
 
@@ -917,6 +1141,15 @@ export class LobbyManager {
     }
 
     const departing = lobby.players.get(slot);
+    if (departing?.disconnectTimer) clearTimeout(departing.disconnectTimer);
+    if (departing) departing.disconnectTimer = undefined;
+    // A player who permanently leaves during a meeting has implicitly skipped
+    // if they had not already cast a vote. A reconnect before expiry keeps the
+    // chance to vote because no skip is recorded while they are merely offline.
+    if (departing?.alive && lobby.meeting && !lobby.meeting.votes.has(slot)) {
+      lobby.meeting.votes.set(slot, NO_TARGET);
+    }
+    lobby.gameplayReadySlots?.delete(slot);
 
     this.userToLobbyMap.delete(tgUserId);
     this._chatLastSentAt.delete(tgUserId);
@@ -954,6 +1187,7 @@ export class LobbyManager {
         const winFlag = this._computeWinFlag(lobby);
         if (winFlag !== 0) {
           lobby.phase = 'GAMEOVER';
+          lobby.gameOverResult = { ejectedSlot: NO_TARGET, winFlag };
           this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
           this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });
         } else {
@@ -963,13 +1197,7 @@ export class LobbyManager {
     }
 
     // A departing voter may be the one holdout blocking an early tally.
-    if (lobby.phase === 'MEETING' && lobby.meeting?.votingOpen) {
-      const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;
-      if (lobby.meeting.votes.size >= aliveCount) {
-        if (lobby.meeting.votingTimer) { clearTimeout(lobby.meeting.votingTimer); lobby.meeting.votingTimer = null; }
-        this._tallyVotes(lobby);
-      }
-    }
+    this._maybeTallyVotes(lobby);
 
     return lobby;
   }
@@ -1008,17 +1236,28 @@ export class LobbyManager {
    */
   markGameplayReady(lobby: Lobby, slot: number): boolean {
     const player = lobby.players.get(slot);
-    if (!player || player.isBot || lobby.phase !== 'ROAMING') return false;
+    if (
+      !player ||
+      player.isBot ||
+      player.disconnectedAtMs !== undefined ||
+      player.ws.readyState !== 1 ||
+      (lobby.phase !== 'ROAMING' && lobby.phase !== 'MEETING' && lobby.phase !== 'GAMEOVER')
+    ) return false;
+
     if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
     lobby.gameplayReadySlots.add(slot);
+
+    // The initial game barrier is a one-time lobby transition. A late rejoiner
+    // becomes ready individually and must not freeze other connected players.
+    if (lobby.gameplayReady === true) return true;
     return this.refreshGameplayReady(lobby);
   }
 
-  /** Recompute readiness on action/tick boundaries so disconnects cannot stall a round. */
+  /** The initial game barrier stays open after launch; readiness is per slot for reconnects. */
   isGameplayReady(lobby: Lobby): boolean {
-    // Once unlocked, the ready state persists through meetings so chat/votes
-    // continue to work while movement and kills are separately phase-gated.
-    if (lobby.phase === 'MEETING') return lobby.gameplayReady === true;
+    if (lobby.phase === 'MEETING' || lobby.phase === 'GAMEOVER') return lobby.gameplayReady === true;
+    if (lobby.phase !== 'ROAMING') return false;
+    if (lobby.gameplayReady === true) return true;
     return this.refreshGameplayReady(lobby);
   }
 
@@ -1026,7 +1265,7 @@ export class LobbyManager {
     if (lobby.phase !== 'ROAMING') return false;
     if (!lobby.gameplayReadySlots) lobby.gameplayReadySlots = new Set<number>();
     const connectedHumans = Array.from(lobby.players.values()).filter(
-      player => !player.isBot && player.ws.readyState === /* OPEN */ 1,
+      player => !player.isBot && player.disconnectedAtMs === undefined && player.ws.readyState === /* OPEN */ 1,
     );
     // Bot-only headless simulations have no connected human sockets and
     // must exercise the same gameplay loops without a browser readiness packet.
@@ -1229,6 +1468,7 @@ export class LobbyManager {
     if (lobby.totalTaskSteps === 0) return;
     if (lobby.completedTaskSteps.size < lobby.totalTaskSteps) return;
     lobby.phase = 'GAMEOVER';
+    lobby.gameOverResult = { ejectedSlot: NO_TARGET, winFlag: 1 };
     this._broadcastVoteResult(lobby, NO_TARGET, 1); // crewmates win
     this._emit({ type: 'gameOver', code: lobby.code, winFlag: 1, atMs: Date.now() });
     logger.info(`[Lobby] Crewmates win by tasks in ${lobby.code}`);
@@ -1244,6 +1484,7 @@ export class LobbyManager {
     const winFlag = this._computeWinFlag(lobby);
     if (winFlag === 0) return;
     lobby.phase = 'GAMEOVER';
+    lobby.gameOverResult = { ejectedSlot: NO_TARGET, winFlag };
     this._broadcastVoteResult(lobby, NO_TARGET, winFlag);
     this._emit({ type: 'gameOver', code: lobby.code, winFlag, atMs: Date.now() });
     logger.info(`[Lobby] Game over in ${lobby.code} after kill — winFlag=${winFlag}`);
@@ -1383,6 +1624,7 @@ export class LobbyManager {
 
     if (isCriticalSabotage(systemId)) {
       lobby.phase = 'GAMEOVER';
+      lobby.gameOverResult = { ejectedSlot: NO_TARGET, winFlag: 2 };
       this._broadcastVoteResult(lobby, NO_TARGET, 2); // impostors win
       this._emit({ type: 'gameOver', code: lobby.code, winFlag: 2, atMs: Date.now() });
       logger.info(`[Lobby] Critical sabotage timed out in ${lobby.code} — impostors win`);
@@ -1510,6 +1752,7 @@ export class LobbyManager {
     const meeting: MeetingState = {
       reporterSlot,
       bodySlot,
+      startedAtMs: Date.now(),
       messages: [],
       votes: new Map(),
       votingOpen: false,
@@ -1551,7 +1794,7 @@ export class LobbyManager {
     if (lobby.phase !== 'MEETING' || !meeting || !meeting.votingOpen) return false;
 
     const voter = lobby.players.get(voterSlot);
-    if (!voter || !voter.alive) return false;
+    if (!voter || !voter.alive || voter.disconnectedAtMs !== undefined) return false;
 
     if (targetSlot !== NO_TARGET) {
       const target = lobby.players.get(targetSlot);
@@ -1563,12 +1806,31 @@ export class LobbyManager {
 
     meeting.votes.set(voterSlot, targetSlot);
     this._emit({ type: 'vote', code: lobby.code, voterSlot, targetSlot, atMs: Date.now() });
+    this._maybeTallyVotes(lobby);
+    return true;
+  }
 
-    const aliveCount = Array.from(lobby.players.values()).filter(p => p.alive).length;
-    if (meeting.votes.size >= aliveCount) {
-      if (meeting.votingTimer) { clearTimeout(meeting.votingTimer); meeting.votingTimer = null; }
-      this._tallyVotes(lobby);
+  /**
+   * Disconnected living players count as resolved for early-tally purposes,
+   * but their implicit skip is only applied during tally. If they reconnect
+   * before tally, they may still cast a vote in their retained slot.
+   */
+  private _maybeTallyVotes(lobby: Lobby): boolean {
+    const meeting = lobby.meeting;
+    if (lobby.phase !== 'MEETING' || !meeting || !meeting.votingOpen) return false;
+
+    const allAliveResolved = Array.from(lobby.players.values())
+      .filter(player => player.alive)
+      .every(player =>
+        meeting.votes.has(player.slot) || player.disconnectedAtMs !== undefined,
+      );
+    if (!allAliveResolved) return false;
+
+    if (meeting.votingTimer) {
+      clearTimeout(meeting.votingTimer);
+      meeting.votingTimer = null;
     }
+    this._tallyVotes(lobby);
     return true;
   }
 
@@ -1604,7 +1866,16 @@ export class LobbyManager {
     if (meeting.votingTimer) clearTimeout(meeting.votingTimer);
 
     const counts = new Map<number, number>(); // target slot (or NO_TARGET = skip) → count
-    for (const target of meeting.votes.values()) {
+    const effectiveVotes = new Map(meeting.votes);
+    // Any living player still disconnected at the actual tally implicitly skips.
+    // A successful reattachment clears disconnectedAtMs and preserves their
+    // chance to vote until this synchronous tally occurs.
+    for (const player of lobby.players.values()) {
+      if (player.alive && player.disconnectedAtMs !== undefined && !effectiveVotes.has(player.slot)) {
+        effectiveVotes.set(player.slot, NO_TARGET);
+      }
+    }
+    for (const target of effectiveVotes.values()) {
       counts.set(target, (counts.get(target) ?? 0) + 1);
     }
 
@@ -1641,7 +1912,10 @@ export class LobbyManager {
     if (winFlag === 0 && lobby.totalTaskSteps > 0 && lobby.completedTaskSteps.size >= lobby.totalTaskSteps) {
       winFlag = 1;
     }
-    if (winFlag !== 0) lobby.phase = 'GAMEOVER';
+    if (winFlag !== 0) {
+      lobby.phase = 'GAMEOVER';
+      lobby.gameOverResult = { ejectedSlot, winFlag };
+    }
 
     this._broadcastVoteResult(lobby, ejectedSlot, winFlag);
     this._broadcastTaskProgress(lobby);
