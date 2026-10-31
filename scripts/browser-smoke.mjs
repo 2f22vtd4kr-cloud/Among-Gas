@@ -563,6 +563,15 @@ try {
   await page.getByText('Голосование', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Пропустить' }).waitFor({ state: 'visible' });
+  const voteIdentityDots = page.getByTestId('vote-player-color');
+  const voteIdentityNumbers = page.getByTestId('vote-player-number');
+  await voteIdentityDots.first().waitFor({ state: 'visible', timeout: 5_000 });
+  assert.ok(await voteIdentityDots.count() >= 2,
+    'meeting voting must show a color identity chip for every living player');
+  assert.equal(await voteIdentityNumbers.count(), await voteIdentityDots.count(),
+    'every voting color chip must have a corresponding stable player slot number');
+  assert.match(await voteIdentityNumbers.first().innerText(), /^\d{2}$/,
+    'voting player identifiers must use two-digit slot numbers');
 
   // Eliminated players can read the shared meeting transcript but cannot send messages or vote.
   await page.goto(`${origin}/?mock=meeting-ghost`, { waitUntil: 'domcontentloaded' });
