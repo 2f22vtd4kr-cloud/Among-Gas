@@ -1,4 +1,4 @@
-import { buildCollisionGrid, COLS, ROWS, CELL_X, CELL_Y } from '@workspace/shared/collisionMap';
+import { buildCollisionGrid, COLS, ROWS, CELL_X, CELL_Y, isPlayerPathWalkable } from '@workspace/shared/collisionMap';
 import { findPath, PathCache } from '@workspace/shared';
 
 const grid = buildCollisionGrid();
@@ -203,6 +203,21 @@ check('path cache finds route on the open map',
   mapScopedCache.find(boundaryGrid, corridorStart, corridorGoal, false, boundaryGeometry) !== null);
 check('path cache does not reuse a route from a different blocked map',
   mapScopedCache.find(blockedColumnGrid, corridorStart, corridorGoal, false, boundaryGeometry) === null);
+
+
+ // Swept movement validation must fail closed for malformed coordinates or
+ // spacing. NaN previously produced zero loop iterations (and therefore true);
+ // zero spacing could also produce an unbounded loop for nonzero distances.
+check('swept movement rejects NaN coordinates',
+  isPlayerPathWalkable(grid, Number.NaN, 0, 0, 0) === false);
+check('swept movement rejects infinite coordinates',
+  isPlayerPathWalkable(grid, 0, 0, Number.POSITIVE_INFINITY, 0) === false);
+check('swept movement rejects zero sample spacing',
+  isPlayerPathWalkable(grid, 0, 0, 0, 0, 0) === false);
+check('swept movement rejects negative sample spacing',
+  isPlayerPathWalkable(grid, 0, 0, 0, 0, -1) === false);
+check('swept movement rejects non-finite sample spacing',
+  isPlayerPathWalkable(grid, 0, 0, 0, 0, Number.NaN) === false);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
