@@ -22,3 +22,19 @@ export function getCharacterShadowScale(walkBobOffset: number, spriteHeight: num
   const maxBob = Math.max(1, spriteHeight * 0.06);
   return 1 - Math.min(0.24, Math.max(0, walkBobOffset) / maxBob * 0.24);
 }
+
+/**
+ * Shared draw-only motion values for local and remote sprites. Both render
+ * paths must use the same un-cropped base frame height so pose-specific atlas
+ * crops cannot change the apparent bounce amplitude or shadow squash.
+ */
+export function getCharacterMotionMetrics(
+  animElapsedMs: number,
+  baseSpriteHeight: number,
+): { walkBobOffset: number; shadowScale: number } {
+  const walkBobOffset = getCharacterWalkBobOffset(animElapsedMs, baseSpriteHeight);
+  return {
+    walkBobOffset,
+    shadowScale: getCharacterShadowScale(walkBobOffset, baseSpriteHeight),
+  };
+}
