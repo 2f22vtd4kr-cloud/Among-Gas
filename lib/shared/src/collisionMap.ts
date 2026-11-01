@@ -558,6 +558,8 @@ export function isPlayerPathWalkable(
   toY: number,
   sampleSpacingPx = 2,
 ): boolean {
+  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) ||
+      sampleSpacingPx <= 0) return false;
   const distance = Math.hypot(toX - fromX, toY - fromY);
   const steps = Math.max(1, Math.ceil(distance / sampleSpacingPx));
   for (let step = 0; step <= steps; step++) {
