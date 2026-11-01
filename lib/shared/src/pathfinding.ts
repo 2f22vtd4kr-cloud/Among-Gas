@@ -96,11 +96,16 @@ function isWalkable(grid: Grid, col: number, row: number, geometry: PathGridGeom
  * Accounts for non-square cells (CELL_X ≠ CELL_Y).
  */
 function heuristic(ac: number, ar: number, bc: number, br: number, geometry: PathGridGeometry): number {
-  const dx = Math.abs(ac - bc) * geometry.cellX;
-  const dy = Math.abs(ar - br) * geometry.cellY;
-  const D  = 1;
-  const D2 = Math.SQRT2;
-  return D * (dx + dy) + (D2 - 2 * D) * Math.min(dx, dy);
+  const columns = Math.abs(ac - bc);
+  const rows = Math.abs(ar - br);
+  const diagonalSteps = Math.min(columns, rows);
+  const straightColumns = columns - diagonalSteps;
+  const straightRows = rows - diagonalSteps;
+  // A diagonal step spans one cell on each axis, so its cost is the actual
+  // Euclidean diagonal of this (possibly non-square) grid cell.
+  return diagonalSteps * Math.hypot(geometry.cellX, geometry.cellY) +
+    straightColumns * geometry.cellX +
+    straightRows * geometry.cellY;
 }
 
 // ─── Min-heap (priority queue) ────────────────────────────────────────────────
