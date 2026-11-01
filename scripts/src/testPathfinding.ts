@@ -129,5 +129,36 @@ if (r2) {
     rrev ? `${rrev.waypoints.length} wp` : 'null');
 }
 
+
+ // Regression: coordinates outside the map must not be silently clamped
+ // onto an edge cell, which can send bots toward a location they do not occupy.
+const boundaryGrid = new Uint8Array(3 * 3);
+const boundaryGeometry = { cols: 3, rows: 3, cellX: 10, cellY: 10 };
+const boundaryStart = { x: 5, y: 5 };
+const boundaryGoal = { x: 25, y: 25 };
+check('valid in-bounds path works with explicit geometry',
+  findPath(boundaryGrid, boundaryStart, boundaryGoal, boundaryGeometry) !== null);
+check('negative X start is rejected instead of clamped',
+  findPath(boundaryGrid, { x: -0.01, y: 5 }, boundaryGoal, boundaryGeometry) === null);
+check('negative Y start is rejected instead of clamped',
+  findPath(boundaryGrid, { x: 5, y: -0.01 }, boundaryGoal, boundaryGeometry) === null);
+check('right map edge is exclusive',
+  findPath(boundaryGrid, boundaryStart, { x: 30, y: 5 }, boundaryGeometry) === null);
+check('bottom map edge is exclusive',
+  findPath(boundaryGrid, boundaryStart, { x: 5, y: 30 }, boundaryGeometry) === null);
+check('non-finite path coordinates are rejected',
+  findPath(boundaryGrid, { x: Number.POSITIVE_INFINITY, y: 5 }, boundaryGoal, boundaryGeometry) === null &&
+  findPath(boundaryGrid, boundaryStart, { x: Number.NaN, y: 5 }, boundaryGeometry) === null);
+const boundaryCache = new PathCache();
+check('out-of-bounds cache request returns null without caching',
+  boundaryCache.find(boundaryGrid, { x: -1, y: 5 }, boundaryGoal, false, boundaryGeometry) === null &&
+  boundaryCache.size === 0);
+check('valid edge-cell query succeeds after invalid request',
+  boundaryCache.find(boundaryGrid, { x: 1, y: 5 }, boundaryGoal, false, boundaryGeometry) !== null);
+check('invalid geometry is rejected without throwing',
+  findPath(boundaryGrid, boundaryStart, boundaryGoal, {
+    cols: 0, rows: 3, cellX: 10, cellY: 10,
+  }) === null);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
