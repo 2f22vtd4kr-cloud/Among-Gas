@@ -594,6 +594,18 @@ const toWorld = (point: readonly [number, number]): readonly [number, number] =>
 for (const region of INTENTIONALLY_SEALED_REGIONS) {
   assert.ok(blockedPolygonIds.has(region.id), `${region.id} has a named production collision polygon`);
   assert.ok(region.rationale.length >= 40, `${region.id} has an evidence-based source-art rationale`);
+  const polygon = MANUAL_BLOCKED_POLYGONS.find(candidate => candidate.id === region.id)!;
+  assert.ok(polygon.points.length >= 7, `${region.id} uses an irregular source-derived contour, not a rectangle`);
+  const polygonBounds = [
+    Math.min(...polygon.points.map(point => point[0])),
+    Math.min(...polygon.points.map(point => point[1])),
+    Math.max(...polygon.points.map(point => point[0])),
+    Math.max(...polygon.points.map(point => point[1])),
+  ];
+  assert.ok(
+    polygonBounds.every((value, index) => Math.abs(value - region.worldBounds[index]) <= 12),
+    `${region.id}: blocked polygon tracks the reviewed component bounds`,
+  );
 
   const [spawnFeetX, spawnFeetY] = toWorld(region.spawnSideReferenceImage);
   const [islandFeetX, islandFeetY] = toWorld(region.islandSideReferenceImage);
