@@ -379,6 +379,57 @@ const gameplayAnchors = [
   )),
 ];
 
+// Five named route probes used by the earlier sector-level audit. Re-check
+// them against the fine-grid production player footprint, not only the compact
+// navigation mask. A small local search avoids a false negative from a target
+// landing between fine-grid cell centres.
+const sectorTargets = [
+  { id: 'A', name: 'upper-left', x: 429, y: 600 },
+  { id: 'B', name: 'upper-right/generator', x: 2942, y: 898 },
+  { id: 'C', name: 'central garden', x: 1733, y: 472 },
+  { id: 'D', name: 'lower-left storage/electrical', x: 472, y: 1372 },
+  { id: 'E', name: 'lower-right', x: 2634, y: 1443 },
+];
+const sectorTargetApproaches = sectorTargets.map(target => {
+  const byComponent = new Map<number, { count: number; nearest: number; x: number; y: number }>();
+  for (let dy = -48; dy <= 48; dy += 8) {
+    for (let dx = -48; dx <= 48; dx += 8) {
+      const distance = Math.hypot(dx, dy);
+      if (distance > 48) continue;
+      const spriteX = target.x + dx;
+      const spriteY = target.y + dy;
+      if (!isPlayerPositionWalkable(grid, spriteX, spriteY)) continue;
+      const feetY = spriteY + FEET_OFFSET_Y;
+      const col = Math.floor(spriteX / FINE_CELL_X);
+      const row = Math.floor(feetY / FINE_CELL_Y);
+      if (col < 0 || col >= FINE_COLS || row < 0 || row >= FINE_ROWS) continue;
+      const component = componentOf[row * FINE_COLS + col];
+      if (component < 0) continue;
+      const previous = byComponent.get(component);
+      if (previous) {
+        previous.count++;
+        if (distance < previous.nearest) {
+          previous.nearest = distance;
+          previous.x = spriteX;
+          previous.y = spriteY;
+        }
+      } else {
+        byComponent.set(component, { count: 1, nearest: distance, x: spriteX, y: spriteY });
+      }
+    }
+  }
+  return {
+    ...target,
+    approachComponents: [...byComponent.entries()].map(([component, value]) => ({
+      component,
+      samples: value.count,
+      nearestPx: Math.round(value.nearest),
+      nearestPosition: [Math.round(value.x), Math.round(value.y)],
+      connectedToSpawn: component === spawnComponent,
+    })).sort((a, b) => a.nearestPx - b.nearestPx),
+  };
+});
+
 console.log('Fine-grid component visual: ' + outputPath);
 console.log('GAMEPLAY_ANCHOR_COMPONENTS ' + JSON.stringify(
   gameplayAnchors.map(anchor => ({
@@ -387,7 +438,20 @@ console.log('GAMEPLAY_ANCHOR_COMPONENTS ' + JSON.stringify(
     spawnConnected: anchor.approachComponents.some(approach => approach.connectedToSpawn),
   })),
 ));
+console.log('SECTOR_TARGET_COMPONENTS ' + JSON.stringify(
+  sectorTargetApproaches.map(target => ({
+    sector: target.id,
+    name: target.name,
+    components: target.approachComponents.map(approach => approach.component),
+    spawnConnected: target.approachComponents.some(approach => approach.connectedToSpawn),
+  })),
+));
 console.log('SIGNIFICANT_BOUNDARY_CONTACTS ' + JSON.stringify(significantBoundaryContacts));
+assert.ok(
+  sectorTargetApproaches.every(target => target.approachComponents.some(approach => approach.connectedToSpawn)),
+  'all five named map-sector targets must have a full-footprint approach in the spawn-connected fine-grid network',
+);
+
 console.log(JSON.stringify({
   fineGrid: {
     cols: FINE_COLS,
