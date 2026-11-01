@@ -22,9 +22,9 @@ function mentionsPlayer(text: string, player: PublicVotePlayer): boolean {
   if (name.length >= 2) {
     let index = lower.indexOf(name);
     while (index >= 0) {
-      const before = index === 0 || !/[\\p{L}\\p{N}_]/u.test(text[index - 1]);
+      const before = index === 0 || !/[\p{L}\p{N}_]/u.test(text[index - 1]);
       const afterIndex = index + name.length;
-      const after = afterIndex === text.length || !/[\\p{L}\\p{N}_]/u.test(text[afterIndex]);
+      const after = afterIndex === text.length || !/[\p{L}\p{N}_]/u.test(text[afterIndex]);
       if (before && after) return true;
       index = lower.indexOf(name, index + 1);
     }
