@@ -303,8 +303,6 @@ export abstract class BotAgent {
       })) manager.castVote(lobby, self.slot, fallback);
     }).finally(() => {
       this.voteRequestPending = false;
-    });finally(() => {
-      this.voteRequestPending = false;
     });
   }
 
