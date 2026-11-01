@@ -63,6 +63,9 @@ jobs:
           after=$(sha256sum lib/shared/src/collisionData.ts)
           test "$before" = "$after" || { echo "Collision analyzer modified production collisionData.ts"; exit 1; }
 
+      - name: Verify fine-grid player-footprint connectivity across the map
+        run: node scripts/test-fine-map-connectivity.mjs
+
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
