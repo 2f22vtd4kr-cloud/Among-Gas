@@ -57,13 +57,12 @@ export const MANUAL_BLOCKED_POLYGONS: readonly {
 ];
 
 /**
- * Source-art regions intentionally sealed from the spawn-connected play space.
- * Each disposition is tied to stable world bounds and annotated source-image
- * boundary points. Its irregular MANUAL_BLOCKED_POLYGONS contour blocks the
- * sealed floor pocket. These are geometry dispositions, not scan-order
- * component-ID allowlists.
+ * Source-art regions whose boundaries currently appear sealed from the
+ * spawn-connected play space. These are provisional geometry candidates,
+ * not proof of intended game design. Require explicit design-owner approval
+ * before treating any enclosed floor as intentionally non-playable.
  */
-export const INTENTIONALLY_SEALED_REGIONS: readonly {
+export const SOURCE_ART_SEALED_REGION_CANDIDATES: readonly {
   readonly id: string;
   readonly worldBounds: readonly [number, number, number, number];
   readonly spawnSideReferenceImage: readonly [number, number];
@@ -101,12 +100,12 @@ export const INTENTIONALLY_SEALED_REGIONS: readonly {
 ];
 
 /**
- * Decorative zones with intentionally preserved internal walkability but no
- * source-art doorway to the spawn-connected network. These remain isolated;
- * they are not counted as gameplay route targets and have no exclusive task,
- * vent, Admin Table, or sabotage interaction.
+ * Source-art regions whose interiors remain walkable while their perimeter
+ * currently appears sealed. The no-entry interpretation is provisional:
+ * source art alone does not establish design intent. Require explicit
+ * design-owner approval before treating these as intentionally inaccessible.
  */
-export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
+export const SOURCE_ART_ISOLATED_REGION_CANDIDATES: readonly {
   readonly id: string;
   readonly worldBounds: readonly [number, number, number, number];
   readonly spawnSideReferenceImage: readonly [number, number];
@@ -119,7 +118,7 @@ export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
     worldBounds: [1821, 801, 2589, 1327],
     spawnSideReferenceImage: [1002, 343],
     islandSideReferenceImage: [1016, 357],
-    entryExitMechanics: 'None by design: the source-art perimeter is continuous, with no door, vent, teleport or other entry/exit route. This decorative bay is not a gameplay route target.',
-    rationale: 'The vehicle-service bay retains its internally walkable floor and exact green-van silhouette clearance, as required by the existing movement/vision regression. The perimeter is a continuous red-line wall with no drawn doorway; no gameplay anchor is inside. Preserve the bay geometry but keep its sealed perimeter rather than inventing an entrance.',
+    entryExitMechanics: 'No entry/exit is currently authored in the source art; design-owner confirmation is pending before treating this as an intended no-entry area.',
+    rationale: 'The vehicle-service bay retains its internally walkable floor and exact green-van silhouette clearance, as required by the existing movement/vision regression. The current reference shows a continuous red-line perimeter with no drawn doorway and no gameplay anchor inside. Preserve the current geometry pending explicit design-owner confirmation; do not infer that isolation is intended.',
   },
 ];

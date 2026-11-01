@@ -6,8 +6,8 @@ import sharp from 'sharp';
 import {
   buildPreciseCollisionGrid,
   buildPreciseCollisionGridFromRle,
-  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS,
-  INTENTIONALLY_SEALED_REGIONS,
+  SOURCE_ART_ISOLATED_REGION_CANDIDATES,
+  SOURCE_ART_SEALED_REGION_CANDIDATES,
   MANUAL_BLOCKED_POLYGONS,
   FINE_CELL_X,
   FINE_CELL_Y,
@@ -578,20 +578,20 @@ console.log(JSON.stringify({
   significantBoundaryContacts,
 }, null, 2));
 
-// Four sealed prop/furniture regions are blocked by named irregular polygons.
-// The central decorative garden is a deliberate exception: the existing
-// mechanics contract preserves its walkable footprint, while its source-art
-// perimeter remains sealed. No component-ID allowlist is used.
+// Four source-art-sealed candidates currently have named irregular collision
+// contours. One further candidate retains its internal walkable floor while
+// its perimeter remains sealed in the current map data. These are provisional
+// geometry states, not design approvals; no component-ID allowlist is used.
 const detachedContacts = significantBoundaryContacts;
 assert.equal(
   significant.filter(({ id }) => id !== spawnComponent).length,
-  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS.length,
-  'only the explicitly documented decorative garden remains as a detached walkable region',
+  SOURCE_ART_ISOLATED_REGION_CANDIDATES.length,
+  'only the documented source-art isolated candidate remains as a detached walkable region; design sign-off is pending',
 );
 assert.equal(
   detachedContacts.length,
-  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS.length,
-  'every remaining detached component has one named decorative-region disposition',
+  SOURCE_ART_ISOLATED_REGION_CANDIDATES.length,
+  'every remaining detached component has one named source-art candidate disposition',
 );
 
 const toWorld = (point: readonly [number, number]): readonly [number, number] => [
@@ -626,8 +626,53 @@ const findNearbyFeet = (
 };
 const closeEnough = (a: number, b: number, tolerance: number) =>
   Math.abs(a - b) <= tolerance;
+const orientation = (
+  a: readonly [number, number],
+  b: readonly [number, number],
+  c: readonly [number, number],
+): number => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+const onSegment = (
+  a: readonly [number, number],
+  b: readonly [number, number],
+  p: readonly [number, number],
+): boolean => p[0] >= Math.min(a[0], b[0]) - 1e-9 &&
+  p[0] <= Math.max(a[0], b[0]) + 1e-9 &&
+  p[1] >= Math.min(a[1], b[1]) - 1e-9 &&
+  p[1] <= Math.max(a[1], b[1]) + 1e-9;
+const segmentsIntersect = (
+  a: readonly [number, number], b: readonly [number, number],
+  c: readonly [number, number], d: readonly [number, number],
+): boolean => {
+  const o1 = orientation(a, b, c), o2 = orientation(a, b, d);
+  const o3 = orientation(c, d, a), o4 = orientation(c, d, b);
+  if (o1 * o2 < 0 && o3 * o4 < 0) return true;
+  return (Math.abs(o1) < 1e-9 && onSegment(a, b, c)) ||
+    (Math.abs(o2) < 1e-9 && onSegment(a, b, d)) ||
+    (Math.abs(o3) < 1e-9 && onSegment(c, d, a)) ||
+    (Math.abs(o4) < 1e-9 && onSegment(c, d, b));
+};
+for (const polygon of MANUAL_BLOCKED_POLYGONS) {
+  const points = polygon.points;
+  let twiceArea = 0;
+  for (let i = 0; i < points.length; i++) {
+    const a = points[i], b = points[(i + 1) % points.length];
+    twiceArea += a[0] * b[1] - b[0] * a[1];
+  }
+  assert.ok(points.length >= 3 && Math.abs(twiceArea) > 2,
+    `${polygon.id}: polygon has non-zero area`);
+  for (let i = 0; i < points.length; i++) {
+    for (let j = i + 1; j < points.length; j++) {
+      if (j === i + 1 || (i === 0 && j === points.length - 1)) continue;
+      assert.equal(
+        segmentsIntersect(points[i], points[(i + 1) % points.length], points[j], points[(j + 1) % points.length]),
+        false,
+        `${polygon.id}: non-adjacent contour edges do not self-intersect`,
+      );
+    }
+  }
+}
 
-for (const region of INTENTIONALLY_SEALED_REGIONS) {
+for (const region of SOURCE_ART_SEALED_REGION_CANDIDATES) {
   assert.ok(region.rationale.length >= 40, `${region.id} has an evidence-based source-art rationale`);
   const polygon = MANUAL_BLOCKED_POLYGONS.find(candidate => candidate.id === region.id);
   assert.ok(polygon, `${region.id} has a named production collision polygon`);
@@ -654,10 +699,14 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
     isPlayerPositionWalkable(grid, spawnFeetX, spawnSpriteY),
     `${region.id}: surrounding spawn-side route retains full-footprint clearance`,
   );
+  assert.ok(
+    isPlayerPositionWalkable(rebuiltGrid, spawnFeetX, spawnSpriteY),
+    `${region.id}: independent RLE rebuild preserves spawn-side clearance`,
+  );
   assert.equal(
     isPlayerPositionWalkable(grid, islandFeetX, islandSpriteY),
     false,
-    `${region.id}: sealed non-playable footprint is blocked`,
+    `${region.id}: current source-art contour candidate blocks this footprint pending design sign-off`,
   );
   assert.equal(
     isPlayerPositionWalkable(rebuiltGrid, islandFeetX, islandSpriteY),
@@ -669,17 +718,22 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
     false,
     `${region.id}: player cannot sweep through the sealed source-art boundary`,
   );
+  assert.equal(
+    isPlayerPathWalkable(rebuiltGrid, spawnFeetX, spawnSpriteY, islandFeetX, islandSpriteY),
+    false,
+    `${region.id}: independent RLE rebuild also blocks a swept path through the contour`,
+  );
 }
 
-for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
-  assert.ok(region.rationale.length >= 40, `${region.id} has an explicit decorative-area rationale`);
+for (const region of SOURCE_ART_ISOLATED_REGION_CANDIDATES) {
+  assert.ok(region.rationale.length >= 40, `${region.id} has a source-art rationale; design approval is tracked separately`);
   assert.ok(
-    region.entryExitMechanics.length >= 40 && /none by design/i.test(region.entryExitMechanics),
-    `${region.id} explicitly documents that no entry/exit mechanic is authored`,
+    region.entryExitMechanics.length >= 40 && /design-owner confirmation is pending/i.test(region.entryExitMechanics),
+    `${region.id} records the current lack of an authored entry/exit without claiming design intent`,
   );
   assert.ok(
     !MANUAL_BLOCKED_POLYGONS.some(polygon => polygon.id === region.id),
-    `${region.id}: central decorative garden is not filled by a manual collision polygon`,
+    `${region.id}: current interior remains free of a manual blocked polygon pending design sign-off`,
   );
   const contact = detachedContacts.find(candidate =>
     candidate.bounds.every((value, index) => closeEnough(value, region.worldBounds[index], 12)) &&
@@ -708,12 +762,21 @@ for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
   );
   assert.ok(
     isPlayerPositionWalkable(grid, islandFeetX, islandSpriteY),
-    `${region.id}: decorative garden footprint remains walkable per map-mechanics contract`,
+    `${region.id}: current interior remains walkable while its design disposition is pending`,
+  );
+  assert.ok(
+    isPlayerPositionWalkable(rebuiltGrid, islandFeetX, islandSpriteY),
+    `${region.id}: independent RLE rebuild preserves the internal walkable floor`,
   );
   assert.equal(
     isPlayerPathWalkable(grid, spawnFeetX, spawnSpriteY, islandFeetX, islandSpriteY),
     false,
     `${region.id}: the continuous source-art perimeter remains a blocked boundary`,
+  );
+  assert.equal(
+    isPlayerPathWalkable(rebuiltGrid, spawnFeetX, spawnSpriteY, islandFeetX, islandSpriteY),
+    false,
+    `${region.id}: independent RLE rebuild preserves the current isolated perimeter`,
   );
 }
 
@@ -726,5 +789,5 @@ assert.deepEqual(
   'all 24 gameplay anchors retain at least one spawn-connected full-footprint/LOS approach',
 );
 
-console.log('SEALED_REGION_DISPOSITIONS ' + JSON.stringify(INTENTIONALLY_SEALED_REGIONS));
-console.log('ISOLATED_DECORATIVE_REGION_DISPOSITIONS ' + JSON.stringify(INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS));
+console.log('SOURCE_ART_SEALED_REGION_CANDIDATES ' + JSON.stringify(SOURCE_ART_SEALED_REGION_CANDIDATES));
+console.log('SOURCE_ART_ISOLATED_REGION_CANDIDATES ' + JSON.stringify(SOURCE_ART_ISOLATED_REGION_CANDIDATES));

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { INTENTIONALLY_SEALED_REGIONS } from '../lib/shared/src/collisionOverrides.js';
+import { SOURCE_ART_SEALED_REGION_CANDIDATES } from '../lib/shared/src/collisionOverrides.js';
 import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
@@ -98,7 +98,7 @@ for (const point of openPolygon) {
 // raster walls. The reference-side ray must reach past the island point without
 // polygons and stop before it when the authored map polygons are enabled.
 const polygonOnlyFineGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
-for (const region of INTENTIONALLY_SEALED_REGIONS) {
+for (const region of SOURCE_ART_SEALED_REGION_CANDIDATES) {
   const [spawnImageX, spawnImageY] = region.spawnSideReferenceImage;
   const [islandImageX, islandImageY] = region.islandSideReferenceImage;
   const originX = spawnImageX * MAP_W / 1359;
