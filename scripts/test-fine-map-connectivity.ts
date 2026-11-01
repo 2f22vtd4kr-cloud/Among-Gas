@@ -592,23 +592,31 @@ const toWorld = (point: readonly [number, number]): readonly [number, number] =>
   point[0] * MAP_W / 1359,
   point[1] * MAP_H / 784,
 ];
-const offsetFromBoundary = (
-  spawnReference: readonly [number, number],
-  islandReference: readonly [number, number],
-  distanceWorldPx: number,
-): { spawn: readonly [number, number]; island: readonly [number, number] } => {
-  const spawn = toWorld(spawnReference);
-  const island = toWorld(islandReference);
-  const dx = island[0] - spawn[0];
-  const dy = island[1] - spawn[1];
-  const length = Math.hypot(dx, dy);
-  assert.ok(length > 0, 'boundary probes must be distinct');
-  const ux = dx / length;
-  const uy = dy / length;
-  return {
-    spawn: [spawn[0] - ux * distanceWorldPx, spawn[1] - uy * distanceWorldPx],
-    island: [island[0] + ux * distanceWorldPx, island[1] + uy * distanceWorldPx],
-  };
+const findNearbyFeet = (
+  referencePoint: readonly [number, number],
+  componentId: number,
+  maxDistanceWorldPx = 60,
+): readonly [number, number] => {
+  const [targetX, targetY] = toWorld(referencePoint);
+  const centerCol = Math.floor(targetX / FINE_CELL_X);
+  const centerRow = Math.floor(targetY / FINE_CELL_Y);
+  let best: { point: readonly [number, number]; distance: number } | null = null;
+  const radiusCols = Math.ceil(maxDistanceWorldPx / FINE_CELL_X);
+  const radiusRows = Math.ceil(maxDistanceWorldPx / FINE_CELL_Y);
+  for (let row = Math.max(0, centerRow - radiusRows); row <= Math.min(FINE_ROWS - 1, centerRow + radiusRows); row++) {
+    for (let col = Math.max(0, centerCol - radiusCols); col <= Math.min(FINE_COLS - 1, centerCol + radiusCols); col++) {
+      const index = row * FINE_COLS + col;
+      if (componentOf[index] !== componentId) continue;
+      const feetX = (col + 0.5) * FINE_CELL_X;
+      const feetY = (row + 0.5) * FINE_CELL_Y;
+      const distance = Math.hypot(feetX - targetX, feetY - targetY);
+      if (distance <= maxDistanceWorldPx && (!best || distance < best.distance)) {
+        best = { point: [feetX, feetY], distance };
+      }
+    }
+  }
+  assert.ok(best, `source-image boundary point ${referencePoint.join(',')} has a nearby valid component-${componentId} footprint`);
+  return best!.point;
 };
 const closeEnough = (a: number, b: number, tolerance: number) =>
   Math.abs(a - b) <= tolerance;
@@ -629,13 +637,11 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
     `${region.id}: blocked polygon tracks the reviewed component bounds`,
   );
 
-  const probes = offsetFromBoundary(
+  const [spawnFeetX, spawnFeetY] = findNearbyFeet(
     region.spawnSideReferenceImage,
-    region.islandSideReferenceImage,
-    20,
+    spawnComponent,
   );
-  const [spawnFeetX, spawnFeetY] = probes.spawn;
-  const [islandFeetX, islandFeetY] = probes.island;
+  const [islandFeetX, islandFeetY] = toWorld(region.islandSideReferenceImage);
   const spawnSpriteY = spawnFeetY - FEET_OFFSET_Y;
   const islandSpriteY = islandFeetY - FEET_OFFSET_Y;
   assert.ok(
@@ -671,13 +677,14 @@ for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
   );
   assert.ok(contact?.spawnSide && contact?.islandSide, `${region.id} matches the reviewed source-art boundary`);
 
-  const probes = offsetFromBoundary(
+  const [spawnFeetX, spawnFeetY] = findNearbyFeet(
     region.spawnSideReferenceImage,
-    region.islandSideReferenceImage,
-    20,
+    spawnComponent,
   );
-  const [spawnFeetX, spawnFeetY] = probes.spawn;
-  const [islandFeetX, islandFeetY] = probes.island;
+  const [islandFeetX, islandFeetY] = findNearbyFeet(
+    region.islandSideReferenceImage,
+    contact!.component,
+  );
   const spawnSpriteY = spawnFeetY - FEET_OFFSET_Y;
   const islandSpriteY = islandFeetY - FEET_OFFSET_Y;
   assert.ok(
