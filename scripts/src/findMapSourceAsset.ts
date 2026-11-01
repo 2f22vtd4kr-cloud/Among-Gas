@@ -1,4 +1,5 @@
-import { readdir } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { extname, resolve, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -78,6 +79,33 @@ for (const root of searchRoots) {
 
 candidates.sort((a, b) => a.sampledMae - b.sampledMae);
 console.log('MAP_SOURCE_DIMENSION_CANDIDATES ' + JSON.stringify(candidates.slice(0, 20)));
+const exactSource = candidates.find(candidate => candidate.width === 1652 && candidate.height === 952);
 console.log('MAP_SOURCE_EXACT_DIMENSION_MATCHES ' + JSON.stringify(
   candidates.filter(candidate => candidate.width === 1652 && candidate.height === 952),
 ));
+if (exactSource) {
+  const sourcePath = resolve(repoRoot, exactSource.path);
+  const sourceBytes = await readFile(sourcePath);
+  const targetBytes = await readFile(targetPath);
+  const sourceRaw = await sharp(sourcePath)
+    .resize(targetMeta.width, targetMeta.height, { fit: 'fill', kernel: exactSource.kernel as 'lanczos3' | 'cubic' | 'nearest' })
+    .removeAlpha()
+    .raw()
+    .toBuffer();
+  let fullAbsoluteError = 0;
+  for (let i = 0; i < target.length; i++) fullAbsoluteError += Math.abs(target[i] - sourceRaw[i]);
+  const fullMae = fullAbsoluteError / target.length;
+  console.log('MAP_SOURCE_PROVENANCE ' + JSON.stringify({
+    source: exactSource.path,
+    sourceDimensions: [exactSource.width, exactSource.height],
+    sourceSha256: createHash('sha256').update(sourceBytes).digest('hex'),
+    target: 'artifacts/telegram-game/public/map-hires.png',
+    targetDimensions: [targetMeta.width, targetMeta.height],
+    targetSha256: createHash('sha256').update(targetBytes).digest('hex'),
+    scale: [targetMeta.width / exactSource.width, targetMeta.height / exactSource.height],
+    kernel: exactSource.kernel,
+    sampledMae: exactSource.sampledMae,
+    fullMae: Number(fullMae.toFixed(4)),
+  }));
+  if (fullMae >= 8) throw new Error(`The 1652×952 source candidate does not sufficiently reproduce map-hires.png (full MAE ${fullMae.toFixed(4)})`);
+}
