@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import {
   buildPreciseCollisionGrid,
+  INTENTIONALLY_SEALED_REGIONS,
   FINE_CELL_X,
   FINE_CELL_Y,
   FINE_COLS,
@@ -569,11 +570,79 @@ console.log(JSON.stringify({
   significantBoundaryContacts,
 }, null, 2));
 
-// Significant detached regions remain diagnostic candidates. Do not alter
-// their geometry or whitelist them until the map reference and intended route
-// anchors have been reviewed.
+// Every significant detached region now has a named, source-art-backed
+// disposition. Match by world bounds and source-image boundary points, never
+// by scan-order component ID. The red-line wall separating each sealed region
+// from the spawn network must remain blocked for the full player footprint.
+const detachedContacts = significantBoundaryContacts;
 assert.equal(
-  significant.filter(({ id }) => id !== spawnComponent).length,
-  0,
-  'all significant player-clearance regions must connect to the configured spawn network',
+  detachedContacts.length,
+  INTENTIONALLY_SEALED_REGIONS.length,
+  'every significant detached region has exactly one named disposition',
 );
+
+const matchedDispositionIds = new Set<string>();
+const closeEnough = (a: number, b: number, tolerance: number) =>
+  Math.abs(a - b) <= tolerance;
+
+for (const contact of detachedContacts) {
+  assert.ok(contact.spawnSide && contact.islandSide, 'sealed region has both boundary-side probes');
+  const disposition = INTENTIONALLY_SEALED_REGIONS.find(region =>
+    contact.bounds.every((value, index) =>
+      closeEnough(value, region.worldBounds[index], 12),
+    ) &&
+    contact.spawnSide!.referenceImage.every((value, index) =>
+      closeEnough(value, region.spawnSideReferenceImage[index], 6),
+    ) &&
+    contact.islandSide!.referenceImage.every((value, index) =>
+      closeEnough(value, region.islandSideReferenceImage[index], 6),
+    ),
+  );
+  assert.ok(disposition, `detached region bounds ${contact.bounds.join(',')} have a named source-art disposition`);
+  assert.ok(disposition!.rationale.length >= 40, `${disposition!.id} has an evidence-based rationale`);
+  assert.ok(!matchedDispositionIds.has(disposition!.id), `${disposition!.id} is matched only once`);
+  matchedDispositionIds.add(disposition!.id);
+
+  const spawnSpriteX = contact.spawnSide!.world[0];
+  const spawnSpriteY = contact.spawnSide!.world[1] - FEET_OFFSET_Y;
+  const islandSpriteX = contact.islandSide!.world[0];
+  const islandSpriteY = contact.islandSide!.world[1] - FEET_OFFSET_Y;
+  assert.ok(
+    isPlayerPositionWalkable(grid, spawnSpriteX, spawnSpriteY),
+    `${disposition!.id}: spawn-side approach retains full-footprint clearance`,
+  );
+  assert.ok(
+    isPlayerPositionWalkable(grid, islandSpriteX, islandSpriteY),
+    `${disposition!.id}: sealed-side floor probe retains full-footprint clearance`,
+  );
+  assert.equal(
+    isPlayerPathWalkable(grid, spawnSpriteX, spawnSpriteY, islandSpriteX, islandSpriteY),
+    false,
+    `${disposition!.id}: source-art wall remains blocked to the complete player footprint`,
+  );
+}
+
+assert.deepEqual(
+  [...matchedDispositionIds].sort(),
+  INTENTIONALLY_SEALED_REGIONS.map(region => region.id).sort(),
+  'no named sealed region is missing from the diagnostic and no unknown region is silently excluded',
+);
+
+const unreachableGameplayAnchors = gameplayAnchors
+  .filter(anchor => !anchor.approachComponents.some(approach => approach.connectedToSpawn))
+  .map(anchor => anchor.name);
+assert.deepEqual(
+  unreachableGameplayAnchors,
+  [],
+  'all 24 gameplay anchors retain at least one spawn-connected full-footprint/LOS approach',
+);
+
+console.log('SEALED_REGION_DISPOSITIONS ' + JSON.stringify(
+  INTENTIONALLY_SEALED_REGIONS.map(region => ({
+    id: region.id,
+    worldBounds: region.worldBounds,
+    spawnSideReferenceImage: region.spawnSideReferenceImage,
+    islandSideReferenceImage: region.islandSideReferenceImage,
+    rationale: region.rationale,
+  })),
+));
