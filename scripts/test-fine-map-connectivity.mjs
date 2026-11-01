@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
+import path from 'node:path';
+import sharp from 'sharp';
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const fineSource = read('../lib/shared/src/collisionDataFine.ts');
@@ -106,6 +108,36 @@ const spawnY = Math.round(150 * mapH / 580);
 const spawnIndex = Math.floor(spawnY / cellY) * cols + Math.floor(spawnX / cellX);
 assert.ok(componentOf[spawnIndex] >= 0, 'configured player spawn has valid full-footprint clearance');
 const spawnComponent = componentOf[spawnIndex];
+
+// Render a component-coloured map for visual diagnosis. This is emitted even
+// when the release assertion below fails, so the CI artifact shows exactly
+// which rooms/corridors are detached instead of reducing the failure to a count.
+const componentPixels = Buffer.alloc(cols * rows * 4);
+for (let index = 0; index < componentOf.length; index++) {
+  const id = componentOf[index];
+  if (id < 0) continue;
+  const hue = (id * 137.508) % 360;
+  const chroma = 0.72, sector = hue / 60, x = chroma * (1 - Math.abs((sector % 2) - 1));
+  let rgb;
+  if (sector < 1) rgb = [chroma, x, 0];
+  else if (sector < 2) rgb = [x, chroma, 0];
+  else if (sector < 3) rgb = [0, chroma, x];
+  else if (sector < 4) rgb = [0, x, chroma];
+  else if (sector < 5) rgb = [x, 0, chroma];
+  else rgb = [chroma, 0, x];
+  const offset = index * 4;
+  componentPixels[offset] = Math.round((rgb[0] + 0.28) * 255);
+  componentPixels[offset + 1] = Math.round((rgb[1] + 0.28) * 255);
+  componentPixels[offset + 2] = Math.round((rgb[2] + 0.28) * 255);
+  componentPixels[offset + 3] = id === spawnComponent ? 165 : 125;
+}
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
+const outputPath = path.join(root, 'artifacts/telegram-game/fine-connectivity-components.png');
+const componentOverlay = await sharp(componentPixels, { raw: { width: cols, height: rows, channels: 4 } })
+  .resize(mapW, mapH, { kernel: 'nearest' }).png().toBuffer();
+await sharp(mapPath).composite([{ input: componentOverlay, blend: 'over' }]).png().toFile(outputPath);
+console.log('Fine-grid component visual: ' + outputPath);
 const significant = componentSizes
   .map((size, id) => ({ id, size, bounds: componentBounds[id] }))
   .filter(({ size }) => size >= 1000)
