@@ -389,6 +389,7 @@ export function findPath(
  */
 export class PathCache {
   private cache = new Map<string, PathResult | null>();
+  private cachedGrid: Grid | null = null;
 
   find(
     grid: Grid,
@@ -398,6 +399,12 @@ export class PathCache {
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
   ): PathResult | null {
     if (!isValidPathInput(grid, start, goal, geometry)) return null;
+    // A cache key made only from coordinates is unsafe across distinct map
+    // grids: the same cells can be walkable in one map and blocked in another.
+    if (this.cachedGrid !== grid) {
+      this.cache.clear();
+      this.cachedGrid = grid;
+    }
 
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
@@ -423,6 +430,7 @@ export class PathCache {
 
   clear(): void {
     this.cache.clear();
+    this.cachedGrid = null;
   }
 
   get size(): number { return this.cache.size; }
