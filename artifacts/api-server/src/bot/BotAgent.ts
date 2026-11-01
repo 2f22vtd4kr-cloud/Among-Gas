@@ -30,6 +30,7 @@ import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { buildPublicBotDialogueMessages, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
+import { buildPublicBotVoteMessages, parsePublicBotVoteResponse } from './aiVoting.js';
 
 export { NO_TARGET };
 
@@ -159,6 +160,9 @@ export abstract class BotAgent {
   private lastDiscussionMessageKey = '';
   private discussionRequestPending = false;
   private lastDiscussionReplyAtMs = 0;
+  private voteRequestMeeting: Lobby['meeting'] = null;
+  private voteRequestPending = false;
+  private voteRequestStartedAtMs = 0;
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -202,9 +206,87 @@ export abstract class BotAgent {
         return;
       }
       if (meeting.votes.has(self.slot)) return; // already voted
-      const target = this.chooseVote(lobby, self);
-      manager.castVote(lobby, self.slot, target);
+      this.requestMeetingVote(lobby, self, manager, meeting);
     }
+  }
+
+  /**
+   * Request an asynchronous model vote without blocking the 5Hz bot loop.
+   * Each bot's request is staggered to respect the shared per-key provider
+   * cooldown. The deterministic role-aware vote remains the fail-closed path.
+   */
+  private requestMeetingVote(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    meeting: NonNullable<Lobby['meeting']>,
+  ): void {
+    if (this.voteRequestMeeting !== meeting) {
+      this.voteRequestMeeting = meeting;
+      this.voteRequestPending = false;
+      this.voteRequestStartedAtMs = 0;
+    }
+    if (this.voteRequestPending || meeting.votes.has(self.slot)) return;
+
+    const sessionKey = lobby.players.get(lobby.hostSlot)?.groqApiKey ??
+      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+    const fallback = this.chooseVote(lobby, self);
+
+    // Without a configured provider, preserve immediate deterministic play.
+    if (!sessionKey) {
+      manager.castVote(lobby, self.slot, fallback);
+      return;
+    }
+
+    const now = Date.now();
+    if (this.voteRequestStartedAtMs === 0) this.voteRequestStartedAtMs = now;
+    // Groq keys are shared by bots in a lobby and are rate-limited per key.
+    // A 1.6s slot stagger prevents a burst of simultaneous calls at votingOpen.
+    if (now - this.voteRequestStartedAtMs < self.slot * 1_600) return;
+
+    this.voteRequestPending = true;
+    const publicRoster = Array.from(lobby.players.values())
+      .filter(player => player.alive)
+      .map(player => ({ slot: player.slot, username: player.username, alive: true }));
+    const publicTranscript = meeting.messages.slice(-12).map(message => ({
+      slot: message.slot,
+      text: message.text,
+    }));
+    const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
+
+    void requestGroqDialogue(sessionKey, prompt).then(response => {
+      // A slow model response must never cast into a later meeting or after
+      // this meeting has closed, the bot died, or another path already voted.
+      if (
+        lobby.phase !== 'MEETING' ||
+        lobby.meeting !== meeting ||
+        !meeting.votingOpen ||
+        !self.alive ||
+        meeting.votes.has(self.slot)
+      ) return;
+
+      const parsed = response === null
+        ? null
+        : parsePublicBotVoteResponse(response, self.slot, publicRoster);
+      const candidate = parsed === null ? fallback : parsed;
+      const target = candidate === NO_TARGET ? undefined : lobby.players.get(candidate);
+      // The model sees no roles. The authoritative server enforces role rules:
+      // impostors cannot vote for an impostor ally; nobody can vote for self/dead.
+      const legal = candidate === NO_TARGET ||
+        (!!target && target.alive && target.slot !== self.slot &&
+          (self.role !== 'impostor' || target.role !== 'impostor'));
+      manager.castVote(lobby, self.slot, legal ? candidate : fallback);
+    }).catch(() => {
+      if (
+        lobby.phase === 'MEETING' &&
+        lobby.meeting === meeting &&
+        meeting.votingOpen &&
+        self.alive &&
+        !meeting.votes.has(self.slot)
+      ) manager.castVote(lobby, self.slot, fallback);
+    }).finally(() => {
+      this.voteRequestPending = false;
+    });
   }
 
   /**
