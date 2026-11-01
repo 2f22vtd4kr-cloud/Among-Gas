@@ -21,7 +21,7 @@ The component IDs below are retained only to preserve the original diagnostic re
 | Original component | Valid cells | Original world bounds [minX,minY,maxX,maxY] | Spawn-side source px | Region-side source px | Named disposition | Collision treatment |
 |---:|---:|---|---|---|---|---|
 | 27 | 11,463 | [597,673,1645,1531] | [698,351] | [684,365] | `south-central-service-fixture-enclosure` — sealed lower-central equipment/cabinet area; continuous wall at the reviewed threshold; no exclusive gameplay anchor | Irregular blocked contour |
-| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | [1016,357] | `east-office-vehicle-service-bay` — decorative vehicle-service bay with internally walkable floor and van silhouette; no doorway in source art and no gameplay anchor | Preserve walkable bay and van silhouette; keep the continuous perimeter wall blocked; document as one intentionally isolated decorative region |
+| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | `east-office-vehicle-service-bay` — decorative vehicle-service bay with internally walkable floor and van silhouette; no doorway in source art and no gameplay anchor | Preserve walkable bay and van silhouette; keep the continuous perimeter wall blocked; entry/exit mechanics are explicitly **none by design** |
 | 20 | 2,719 | [597,507,929,801] | [311,201] | [299,215] | `northwest-tank-machinery-enclosure` — sealed tank/pipe machinery footprint; continuous wall, no task or interaction approach | Irregular blocked contour |
 | 0 | 2,509 | [1337,19,2138,270] | [629,59] | [613,43] | `north-cafeteria-upper-furniture-strip` — upper furniture/bench strip behind the continuous cafeteria partition | Irregular blocked contour |
 | 56 | 2,304 | [147,1209,427,1555] | [153,631] | [137,615] | `southwest-shop-shelving-interior` — enclosed shelving/display footprint behind a continuous diagonal wall | Irregular blocked contour |
@@ -31,7 +31,7 @@ World bounds use the 3224×1858 map coordinate system. Source coordinates refer 
 ## Geometry implementation
 
 - Added four named entries to `MANUAL_BLOCKED_POLYGONS` in `lib/shared/src/collisionOverrides.ts`. Each polygon follows the isolated pocket's irregular fine-grid contour and is expanded by two fine-grid cells to cover the complete player-centre footprint. No bounding rectangles or global collision holes were introduced.
-- Preserved the `green-service-van-bay` walkable replacement zone and its vehicle silhouette polygon. The van remains solid, while left/right player clearance around the vehicle remains walkable. The bay perimeter is still blocked by the source-art wall; no doorway was invented.
+- Preserved the `green-service-van-bay` walkable replacement zone and its vehicle silhouette polygon. The van remains solid, while left/right player clearance around the vehicle remains walkable. The bay perimeter is still blocked by the source-art wall; no doorway was invented. The zone has no door, vent, teleport or other entry/exit mechanic and is not a gameplay route target.
 - Kept the separate `east-generator-approach-aisle` walkable replacement zone; it remains connected to the spawn network.
 - The central decorative garden remains walkable. The map-mechanics regression now checks its actual floor probes rather than rejecting every manual collision polygon anywhere on the map.
 - No source image, PNG/WebP asset, fine-grid RLE payload, or global collision mask was regenerated.
@@ -42,7 +42,7 @@ World bounds use the 3224×1858 map coordinate system. Source coordinates refer 
 
 1. The four sealed prop/service regions have named irregular production collision polygons whose bounds match the reviewed component bounds.
 2. Each sealed region's full-player-footprint probe is blocked; the spawn-side approach remains walkable; a sweep across the source-art boundary remains blocked.
-3. The east vehicle-service bay retains its internal walkable footprint, the van remains a solid obstacle, and the source-art perimeter remains a blocked boundary.
+3. The east vehicle-service bay retains its internal walkable footprint, the van remains a solid obstacle, and the source-art perimeter remains a blocked boundary. The metadata and regression explicitly record that no entry/exit mechanic is authored for this decorative zone.
 4. Exactly one documented decorative/service region remains internally walkable but isolated; no other significant detached walkable component remains.
 5. Every one of the 24 gameplay anchors retains at least one spawn-connected full-footprint and line-of-sight approach.
 6. All five sector targets A–E remain spawn-connected.
