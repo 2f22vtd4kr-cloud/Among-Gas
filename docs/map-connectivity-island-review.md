@@ -40,9 +40,9 @@ World bounds use the 3224×1858 map coordinate system. Boundary coordinates refe
 
 `scripts/test-fine-map-connectivity.ts` verifies:
 
-1. The four sealed prop/service regions have named irregular production collision polygons whose bounds match the reviewed component bounds.
-2. Each sealed region's full-player-footprint probe is blocked; the spawn-side approach remains walkable; a sweep across the original-art boundary remains blocked.
-3. The east vehicle-service bay retains its internal walkable footprint, the van remains a solid obstacle, and the source-art perimeter remains a blocked boundary. The metadata and regression explicitly record that no entry/exit mechanic is authored for this decorative zone.
+1. The four source-art contour candidates currently have named irregular production collision polygons whose bounds match the reviewed component bounds; this records the implementation, not design approval.
+2. Each currently blocked contour candidate's full-player-footprint probe is blocked; the spawn-side approach remains walkable; a sweep across the source-art boundary remains blocked.
+3. The east vehicle-service bay retains its internal walkable footprint, the van remains a solid obstacle, and the current source-art perimeter remains a blocked boundary. The metadata records that no entry/exit is currently authored, while explicitly leaving the intended accessibility pending design-owner confirmation.
 4. Exactly one documented source-art isolated candidate remains internally walkable but disconnected under the current map data; no other significant detached walkable component remains. This test does not declare that isolation to be intended game design.
 5. Every one of the 24 gameplay anchors retains at least one spawn-connected full-footprint and line-of-sight approach.
 6. All five sector targets A–E remain spawn-connected.
