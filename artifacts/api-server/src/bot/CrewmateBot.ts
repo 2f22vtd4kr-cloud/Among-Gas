@@ -15,7 +15,6 @@ import { BotAgent, BOT_SPEED_PX } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
-import { NO_TARGET } from '@workspace/shared/coords';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { chooseEvidenceWeightedVote } from './voting.js';
