@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import {
   buildPreciseCollisionGrid,
+  buildPreciseCollisionGridFromRle,
   INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS,
   INTENTIONALLY_SEALED_REGIONS,
   MANUAL_BLOCKED_POLYGONS,
@@ -20,6 +21,7 @@ import {
   isPlayerSpawnPositionClear,
   isLineOfSightToInteractionTarget,
 } from '@workspace/shared/collisionMap';
+import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   FEET_OFFSET_Y,
   PLAYER_HALF_WIDTH,
@@ -31,6 +33,10 @@ import {
 // Use the exact production grid, including the same authored walkable and
 // blocked overrides consumed by client prediction and server validation.
 const grid = buildPreciseCollisionGrid();
+// A separately decoded candidate/rebuilt grid must enforce the same named
+// vector collision overrides as the cached production grid.
+const rebuiltGrid = buildPreciseCollisionGridFromRle(FINE_RLE_BASE64);
+assert.notEqual(rebuiltGrid, grid, 'the RLE rebuild is an independent grid instance');
 assert.equal(grid.length, FINE_COLS * FINE_ROWS, 'canonical fine grid dimensions match');
 assert.ok(FINE_COLS > 0 && FINE_ROWS > 0, 'canonical fine grid dimensions are non-zero');
 
@@ -652,6 +658,11 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
     isPlayerPositionWalkable(grid, islandFeetX, islandSpriteY),
     false,
     `${region.id}: sealed non-playable footprint is blocked`,
+  );
+  assert.equal(
+    isPlayerPositionWalkable(rebuiltGrid, islandFeetX, islandSpriteY),
+    false,
+    `${region.id}: independently rebuilt RLE grid preserves the same blocked polygon`,
   );
   assert.equal(
     isPlayerPathWalkable(grid, spawnFeetX, spawnSpriteY, islandFeetX, islandSpriteY),
