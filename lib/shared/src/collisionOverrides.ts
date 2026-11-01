@@ -111,6 +111,7 @@ export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
   readonly worldBounds: readonly [number, number, number, number];
   readonly spawnSideReferenceImage: readonly [number, number];
   readonly islandSideReferenceImage: readonly [number, number];
+  readonly entryExitMechanics: string;
   readonly rationale: string;
 }[] = [
   {
@@ -118,6 +119,7 @@ export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
     worldBounds: [1821, 801, 2589, 1327],
     spawnSideReferenceImage: [1002, 343],
     islandSideReferenceImage: [1016, 357],
+    entryExitMechanics: 'None by design: the source-art perimeter is continuous, with no door, vent, teleport or other entry/exit route. This decorative bay is not a gameplay route target.',
     rationale: 'The vehicle-service bay retains its internally walkable floor and exact green-van silhouette clearance, as required by the existing movement/vision regression. The perimeter is a continuous red-line wall with no drawn doorway; no gameplay anchor is inside. Preserve the bay geometry but keep its sealed perimeter rather than inventing an entrance.',
   },
 ];
