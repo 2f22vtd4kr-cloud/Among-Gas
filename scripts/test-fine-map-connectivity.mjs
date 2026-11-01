@@ -101,7 +101,8 @@ for (let start = 0; start < valid.length; start++) {
       }
     }
   }
-  componentSizes.push(queue.length);\n  componentBounds.push([Math.round(minCol * cellX), Math.round(minRow * cellY), Math.round((maxCol + 1) * cellX), Math.round((maxRow + 1) * cellY)]);
+  componentSizes.push(queue.length);
+  componentBounds.push([Math.round(minCol * cellX), Math.round(minRow * cellY), Math.round((maxCol + 1) * cellX), Math.round((maxRow + 1) * cellY)]);
 }
 const spawnX = Math.round(450 * mapW / 1040);
 const spawnY = Math.round(150 * mapH / 580);
