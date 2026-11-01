@@ -149,6 +149,12 @@ assert.ok(
 );
 const spawnComponent = componentOf[spawnIndex];
 
+const significant = componentSizes
+  .map((size, id) => ({ id, size, bounds: componentBounds[id] }))
+  .filter(({ size }) => size >= 1000)
+  .sort((a, b) => b.size - a.size);
+
+
 // Find the closest cells of every significant detached region to the spawn
 // network, ignoring obstacles during this distance transform. These are
 // inspection candidates for a missing doorway or an intentional wall, not
@@ -270,11 +276,6 @@ await sharp(mapPath)
   .composite([{ input: componentOverlay, blend: 'over' }])
   .png()
   .toFile(outputPath);
-
-const significant = componentSizes
-  .map((size, id) => ({ id, size, bounds: componentBounds[id] }))
-  .filter(({ size }) => size >= 1000)
-  .sort((a, b) => b.size - a.size);
 
 // Map gameplay anchors to the actual fine-grid components that have a valid
 // player footprint and line-of-sight approach. This is classification evidence,
