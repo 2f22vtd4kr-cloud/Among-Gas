@@ -1,69 +1,60 @@
 # Fine-grid disconnected-region review register
 
-Status: **open — all five regions unclassified**  
-Baseline: `main` `aef0f099e8924ec1d58359521ce8d235b762c38d`  
+Status: **classified — five sealed non-playable source-art regions are blocked by named irregular collision polygons.**  
+Baseline reviewed: `main` `aef0f099e8924ec1d58359521ce8d235b762c38d`  
 Diagnostic branch: `recovery/map-connectivity-regressions`
 
-This register captures candidate regions produced by the shared-production fine-grid diagnostic. The region IDs come from scan order and are not stable identifiers across mask revisions. Use the world bounds and source-image coordinates together.
-
-## Evidence
+## Evidence and decision method
 
 - Production player footprint: 4 px radius, 10 px horizontal half-width, 31 px sprite-centre-to-feet offset.
-- Connectivity nodes use `isPlayerFootprintWalkableAtFeet`; edges use `isPlayerPathWalkable` (<=2 px path samples), the same shared geometry consumed by client/server movement.
-- Spawn sprite centre: (1395,481); feet anchor: (1395,512); spawn-connected component: 1.
+- Connectivity nodes use `isPlayerFootprintWalkableAtFeet`; edges use `isPlayerPathWalkable` with at-most-2 px samples. These are the same shared geometry checks used by client prediction and server movement.
 - Fine grid: 680×392 at approximately 4.741×4.740 world px/cell.
-- 72 total player-clearance components; five are larger than 1,000 cells and are outside the spawn component.
-- All 24 required gameplay anchors (11 tasks, 6 vents, 1 Admin Table, 6 sabotage pads) have at least one spawn-connected full-footprint and line-of-sight approach.
-- All five previously defined sector targets A–E also have a spawn-connected full-footprint approach.
+- Before the exclusion polygons, the diagnostic found 72 player-clearance components. Five disconnected pockets exceeded 1,000 cells.
+- The 24 required gameplay anchors (11 tasks, 6 vents, 1 Admin Table, 6 sabotage pads) and all five sector targets A–E had spawn-connected full-footprint approaches before the exclusions.
+- The five boundary pairs were inspected at pixel level against `attached_assets/IMG_2907_1783632830477.jpeg` (1359×784). The nearest contacts for C27 and C38, plus the next-nearest boundary contacts, cross continuous red wall/fixture outlines. No open doorway is drawn at those boundaries.
+- The detached pockets are not gameplay rooms with documented entry/exit mechanics. They are sealed decorative, machinery, shelving, or service-fixture interiors. No gameplay anchor is exclusively inside any of them.
 
-Latest relevant evidence:
-- [CI run 41282246380](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41282246380), artifact [13074385240](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41282246380/artifacts/13074385240): distinct-colour component map and annotated source-map nearest-boundary overlay.
-- [CI run 41281847144](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41281847144): all 24 gameplay anchors and all five sector targets report a valid approach in spawn component 1.
+The component IDs below are shown only to preserve the original diagnostic record. They are scan-order labels and are **not used by production geometry or the regression**.
 
-The nearest-boundary calculation is a coordinate-space distance transform that deliberately ignores obstacles. Its two points are review locators, **not** a navigable route and **not** an instruction to make the intervening cells walkable.
+## Final disposition table
 
-## Candidate region table
+| Original component | Valid cells | Original world bounds [minX,minY,maxX,maxY] | Spawn-side source px | Region-side source px | Named disposition | Collision treatment |
+|---:|---:|---|---|---|---|---|
+| 27 | 11,463 | [597,673,1645,1531] | [698,351] | [684,365] | `south-central-service-fixture-enclosure` — sealed lower-central equipment/cabinet area; continuous wall at the reviewed threshold; no exclusive gameplay anchor | Irregular blocked contour |
+| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | [1016,357] | `east-office-vehicle-service-enclosure` — sealed vehicle-service room; continuous wall corner, no doorway in source art. The former van-bay walkable override only cleared floor inside this sealed room and did not define an entrance | Irregular blocked contour; obsolete van-bay walkable override removed |
+| 20 | 2,719 | [597,507,929,801] | [311,201] | [299,215] | `northwest-tank-machinery-enclosure` — sealed tank/pipe machinery footprint; continuous wall, no task or interaction approach | Irregular blocked contour |
+| 0 | 2,509 | [1337,19,2138,270] | [629,59] | [613,43] | `north-cafeteria-upper-furniture-strip` — upper furniture/bench strip behind the continuous cafeteria partition | Irregular blocked contour |
+| 56 | 2,304 | [147,1209,427,1555] | [153,631] | [137,615] | `southwest-shop-shelving-interior` — enclosed shelving/display footprint behind a continuous diagonal wall | Irregular blocked contour |
 
-| Component ID | Valid cells | World bounds [minX,minY,maxX,maxY] | Spawn-side source px | Region-side source px | Approx. gap | Initial visual hypothesis — not a decision | Disposition |
-|---:|---:|---|---|---|---:|---|---|
-| 27 | 11,463 | [597,673,1645,1531] | [698,351] | [684,365] | 47 px | South edge of central atrium / lower central passage | **UNCLASSIFIED** |
-| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | [1016,357] | 47 px | East office / vehicle-service boundary | **UNCLASSIFIED** |
-| 20 | 2,719 | [597,507,929,801] | [311,201] | [299,215] | 44 px | Upper-left blue equipment or pool enclosure | **UNCLASSIFIED** |
-| 0 | 2,509 | [1337,19,2138,270] | [629,59] | [613,43] | 54 px | Northern edge of upper cafeteria / atrium | **UNCLASSIFIED** |
-| 56 | 2,304 | [147,1209,427,1555] | [153,631] | [137,615] | 54 px | Southwest utility forecourt / shop boundary | **UNCLASSIFIED** |
+World bounds use the 3224×1858 map coordinate system. Source coordinates refer to the collision reference image listed above.
 
-World bounds are in the 3224×1858 map coordinate system. Source coordinates refer to `attached_assets/IMG_2907_1783632830477.jpeg`, 1359×784 pixels.
+## Geometry implementation
 
-## Required review for each region
+- Added five named entries to `MANUAL_BLOCKED_POLYGONS` in `lib/shared/src/collisionOverrides.ts`.
+- Each polygon follows the actual detached pocket contour and is expanded by two fine-grid cells to cover the complete player-centre footprint. The polygons are irregular; no bounding rectangles or global holes were introduced.
+- Polygon bounds are regression-checked against the reviewed source-derived component bounds within 12 world pixels.
+- Removed the `green-service-van-bay` walkable replacement zone. It cleared an interior floor pocket that has no source-art entrance; retaining it would falsely describe a sealed room as playable. The green van silhouette is now covered by the named sealed vehicle-service region.
+- Kept the separate `east-generator-approach-aisle` walkable replacement zone; it is outside these five sealed regions and remains connected to the spawn network.
+- No source image, PNG/WebP asset, fine-grid RLE payload, or global collision mask was regenerated.
 
-Lead 2 (collision/pathing) owns the classification; Lead 5 (sector QA) independently checks the room/route semantics. For every row, record:
+## Regression gate
 
-1. **Room/prop identity:** name the visible room, floor, water, equipment or decorative object inside the region using the source artwork.
-2. **Intended player access:** state whether a human player is meant to stand/walk there during normal play. Do not infer access solely from a large open-looking raster component.
-3. **Boundary semantics:** identify the actual red-line/wall/prop edge that separates it from the spawn network. Distinguish a real solid wall or object base from a missing/open doorway.
-4. **Door/path decision:** if it is intended walkable space, mark the exact intended crossing and prove the complete production player footprint can traverse it. If it is not playable floor, document the named reason and prove that no gameplay anchor is placed exclusively inside it.
-5. **Regression:** add a named region/doorway probe; do not key exclusions only by ephemeral component ID.
+`scripts/test-fine-map-connectivity.ts` now verifies:
 
-### Allowed final dispositions
+1. Every named sealed region has a corresponding irregular production collision polygon.
+2. Each polygon's bounds match the reviewed source-derived region bounds.
+3. The region-side full-player-footprint probe is blocked.
+4. The spawn-side approach remains walkable and the sweep across the sealed boundary remains blocked.
+5. No significant disconnected walkable component remains after the named blocked footprints are applied.
+6. Every one of the 24 gameplay anchors retains at least one spawn-connected full-footprint and line-of-sight approach.
+7. All five sector targets A–E remain spawn-connected.
 
-- `PLAYABLE — REPAIR REQUIRED`: the artwork/game design shows a real floor/corridor that should connect to spawn. Add a tightly bounded, source-aligned geometry correction and a swept-path regression.
-- `INTENTIONALLY NON-PLAYABLE`: the region is water, a prop interior, exterior/decorative space, or otherwise not a legal player floor. Keep it blocked by named object/region geometry and add a regression that verifies both its blocked footprint and the surrounding intended walkable route.
-- `INTENTIONALLY ISOLATED ROOM`: only allowed if the game design explicitly supports an isolated room/zone and its entry/exit mechanics are documented. This is not currently established for any listed region.
-- `UNRESOLVED`: keep the gate open; no whitelist or collision change.
+The regression matches stable geometry and source-image coordinates, never component IDs.
 
-## Review checklist
+## Remaining provenance limitation
 
-- [ ] C27 reviewed against the central atrium south threshold and lower central passage.
-- [ ] C38 reviewed against the east office / vehicle-service boundary.
-- [ ] C20 reviewed against the upper-left blue equipment/pool silhouette.
-- [ ] C0 reviewed against the upper north cafeteria/atrium boundary.
-- [ ] C56 reviewed against the southwest forecourt/utility boundary.
-- [ ] Every region has a named disposition with source-art evidence.
-- [ ] Every playable region has a fine-grid continuous player-footprint route test.
-- [ ] Every non-playable region has a named blocked-object/area regression and nearby walkable-approach checks.
-- [ ] The full fine-grid diagnostic still verifies all 24 gameplay anchors and five sector targets.
-- [ ] Full CI is rerun on the exact PR head after any production geometry change.
+The original 1652×952 map source and the one-off upscale script mentioned in the earlier asset notes were not present in the available Library search or current source tree. This review therefore uses the committed 1359×784 collision reference and the existing generated fine-grid diagnostic. The original source/transform provenance must still be recovered before any further map-art regeneration.
 
-## Current decision
+## Decision
 
-**Do not edit production collision data yet.** The fine-grid check proves five large clearance islands exist, but the defined tasks, vents, Admin Table, sabotage pads, and five sector targets remain reachable from spawn. The visual/source-art review must decide which islands are false-positive walkable areas and which are genuine missing room connections. The global topology assertion remains red until each region has an explicit, defensible disposition.
+The five large detached pockets are now explicitly classified and blocked as sealed non-playable source-art regions. The intended gameplay network remains the spawn-connected region containing every required interaction anchor and sector target. A future design change that wants any of these rooms playable must first add an explicit doorway to the source map art, then add a named swept-path regression through that doorway; do not punch an undocumented collision hole.
