@@ -303,16 +303,16 @@ const componentLegendRows = [
     })),
 ];
 const componentLegendSvg = Buffer.from(`
-  <svg xmlns="http://www.w3.org/2000/svg" width="330" height="${38 + componentLegendRows.length * 23}">
-    <rect x="12" y="10" width="306" height="${18 + componentLegendRows.length * 23}" rx="9" fill="#111827" fill-opacity="0.92"/>
+  <svg xmlns="http://www.w3.org/2000/svg" width="540" height="${56 + componentLegendRows.length * 38}">
+    <rect x="10" y="10" width="520" height="${36 + componentLegendRows.length * 38}" rx="12" fill="#111827" fill-opacity="0.94"/>
     ${componentLegendRows.map((item, index) => {
       const color = item.colour.map(channel =>
         Math.round(Math.min(1, channel + 0.18) * 255).toString(16).padStart(2, '0'),
       ).join('');
-      const y = 30 + index * 23;
+      const y = 48 + index * 38;
       return `
-        <rect x="25" y="${y - 10}" width="13" height="13" rx="3" fill="#${color}"/>
-        <text x="47" y="${y}" font-family="Arial,sans-serif" font-size="12" fill="#ffffff">
+        <rect x="28" y="${y - 17}" width="21" height="21" rx="4" fill="#${color}"/>
+        <text x="63" y="${y}" font-family="Arial,sans-serif" font-size="22" fill="#ffffff">
           ${item.label} — ${item.size.toLocaleString()} cells
         </text>
       `;
@@ -322,7 +322,7 @@ const componentLegendSvg = Buffer.from(`
 await sharp(mapPath)
   .composite([
     { input: componentOverlay, blend: 'over' },
-    { input: componentLegendSvg, blend: 'over' },
+    { input: componentLegendSvg, left: 18, top: 18, blend: 'over' },
   ])
   .png()
   .toFile(outputPath);
