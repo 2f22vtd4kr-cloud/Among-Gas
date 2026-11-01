@@ -56,6 +56,12 @@ jobs:
       - name: Verify character atlas crops, authored scale and shared feet anchor
         run: pnpm --filter @workspace/scripts run test:character-geometry
 
+      - name: Verify character atlas frame and pose geometry
+        run: pnpm --filter @workspace/scripts exec tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts
+
+      - name: Verify local and remote character animation/shadow synchronization
+        run: pnpm --filter @workspace/scripts exec tsx ../artifacts/telegram-game/src/game/characterAnimation.test.ts
+
       - name: Exhaustively verify real-map player footprint and reachable geometry
         run: node scripts/verify-map-mechanics.mjs
 
