@@ -17,7 +17,7 @@ interface CandidateScore {
 }
 
 function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\]/g, '\$&');
+  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
 }
 
 function mentionsPlayer(text: string, player: PublicVotePlayer): boolean {
