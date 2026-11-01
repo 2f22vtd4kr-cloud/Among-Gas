@@ -5,6 +5,7 @@ import sharp from 'sharp';
 
 import {
   buildPreciseCollisionGrid,
+  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS,
   INTENTIONALLY_SEALED_REGIONS,
   MANUAL_BLOCKED_POLYGONS,
   FINE_CELL_X,
@@ -571,39 +572,42 @@ console.log(JSON.stringify({
   significantBoundaryContacts,
 }, null, 2));
 
-// The five source-art sealed regions are blocked by named, irregular
-// geometry polygons. The polygons are spatial data, not component-ID
-// allowlists. Verify each footprint is blocked, the spawn-side approach stays
-// walkable, and every gameplay route remains in the spawn-connected component.
+// Four sealed prop/furniture regions are blocked by named irregular polygons.
+// The central decorative garden is a deliberate exception: the existing
+// mechanics contract preserves its walkable footprint, while its source-art
+// perimeter remains sealed. No component-ID allowlist is used.
+const detachedContacts = significantBoundaryContacts;
 assert.equal(
   significant.filter(({ id }) => id !== spawnComponent).length,
-  0,
-  'all significant disconnected floor pockets are blocked by named region geometry',
+  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS.length,
+  'only the explicitly documented decorative garden remains as a detached walkable region',
 );
 assert.equal(
-  significantBoundaryContacts.length,
-  0,
-  'no significant detached component remains after applying the sealed-region polygons',
+  detachedContacts.length,
+  INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS.length,
+  'every remaining detached component has one named decorative-region disposition',
 );
 
-const blockedPolygonIds = new Set(MANUAL_BLOCKED_POLYGONS.map(polygon => polygon.id));
 const toWorld = (point: readonly [number, number]): readonly [number, number] => [
   point[0] * MAP_W / 1359,
   point[1] * MAP_H / 784,
 ];
+const closeEnough = (a: number, b: number, tolerance: number) =>
+  Math.abs(a - b) <= tolerance;
+
 for (const region of INTENTIONALLY_SEALED_REGIONS) {
-  assert.ok(blockedPolygonIds.has(region.id), `${region.id} has a named production collision polygon`);
   assert.ok(region.rationale.length >= 40, `${region.id} has an evidence-based source-art rationale`);
-  const polygon = MANUAL_BLOCKED_POLYGONS.find(candidate => candidate.id === region.id)!;
-  assert.ok(polygon.points.length >= 7, `${region.id} uses an irregular source-derived contour, not a rectangle`);
+  const polygon = MANUAL_BLOCKED_POLYGONS.find(candidate => candidate.id === region.id);
+  assert.ok(polygon, `${region.id} has a named production collision polygon`);
+  assert.ok(polygon!.points.length >= 7, `${region.id} uses an irregular source-derived contour, not a rectangle`);
   const polygonBounds = [
-    Math.min(...polygon.points.map(point => point[0])),
-    Math.min(...polygon.points.map(point => point[1])),
-    Math.max(...polygon.points.map(point => point[0])),
-    Math.max(...polygon.points.map(point => point[1])),
+    Math.min(...polygon!.points.map(point => point[0])),
+    Math.min(...polygon!.points.map(point => point[1])),
+    Math.max(...polygon!.points.map(point => point[0])),
+    Math.max(...polygon!.points.map(point => point[1])),
   ];
   assert.ok(
-    polygonBounds.every((value, index) => Math.abs(value - region.worldBounds[index]) <= 12),
+    polygonBounds.every((value, index) => closeEnough(value, region.worldBounds[index], 12)),
     `${region.id}: blocked polygon tracks the reviewed component bounds`,
   );
 
@@ -627,6 +631,42 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
   );
 }
 
+for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
+  assert.ok(region.rationale.length >= 40, `${region.id} has an explicit decorative-area rationale`);
+  assert.ok(
+    !MANUAL_BLOCKED_POLYGONS.some(polygon => polygon.id === region.id),
+    `${region.id}: central decorative garden is not filled by a manual collision polygon`,
+  );
+  const contact = detachedContacts.find(candidate =>
+    candidate.bounds.every((value, index) => closeEnough(value, region.worldBounds[index], 12)) &&
+    candidate.spawnSide?.referenceImage.every((value, index) =>
+      closeEnough(value, region.spawnSideReferenceImage[index], 6),
+    ) &&
+    candidate.islandSide?.referenceImage.every((value, index) =>
+      closeEnough(value, region.islandSideReferenceImage[index], 6),
+    ),
+  );
+  assert.ok(contact?.spawnSide && contact?.islandSide, `${region.id} matches the reviewed source-art boundary`);
+
+  const [spawnFeetX, spawnFeetY] = toWorld(region.spawnSideReferenceImage);
+  const [islandFeetX, islandFeetY] = toWorld(region.islandSideReferenceImage);
+  const spawnSpriteY = spawnFeetY - FEET_OFFSET_Y;
+  const islandSpriteY = islandFeetY - FEET_OFFSET_Y;
+  assert.ok(
+    isPlayerPositionWalkable(grid, spawnFeetX, spawnSpriteY),
+    `${region.id}: surrounding spawn-side route remains walkable`,
+  );
+  assert.ok(
+    isPlayerPositionWalkable(grid, islandFeetX, islandSpriteY),
+    `${region.id}: decorative garden footprint remains walkable per map-mechanics contract`,
+  );
+  assert.equal(
+    isPlayerPathWalkable(grid, spawnFeetX, spawnSpriteY, islandFeetX, islandSpriteY),
+    false,
+    `${region.id}: the continuous source-art perimeter remains a blocked boundary`,
+  );
+}
+
 const unreachableGameplayAnchors = gameplayAnchors
   .filter(anchor => !anchor.approachComponents.some(approach => approach.connectedToSpawn))
   .map(anchor => anchor.name);
@@ -636,12 +676,5 @@ assert.deepEqual(
   'all 24 gameplay anchors retain at least one spawn-connected full-footprint/LOS approach',
 );
 
-console.log('SEALED_REGION_DISPOSITIONS ' + JSON.stringify(
-  INTENTIONALLY_SEALED_REGIONS.map(region => ({
-    id: region.id,
-    worldBounds: region.worldBounds,
-    spawnSideReferenceImage: region.spawnSideReferenceImage,
-    islandSideReferenceImage: region.islandSideReferenceImage,
-    rationale: region.rationale,
-  })),
-));
+console.log('SEALED_REGION_DISPOSITIONS ' + JSON.stringify(INTENTIONALLY_SEALED_REGIONS));
+console.log('ISOLATED_DECORATIVE_REGION_DISPOSITIONS ' + JSON.stringify(INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS));
