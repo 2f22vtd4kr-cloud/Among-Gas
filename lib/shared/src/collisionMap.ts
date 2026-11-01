@@ -384,6 +384,7 @@ export function buildPreciseCollisionGrid(): Grid {
 
 /** Is the cell at pixel (px, py) blocked? Returns true if outside map bounds. */
 export function isBlocked(grid: Grid, px: number, py: number): boolean {
+  if (!Number.isFinite(px) || !Number.isFinite(py)) return true;
   const geometry = getGridGeometry(grid);
   const col = Math.floor(px / geometry.cellX);
   const row = Math.floor(py / geometry.cellY);
@@ -454,6 +455,7 @@ export function canMoveTo(
   cx: number, cy: number,
   radius = 8,
 ): boolean {
+  if (![cx, cy, radius].every(Number.isFinite) || radius < 0) return false;
   if (isBlocked(grid, cx, cy)) return false;
 
   const geometry = getGridGeometry(grid);
