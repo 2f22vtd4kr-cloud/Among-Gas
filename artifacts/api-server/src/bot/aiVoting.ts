@@ -31,7 +31,7 @@ export function buildPublicBotVoteMessages(
     .map(({ slot, username: name }) => ({ slot, username: name }));
   const publicTranscript = transcript.slice(-12).map(({ slot, text }) => ({
     slot,
-    text: String(text).replace(/[\\u0000-\\u001f\\u007f]/g, ' ').slice(0, 220),
+    text: String(text).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 220),
   }));
 
   return [
