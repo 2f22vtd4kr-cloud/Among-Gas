@@ -21,7 +21,6 @@ import { BotAgent, grid } from './BotAgent.js';
 import { KILL_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DEFS, SABOTAGE_DOORS, type SabotageSystemId } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, type VentDef } from '@workspace/shared/vents';
-import { NO_TARGET } from '@workspace/shared/coords';
 import { chooseEvidenceWeightedVote } from './voting.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
