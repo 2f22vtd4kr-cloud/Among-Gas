@@ -16,26 +16,35 @@ interface CandidateScore {
   readonly score: number;
 }
 
-function mentionsPlayer(text: string, player: PublicVotePlayer): boolean {
-  const name = player.username.trim().toLocaleLowerCase();
-  const lower = text.toLocaleLowerCase();
+function findPlayerMentionIndex(text: string, player: PublicVotePlayer): number {
+  const name = player.username.trim().toLowerCase();
+  const lower = text.toLowerCase();
   if (name.length >= 2) {
     let index = lower.indexOf(name);
     while (index >= 0) {
-      const before = index === 0 || !/[\p{L}\p{N}_]/u.test(text[index - 1]);
+      const before = index === 0 || !/[\\p{L}\\p{N}_]/u.test(text[index - 1]);
       const afterIndex = index + name.length;
-      const after = afterIndex === text.length || !/[\p{L}\p{N}_]/u.test(text[afterIndex]);
-      if (before && after) return true;
+      const after = afterIndex === text.length || !/[\\p{L}\\p{N}_]/u.test(text[afterIndex]);
+      if (before && after) return index;
       index = lower.indexOf(name, index + 1);
     }
   }
   const displayNumber = player.slot + 1;
-  return new RegExp(
-    `(?:#|\\b(?:player|slot)\\s*#?)0*${displayNumber}\\b`,
-    'i',
-  ).test(text);
+  const slotPattern = new RegExp(`(?:#|\\b(?:player|slot)\\s*#?)0*${displayNumber}\\b`, 'i');
+  return slotPattern.exec(text)?.index ?? -1;
 }
 
+function sentenceAround(text: string, index: number): string {
+  const separators = ['.', '!', '?', ';', '\\n'];
+  let start = 0;
+  let end = text.length;
+  for (const separator of separators) {
+    start = Math.max(start, text.lastIndexOf(separator, index) + 1);
+    const next = text.indexOf(separator, index);
+    if (next >= 0) end = Math.min(end, next);
+  }
+  return text.slice(start, end).trim();
+}
 /**
  * Choose a crewmate vote using only public meeting chat and the living roster.
  * Hidden roles, private positions, and server-only events are deliberately not
@@ -52,7 +61,6 @@ export function chooseEvidenceWeightedVote(
   const perCandidate = new Map<number, Map<number, number>>();
   for (const candidate of candidates) perCandidate.set(candidate.slot, new Map());
 
-  let skipEndorsements = 0;
   const skipSpeakers = new Set<number>();
 
   for (const message of messages) {
@@ -64,18 +72,15 @@ export function chooseEvidenceWeightedVote(
     }
 
     for (const candidate of candidates) {
-      if (message.slot === candidate.slot || !mentionsPlayer(text, candidate)) continue;
+      if (message.slot === candidate.slot) continue;
+      const mentionIndex = findPlayerMentionIndex(text, candidate);
+      if (mentionIndex < 0) continue;
 
       const speakerScores = perCandidate.get(candidate.slot)!;
-      const mentionIndex = candidate.username.trim().length >= 2
-        ? text.toLocaleLowerCase().indexOf(candidate.username.trim().toLocaleLowerCase())
-        : -1;
-      const context = mentionIndex >= 0
-        ? text.slice(Math.max(0, mentionIndex - 64), Math.min(text.length, mentionIndex + candidate.username.length + 64))
-        : text;
+      const context = sentenceAround(text, mentionIndex);
       const accusation = /\b(?:sus(?:picious)?|impostor|guilty|accus(?:e|ing)|suspect|vote)\b/i.test(context);
-      const directObservation = /\b(?:i|we)\s+(?:personally\s+)?(?:saw|watched|witnessed|caught|found|heard)\b/i.test(text);
-      const suspiciousAction = /\b(?:kill(?:ed)?|vent(?:ed|ing)?|sabotag(?:e|ed|ing)|report(?:ed|ing)?|lied|lying|ran from|came out of (?:the )?vent)\b/i.test(text);
+      const directObservation = /\b(?:i|we)\s+(?:personally\s+)?(?:saw|watched|witnessed|caught|found|heard)\b/i.test(context);
+      const suspiciousAction = /\b(?:kill(?:ed)?|vent(?:ed|ing)?|sabotag(?:e|ed|ing)|lied|lying|ran from|came out of (?:the )?vent)\b/i.test(context);
       const cleared = /\b(?:not|never|don't|do not|isn't|is not)\b.{0,48}\b(?:sus(?:picious)?|impostor|guilty)\b|\b(?:clear|cleared|innocent|has an alibi)\b/i.test(context);
 
       let contribution = 0;
@@ -85,12 +90,12 @@ export function chooseEvidenceWeightedVote(
       else if (accusation) contribution = 1.25;
 
       if (contribution !== 0) {
-        speakerScores.set(message.slot, Math.max(speakerScores.get(message.slot) ?? 0, contribution));
+        speakerScores.set(message.slot, contribution);
       }
     }
   }
 
-  skipEndorsements = skipSpeakers.size;
+  const skipEndorsements = skipSpeakers.size;
   const scores: CandidateScore[] = candidates.map(candidate => ({
     slot: candidate.slot,
     score: Array.from(perCandidate.get(candidate.slot)!.values()).reduce((sum, value) => sum + value, 0),
