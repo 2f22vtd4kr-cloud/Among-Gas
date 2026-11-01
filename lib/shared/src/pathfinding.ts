@@ -46,12 +46,15 @@ function pixelToCell(px: number, py: number, geometry: PathGridGeometry): Cell {
   };
 }
 
-function isValidGeometry(grid: Grid, geometry: PathGridGeometry): boolean {
+function isValidGridGeometry(geometry: PathGridGeometry): boolean {
   return Number.isInteger(geometry.cols) && geometry.cols > 0 &&
     Number.isInteger(geometry.rows) && geometry.rows > 0 &&
     Number.isFinite(geometry.cellX) && geometry.cellX > 0 &&
-    Number.isFinite(geometry.cellY) && geometry.cellY > 0 &&
-    grid.length === geometry.cols * geometry.rows;
+    Number.isFinite(geometry.cellY) && geometry.cellY > 0;
+}
+
+function isValidGeometry(grid: Grid, geometry: PathGridGeometry): boolean {
+  return isValidGridGeometry(geometry) && grid.length === geometry.cols * geometry.rows;
 }
 
 function isPointInsideGrid(point: Point, geometry: PathGridGeometry): boolean {
@@ -403,8 +406,7 @@ export class PathCache {
   }
 
   invalidate(goal: Point, geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY): void {
-    if (!isValidGeometry(new Uint8Array(geometry.cols * geometry.rows), geometry) ||
-        !isPointInsideGrid(goal, geometry)) return;
+    if (!isValidGridGeometry(geometry) || !isPointInsideGrid(goal, geometry)) return;
     const gc  = pixelToCell(goal.x, goal.y, geometry);
     const suffix = `→${gc.col},${gc.row}`;
     for (const key of this.cache.keys()) {
