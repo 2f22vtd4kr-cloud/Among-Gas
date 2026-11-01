@@ -190,6 +190,7 @@ jobs:
             attached_assets/IMG_2954_1783630920533.png
             artifacts/telegram-game/public/map-hires.png
             artifacts/map-source-rebuild/map-hires.rebuilt.png
+            artifacts/map-source-rebuild/map-hires.rebuilt.webp
             artifacts/telegram-game/public/map-hires.webp
             artifacts/telegram-game/collision-qa-overlay-webp.png
             artifacts/telegram-game/collision-shadow-qa-overlay.png
