@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { INTENTIONALLY_SEALED_REGIONS } from '../lib/shared/src/collisionOverrides.js';
 import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
@@ -90,6 +91,38 @@ assert.equal(openPolygon.length, 720, 'visibility uses stable half-degree rays')
 for (const point of openPolygon) {
   const distance = Math.hypot(point.x - origin.x, point.y - origin.y);
   assert.ok(Math.abs(distance - 200) < 1e-6, 'open-space points lie on the sight-radius circle');
+}
+
+// Every named sealed-region contour must also occlude vision. Use an otherwise
+// empty fine grid so this specifically tests the vector polygons, not nearby
+// raster walls. The reference-side ray must reach past the island point without
+// polygons and stop before it when the authored map polygons are enabled.
+const polygonOnlyFineGrid = new Uint8Array(FINE_COLS * FINE_ROWS) as Grid;
+for (const region of INTENTIONALLY_SEALED_REGIONS) {
+  const [spawnImageX, spawnImageY] = region.spawnSideReferenceImage;
+  const [islandImageX, islandImageY] = region.islandSideReferenceImage;
+  const originX = spawnImageX * MAP_W / 1359;
+  const originY = spawnImageY * MAP_H / 784;
+  const targetX = islandImageX * MAP_W / 1359;
+  const targetY = islandImageY * MAP_H / 784;
+  const dx = targetX - originX;
+  const dy = targetY - originY;
+  const targetDistance = Math.hypot(dx, dy);
+  const angle = Math.atan2(dy, dx);
+  const rayIndex = Math.round(((angle + Math.PI) / (Math.PI * 2)) * 720) % 720;
+  const sightRadius = targetDistance + 20;
+  const clearRay = computeVisibilityPolygon(
+    originX, originY, sightRadius, polygonOnlyFineGrid, [], false,
+  )[rayIndex];
+  const blockedRay = computeVisibilityPolygon(
+    originX, originY, sightRadius, polygonOnlyFineGrid, [], true,
+  )[rayIndex];
+  const clearDistance = Math.hypot(clearRay.x - originX, clearRay.y - originY);
+  const blockedDistance = Math.hypot(blockedRay.x - originX, blockedRay.y - originY);
+  assert.ok(clearDistance > targetDistance + 5,
+    `${region.id}: sight reaches beyond the island-side reference without vector occluders`);
+  assert.ok(blockedDistance < targetDistance - 1,
+    `${region.id}: its authored collision contour also stops sight before the sealed interior (hit=${blockedDistance.toFixed(1)}px, target=${targetDistance.toFixed(1)}px)`);
 }
 
 // A blocked collision cell must truncate sight at its near boundary.
