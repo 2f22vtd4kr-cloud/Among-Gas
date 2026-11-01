@@ -89,11 +89,17 @@ const componentBounds = [];
 for (let start = 0; start < valid.length; start++) {
   if (!valid[start] || componentOf[start] !== -1) continue;
   const id = componentSizes.length, queue = [start];
+  let minCol = cols, minRow = rows, maxCol = -1, maxRow = -1;
   componentOf[start] = id;
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head], col = index % cols, row = Math.floor(index / cols);
-    for (const [nextCol, nextRow] of [[col - 1, row], [col + 1, row], [col, row - 1], [col, row + 1]]) {
+    minCol = Math.min(minCol, col); maxCol = Math.max(maxCol, col);
+    minRow = Math.min(minRow, row); maxRow = Math.max(maxRow, row);
+    for (const [dc, dr] of [[-1, 0], [1, 0], [0, -1], [0, 1], [-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+      const nextCol = col + dc, nextRow = row + dr;
       if (nextCol < 0 || nextCol >= cols || nextRow < 0 || nextRow >= rows) continue;
+      if (dc !== 0 && dr !== 0 &&
+          (!valid[row * cols + nextCol] || !valid[nextRow * cols + col])) continue;
       const next = nextRow * cols + nextCol;
       if (valid[next] && componentOf[next] === -1) {
         componentOf[next] = id;
