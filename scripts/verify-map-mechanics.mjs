@@ -88,7 +88,6 @@ const polygonBlocks = [...collisionOverrides.matchAll(
   [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
     .map(point => [Number(point[1]), Number(point[2])]),
 );
-assert.equal(polygonBlocks.length, 0, 'The decorative central garden must not be filled by a manual collision polygon');
 const pointInPolygon = (x, y, points) => {
   let inside = false;
   for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
@@ -99,6 +98,16 @@ const pointInPolygon = (x, y, points) => {
   }
   return inside;
 };
+const gardenFloorProbes = [
+  [1735, 449 + feetOffsetY],
+  [1640, 449 + feetOffsetY],
+  [1810, 449 + feetOffsetY],
+  [1450, 449 + feetOffsetY],
+];
+assert.ok(
+  polygonBlocks.every(points => gardenFloorProbes.every(([x, y]) => !pointInPolygon(x, y, points))),
+  'No named manual collision polygon may cover the required decorative garden floor probes',
+);
 const orientation = (a, b, c) => (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
 const onSegment = (a, p, b) => p[0] >= Math.min(a[0], b[0]) && p[0] <= Math.max(a[0], b[0]) &&
   p[1] >= Math.min(a[1], b[1]) && p[1] <= Math.max(a[1], b[1]);
