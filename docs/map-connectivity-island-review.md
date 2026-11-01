@@ -11,7 +11,7 @@ Diagnostic branch: `recovery/map-connectivity-regressions`
 - Fine grid: 680×392 at approximately 4.741×4.740 world px/cell.
 - Before exclusions, the diagnostic found 72 player-clearance components. Five disconnected pockets exceeded 1,000 cells.
 - The 24 required gameplay anchors (11 tasks, 6 vents, 1 Admin Table, 6 sabotage pads) and all five sector targets A–E had spawn-connected full-footprint approaches before exclusions.
-- The five boundary pairs were inspected at pixel level against `attached_assets/IMG_2907_1783632830477.jpeg` (1359×784). The four sealed prop/service pockets cross continuous red-line wall or fixture outlines. The east vehicle-service bay is also bounded by a continuous red-line wall with no drawn doorway, but its internal walkable floor and green-van clearance are explicit existing movement/vision contracts and are preserved.
+- All five annotated boundary pairs were inspected against both the red-line collision reference `attached_assets/IMG_2907_1783632830477.jpeg` (1359×784) and the recovered original artwork `attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png` (1652×952). The original artwork confirms C0 is upper cafeteria furniture, C20 is the tank/pipe machinery enclosure, C27 is the south-central playground/service-fixture enclosure, C56 is the southwest shelf/canister display interior, and C38 is the east office/vehicle-service bay. The four polygon contours stay on prop/furniture/fixture interiors and leave surrounding player routes open. C38 has a continuous source-art perimeter wall and no doorway; its internal walkable floor and green-van clearance remain because existing movement/vision tests explicitly require them.
 - No gameplay anchor or exclusive interaction approach is located inside any detached pocket.
 
 The component IDs below are retained only to preserve the original diagnostic record. They are scan-order labels and are **not used by production geometry or the regression**.
@@ -26,7 +26,7 @@ The component IDs below are retained only to preserve the original diagnostic re
 | 0 | 2,509 | [1337,19,2138,270] | [629,59] | [613,43] | `north-cafeteria-upper-furniture-strip` — upper furniture/bench strip behind the continuous cafeteria partition | Irregular blocked contour |
 | 56 | 2,304 | [147,1209,427,1555] | [153,631] | [137,615] | `southwest-shop-shelving-interior` — enclosed shelving/display footprint behind a continuous diagonal wall | Irregular blocked contour |
 
-World bounds use the 3224×1858 map coordinate system. Source coordinates refer to the collision reference image listed above.
+World bounds use the 3224×1858 map coordinate system. Boundary coordinates refer to the 1359×784 collision reference; every disposition was cross-checked against the recovered 1652×952 original artwork.
 
 ## Geometry implementation
 
@@ -41,7 +41,7 @@ World bounds use the 3224×1858 map coordinate system. Source coordinates refer 
 `scripts/test-fine-map-connectivity.ts` verifies:
 
 1. The four sealed prop/service regions have named irregular production collision polygons whose bounds match the reviewed component bounds.
-2. Each sealed region's full-player-footprint probe is blocked; the spawn-side approach remains walkable; a sweep across the source-art boundary remains blocked.
+2. Each sealed region's full-player-footprint probe is blocked; the spawn-side approach remains walkable; a sweep across the original-art boundary remains blocked.
 3. The east vehicle-service bay retains its internal walkable footprint, the van remains a solid obstacle, and the source-art perimeter remains a blocked boundary. The metadata and regression explicitly record that no entry/exit mechanic is authored for this decorative zone.
 4. Exactly one documented decorative/service region remains internally walkable but isolated; no other significant detached walkable component remains.
 5. Every one of the 24 gameplay anchors retains at least one spawn-connected full-footprint and line-of-sight approach.
@@ -52,7 +52,7 @@ The regression matches stable geometry and source-image coordinates, never compo
 
 ## Remaining provenance limitation
 
-The original 1652×952 map source and the one-off upscale script mentioned in the earlier asset notes were not present in the available Library search or current source tree. This review therefore uses the committed 1359×784 collision reference and the existing generated fine-grid diagnostic. The original source/transform provenance must still be recovered before any further map-art regeneration.
+The original 1652×952 source has now been recovered and compared against all five boundary locations. A deterministic non-destructive derivative generator is committed at `scripts/src/rebuildMapHiRes.ts`; it rebuilds PNG and WebP outputs into `artifacts/map-source-rebuild/` and verifies them against the committed runtime rasters. The historical one-off `/tmp` script itself was not recovered, so the committed generator records the verified replacement transform and pixel-error bounds. Runtime PNG/WebP assets remain unchanged.
 
 ## Decision
 
