@@ -81,3 +81,20 @@ export function parsePublicBotVoteResponse(
   const target = roster.find(player => player.slot === vote);
   return target?.alive ? target.slot : null;
 }
+
+/** Guard an async decision against meeting rollover, death, and duplicate votes. */
+export function canCommitBotVote(state: {
+  readonly phase: string;
+  readonly currentMeeting: unknown;
+  readonly requestedMeeting: unknown;
+  readonly votingOpen: boolean;
+  readonly alive: boolean;
+  readonly hasVoted: boolean;
+}): boolean {
+  return state.phase === 'MEETING' &&
+    state.currentMeeting !== null &&
+    state.currentMeeting === state.requestedMeeting &&
+    state.votingOpen &&
+    state.alive &&
+    !state.hasVoted;
+}
