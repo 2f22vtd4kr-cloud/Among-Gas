@@ -160,5 +160,33 @@ check('invalid geometry is rejected without throwing',
     cols: 0, rows: 3, cellX: 10, cellY: 10,
   }) === null);
 
+
+ // Regression: the heuristic must use the true diagonal cost when cell X/Y
+ // scales differ. The prior square-cell octile estimate overestimated some
+ // routes and made A* return a longer path than Dijkstra on this fixture.
+const anisotropicRows = [
+  '........',
+  '.#.....#',
+  '.#......',
+  '......#.',
+  '........',
+  '#.......',
+  '#.......',
+  '..#.....',
+];
+const anisotropicGrid = Uint8Array.from(
+  anisotropicRows.join('').split('').map(cell => cell === '#' ? 1 : 0),
+);
+const anisotropicPath = findPath(
+  anisotropicGrid,
+  { x: 5, y: 10 },
+  { x: 75, y: 150 },
+  { cols: 8, rows: 8, cellX: 10, cellY: 20 },
+);
+check('non-square-cell A* returns the optimal anisotropic route',
+  anisotropicPath !== null &&
+  Math.abs(anisotropicPath.length - 171.80339887498945) < 1e-5,
+  anisotropicPath ? `length=${anisotropicPath.length.toFixed(6)}px` : 'null');
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
