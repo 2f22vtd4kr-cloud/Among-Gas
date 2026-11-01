@@ -3,6 +3,7 @@ import {
   CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
   CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
   CHARACTER_SHADOW_Y_OFFSET_RATIO,
+  getCharacterMotionMetrics,
   getCharacterShadowScale,
   getCharacterWalkBobOffset,
 } from './characterAnimation';
@@ -30,6 +31,16 @@ assert.equal(getCharacterShadowScale(maximumBob, spriteHeight), 0.76,
   'shadow squash must remain capped at the intended 24 percent');
 assert.equal(getCharacterShadowScale(maximumBob * 2, spriteHeight), 0.76,
   'shadow squash must never exceed its cap');
+const sharedMotion = getCharacterMotionMetrics(PLAYER_ANIM_INTERVAL_MS / 2, spriteHeight);
+assert.equal(sharedMotion.walkBobOffset, maximumBob,
+  'the shared local/remote motion helper uses the un-cropped base sprite height');
+assert.equal(sharedMotion.shadowScale, 0.76,
+  'the shared local/remote shadow squash uses the same base-height normalization');
+assert.deepEqual(
+  getCharacterMotionMetrics(0, spriteHeight),
+  { walkBobOffset: 0, shadowScale: 1 },
+  'local and remote sprites begin each step grounded with a full-size shadow',
+);
 assert.equal(getCharacterWalkBobOffset(10, 0), 0);
 assert.equal(getCharacterShadowScale(10, 0), 1);
 
@@ -41,4 +52,4 @@ assert.ok(CHARACTER_SHADOW_Y_OFFSET_RATIO - CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO
 assert.ok(CHARACTER_SHADOW_Y_OFFSET_RATIO + CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO > 0.5,
   'most of the oval must remain visible below the character feet');
 
-console.log('Character animation regression passed: local/remote bob phase and grounded shadow scaling stay synchronized.');
+console.log('Character animation regression passed: local and remote sprites share one base-height bob/shadow model.');
