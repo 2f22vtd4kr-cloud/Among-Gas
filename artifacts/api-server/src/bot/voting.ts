@@ -56,10 +56,10 @@ export function chooseEvidenceWeightedVote(
   const skipSpeakers = new Set<number>();
 
   for (const message of messages) {
-    const text = String(message.text ?? '').replace(/[\\u0000-\\u001F\\u007F]/g, ' ').trim();
+    const text = String(message.text ?? '').replace(/[\u0000-\u001F\u007F]/g, ' ').trim();
     if (!text) continue;
 
-    if (/\\b(?:skip|no evidence|not enough evidence|no proof|nothing to go on)\\b/i.test(text)) {
+    if (/\b(?:skip|no evidence|not enough evidence|no proof|nothing to go on)\\b/i.test(text)) {
       skipSpeakers.add(message.slot);
     }
 
@@ -73,10 +73,10 @@ export function chooseEvidenceWeightedVote(
       const context = mentionIndex >= 0
         ? text.slice(Math.max(0, mentionIndex - 64), Math.min(text.length, mentionIndex + candidate.username.length + 64))
         : text;
-      const accusation = /\\b(?:sus(?:picious)?|impostor|guilty|accus(?:e|ing)|suspect|vote)\\b/i.test(context);
-      const directObservation = /\\b(?:i|we)\\s+(?:personally\\s+)?(?:saw|watched|witnessed|caught|found|heard)\\b/i.test(text);
-      const suspiciousAction = /\\b(?:kill(?:ed)?|vent(?:ed|ing)?|sabotag(?:e|ed|ing)|report(?:ed|ing)?|lied|lying|ran from|came out of (?:the )?vent)\\b/i.test(text);
-      const cleared = /\\b(?:not|never|don't|do not|isn't|is not)\\b.{0,48}\\b(?:sus(?:picious)?|impostor|guilty)\\b|\\b(?:clear|cleared|innocent|has an alibi)\\b/i.test(context);
+      const accusation = /\b(?:sus(?:picious)?|impostor|guilty|accus(?:e|ing)|suspect|vote)\\b/i.test(context);
+      const directObservation = /\b(?:i|we)\s+(?:personally\s+)?(?:saw|watched|witnessed|caught|found|heard)\\b/i.test(text);
+      const suspiciousAction = /\b(?:kill(?:ed)?|vent(?:ed|ing)?|sabotag(?:e|ed|ing)|report(?:ed|ing)?|lied|lying|ran from|came out of (?:the )?vent)\\b/i.test(text);
+      const cleared = /\b(?:not|never|don't|do not|isn't|is not)\\b.{0,48}\\b(?:sus(?:picious)?|impostor|guilty)\\b|\\b(?:clear|cleared|innocent|has an alibi)\\b/i.test(context);
 
       let contribution = 0;
       if (cleared) contribution = -1.5;
