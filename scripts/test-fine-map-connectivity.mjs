@@ -82,7 +82,8 @@ for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
 }
 const componentOf = new Int32Array(grid.length);
 componentOf.fill(-1);
-const componentSizes = [];\nconst componentBounds = [];
+const componentSizes = [];
+const componentBounds = [];
 for (let start = 0; start < valid.length; start++) {
   if (!valid[start] || componentOf[start] !== -1) continue;
   const id = componentSizes.length, queue = [start];
