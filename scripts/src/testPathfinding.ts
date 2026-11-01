@@ -1,4 +1,4 @@
-import { buildCollisionGrid, COLS, ROWS, CELL_X, CELL_Y, isPlayerPathWalkable } from '@workspace/shared/collisionMap';
+import { buildCollisionGrid, COLS, ROWS, CELL_X, CELL_Y, canMoveTo, isPlayerPathWalkable, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { findPath, PathCache } from '@workspace/shared';
 
 const grid = buildCollisionGrid();
@@ -218,6 +218,15 @@ check('swept movement rejects negative sample spacing',
   isPlayerPathWalkable(grid, 0, 0, 0, 0, -1) === false);
 check('swept movement rejects non-finite sample spacing',
   isPlayerPathWalkable(grid, 0, 0, 0, 0, Number.NaN) === false);
+
+
+check('player collision rejects non-finite world positions',
+  isPlayerPositionWalkable(grid, Number.NaN, 0) === false &&
+  isPlayerPositionWalkable(grid, 0, Number.POSITIVE_INFINITY) === false);
+check('circle collision rejects non-finite and negative radii',
+  canMoveTo(grid, A.x, A.y, Number.POSITIVE_INFINITY) === false &&
+  canMoveTo(grid, A.x, A.y, Number.NaN) === false &&
+  canMoveTo(grid, A.x, A.y, -1) === false);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
