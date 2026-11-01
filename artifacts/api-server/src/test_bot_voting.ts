@@ -42,7 +42,7 @@ test(
   'equally supported accusations produce an explicit skip',
   chooseEvidenceWeightedVote(0, roster, [
     { slot: 0, text: 'I saw Blue vent near reactor.' },
-    { slot: 2, text: 'I saw Green sabotage the reactor.' },
+    { slot: 1, text: 'I saw Green sabotage the reactor.' },
   ]),
   NO_TARGET,
 );
