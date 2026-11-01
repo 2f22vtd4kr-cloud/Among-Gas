@@ -26,9 +26,9 @@ The compact grid is retained for navigation/pathfinding and editor compatibility
 
 | Asset | Current repository evidence | Runtime role |
 |---|---|---|
-| `artifacts/telegram-game/public/map-hires.png` | Git blob `11cd7946e792d1dd1ec737c10d371e3bb69f87c5`; 9,734,170 bytes. CI image QA reports 3224×1858. | Canonical PNG fallback / direct DOM map image; dimensions are asserted equal to world dimensions. |
-| `artifacts/telegram-game/public/map-hires.webp` | Git blob `e5fbfe6d0ef42aca9f03cd2f480d9095325cba71`; 1,124,562 bytes. CI image QA reports 6608×3808. | Preferred high-resolution source in the gameplay canvas loader, with PNG fallback. |
-| `attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png` | Git blob `05cb87a17f5d99f6625f703982f598cf87cf9417`; 1,912,558 bytes. | Historical handoff identifies this as the user-supplied original map artwork (1652×952). |
+| `artifacts/telegram-game/public/map-hires.png` | Git blob `11cd7946e792d1dd1ec737c10d371e3bb69f87c5`; 9,734,170 bytes; SHA-256 `82e3d03f5f580bc2a32024ecddadb3df6929689a753d8c69016bbfaf003b96ce`; 3224×1858. | Canonical PNG fallback / direct DOM map image; dimensions are asserted equal to world dimensions. |
+| `artifacts/telegram-game/public/map-hires.webp` | Git blob `e5fbfe6d0ef42aca9f03cd2f480d9095325cba71`; 1,124,562 bytes; SHA-256 `f8153c33f608da0a713a4a71b61aaa865fb3ef869136889b7b000e48ceefa800`; 6608×3808. | Preferred high-resolution source in the gameplay canvas loader, with PNG fallback. |
+| `attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png` | Git blob `05cb87a17f5d99f6625f703982f598cf87cf9417`; 1,912,558 bytes; SHA-256 `c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80`; 1652×952. | Recovered original map artwork; now cross-checked against all five collision-island boundary pairs. |
 
 ### Rendering transform
 
@@ -40,14 +40,20 @@ The compact grid is retained for navigation/pathfinding and editor compatibility
 - an interior crop maps with the exact independent X/Y scale;
 - invalid image dimensions are rejected.
 
-### Provenance gap — do not guess
+### Recovered source and reproducible derivative
 
-The historical `handoff.md` records that the 1652×952 user-supplied PNG was once upscaled with Sharp/Lanczos and sharpening, then a later WebP derivative was created. The one-off upscaling script was under `/tmp` and is not committed. The current repository contains the input image and the two published derivatives, but this repository snapshot does **not** contain a deterministic, versioned generator that recreates the current `map-hires.png` and `map-hires.webp` byte-for-byte.
+The original 1652×952 PNG is present at the path above. The historical one-off `/tmp` script itself was not recovered, but a deterministic, non-destructive replacement is committed at `scripts/src/rebuildMapHiRes.ts`. It writes verification outputs under `artifacts/map-source-rebuild/`; it never overwrites either runtime asset.
 
-Consequently:
-1. Preserve the current binaries until their provenance and intended source are confirmed.
-2. Do not regenerate or replace them using historical dimensions from `handoff.md`.
-3. A future asset-pipeline workstream should add a committed deterministic generator, record its exact source file and processing recipe, and assert output dimensions/hashes or a documented non-byte-identical tolerance.
+The generator verifies these exact inputs and outputs:
+
+| Derivative | Source transform | Runtime target SHA-256 | Rebuilt verification SHA-256 | Full decoded-pixel MAE |
+|---|---|---|---|---:|
+| PNG 3224×1858 | Sharp resize, `fit: 'fill'`, Lanczos3, alpha preserved if present; scale X 1.9515738499, Y 1.9516806723 | `82e3d03f5f580bc2a32024ecddadb3df6929689a753d8c69016bbfaf003b96ce` | `4d84f432aca5ae5d8a6520b4378dfb345a318737854fd630bee5bae8a159c3aa` | 5.9273 |
+| WebP 6608×3808 | Direct from original source at exactly 4×, Lanczos3, WebP quality 90, effort 6 | `f8153c33f608da0a713a4a71b61aaa865fb3ef869136889b7b000e48ceefa800` | `1117c2c0980492e84dbcbcceb4d2d0b44c6e1286f2b3939b09825c88c5041335` | 2.2193 |
+
+The source SHA-256 is `c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80`. The PNG and WebP recipes are independently verified against their committed targets; the generator enforces MAE below 8 for PNG and below 4 for WebP. These tolerances are explicit because the historical one-off sharpening/encoding step is not available, so byte-for-byte reproduction is not claimed.
+
+`scripts/src/findMapSourceAsset.ts` also scans dimension/aspect-ratio candidates and verifies the source-to-PNG similarity. The CI workflow archives the original source, both runtime targets and both rebuilt verification outputs. **No runtime PNG/WebP asset is replaced.**
 
 ## 3. Red-line geometry reference and generated masks
 
