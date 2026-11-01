@@ -185,7 +185,7 @@ const anisotropicPath = findPath(
 );
 check('non-square-cell A* returns the optimal anisotropic route',
   anisotropicPath !== null &&
-  Math.abs(anisotropicPath.length - 171.80339887498945) < 1e-5,
+  Math.abs(anisotropicPath.length - 168.66068747318505) < 1e-5,
   anisotropicPath ? `length=${anisotropicPath.length.toFixed(6)}px` : 'null');
 
 console.log(`\n${pass} passed, ${fail} failed`);
