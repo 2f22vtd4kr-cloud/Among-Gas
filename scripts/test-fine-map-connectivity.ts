@@ -297,6 +297,13 @@ const gameplayAnchors = [
 ];
 
 console.log('Fine-grid component visual: ' + outputPath);
+console.log('GAMEPLAY_ANCHOR_COMPONENTS ' + JSON.stringify(
+  gameplayAnchors.map(anchor => ({
+    name: anchor.name,
+    components: anchor.approachComponents.map(approach => approach.component),
+    spawnConnected: anchor.approachComponents.some(approach => approach.connectedToSpawn),
+  })),
+));
 console.log(JSON.stringify({
   fineGrid: {
     cols: FINE_COLS,
