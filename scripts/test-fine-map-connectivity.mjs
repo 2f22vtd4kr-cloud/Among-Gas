@@ -6,7 +6,7 @@ const fineSource = read('../lib/shared/src/collisionDataFine.ts');
 const overrideSource = read('../lib/shared/src/collisionOverrides.ts');
 const coordsSource = read('../lib/shared/src/coords.ts');
 
-const payload = fineSource.match(/FINE_RLE_BASE64\\s*=\\s*"([^"]+)"/)?.[1];
+const payload = fineSource.match(/FINE_RLE_BASE64\s*=\s*"([^"]+)"/)?.[1];
 assert.ok(payload, 'canonical fine collision RLE payload exists');
 const cols = 680, rows = 392, mapW = 3224, mapH = 1858;
 const cellX = mapW / cols, cellY = mapH / rows;
@@ -29,7 +29,7 @@ while (input < bytes.length) {
 }
 assert.equal(output, grid.length, 'RLE fills the complete fine grid');
 
-const bounds = [...overrideSource.matchAll(/bounds:\\s*\\[(\\d+),\\s*(\\d+),\\s*(\\d+),\\s*(\\d+)\\]/g)]
+const bounds = [...overrideSource.matchAll(/bounds:\s*\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]/g)]
   .map((match) => match.slice(1).map(Number));
 for (const [minX, minY, maxX, maxY] of bounds) {
   for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
@@ -38,8 +38,8 @@ for (const [minX, minY, maxX, maxY] of bounds) {
   }
 }
 
-const radius = Number(coordsSource.match(/PLAYER_RADIUS\\s*=\\s*(\\d+)/)?.[1]);
-const halfWidth = Number(coordsSource.match(/PLAYER_HALF_WIDTH\\s*=\\s*(\\d+)/)?.[1]);
+const radius = Number(coordsSource.match(/PLAYER_RADIUS\s*=\s*(\d+)/)?.[1]);
+const halfWidth = Number(coordsSource.match(/PLAYER_HALF_WIDTH\s*=\s*(\d+)/)?.[1]);
 assert.ok(Number.isFinite(radius) && Number.isFinite(halfWidth), 'player collision footprint constants exist');
 function blocked(x, y) {
   const col = Math.floor(x / cellX), row = Math.floor(y / cellY);
