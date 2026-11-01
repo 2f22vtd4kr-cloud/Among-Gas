@@ -29,6 +29,25 @@ while (input < bytes.length) {
 }
 assert.equal(output, grid.length, 'RLE fills the complete fine grid');
 
+function pointInPolygon(x, y, points) {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, yi] = points[i], [xj, yj] = points[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / ((yj - yi) || Number.EPSILON) + xi) inside = !inside;
+  }
+  return inside;
+}
+const polygonMatch = overrideSource.match(/blockedPolygons:\\s*\\[\\[([\\s\\S]*?)\\]\\]/);
+if (polygonMatch) {
+  const points = [...polygonMatch[1].matchAll(/\\[\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\]/g)].map((m) => [Number(m[1]), Number(m[2])]);
+  assert.ok(points.length >= 3, 'authored blocked override polygon has at least three points');
+  const xs = points.map(([x]) => x), ys = points.map(([, y]) => y);
+  for (let row = Math.max(0, Math.floor(Math.min(...ys) / cellY)); row <= Math.min(rows - 1, Math.ceil(Math.max(...ys) / cellY)); row++) {
+    for (let col = Math.max(0, Math.floor(Math.min(...xs) / cellX)); col <= Math.min(cols - 1, Math.ceil(Math.max(...xs) / cellX)); col++) {
+      if (pointInPolygon((col + 0.5) * cellX, (row + 0.5) * cellY, points)) grid[row * cols + col] = 1;
+    }
+  }
+}
 const bounds = [...overrideSource.matchAll(/bounds:\s*\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]/g)]
   .map((match) => match.slice(1).map(Number));
 for (const [minX, minY, maxX, maxY] of bounds) {
