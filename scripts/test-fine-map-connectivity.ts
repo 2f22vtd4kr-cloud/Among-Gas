@@ -149,6 +149,88 @@ assert.ok(
 );
 const spawnComponent = componentOf[spawnIndex];
 
+// Find the closest cells of every significant detached region to the spawn
+// network, ignoring obstacles during this distance transform. These are
+// inspection candidates for a missing doorway or an intentional wall, not
+// automatic instructions to carve a connection.
+const nearestSpawnSteps = new Int32Array(grid.length);
+nearestSpawnSteps.fill(-1);
+const nearestSpawnOrigin = new Int32Array(grid.length);
+nearestSpawnOrigin.fill(-1);
+const distanceQueue = new Int32Array(grid.length);
+let distanceHead = 0;
+let distanceTail = 0;
+for (let index = 0; index < componentOf.length; index++) {
+  if (componentOf[index] !== spawnComponent) continue;
+  nearestSpawnSteps[index] = 0;
+  nearestSpawnOrigin[index] = index;
+  distanceQueue[distanceTail++] = index;
+}
+const distanceDirections = [
+  [-1, 0], [1, 0], [0, -1], [0, 1],
+  [-1, -1], [-1, 1], [1, -1], [1, 1],
+] as const;
+while (distanceHead < distanceTail) {
+  const index = distanceQueue[distanceHead++];
+  const col = index % FINE_COLS;
+  const row = Math.floor(index / FINE_COLS);
+  for (const [dc, dr] of distanceDirections) {
+    const nextCol = col + dc;
+    const nextRow = row + dr;
+    if (
+      nextCol < 0 || nextCol >= FINE_COLS ||
+      nextRow < 0 || nextRow >= FINE_ROWS
+    ) continue;
+    const next = nextRow * FINE_COLS + nextCol;
+    if (nearestSpawnSteps[next] !== -1) continue;
+    nearestSpawnSteps[next] = nearestSpawnSteps[index] + 1;
+    nearestSpawnOrigin[next] = nearestSpawnOrigin[index];
+    distanceQueue[distanceTail++] = next;
+  }
+}
+const significantBoundaryContacts = significant
+  .filter(region => region.id !== spawnComponent)
+  .map(region => {
+    let nearestIndex = -1;
+    let nearestSteps = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < componentOf.length; index++) {
+      if (componentOf[index] !== region.id) continue;
+      const steps = nearestSpawnSteps[index];
+      if (steps >= 0 && steps < nearestSteps) {
+        nearestSteps = steps;
+        nearestIndex = index;
+      }
+    }
+    if (nearestIndex < 0) return { component: region.id, bounds: region.bounds, contact: null };
+    const originIndex = nearestSpawnOrigin[nearestIndex];
+    const toPoint = (index: number) => {
+      const col = index % FINE_COLS;
+      const row = Math.floor(index / FINE_COLS);
+      const worldX = (col + 0.5) * FINE_CELL_X;
+      const worldY = (row + 0.5) * FINE_CELL_Y;
+      return {
+        world: [Math.round(worldX), Math.round(worldY)],
+        referenceImage: [
+          Math.round(worldX * 1359 / MAP_W),
+          Math.round(worldY * 784 / MAP_H),
+        ],
+      };
+    };
+    const from = toPoint(originIndex);
+    const to = toPoint(nearestIndex);
+    return {
+      component: region.id,
+      bounds: region.bounds,
+      chebyshevGridSteps: nearestSteps,
+      approximateWorldGapPx: Math.round(Math.hypot(
+        from.world[0] - to.world[0],
+        from.world[1] - to.world[1],
+      )),
+      spawnSide: from,
+      islandSide: to,
+    };
+  });
+
 // Render a component-coloured map for visual diagnosis. This artifact is
 // produced even if the release assertion below fails.
 const componentPixels = Buffer.alloc(FINE_COLS * FINE_ROWS * 4);
@@ -304,6 +386,7 @@ console.log('GAMEPLAY_ANCHOR_COMPONENTS ' + JSON.stringify(
     spawnConnected: anchor.approachComponents.some(approach => approach.connectedToSpawn),
   })),
 ));
+console.log('SIGNIFICANT_BOUNDARY_CONTACTS ' + JSON.stringify(significantBoundaryContacts));
 console.log(JSON.stringify({
   fineGrid: {
     cols: FINE_COLS,
@@ -328,6 +411,7 @@ console.log(JSON.stringify({
   components: componentSizes.length,
   significantComponents: significant,
   gameplayAnchorApproaches: gameplayAnchors,
+  significantBoundaryContacts,
 }, null, 2));
 
 // Significant detached regions remain diagnostic candidates. Do not alter
