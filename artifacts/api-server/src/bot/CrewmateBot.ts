@@ -8,8 +8,8 @@
  *   4. All tasks done   → wander randomly (social behaviour)
  *
  * Voting (MEETING phase, once votingOpen):
- *   Random vote among alive players, or skip. No real information, so
- *   crewmate bots choose uniformly at random.
+ *   Evidence-weighted vote from public meeting discussion; skip when evidence
+ *   is weak, contradictory, or the roster has no eligible target.
  */
 import { BotAgent, BOT_SPEED_PX } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -18,6 +18,7 @@ import { SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RAN
 import { NO_TARGET } from '@workspace/shared/coords';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
+import { chooseEvidenceWeightedVote } from './voting.js';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
 const TASK_DWELL_TICKS = 5; // 5 × 200ms = 1s per task step
@@ -102,13 +103,17 @@ export class CrewmateBot extends BotAgent {
   }
 
   override chooseVote(lobby: Lobby, self: LobbyPlayer): number {
-    const candidates = Array.from(lobby.players.values()).filter(
-      p => p.alive && p.slot !== self.slot,
+    // Use only the public roster and meeting transcript. The voting helper
+    // deliberately has no access to hidden roles, private positions or events.
+    return chooseEvidenceWeightedVote(
+      self.slot,
+      Array.from(lobby.players.values(), player => ({
+        slot: player.slot,
+        username: player.username,
+        alive: player.alive,
+      })),
+      lobby.meeting?.messages ?? [],
     );
-    if (candidates.length === 0) return NO_TARGET;
-    // ~20% chance to skip, otherwise vote randomly
-    if (Math.random() < 0.2) return NO_TARGET;
-    return candidates[Math.floor(Math.random() * candidates.length)].slot;
   }
 
   // ── Sabotage repair ─────────────────────────────────────────────────────
