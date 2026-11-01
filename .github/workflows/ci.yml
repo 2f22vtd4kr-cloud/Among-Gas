@@ -50,6 +50,9 @@ jobs:
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform
 
+      - name: Search repository for the original map raster and upscale source
+        run: pnpm --filter @workspace/scripts exec tsx src/findMapSourceAsset.ts
+
       - name: Verify character atlas crops, authored scale and shared feet anchor
         run: pnpm --filter @workspace/scripts run test:character-geometry
 
