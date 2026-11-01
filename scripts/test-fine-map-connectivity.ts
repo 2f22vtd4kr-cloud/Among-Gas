@@ -15,6 +15,7 @@ import {
   isPlayerPathWalkable,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
+  isLineOfSightToInteractionTarget,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
@@ -193,6 +194,108 @@ const significant = componentSizes
   .filter(({ size }) => size >= 1000)
   .sort((a, b) => b.size - a.size);
 
+// Map gameplay anchors to the actual fine-grid components that have a valid
+// player footprint and line-of-sight approach. This is classification evidence,
+// not an assumption that every region must be physically connected to spawn.
+const { TASK_DEFS, TASK_INTERACTION_RANGE_PX } = await import('@workspace/shared/tasks');
+const { VENT_DEFS, VENT_INTERACTION_RANGE_PX } = await import('@workspace/shared/vents');
+const { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } = await import('@workspace/shared/adminTable');
+const { SABOTAGE_DEFS, SABOTAGE_INTERACTION_RANGE_PX } = await import('@workspace/shared/sabotage');
+
+function classifyAnchorApproaches(
+  target: { id: number | string; name: string; x: number; y: number; radiusPx?: number },
+  interactionRangePx: number,
+  defaultRadiusPx = 24,
+) {
+  const approachRadius = interactionRangePx - 8;
+  const radiusPx = target.radiusPx ?? defaultRadiusPx;
+  const byComponent = new Map<number, { count: number; nearest: number; x: number; y: number }>();
+
+  for (let dy = -approachRadius; dy <= approachRadius; dy += 8) {
+    for (let dx = -approachRadius; dx <= approachRadius; dx += 8) {
+      const distance = Math.hypot(dx, dy);
+      if (distance > approachRadius) continue;
+
+      const spriteX = target.x + dx;
+      const spriteY = target.y + dy;
+      if (!isPlayerPositionWalkable(grid, spriteX, spriteY)) continue;
+
+      const feetY = spriteY + FEET_OFFSET_Y;
+      if (!isLineOfSightToInteractionTarget(
+        grid,
+        spriteX,
+        feetY,
+        target.x,
+        target.y + FEET_OFFSET_Y,
+        radiusPx,
+      )) continue;
+
+      const col = Math.floor(spriteX / FINE_CELL_X);
+      const row = Math.floor(feetY / FINE_CELL_Y);
+      if (col < 0 || col >= FINE_COLS || row < 0 || row >= FINE_ROWS) continue;
+      const component = componentOf[row * FINE_COLS + col];
+      if (component < 0) continue;
+
+      const previous = byComponent.get(component);
+      if (previous) {
+        previous.count++;
+        if (distance < previous.nearest) {
+          previous.nearest = distance;
+          previous.x = spriteX;
+          previous.y = spriteY;
+        }
+      } else {
+        byComponent.set(component, {
+          count: 1,
+          nearest: distance,
+          x: spriteX,
+          y: spriteY,
+        });
+      }
+    }
+  }
+
+  return {
+    id: target.id,
+    name: target.name,
+    anchor: [target.x, target.y],
+    rangePx: interactionRangePx,
+    approachRadiusPx: approachRadius,
+    radiusPx,
+    approachComponents: [...byComponent.entries()]
+      .map(([component, value]) => ({
+        component,
+        approachSamples: value.count,
+        nearestApproachPx: Math.round(value.nearest),
+        nearestSpritePosition: [Math.round(value.x), Math.round(value.y)],
+        connectedToSpawn: component === spawnComponent,
+      }))
+      .sort((a, b) => a.nearestApproachPx - b.nearestApproachPx),
+  };
+}
+
+const gameplayAnchors = [
+  ...TASK_DEFS.map(task => classifyAnchorApproaches(
+    { id: task.id, name: task.name, x: task.x, y: task.y, radiusPx: task.interactionTargetRadiusPx },
+    TASK_INTERACTION_RANGE_PX,
+  )),
+  ...VENT_DEFS.map(vent => classifyAnchorApproaches(
+    { id: vent.id, name: 'Vent ' + vent.name, x: vent.x, y: vent.y },
+    VENT_INTERACTION_RANGE_PX,
+    20,
+  )),
+  ...ADMIN_TABLE_DEFS.map(consoleDef => classifyAnchorApproaches(
+    { id: consoleDef.id, name: consoleDef.name, x: consoleDef.x, y: consoleDef.y },
+    ADMIN_TABLE_INTERACTION_RANGE_PX,
+  )),
+  ...Object.values(SABOTAGE_DEFS).flatMap(system => system.pads.map((pad, index) =>
+    classifyAnchorApproaches(
+      { id: system.id + ':' + index, name: system.name + ' pad ' + index, x: pad.x, y: pad.y },
+      SABOTAGE_INTERACTION_RANGE_PX,
+    ),
+  )),
+];
+
 console.log('Fine-grid component visual: ' + outputPath);
 console.log(JSON.stringify({
   fineGrid: {
@@ -217,6 +320,7 @@ console.log(JSON.stringify({
   },
   components: componentSizes.length,
   significantComponents: significant,
+  gameplayAnchorApproaches: gameplayAnchors,
 }, null, 2));
 
 // Significant detached regions remain diagnostic candidates. Do not alter
