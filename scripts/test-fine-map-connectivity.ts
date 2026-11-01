@@ -291,8 +291,39 @@ const componentOverlay = await sharp(componentPixels, {
   .resize(MAP_W, MAP_H, { kernel: 'nearest' })
   .png()
   .toBuffer();
+const componentLegendRows = [
+  { id: spawnComponent, label: 'Spawn network', size: componentSizes[spawnComponent], colour: spawnColour },
+  ...significant
+    .filter(region => region.id !== spawnComponent)
+    .map(region => ({
+      id: region.id,
+      label: 'Detached component ' + region.id,
+      size: region.size,
+      colour: significantColourById.get(region.id) ?? [0.5, 0.5, 0.5] as [number, number, number],
+    })),
+];
+const componentLegendSvg = Buffer.from(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="330" height="${38 + componentLegendRows.length * 23}">
+    <rect x="12" y="10" width="306" height="${18 + componentLegendRows.length * 23}" rx="9" fill="#111827" fill-opacity="0.92"/>
+    ${componentLegendRows.map((item, index) => {
+      const color = item.colour.map(channel =>
+        Math.round(Math.min(1, channel + 0.18) * 255).toString(16).padStart(2, '0'),
+      ).join('');
+      const y = 30 + index * 23;
+      return `
+        <rect x="25" y="${y - 10}" width="13" height="13" rx="3" fill="#${color}"/>
+        <text x="47" y="${y}" font-family="Arial,sans-serif" font-size="12" fill="#ffffff">
+          ${item.label} — ${item.size.toLocaleString()} cells
+        </text>
+      `;
+    }).join('')}
+  </svg>
+`);
 await sharp(mapPath)
-  .composite([{ input: componentOverlay, blend: 'over' }])
+  .composite([
+    { input: componentOverlay, blend: 'over' },
+    { input: componentLegendSvg, blend: 'over' },
+  ])
   .png()
   .toFile(outputPath);
 
