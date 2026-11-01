@@ -185,11 +185,12 @@ async function main() {
       'bot movement deltas must resume after the human acknowledges decoded map and sprites',
     );
 
-    console.log('--- Verify a live emergency call broadcasts a meeting and is single-use ---');
+    console.log('--- Verify a live server-backed emergency meeting, discussion, voting and ejection ---');
     const emergencyHost = await connect(90005, 'EmergencyHost');
     const emergencyGuest = await connect(90006, 'EmergencyGuest');
     const emergencyThird = await connect(90007, 'EmergencyThird');
-    players.push(emergencyHost, emergencyGuest, emergencyThird);
+    const emergencyPlayers = [emergencyHost, emergencyGuest, emergencyThird];
+    players.push(...emergencyPlayers);
     send(emergencyHost, [0x10, 0x01]);
     await waitFor(emergencyHost, b => b[0] === 0x10 && b[1] === 0x05);
     const emergencyRoom = await waitFor(emergencyHost, b => b[0] === 0x10 && b[1] === 0x03);
@@ -200,32 +201,71 @@ async function main() {
       await waitFor(player, b => b[0] === 0x10 && b[1] === 0x03 && b[2] === expectedSlot + 1);
     }
     send(emergencyHost, [0x12]);
-    await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+    const emergencyRolePackets = await Promise.all(emergencyPlayers.map(player =>
       waitFor(player, b => b[0] === 0x1A, 5000)));
-    for (const player of [emergencyHost, emergencyGuest, emergencyThird]) send(player, [0x23]);
-    await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+    for (const player of emergencyPlayers) send(player, [0x23]);
+    await Promise.all(emergencyPlayers.map(player =>
       waitFor(player, b => b[0] === 0x24 && b[1] === 0x01, 2000)));
-    send(emergencyHost, [0x13, 0xff]);
-    const emergencyAck = await waitFor(emergencyHost, b => b[0] === 0x20 && b[1] === 0x01);
+
+    const emergencyImpostor = emergencyPlayers.find((player, index) =>
+      emergencyRolePackets[index][1] === 0x01);
+    const emergencyCrew = emergencyPlayers.filter((player, index) =>
+      emergencyRolePackets[index][1] === 0x00);
+    assert.ok(emergencyImpostor, 'server assigns exactly one impostor in the meeting fixture');
+    assert.equal(emergencyCrew.length, 2, 'meeting fixture has two crewmates');
+    const emergencyAck = await (async () => {
+      send(emergencyHost, [0x13, 0xff]);
+      return waitFor(emergencyHost, b => b[0] === 0x20 && b[1] === 0x01);
+    })();
     assert.equal(emergencyAck[2], emergencyHost.slot, 'server confirms the caller identity');
-    const meetingStarts = await Promise.all([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+    const meetingStarts = await Promise.all(emergencyPlayers.map(player =>
       waitFor(player, b => b[0] === 0x1b)));
     for (const packet of meetingStarts) {
       assert.equal(packet[1], emergencyHost.slot, 'meeting broadcast identifies the real caller');
       assert.equal(packet[2], 0xff, '0xFF body slot denotes an emergency meeting, not a corpse report');
     }
-    const meetingStartCounts = [emergencyHost, emergencyGuest, emergencyThird].map(player =>
+
+    const meetingStartCounts = emergencyPlayers.map(player =>
       player.msgs.filter(packet => packet[0] === 0x1b).length);
     const ackCount = emergencyHost.msgs.filter(packet => packet[0] === 0x20 && packet[1] === 0x01).length;
     send(emergencyHost, [0x13, 0xff]);
     await sleep(180);
-    assert.deepEqual([emergencyHost, emergencyGuest, emergencyThird].map(player =>
+    assert.deepEqual(emergencyPlayers.map(player =>
       player.msgs.filter(packet => packet[0] === 0x1b).length), meetingStartCounts,
       'the same player cannot start a second emergency meeting');
     assert.equal(emergencyHost.msgs.filter(packet => packet[0] === 0x20 && packet[1] === 0x01).length,
       ackCount, 'rejected repeat calls are not confirmed by the server');
 
-        console.log('--- Allow a fresh socket to replace an existing lobby session ---');
+    const chatText = 'I was at the lobby console when the emergency was called.';
+    const chatBytes = Buffer.from(chatText, 'utf8');
+    send(emergencyCrew[0], [0x19, 0x01, chatBytes.length, ...chatBytes]);
+    const chatBroadcasts = await Promise.all(emergencyPlayers.map(player =>
+      waitFor(player, b => b[0] === 0x19 && b[1] === 0x02 && b[2] === emergencyCrew[0].slot)));
+    for (const packet of chatBroadcasts) {
+      assert.equal(packet[3], chatBytes.length, 'meeting chat broadcast carries the exact UTF-8 byte length');
+      assert.equal(packet.subarray(4).toString('utf8'), chatText,
+        'all connected clients receive the same public discussion message');
+    }
+
+    // Voting before the server's 15-second discussion window closes must be
+    // rejected. Vote for the other crewmate now; after the window, vote for the
+    // impostor. If the early vote was accepted, the later correction is a
+    // duplicate and the final tally cannot eject the impostor.
+    send(emergencyCrew[0], [0x14, emergencyCrew[1].slot]);
+    await sleep(15_250);
+    send(emergencyCrew[0], [0x14, emergencyImpostor.slot]);
+    send(emergencyCrew[1], [0x14, emergencyImpostor.slot]);
+    send(emergencyImpostor, [0x14, 0xff]);
+    const voteResults = await Promise.all(emergencyPlayers.map(player =>
+      waitFor(player, b => b[0] === 0x1c, 5000)));
+    for (const packet of voteResults) {
+      assert.equal(packet[1], emergencyImpostor.slot,
+        'the authoritative meeting tally ejects the impostor after two crew votes');
+      assert.equal(packet[2], 0x01,
+        'server broadcasts the crewmate victory after the impostor is ejected');
+    }
+
+    console.log('--- Allow a fresh socket to replace an existing lobby session ---');
     const previousHost = await connect(90101, 'ReconnectHost');
     players.push(previousHost);
     send(previousHost, [0x10, 0x01]);
