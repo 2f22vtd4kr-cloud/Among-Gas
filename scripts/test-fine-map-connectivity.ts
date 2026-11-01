@@ -237,30 +237,47 @@ const significantBoundaryContacts = significant
     };
   });
 
-// Render a component-coloured map for visual diagnosis. This artifact is
-// produced even if the release assertion below fails.
+// Render a component-coloured map for visual diagnosis. Give the spawn
+// network and all five significant detached regions a deliberately distinct,
+// stable review palette; an ID-derived hue alone caused components 1 and 56
+// to render almost the same green. Small components keep deterministic hues.
+const significantPalette: [number, number, number][] = [
+  [0.96, 0.20, 0.24], // red
+  [0.98, 0.58, 0.12], // orange
+  [0.12, 0.62, 0.92], // blue
+  [0.65, 0.35, 0.92], // purple
+  [0.93, 0.32, 0.68], // magenta
+];
+const significantColourById = new Map<number, [number, number, number]>(
+  significant
+    .filter(region => region.id !== spawnComponent)
+    .map((region, index) => [region.id, significantPalette[index % significantPalette.length]]),
+);
+const spawnColour: [number, number, number] = [0.08, 0.76, 0.36];
 const componentPixels = Buffer.alloc(FINE_COLS * FINE_ROWS * 4);
 for (let index = 0; index < componentOf.length; index++) {
   const id = componentOf[index];
   if (id < 0) continue;
 
-  const hue = (id * 137.508) % 360;
-  const chroma = 0.72;
-  const sector = hue / 60;
-  const x = chroma * (1 - Math.abs((sector % 2) - 1));
-  let rgb: [number, number, number];
-  if (sector < 1) rgb = [chroma, x, 0];
-  else if (sector < 2) rgb = [x, chroma, 0];
-  else if (sector < 3) rgb = [0, chroma, x];
-  else if (sector < 4) rgb = [0, x, chroma];
-  else if (sector < 5) rgb = [x, 0, chroma];
-  else rgb = [chroma, 0, x];
+  let rgb = id === spawnComponent ? spawnColour : significantColourById.get(id);
+  if (!rgb) {
+    const hue = (id * 137.508) % 360;
+    const chroma = 0.72;
+    const sector = hue / 60;
+    const x = chroma * (1 - Math.abs((sector % 2) - 1));
+    if (sector < 1) rgb = [chroma, x, 0];
+    else if (sector < 2) rgb = [x, chroma, 0];
+    else if (sector < 3) rgb = [0, chroma, x];
+    else if (sector < 4) rgb = [0, x, chroma];
+    else if (sector < 5) rgb = [x, 0, chroma];
+    else rgb = [chroma, 0, x];
+  }
 
   const offset = index * 4;
-  componentPixels[offset] = Math.round((rgb[0] + 0.28) * 255);
-  componentPixels[offset + 1] = Math.round((rgb[1] + 0.28) * 255);
-  componentPixels[offset + 2] = Math.round((rgb[2] + 0.28) * 255);
-  componentPixels[offset + 3] = id === spawnComponent ? 165 : 125;
+  componentPixels[offset] = Math.round((rgb[0] + 0.18) * 255);
+  componentPixels[offset + 1] = Math.round((rgb[1] + 0.18) * 255);
+  componentPixels[offset + 2] = Math.round((rgb[2] + 0.18) * 255);
+  componentPixels[offset + 3] = id === spawnComponent ? 180 : significantColourById.has(id) ? 175 : 95;
 }
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
