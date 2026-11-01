@@ -254,9 +254,24 @@ export abstract class BotAgent {
     }));
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
 
-    void requestGroqDialogue(sessionKey, prompt).then(response => {
-      // A slow model response must never cast into a later meeting or after
-      // this meeting has closed, the bot died, or another path already voted.
+    void (async () => {
+      let response = await requestGroqDialogue(sessionKey, prompt);
+      // The shared-key limiter can reject a request while the previous bot's
+      // call is still in flight. Retry once after the cooldown; never block the
+      // 5Hz loop, and abandon the retry if this meeting is no longer current.
+      if (response === null) {
+        await new Promise(resolve => setTimeout(resolve, 1_600));
+        if (!canCommitBotVote({
+          phase: lobby.phase,
+          currentMeeting: lobby.meeting,
+          requestedMeeting: meeting,
+          votingOpen: meeting.votingOpen,
+          alive: self.alive,
+          hasVoted: meeting.votes.has(self.slot),
+        })) return;
+        response = await requestGroqDialogue(sessionKey, prompt);
+      }
+
       if (!canCommitBotVote({
         phase: lobby.phase,
         currentMeeting: lobby.meeting,
@@ -277,7 +292,7 @@ export abstract class BotAgent {
         (!!target && target.alive && target.slot !== self.slot &&
           (self.role !== 'impostor' || target.role !== 'impostor'));
       manager.castVote(lobby, self.slot, legal ? candidate : fallback);
-    }).catch(() => {
+    })().catch(() => {
       if (canCommitBotVote({
         phase: lobby.phase,
         currentMeeting: lobby.meeting,
@@ -287,6 +302,8 @@ export abstract class BotAgent {
         hasVoted: meeting.votes.has(self.slot),
       })) manager.castVote(lobby, self.slot, fallback);
     }).finally(() => {
+      this.voteRequestPending = false;
+    });finally(() => {
       this.voteRequestPending = false;
     });
   }
