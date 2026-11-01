@@ -266,6 +266,8 @@ for (let index = 0; index < componentOf.length; index++) {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const outputPath = path.join(root, 'artifacts/telegram-game/fine-connectivity-components.png');
+const referenceMapPath = path.join(root, 'attached_assets/IMG_2907_1783632830477.jpeg');
+const boundaryOutputPath = path.join(root, 'artifacts/telegram-game/fine-connectivity-boundaries.png');
 const componentOverlay = await sharp(componentPixels, {
   raw: { width: FINE_COLS, height: FINE_ROWS, channels: 4 },
 })
@@ -276,6 +278,46 @@ await sharp(mapPath)
   .composite([{ input: componentOverlay, blend: 'over' }])
   .png()
   .toFile(outputPath);
+
+// Annotate the nearest source-image boundary pairs. Cyan marks the spawn side;
+// orange marks the detached side. The line is an inspection locator, not a
+// proposed route or a claim that the intervening region should be walkable.
+const boundaryMarks = significantBoundaryContacts
+  .filter(contact => contact.spawnSide && contact.islandSide)
+  .map(contact => {
+    const [sx, sy] = contact.spawnSide.referenceImage;
+    const [ix, iy] = contact.islandSide.referenceImage;
+    const labelX = Math.round((sx + ix) / 2);
+    const labelY = Math.round((sy + iy) / 2);
+    const label = 'C' + contact.component + ' ' + contact.approximateWorldGapPx + 'px';
+    return `
+      <line x1="${sx}" y1="${sy}" x2="${ix}" y2="${iy}" stroke="#ffffff" stroke-width="5" opacity="0.95"/>
+      <line x1="${sx}" y1="${sy}" x2="${ix}" y2="${iy}" stroke="#ff9a3c" stroke-width="2.5" stroke-dasharray="5 4"/>
+      <circle cx="${sx}" cy="${sy}" r="8" fill="#00d8ff" stroke="#062632" stroke-width="2"/>
+      <circle cx="${ix}" cy="${iy}" r="8" fill="#ff9a3c" stroke="#421b00" stroke-width="2"/>
+      <rect x="${labelX - 38}" y="${labelY - 23}" width="76" height="19" rx="5" fill="#111827" fill-opacity="0.94"/>
+      <text x="${labelX}" y="${labelY - 9}" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="bold" fill="#ffffff">${label}</text>
+    `;
+  })
+  .join('');
+const boundaryLegend = `
+  <rect x="18" y="18" width="250" height="48" rx="8" fill="#111827" fill-opacity="0.92"/>
+  <circle cx="36" cy="36" r="6" fill="#00d8ff"/>
+  <text x="49" y="40" font-family="Arial,sans-serif" font-size="12" fill="#ffffff">spawn-connected side</text>
+  <circle cx="36" cy="53" r="6" fill="#ff9a3c"/>
+  <text x="49" y="57" font-family="Arial,sans-serif" font-size="12" fill="#ffffff">detached component side</text>
+`;
+const boundarySvg = Buffer.from(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="1359" height="784" viewBox="0 0 1359 784">
+    ${boundaryLegend}
+    ${boundaryMarks}
+  </svg>
+`);
+await sharp(referenceMapPath)
+  .composite([{ input: boundarySvg, blend: 'over' }])
+  .png()
+  .toFile(boundaryOutputPath);
+console.log('Fine-grid boundary review overlay: ' + boundaryOutputPath);
 
 // Map gameplay anchors to the actual fine-grid components that have a valid
 // player footprint and line-of-sight approach. This is classification evidence,
