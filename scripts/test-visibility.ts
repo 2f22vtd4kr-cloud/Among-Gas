@@ -293,6 +293,13 @@ assert.ok(realFineShadowSegments.some(segment =>
   [segment.ax, segment.bx].some(x => x >= 1990 && x <= 2260) &&
   [segment.ay, segment.by].some(y => y >= 1050 && y <= 1260)
 ), 'the vehicle casts a silhouette shadow from its measured fine-grid outline');
+const vanOcclusionRay = computeVisibilityPolygon(
+  2000, 1150, 180, realFineShadowGrid, [], true, realFineShadowSegments,
+)[360];
+assert.ok(
+  vanOcclusionRay.x >= 2018 && vanOcclusionRay.x <= 2040,
+  `vision from the van's left clearance stops at its measured silhouette (x=${vanOcclusionRay.x.toFixed(1)})`,
+);
 assert.equal(realFineGrid.length, FINE_COLS * FINE_ROWS, 'fine collision grid has complete declared coverage');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1640, 449), true, 'fine western garden path is walkable');
 assert.equal(isPlayerPositionWalkable(realFineGrid, 1810, 449), true, 'fine eastern garden path is walkable');
