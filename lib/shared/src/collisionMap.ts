@@ -148,6 +148,12 @@ export const ZONES: Zone[] = [
 let _cached: Grid | null = null;
 let _fineCached: Grid | null = null;
 
+// Map-specific vector overrides belong to every grid built from canonical map
+// data, not only to the two singleton caches. Candidate/rebuilt RLE grids must
+// enforce the same geometry as the live client and server.
+const _manualPolygonAwareGrids = new WeakSet<Grid>();
+const hasManualPolygonGeometry = (grid: Grid): boolean => _manualPolygonAwareGrids.has(grid);
+
 interface GridGeometry {
   cols: number;
   rows: number;
@@ -314,6 +320,7 @@ export function buildCollisionGrid(): Grid {
   if (_cached) return _cached;
   // Retain the compact legacy grid for A* navigation and the collision editor.
   _cached = decodeRuns();
+  _manualPolygonAwareGrids.add(_cached);
   return _cached;
 }
 
@@ -330,6 +337,7 @@ export function buildFineCollisionGridFromRle(encoded: string): Grid {
 export function buildPreciseCollisionGridFromRle(encoded: string): Grid {
   const grid = decodeFineRuns(encoded);
   applyManualWalkableReplacementZones(grid);
+  _manualPolygonAwareGrids.add(grid);
   return grid;
 }
 
@@ -374,7 +382,6 @@ function applyManualWalkableReplacementZones(grid: Grid): void {
 export function buildPreciseCollisionGrid(): Grid {
   if (_fineCached) return _fineCached;
   _fineCached = buildPreciseCollisionGridFromRle(FINE_RLE_BASE64);
-  applyManualWalkableReplacementZones(_fineCached);
   return _fineCached;
 }
 
@@ -389,7 +396,7 @@ export function isBlocked(grid: Grid, px: number, py: number): boolean {
   const row = Math.floor(py / geometry.cellY);
   if (col < 0 || col >= geometry.cols || row < 0 || row >= geometry.rows) return true;
   if (grid[row * geometry.cols + col] === 1) return true;
-  return (grid === _cached || grid === _fineCached) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+  return hasManualPolygonGeometry(grid) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
     pointInPolygon(px, py, polygon.points as readonly PolygonPoint[])
   );
 }
@@ -465,7 +472,7 @@ export function canMoveTo(
     const py = cy + Math.sin(angle) * radius;
     if (isBlocked(grid, px, py)) return false;
   }
-  if ((grid === _cached || grid === _fineCached) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
+  if (hasManualPolygonGeometry(grid) && MANUAL_BLOCKED_POLYGONS.some(polygon =>
     circleIntersectsPolygon(cx, cy, radius, polygon.points as readonly PolygonPoint[])
   )) return false;
   return true;
