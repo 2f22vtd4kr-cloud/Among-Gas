@@ -592,6 +592,24 @@ const toWorld = (point: readonly [number, number]): readonly [number, number] =>
   point[0] * MAP_W / 1359,
   point[1] * MAP_H / 784,
 ];
+const offsetFromBoundary = (
+  spawnReference: readonly [number, number],
+  islandReference: readonly [number, number],
+  distanceWorldPx: number,
+): { spawn: readonly [number, number]; island: readonly [number, number] } => {
+  const spawn = toWorld(spawnReference);
+  const island = toWorld(islandReference);
+  const dx = island[0] - spawn[0];
+  const dy = island[1] - spawn[1];
+  const length = Math.hypot(dx, dy);
+  assert.ok(length > 0, 'boundary probes must be distinct');
+  const ux = dx / length;
+  const uy = dy / length;
+  return {
+    spawn: [spawn[0] - ux * distanceWorldPx, spawn[1] - uy * distanceWorldPx],
+    island: [island[0] + ux * distanceWorldPx, island[1] + uy * distanceWorldPx],
+  };
+};
 const closeEnough = (a: number, b: number, tolerance: number) =>
   Math.abs(a - b) <= tolerance;
 
@@ -611,8 +629,13 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
     `${region.id}: blocked polygon tracks the reviewed component bounds`,
   );
 
-  const [spawnFeetX, spawnFeetY] = toWorld(region.spawnSideReferenceImage);
-  const [islandFeetX, islandFeetY] = toWorld(region.islandSideReferenceImage);
+  const probes = offsetFromBoundary(
+    region.spawnSideReferenceImage,
+    region.islandSideReferenceImage,
+    20,
+  );
+  const [spawnFeetX, spawnFeetY] = probes.spawn;
+  const [islandFeetX, islandFeetY] = probes.island;
   const spawnSpriteY = spawnFeetY - FEET_OFFSET_Y;
   const islandSpriteY = islandFeetY - FEET_OFFSET_Y;
   assert.ok(
@@ -648,8 +671,13 @@ for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
   );
   assert.ok(contact?.spawnSide && contact?.islandSide, `${region.id} matches the reviewed source-art boundary`);
 
-  const [spawnFeetX, spawnFeetY] = toWorld(region.spawnSideReferenceImage);
-  const [islandFeetX, islandFeetY] = toWorld(region.islandSideReferenceImage);
+  const probes = offsetFromBoundary(
+    region.spawnSideReferenceImage,
+    region.islandSideReferenceImage,
+    20,
+  );
+  const [spawnFeetX, spawnFeetY] = probes.spawn;
+  const [islandFeetX, islandFeetY] = probes.island;
   const spawnSpriteY = spawnFeetY - FEET_OFFSET_Y;
   const islandSpriteY = islandFeetY - FEET_OFFSET_Y;
   assert.ok(
