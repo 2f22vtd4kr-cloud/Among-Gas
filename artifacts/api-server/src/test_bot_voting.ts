@@ -92,4 +92,22 @@ test(
   1,
 );
 
+
+test(
+  'exculpatory statements about a different player do not erase an accusation',
+  chooseEvidenceWeightedVote(0, roster, [
+    { slot: 0, text: 'I saw Blue vent near reactor. Green is innocent.' },
+  ]),
+  1,
+);
+
+test(
+  'a speaker retracting their own earlier accusation removes that evidence',
+  chooseEvidenceWeightedVote(0, roster, [
+    { slot: 0, text: 'I saw Blue vent near reactor.' },
+    { slot: 0, text: 'I was wrong; Blue is innocent.' },
+  ]),
+  NO_TARGET,
+);
+
 console.log('All evidence-weighted voting tests passed.');
