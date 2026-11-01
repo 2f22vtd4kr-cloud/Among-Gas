@@ -92,8 +92,8 @@ function isWalkable(grid: Grid, col: number, row: number, geometry: PathGridGeom
 // ─── Heuristic ────────────────────────────────────────────────────────────────
 
 /**
- * Octile (diagonal) heuristic in pixel space.
- * Accounts for non-square cells (CELL_X ≠ CELL_Y).
+ * Obstacle-free shortest-path lower bound for 8-directional movement.
+ * Uses the true Euclidean diagonal cost, including non-square cell dimensions.
  */
 function heuristic(ac: number, ar: number, bc: number, br: number, geometry: PathGridGeometry): number {
   const columns = Math.abs(ac - bc);
@@ -164,7 +164,7 @@ class MinHeap {
 
 /**
  * 8-directional A* on the collision grid.
- * Diagonal moves cost √2 × the longer axis (pixel-space distance).
+ * Diagonal moves cost the Euclidean distance across one cell on each axis.
  * Diagonal cuts through corners are not allowed (both axis-aligned
  * neighbours must be walkable).
  *
