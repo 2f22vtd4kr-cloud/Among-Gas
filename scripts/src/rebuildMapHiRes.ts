@@ -49,7 +49,7 @@ const report = {
   generated: relative(repoRoot, outputPath),
   generatedSha256: createHash('sha256').update(generatedBytes).digest('hex'),
   scale: [targetMeta.width / sourceMeta.width, targetMeta.height / sourceMeta.height],
-  transform: { fit: 'fill', kernel: 'lanczos3', alpha: 'preserve-sharp-default' },
+  transform: { fit: 'fill', kernel: 'lanczos3', alpha: 'preserve-if-present' },
   fullMeanAbsolutePixelError: Number(fullMae.toFixed(4)),
   runtimeAssetOverwritten: false,
 };
