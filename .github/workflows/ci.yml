@@ -63,6 +63,7 @@ jobs:
           after=$(sha256sum lib/shared/src/collisionData.ts)
           test "$before" = "$after" || { echo "Collision analyzer modified production collisionData.ts"; exit 1; }
 
+      # Uses the same player clearance footprint as client/server movement; intentionally blocks release on disconnected gameplay regions.
       - name: Verify fine-grid player-footprint connectivity across the map
         run: node scripts/test-fine-map-connectivity.mjs
 
