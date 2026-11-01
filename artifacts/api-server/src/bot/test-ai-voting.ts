@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildPublicBotVoteMessages,
+  canCommitBotVote,
   parsePublicBotVoteResponse,
   type PublicVoteCandidate,
 } from './aiVoting.js';
@@ -41,5 +42,26 @@ assert.equal(parsePublicBotVoteResponse('{"vote":"2"}', 0, roster), null, 'strin
 assert.equal(parsePublicBotVoteResponse('{"vote":2} extra', 0, roster), null, 'trailing text is rejected');
 assert.equal(parsePublicBotVoteResponse('I vote for Green', 0, roster), null, 'free-form answers are rejected');
 assert.equal(parsePublicBotVoteResponse('{"target":2}', 0, roster), null, 'wrong schema is rejected');
+
+const meeting = {};
+const currentState = {
+  phase: 'MEETING',
+  currentMeeting: meeting,
+  requestedMeeting: meeting,
+  votingOpen: true,
+  alive: true,
+  hasVoted: false,
+};
+assert.equal(canCommitBotVote(currentState), true);
+assert.equal(canCommitBotVote({ ...currentState, currentMeeting: {} }), false,
+  'responses from an earlier meeting are rejected');
+assert.equal(canCommitBotVote({ ...currentState, phase: 'ROAMING' }), false,
+  'responses after meeting closure are rejected');
+assert.equal(canCommitBotVote({ ...currentState, votingOpen: false }), false,
+  'responses before voting opens are rejected');
+assert.equal(canCommitBotVote({ ...currentState, alive: false }), false,
+  'dead bots cannot commit a pending vote');
+assert.equal(canCommitBotVote({ ...currentState, hasVoted: true }), false,
+  'duplicate async votes are rejected');
 
 console.log('PASS: public-only vote prompts, injection boundary, strict schema and target validation');
