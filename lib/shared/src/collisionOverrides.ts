@@ -44,3 +44,56 @@ export const MANUAL_BLOCKED_POLYGONS: readonly {
     points: MANUAL_WALKABLE_REPLACEMENT_ZONES[0].blockedPolygons[0],
   },
 ];
+
+
+/**
+ * Source-art regions intentionally sealed from the spawn-connected play space.
+ * These are not component-ID allowlists: each disposition is tied to stable
+ * world bounds and the annotated source-image boundary pair. The red-line
+ * collision mask already supplies the separating wall; the connectivity
+ * regression verifies that the wall remains closed and that no gameplay
+ * interaction anchor is stranded behind it.
+ */
+export const INTENTIONALLY_SEALED_REGIONS: readonly {
+  readonly id: string;
+  readonly worldBounds: readonly [number, number, number, number];
+  readonly spawnSideReferenceImage: readonly [number, number];
+  readonly islandSideReferenceImage: readonly [number, number];
+  readonly rationale: string;
+}[] = [
+  {
+    id: 'north-cafeteria-upper-furniture-strip',
+    worldBounds: [1337, 19, 2138, 270],
+    spawnSideReferenceImage: [629, 59],
+    islandSideReferenceImage: [613, 43],
+    rationale: 'The island lies behind the continuous upper cafeteria partition in the source reference, within the upper furniture/bench strip. No doorway gap or gameplay interaction anchor is present at this boundary.',
+  },
+  {
+    id: 'northwest-tank-machinery-enclosure',
+    worldBounds: [597, 507, 929, 801],
+    spawnSideReferenceImage: [311, 201],
+    islandSideReferenceImage: [299, 215],
+    rationale: 'The nearest boundary is a continuous red-line wall around the upper-left tank/pipe machinery enclosure. The isolated interior has no task, vent, Admin Table or sabotage approach.',
+  },
+  {
+    id: 'south-central-service-fixture-enclosure',
+    worldBounds: [597, 673, 1645, 1531],
+    spawnSideReferenceImage: [698, 351],
+    islandSideReferenceImage: [684, 365],
+    rationale: 'The nearest boundary crosses a continuous red-line service-fixture wall. The region contains sealed lower-central equipment/cabinet space and has no exclusive gameplay interaction anchor.',
+  },
+  {
+    id: 'east-office-vehicle-service-enclosure',
+    worldBounds: [1821, 801, 2589, 1327],
+    spawnSideReferenceImage: [1002, 343],
+    islandSideReferenceImage: [1016, 357],
+    rationale: 'The east office/vehicle-service area is separated at the annotated threshold by a continuous red-line wall corner, not an open doorway. The green-van override defines clearance around the vehicle inside the enclosure; it does not establish an entrance through the perimeter wall.',
+  },
+  {
+    id: 'southwest-shop-shelving-interior',
+    worldBounds: [147, 1209, 427, 1555],
+    spawnSideReferenceImage: [153, 631],
+    islandSideReferenceImage: [137, 615],
+    rationale: 'The island lies behind the continuous diagonal shop/service boundary inside the shelving/display footprint. No doorway gap or exclusive gameplay interaction anchor is present.',
+  },
+];
