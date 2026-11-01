@@ -392,6 +392,8 @@ export class PathCache {
     forceRefresh = false,
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
   ): PathResult | null {
+    if (!isValidPathInput(grid, start, goal, geometry)) return null;
+
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
     const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
