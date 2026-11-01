@@ -5,11 +5,8 @@
  */
 
 /**
- * A source-art red outline around the green service van was a loose rounded
- * rectangle, leaving too little room to walk around the vehicle. Replace that
- * one raster component with a tight walkable bay plus the actual vehicle
- * silhouette. The bay is deliberately bounded inside the surrounding room
- * walls; only the van body/wheels remain solid.
+ * The remaining replacement zone is the visually open east-generator aisle.
+ * Its equipment perimeter remains blocked by the source-art collision mask.
  */
 export const MANUAL_WALKABLE_REPLACEMENT_ZONES: readonly {
   readonly id: string;
@@ -98,55 +95,3 @@ export const INTENTIONALLY_SEALED_REGIONS: readonly {
 export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
   readonly id: string;
   readonly worldBounds: readonly [number, number, number, number];
-  readonly spawnSideReferenceImage: readonly [number, number];
-  readonly islandSideReferenceImage: readonly [number, number];
-  readonly rationale: string;
-}[] = [
-  {
-    id: 'south-central-decorative-garden-zone',
-    worldBounds: [597, 673, 1645, 1531],
-    spawnSideReferenceImage: [698, 351],
-    islandSideReferenceImage: [684, 365],
-    rationale: 'This detached region includes the central decorative garden, which the existing map-mechanics regression explicitly requires to remain walkable and free of manual collision polygons. The reviewed south threshold is a continuous red-line fixture/wall with no drawn doorway; no gameplay anchor is located inside. Preserve the decorative garden footprint and its sealed boundary rather than inventing an entrance.',
-  },
-];
-  readonly spawnSideReferenceImage: readonly [number, number];
-  readonly islandSideReferenceImage: readonly [number, number];
-  readonly rationale: string;
-}[] = [
-  {
-    id: 'north-cafeteria-upper-furniture-strip',
-    worldBounds: [1337, 19, 2138, 270],
-    spawnSideReferenceImage: [629, 59],
-    islandSideReferenceImage: [613, 43],
-    rationale: 'The island lies behind the continuous upper cafeteria partition in the source reference, within the upper furniture/bench strip. No doorway gap or gameplay interaction anchor is present at this boundary.',
-  },
-  {
-    id: 'northwest-tank-machinery-enclosure',
-    worldBounds: [597, 507, 929, 801],
-    spawnSideReferenceImage: [311, 201],
-    islandSideReferenceImage: [299, 215],
-    rationale: 'The nearest boundary is a continuous red-line wall around the upper-left tank/pipe machinery enclosure. The isolated interior has no task, vent, Admin Table or sabotage approach.',
-  },
-  {
-    id: 'south-central-service-fixture-enclosure',
-    worldBounds: [597, 673, 1645, 1531],
-    spawnSideReferenceImage: [698, 351],
-    islandSideReferenceImage: [684, 365],
-    rationale: 'The nearest boundary crosses a continuous red-line service-fixture wall. The region contains sealed lower-central equipment/cabinet space and has no exclusive gameplay interaction anchor.',
-  },
-  {
-    id: 'east-office-vehicle-service-enclosure',
-    worldBounds: [1821, 801, 2589, 1327],
-    spawnSideReferenceImage: [1002, 343],
-    islandSideReferenceImage: [1016, 357],
-    rationale: 'The east office/vehicle-service area is separated at the annotated threshold by a continuous red-line wall corner, not an open doorway. The green-van override defines clearance around the vehicle inside the enclosure; it does not establish an entrance through the perimeter wall.',
-  },
-  {
-    id: 'southwest-shop-shelving-interior',
-    worldBounds: [147, 1209, 427, 1555],
-    spawnSideReferenceImage: [153, 631],
-    islandSideReferenceImage: [137, 615],
-    rationale: 'The island lies behind the continuous diagonal shop/service boundary inside the shelving/display footprint. No doorway gap or exclusive gameplay interaction anchor is present.',
-  },
-];
