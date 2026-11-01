@@ -188,5 +188,21 @@ check('non-square-cell A* returns the optimal anisotropic route',
   Math.abs(anisotropicPath.length - 168.66068747318505) < 1e-5,
   anisotropicPath ? `length=${anisotropicPath.length.toFixed(6)}px` : 'null');
 
+
+ // The same coordinate key can describe different topology in different
+ // maps. Reusing a successful path from the previous grid is unsafe.
+const blockedColumnGrid = Uint8Array.from([
+  0, 1, 0,
+  0, 1, 0,
+  0, 1, 0,
+]);
+const mapScopedCache = new PathCache();
+const corridorStart = { x: 5, y: 15 };
+const corridorGoal = { x: 25, y: 15 };
+check('path cache finds route on the open map',
+  mapScopedCache.find(boundaryGrid, corridorStart, corridorGoal, false, boundaryGeometry) !== null);
+check('path cache does not reuse a route from a different blocked map',
+  mapScopedCache.find(blockedColumnGrid, corridorStart, corridorGoal, false, boundaryGeometry) === null);
+
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail > 0) process.exit(1);
