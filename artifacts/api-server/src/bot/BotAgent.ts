@@ -30,7 +30,7 @@ import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { buildPublicBotDialogueMessages, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
-import { buildPublicBotVoteMessages, parsePublicBotVoteResponse } from './aiVoting.js';
+import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
 
 export { NO_TARGET };
 
@@ -257,13 +257,14 @@ export abstract class BotAgent {
     void requestGroqDialogue(sessionKey, prompt).then(response => {
       // A slow model response must never cast into a later meeting or after
       // this meeting has closed, the bot died, or another path already voted.
-      if (
-        lobby.phase !== 'MEETING' ||
-        lobby.meeting !== meeting ||
-        !meeting.votingOpen ||
-        !self.alive ||
-        meeting.votes.has(self.slot)
-      ) return;
+      if (!canCommitBotVote({
+        phase: lobby.phase,
+        currentMeeting: lobby.meeting,
+        requestedMeeting: meeting,
+        votingOpen: meeting.votingOpen,
+        alive: self.alive,
+        hasVoted: meeting.votes.has(self.slot),
+      })) return;
 
       const parsed = response === null
         ? null
@@ -277,13 +278,14 @@ export abstract class BotAgent {
           (self.role !== 'impostor' || target.role !== 'impostor'));
       manager.castVote(lobby, self.slot, legal ? candidate : fallback);
     }).catch(() => {
-      if (
-        lobby.phase === 'MEETING' &&
-        lobby.meeting === meeting &&
-        meeting.votingOpen &&
-        self.alive &&
-        !meeting.votes.has(self.slot)
-      ) manager.castVote(lobby, self.slot, fallback);
+      if (canCommitBotVote({
+        phase: lobby.phase,
+        currentMeeting: lobby.meeting,
+        requestedMeeting: meeting,
+        votingOpen: meeting.votingOpen,
+        alive: self.alive,
+        hasVoted: meeting.votes.has(self.slot),
+      })) manager.castVote(lobby, self.slot, fallback);
     }).finally(() => {
       this.voteRequestPending = false;
     });
