@@ -63,7 +63,7 @@ for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
 }
 const componentOf = new Int32Array(grid.length);
 componentOf.fill(-1);
-const componentSizes = [];
+const componentSizes = [];\nconst componentBounds = [];
 for (let start = 0; start < valid.length; start++) {
   if (!valid[start] || componentOf[start] !== -1) continue;
   const id = componentSizes.length, queue = [start];
@@ -79,7 +79,7 @@ for (let start = 0; start < valid.length; start++) {
       }
     }
   }
-  componentSizes.push(queue.length);
+  componentSizes.push(queue.length);\n  componentBounds.push([Math.round(minCol * cellX), Math.round(minRow * cellY), Math.round((maxCol + 1) * cellX), Math.round((maxRow + 1) * cellY)]);
 }
 const spawnX = Math.round(450 * mapW / 1040);
 const spawnY = Math.round(150 * mapH / 580);
@@ -87,7 +87,7 @@ const spawnIndex = Math.floor(spawnY / cellY) * cols + Math.floor(spawnX / cellX
 assert.ok(componentOf[spawnIndex] >= 0, 'configured player spawn has valid full-footprint clearance');
 const spawnComponent = componentOf[spawnIndex];
 const significant = componentSizes
-  .map((size, id) => ({ id, size }))
+  .map((size, id) => ({ id, size, bounds: componentBounds[id] }))
   .filter(({ size }) => size >= 1000)
   .sort((a, b) => b.size - a.size);
 console.log(JSON.stringify({
