@@ -65,7 +65,7 @@ jobs:
 
       # Uses the same player clearance footprint as client/server movement; intentionally blocks release on disconnected gameplay regions.
       - name: Verify fine-grid player-footprint connectivity across the map
-        run: node scripts/test-fine-map-connectivity.mjs
+        run: pnpm --filter @workspace/scripts exec tsx test-fine-map-connectivity.ts
 
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
