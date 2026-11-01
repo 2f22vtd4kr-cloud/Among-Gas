@@ -16,18 +16,18 @@ interface CandidateScore {
   readonly score: number;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&');
-}
-
 function mentionsPlayer(text: string, player: PublicVotePlayer): boolean {
-  const name = player.username.trim();
+  const name = player.username.trim().toLocaleLowerCase();
+  const lower = text.toLocaleLowerCase();
   if (name.length >= 2) {
-    const namePattern = new RegExp(
-      `(^|[^\\p{L}\\p{N}_])${escapeRegExp(name)}(?=$|[^\\p{L}\\p{N}_])`,
-      'iu',
-    );
-    if (namePattern.test(text)) return true;
+    let index = lower.indexOf(name);
+    while (index >= 0) {
+      const before = index === 0 || !/[\\p{L}\\p{N}_]/u.test(text[index - 1]);
+      const afterIndex = index + name.length;
+      const after = afterIndex === text.length || !/[\\p{L}\\p{N}_]/u.test(text[afterIndex]);
+      if (before && after) return true;
+      index = lower.indexOf(name, index + 1);
+    }
   }
   const displayNumber = player.slot + 1;
   return new RegExp(
