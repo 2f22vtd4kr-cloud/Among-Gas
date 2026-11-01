@@ -1,6 +1,7 @@
 /**
- * Hand-traced map geometry overrides. These are expressed in the same
- * 3224×1858 world-pixel coordinate system as the rendered map.
+ * Source-art-derived map geometry overrides in the 3224×1858 world-pixel
+ * coordinate system. Region contours are spatial polygons, never component-ID
+ * allowlists or rectangular collision holes.
  */
 
 /**
@@ -54,11 +55,12 @@ export const MANUAL_BLOCKED_POLYGONS: readonly {
 
 /**
  * Source-art regions intentionally sealed from the spawn-connected play space.
- * These are not component-ID allowlists: each disposition is tied to stable
- * world bounds and the annotated source-image boundary pair. The red-line
- * collision mask already supplies the separating wall; the connectivity
- * regression verifies that the wall remains closed and that no gameplay
- * interaction anchor is stranded behind it.
+ * Each disposition is tied to stable world bounds and annotated source-image
+ * boundary points. The matching irregular MANUAL_BLOCKED_POLYGONS contour
+ * blocks the entire sealed floor pocket; CI verifies the polygon bounds, the
+ * blocked island-side footprint, the retained spawn-side route, and all
+ * gameplay interaction approaches. These are geometry dispositions, not
+ * scan-order component-ID allowlists.
  */
 export const INTENTIONALLY_SEALED_REGIONS: readonly {
   readonly id: string;
