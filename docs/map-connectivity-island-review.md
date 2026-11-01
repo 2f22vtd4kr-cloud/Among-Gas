@@ -20,8 +20,8 @@ The component IDs below are retained only to preserve the original diagnostic re
 
 | Original component | Valid cells | Original world bounds [minX,minY,maxX,maxY] | Spawn-side source px | Region-side source px | Named disposition | Collision treatment |
 |---:|---:|---|---|---|---|---|
-| 27 | 11,463 | [597,673,1645,1531] | [698,351] | [684,365] | `south-central-service-fixture-enclosure` — sealed lower-central equipment/cabinet area; continuous wall at the reviewed threshold; no exclusive gameplay anchor | Irregular blocked contour |
-| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | `east-office-vehicle-service-bay` — decorative vehicle-service bay with internally walkable floor and van silhouette; no doorway in source art and no gameplay anchor | Preserve walkable bay and van silhouette; keep the continuous perimeter wall blocked; entry/exit mechanics are explicitly **none by design** |
+| 27 | 11,463 | [597,673,1645,1531] | [698,351] | [684,365] | `south-central-playground-service-fixture-enclosure` — sealed lower-central playground/equipment footprint behind continuous walls; no exclusive gameplay anchor | Irregular blocked contour |
+| 38 | 3,077 | [1821,801,2589,1327] | [1002,343] | [1016,357] | `east-office-vehicle-service-bay` — decorative vehicle-service bay with internally walkable floor and van silhouette; no doorway in source art and no gameplay anchor | Preserve walkable bay and van silhouette; keep the continuous perimeter wall blocked; entry/exit mechanics are explicitly **none by design** |
 | 20 | 2,719 | [597,507,929,801] | [311,201] | [299,215] | `northwest-tank-machinery-enclosure` — sealed tank/pipe machinery footprint; continuous wall, no task or interaction approach | Irregular blocked contour |
 | 0 | 2,509 | [1337,19,2138,270] | [629,59] | [613,43] | `north-cafeteria-upper-furniture-strip` — upper furniture/bench strip behind the continuous cafeteria partition | Irregular blocked contour |
 | 56 | 2,304 | [147,1209,427,1555] | [153,631] | [137,615] | `southwest-shop-shelving-interior` — enclosed shelving/display footprint behind a continuous diagonal wall | Irregular blocked contour |
@@ -34,7 +34,7 @@ World bounds use the 3224×1858 map coordinate system. Boundary coordinates refe
 - Preserved the `green-service-van-bay` walkable replacement zone and its vehicle silhouette polygon. The van remains solid, while left/right player clearance around the vehicle remains walkable. The bay perimeter is still blocked by the source-art wall; no doorway was invented. The zone has no door, vent, teleport or other entry/exit mechanic and is not a gameplay route target.
 - Kept the separate `east-generator-approach-aisle` walkable replacement zone; it remains connected to the spawn network.
 - The central decorative garden remains walkable. The map-mechanics regression now checks its actual floor probes rather than rejecting every manual collision polygon anywhere on the map.
-- No source image, PNG/WebP asset, fine-grid RLE payload, or global collision mask was regenerated.
+- No runtime source image, PNG/WebP asset, fine-grid RLE payload, or global collision mask was modified. The recovered-source derivative was generated only as a non-production verification artifact.
 
 ## Regression gate
 
@@ -50,7 +50,7 @@ World bounds use the 3224×1858 map coordinate system. Boundary coordinates refe
 
 The regression matches stable geometry and source-image coordinates, never component IDs.
 
-## Remaining provenance limitation
+## Recovered source and reproducible derivative
 
 The original 1652×952 source has now been recovered and compared against all five boundary locations. A deterministic non-destructive derivative generator is committed at `scripts/src/rebuildMapHiRes.ts`; it rebuilds PNG and WebP outputs into `artifacts/map-source-rebuild/` and verifies them against the committed runtime rasters. The historical one-off `/tmp` script itself was not recovered, so the committed generator records the verified replacement transform and pixel-error bounds. Runtime PNG/WebP assets remain unchanged.
 
