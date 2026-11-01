@@ -5,7 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SCHEMA_INDEX="$ROOT_DIR/lib/db/src/schema/index.ts"
 
 # The current game server is intentionally in-memory and the Drizzle schema
-# is empty. Do not make every Replit merge depend on a provisioned Postgres DB
+# is empty. Do not make every repository merge depend on a provisioned Postgres DB
 # until real tables are exported from the schema index.
 if [[ ! -f "$SCHEMA_INDEX" ]] || ! grep -Eq '^[[:space:]]*export[[:space:]]+\*[[:space:]]+from' "$SCHEMA_INDEX"; then
   echo "No Drizzle schema exports detected; skipping database push."
