@@ -210,6 +210,10 @@ jobs:
             artifacts/telegram-game/collision-qa-overlay.png
             artifacts/telegram-game/collision-reference-overlay.png
             attached_assets/IMG_2907_1783632830477.jpeg
+            attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png
+            attached_assets/IMG_2954_1783630920533.png
+            artifacts/telegram-game/public/map-hires.png
+            artifacts/telegram-game/public/map-hires.webp
             artifacts/telegram-game/collision-qa-overlay-webp.png
             artifacts/telegram-game/collision-shadow-qa-overlay.png
             artifacts/telegram-game/collision-vision-qa-overlay.png
