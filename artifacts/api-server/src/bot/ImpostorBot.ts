@@ -22,6 +22,7 @@ import { KILL_RANGE_PX } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DEFS, SABOTAGE_DOORS, type SabotageSystemId } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, type VentDef } from '@workspace/shared/vents';
 import { NO_TARGET } from '@workspace/shared/coords';
+import { chooseEvidenceWeightedVote } from './voting.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
@@ -135,23 +136,30 @@ export class ImpostorBot extends BotAgent {
   override chooseVote(lobby: Lobby, self: LobbyPlayer): number {
     const meeting = lobby.meeting;
 
-    // If someone accused this bot this meeting, vote for the accuser
+    // Deflect a public vote against this bot, but never sacrifice an impostor
+    // teammate merely because they voted tactically.
     if (meeting) {
       for (const [voterSlot, targetSlot] of meeting.votes) {
-        if (targetSlot === self.slot) {
+        const voter = lobby.players.get(voterSlot);
+        if (targetSlot === self.slot && voter?.alive && voter.role !== 'impostor') {
           return voterSlot;
         }
       }
     }
 
-    // Vote for a random alive crewmate (never vote for a known impostor ally)
-    const targets = Array.from(lobby.players.values()).filter(p => {
-      if (!p.alive || p.slot === self.slot) return false;
-      if (p.role === 'impostor') return false; // never vote teammate
-      return true;
-    });
-    if (targets.length === 0) return NO_TARGET;
-    return targets[Math.floor(Math.random() * targets.length)].slot;
+    // Use the same public-evidence scoring as crewmates, but exclude known
+    // impostor allies from the eligible target set.
+    return chooseEvidenceWeightedVote(
+      self.slot,
+      Array.from(lobby.players.values())
+        .filter(player => player.alive && player.role === 'crewmate')
+        .map(player => ({
+          slot: player.slot,
+          username: player.username,
+          alive: player.alive,
+        })),
+      meeting?.messages ?? [],
+    );
   }
 
   // ── Faking tasks ─────────────────────────────────────────────────────────
