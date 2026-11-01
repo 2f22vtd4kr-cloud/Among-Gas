@@ -663,6 +663,10 @@ for (const region of INTENTIONALLY_SEALED_REGIONS) {
 for (const region of INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS) {
   assert.ok(region.rationale.length >= 40, `${region.id} has an explicit decorative-area rationale`);
   assert.ok(
+    region.entryExitMechanics.length >= 40 && /none by design/i.test(region.entryExitMechanics),
+    `${region.id} explicitly documents that no entry/exit mechanic is authored`,
+  );
+  assert.ok(
     !MANUAL_BLOCKED_POLYGONS.some(polygon => polygon.id === region.id),
     `${region.id}: central decorative garden is not filled by a manual collision polygon`,
   );
