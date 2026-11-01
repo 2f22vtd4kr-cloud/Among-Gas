@@ -95,3 +95,15 @@ export const INTENTIONALLY_SEALED_REGIONS: readonly {
 export const INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS: readonly {
   readonly id: string;
   readonly worldBounds: readonly [number, number, number, number];
+  readonly spawnSideReferenceImage: readonly [number, number];
+  readonly islandSideReferenceImage: readonly [number, number];
+  readonly rationale: string;
+}[] = [
+  {
+    id: 'south-central-decorative-garden-zone',
+    worldBounds: [597, 673, 1645, 1531],
+    spawnSideReferenceImage: [698, 351],
+    islandSideReferenceImage: [684, 365],
+    rationale: 'This detached region includes the central decorative garden, which the existing map-mechanics regression explicitly requires to remain walkable and free of manual collision polygons. The reviewed south threshold is a continuous red-line fixture/wall with no drawn doorway; no gameplay anchor is located inside. Preserve the decorative garden footprint and its sealed boundary rather than inventing an entrance.',
+  },
+];
