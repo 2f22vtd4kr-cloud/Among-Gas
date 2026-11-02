@@ -154,3 +154,52 @@ function parseExactIntegerChoice(
   if (typeof choice !== 'number' || !Number.isSafeInteger(choice)) return null;
   return allowedValues.includes(choice) ? choice : null;
 }
+
+export interface SabotageOption {
+  readonly systemId: number;
+  readonly name: string;
+}
+
+export function buildImpostorSabotagePlanningMessages(input: {
+  readonly username: string;
+  readonly availableSystems: readonly SabotageOption[];
+  readonly visibleCrewCount: number;
+  readonly visibleCrewPairsWithin350Px: number;
+  readonly publicTaskProgressPct: number;
+  readonly killCooldownMs: number;
+}): GroqDialogueMessage[] {
+  return [
+    {
+      role: 'system',
+      content: [
+        'You are an autonomous impostor choosing one legal sabotage system in Among Gas.',
+        'Use only the listed systems and the public task progress plus your currently visible crewmate observation.',
+        'Choose a system that advances a coherent strategy: Lights can reduce crew vision, Comms disrupts task completion, Doors can interrupt movement, and O₂/Reactor create critical pressure.',
+        'Do not invent players, positions, cooldowns, or systems. The server revalidates sabotage availability and cooldown.',
+        'Return exactly one JSON object: {"sabotageId": <listed integer>} or {"sabotageId": null} when none is justified.',
+        'Do not include explanations or additional fields.',
+      ].join(' '),
+    },
+    {
+      role: 'user',
+      content: JSON.stringify({
+        actingPlayer: input.username,
+        role: 'impostor',
+        availableSystems: input.availableSystems,
+        currentlyVisibleCrew: {
+          count: Math.max(0, Math.round(input.visibleCrewCount)),
+          pairsWithin350Px: Math.max(0, Math.round(input.visibleCrewPairsWithin350Px)),
+        },
+        publicTaskProgressPct: Math.max(0, Math.min(100, Math.round(input.publicTaskProgressPct))),
+        ownKillCooldownMs: Math.max(0, Math.round(input.killCooldownMs)),
+      }),
+    },
+  ];
+}
+
+export function parseImpostorSabotageChoice(
+  response: string,
+  availableSystemIds: readonly number[],
+): number | null {
+  return parseExactIntegerChoice(response, 'sabotageId', availableSystemIds);
+}
