@@ -96,6 +96,7 @@ export default function VectorCollisionEditor() {
     setSaved(false);
   }, []);
 
+  const drawRef = useRef<() => void>(() => {});
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     const image = imageRef.current;
@@ -201,13 +202,15 @@ export default function VectorCollisionEditor() {
     );
   }, [document, selectedId, draftPoints, previewPoint, walkPoints]);
 
+  useEffect(() => { drawRef.current = draw; }, [draw]);
+
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) return;
     rafRef.current = window.requestAnimationFrame(() => {
       rafRef.current = null;
-      draw();
+      drawRef.current();
     });
-  }, [draw]);
+  }, []);
 
   useEffect(() => {
     let active = true;
