@@ -100,7 +100,7 @@ export async function requestGroqDialogue(
             ? Math.max(0, Math.min(2, options.temperature!))
             : 0.65,
           ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-        stream: false,
+          stream: false,
         }),
         signal: AbortSignal.timeout(GROQ_REQUEST_TIMEOUT_MS),
       });
