@@ -56,7 +56,11 @@ try {
   await page.mouse.click(bounds.x + 40, bounds.y + 40);
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
   await page.mouse.click(bounds.x + 100, bounds.y + 40);
-  await page.getByText(/shared three-circle player footprint|BLOCKED \/ SLID/).waitFor();
+  await page.waitForFunction(() => {
+    const canvas = document.querySelector("canvas");
+    return canvas?.getAttribute("data-walk-point-count") === "2" &&
+      Boolean(canvas.getAttribute("data-walk-status"));
+  }, { timeout: 10000 });
 
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
