@@ -275,6 +275,7 @@ async function testModelHuntDispatch(): Promise<void> {
   const targetPair = findVisibleTargetPair();
   const { lobby, bot: player, targets } = makeImpostorLobby('gsk_' + 'H'.repeat(48), targetPair);
   const agent = new ProbeImpostorBot();
+  agent.setSabotageCountdown(999);
   const manager = { applyKill: () => false } as unknown as LobbyManager;
   const originalCooldown = player.killCooldownMs;
   player.killCooldownMs = 0;
