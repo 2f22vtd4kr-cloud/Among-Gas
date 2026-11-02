@@ -132,7 +132,9 @@ async function runScenario(apiKey: string, modelResponse: string, expectedTaskId
 }
 
 async function testModelMeetingDialogueDispatch(): Promise<void> {
-  const apiKey = 'gsk_' + 'D'.repeat(48);
+  // Use a unique key so the shared-provider cooldown from earlier dispatch
+  // scenarios cannot make this test depend on their scheduling.
+  const apiKey = 'gsk_' + 'M'.repeat(48);
   const { lobby, bot: player } = makeLobby(apiKey);
   const publicObservation = 'I saw Blue leave the reactor after the lights failed.';
   const meeting = {
@@ -155,48 +157,44 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
     },
   } as unknown as LobbyManager;
   const responseText = 'I can corroborate the reactor timeline, but we need another witness.';
-  let calls = 0;
-  let requestUrl: string | null = null;
-  let requestSystem = '';
-  let requestUser: {
-    livingRoster?: string;
-    meetingType?: string;
-    publicTranscript?: string;
-    hiddenRoles?: unknown;
-    privatePositions?: unknown;
-  } | null = null;
+  let providerCalls = 0;
+  let capturedMessages: Array<{ role: string; content: string }> = [];
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    calls++;
-    requestUrl = String(input);
+    providerCalls++;
+    assert.equal(String(input), 'https://api.groq.com/openai/v1/chat/completions');
     const request = JSON.parse(String(init?.body)) as {
       messages: Array<{ role: string; content: string }>;
     };
-    requestSystem = request.messages.find(message => message.role === 'system')?.content ?? '';
-    requestUser = JSON.parse(request.messages.find(message => message.role === 'user')!.content);
+    capturedMessages = request.messages;
+    // The production dialogue builder intentionally sends a plain text
+    // transcript, not JSON. Return a successful provider result first; assert
+    // against the captured prompt below so failures cannot be swallowed by
+    // requestGroqDialogue's safe provider-error fallback.
     return new Response(JSON.stringify({
       choices: [{ message: { content: responseText } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
 
   const agent = new ProbeCrewmateBot();
-  agent.tick(lobby, player, manager);
-  await new Promise(resolve => setTimeout(resolve, 1_250));
+  await new Promise(resolve => setTimeout(resolve, 1_200));
   agent.tick(lobby, player, manager);
   for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
-  assert.equal(calls, 1, 'the real discussion dispatcher makes one provider request for a relevant public message');
-  assert.equal(requestUrl, 'https://api.groq.com/openai/v1/chat/completions');
-  assert.match(requestSystem, /Use only the public meeting transcript and living-player roster/);
-  assert.ok(requestUser?.publicTranscript?.includes(publicObservation),
+  assert.equal(providerCalls, 1, 'the real meeting dispatcher must make exactly one provider request');
+  const system = capturedMessages.find(message => message.role === 'system')?.content ?? '';
+  const userContent = capturedMessages.find(message => message.role === 'user')?.content ?? '';
+  assert.match(system, /Use only the public meeting transcript and living-player roster/);
+  assert.ok(userContent.includes(publicObservation),
     'the real discussion dispatcher sends the actual public player statement to the model');
-  assert.equal(requestUser?.meetingType, 'emergency call');
-  assert.equal('hiddenRoles' in (requestUser ?? {}), false, 'discussion prompt does not include hidden roles');
-  assert.equal('privatePositions' in (requestUser ?? {}), false, 'discussion prompt does not include private player positions');
+  assert.match(userContent, /Meeting type: emergency call/);
+  assert.equal(/hiddenRoles|privatePositions/.test(userContent), false,
+    'the user prompt excludes private role and position fields');
   assert.equal(replies.length, 1, 'a relevant public message produces one asynchronous bot reply');
   assert.equal(replies[0].slot, player.slot, 'the reply is broadcast from the acting bot slot');
-  assert.equal(replies[0].text, responseText, 'the real meeting dispatcher broadcasts the model response');
+  assert.equal(replies[0].text, responseText,
+    'the real meeting dispatcher broadcasts the successful model response');
 }
 
 class ProbeImpostorBot extends ImpostorBot {
