@@ -121,6 +121,8 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.throws(() => world.rasterizeNav(0, 12), /navigation cell/);
   assert.equal(simplifyRDP(Array.from({ length: 60 }, (_, i) => [i * 5, (i % 2) * 1.2] as Point), 3).length, 2);
   assert.equal(snapPoint([shape("edge", [[100, 100], [300, 100]])], [200, 104], 12).kind, "segment");
+  assert.equal(snapPoint([shape("edge-end", [[100, 100], [300, 100]])], [104, 100], 12).kind, "endpoint",
+    "open-wall endpoints take magnet priority over nearby segment projections");
   assert.equal(shouldCloseLoop([[0, 0], [100, 0], [100, 100], [4, 3]], 10), true);
   const history = new History<number[]>([], value => value.slice(), 3);
   history.commit([1]); history.commit([1, 2]); assert.equal(history.undo(), true);
