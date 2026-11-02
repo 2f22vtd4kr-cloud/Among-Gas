@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import NotFound from '@/pages/not-found';
 import GameMap from '@/pages/GameMap';
 import CollisionEditor from '@/pages/CollisionEditor';
+import VectorCollisionEditor from '@/pages/VectorCollisionEditor';
 import Lobby from '@/pages/Lobby';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { GameProvider, useGameState } from '@/context/GameContext';
@@ -21,6 +22,7 @@ function GameRouter() {
     <Switch>
       {/* Collision editor is strictly development-only, never a player-facing route. */}
       {import.meta.env.VITE_ENABLE_DEV_TOOLS === 'true' && <Route path="/collision-editor" component={CollisionEditor} />}
+      {import.meta.env.DEV && <Route path="/dev/collision" component={VectorCollisionEditor} />}
       {/* Game map only when actively playing */}
       <Route path="/game">
         {phase === 'playing' ? <GameMap /> : <Lobby />}
