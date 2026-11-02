@@ -1,11 +1,11 @@
 import type { GroqDialogueMessage } from './groqDialogue.js';
 
 function sanitizePromptLabel(value: string): string {
+  // Display names are user-controlled. Strip Unicode control/format characters
+  // (including bidi overrides and zero-width formatting) before they enter a
+  // model prompt; JSON quoting alone does not prevent misleading prompt text.
   return Array.from(String(value))
-    .filter(character => {
-      const code = character.charCodeAt(0);
-      return code >= 0x20 && code !== 0x7f;
-    })
+    .filter(character => !/[\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]/u.test(character))
     .join('')
     .slice(0, 32).trim();
 }
@@ -129,7 +129,7 @@ export function buildImpostorHuntPlanningMessages(input: {
     {
       role: 'user',
       content: JSON.stringify({
-        actingPlayer: input.username,
+        actingPlayer: sanitizePromptLabel(input.username),
         role: 'impostor',
         ownKillCooldownMs: Math.max(0, Math.round(input.killCooldownMs)),
         visibleCrewTargets: input.visibleCrew,
@@ -193,7 +193,7 @@ export function buildImpostorSabotagePlanningMessages(input: {
     {
       role: 'user',
       content: JSON.stringify({
-        actingPlayer: input.username,
+        actingPlayer: sanitizePromptLabel(input.username),
         role: 'impostor',
         availableSystems: input.availableSystems,
         currentlyVisibleCrew: {
