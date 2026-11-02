@@ -23,15 +23,15 @@ jobs:
       BASE_PATH: /
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.6.5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           # Keep CI aligned with .replit's nodejs-20 runtime.
           node-version: 20
@@ -129,7 +129,7 @@ jobs:
           curl -fsS "http://127.0.0.1:5173/" | grep -q '<div id="root">'
           WS_URL=ws://127.0.0.1:5173/api/ws node test_sabotage.mjs
       - name: Archive production Telegram Mini App build for deployment verification
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telegram-game-static-build
           path: artifacts/telegram-game/dist/public/
@@ -201,7 +201,7 @@ jobs:
 
       - name: Upload gameplay visual QA screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: among-gas-visual-qa
           path: |
