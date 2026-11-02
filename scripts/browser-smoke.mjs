@@ -233,43 +233,59 @@ try {
     }
   });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
-  // The role reveal is intentionally transient (3.2s). Capture its sprite and
-  // shadow before waiting for the map/gameplay readiness gate, which can take
-  // longer on a cold mobile load. Waiting for gameplay first races the reveal
-  // off-screen and makes the following DOM assertions fail nondeterministically.
-  await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
-  const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
-  assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
-  assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '136',
+  // Capture the short role reveal as one browser-side snapshot. Separate
+  // locator calls raced the 3.2s reveal timer: the node could disappear
+  // between waitForSelector and the first getAttribute request.
+  const roleRevealSnapshotHandle = await page.waitForFunction(() => {
+    const sprite = document.querySelector<HTMLElement>('.ag-character-sprite[data-pose]');
+    const shadow = document.querySelector<HTMLElement>('[data-role-reveal-shadow="true"]');
+    if (!sprite || !shadow) return false;
+    const spriteBounds = sprite.getBoundingClientRect();
+    const shadowBounds = shadow.getBoundingClientRect();
+    const shadowStyle = getComputedStyle(shadow);
+    return {
+      pose: sprite.getAttribute('data-pose'),
+      sourceHeight: sprite.getAttribute('data-source-height'),
+      displayHeight: sprite.getAttribute('data-display-height'),
+      transform: sprite.style.transform,
+      clipPath: sprite.style.clipPath,
+      spriteWidth: spriteBounds.width,
+      spriteHeight: spriteBounds.height,
+      spriteCenterX: spriteBounds.left + spriteBounds.width / 2,
+      spriteBottom: spriteBounds.bottom,
+      shadowCenterX: shadowBounds.left + shadowBounds.width / 2,
+      shadowTop: shadowBounds.top,
+      shadowWidth: Number.parseFloat(shadowStyle.width),
+      shadowHeight: Number.parseFloat(shadowStyle.height),
+      shadowAnimation: shadowStyle.animationName,
+      shadowBackground: shadowStyle.backgroundColor,
+    };
+  }, null, { timeout: 30_000 });
+  const roleRevealSnapshot = await roleRevealSnapshotHandle.jsonValue();
+  await roleRevealSnapshotHandle.dispose();
+  assert.equal(roleRevealSnapshot.pose, 'idle');
+  assert.equal(roleRevealSnapshot.sourceHeight, '136',
     'role reveal must crop detached black strokes below the idle character feet');
-  assert.equal(await roleRevealSprite.getAttribute('data-display-height'), '153',
+  assert.equal(roleRevealSnapshot.displayHeight, '153',
     'the authored role-reveal baseline remains available as metadata');
-  assert.equal(await roleRevealSprite.evaluate(el => el.style.transform), 'none',
+  assert.equal(roleRevealSnapshot.transform, 'none',
     'cropped role sprites must not be vertically stretched to compensate for removed pixels');
-  const roleCropRatio = await roleRevealSprite.evaluate(el => {
-    const bounds = el.getBoundingClientRect();
-    return bounds.width > 0 ? bounds.height / bounds.width : 0;
-  });
+  const roleCropRatio = roleRevealSnapshot.spriteWidth > 0
+    ? roleRevealSnapshot.spriteHeight / roleRevealSnapshot.spriteWidth
+    : 0;
   const expectedRoleCropRatio = 136 / (1123 / 7);
   assert.ok(Math.abs(roleCropRatio - expectedRoleCropRatio) < 0.01,
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
-  assert.match(await roleRevealSprite.evaluate(el => el.style.clipPath), /polygon/,
+  assert.match(roleRevealSnapshot.clipPath, /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
-  const roleRevealShadow = page.locator('[data-role-reveal-shadow="true"]');
-  await roleRevealShadow.waitFor({ state: 'visible' });
-  const shadowGeometry = await roleRevealShadow.evaluate((shadow, sprite) => {
-    const a = shadow.getBoundingClientRect();
-    const b = sprite.getBoundingClientRect();
-    const style = getComputedStyle(shadow);
-    return { shadowCenterX: a.left + a.width / 2, spriteCenterX: b.left + b.width / 2, shadowTop: a.top, spriteBottom: b.bottom, width: Number.parseFloat(style.width), height: Number.parseFloat(style.height), animation: style.animationName, background: style.backgroundColor };
-  }, await roleRevealSprite.elementHandle());
-  assert.ok(Math.abs(shadowGeometry.shadowCenterX - shadowGeometry.spriteCenterX) < 2,
+  assert.ok(Math.abs(roleRevealSnapshot.shadowCenterX - roleRevealSnapshot.spriteCenterX) < 2,
     'the role-reveal ground shadow must stay centered beneath the character');
-  assert.ok(shadowGeometry.shadowTop >= shadowGeometry.spriteBottom - 2,
+  assert.ok(roleRevealSnapshot.shadowTop >= roleRevealSnapshot.spriteBottom - 2,
     'the role-reveal shadow must sit below the character feet, not overlap the sprite');
-  assert.ok(shadowGeometry.width >= 90 && shadowGeometry.height >= 14 && shadowGeometry.background.includes('0.85'),
+  assert.ok(roleRevealSnapshot.shadowWidth >= 90 && roleRevealSnapshot.shadowHeight >= 14 &&
+    roleRevealSnapshot.shadowBackground.includes('0.85'),
     'the ground shadow must have enough area and contrast to remain visible at mobile render scale');
-  assert.equal(shadowGeometry.animation, 'rrShadowPulse',
+  assert.equal(roleRevealSnapshot.shadowAnimation, 'rrShadowPulse',
     'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
