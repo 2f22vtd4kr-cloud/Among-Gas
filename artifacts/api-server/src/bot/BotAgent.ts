@@ -228,7 +228,7 @@ export abstract class BotAgent {
     }
     if (meeting.votes.has(self.slot)) return;
     const fallback = this.chooseVote(lobby, self);
-    const voteDeadlineAtMs = meeting.startedAtMs + MEETING_DISCUSSION_MS + MEETING_VOTING_MS;
+    const voteDeadlineAtMs = (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS + MEETING_VOTING_MS;
 
     // Do not let a slow provider or a long shared-key queue leave a bot with no
     // vote. Commit its deterministic decision with one provider-timeout of
@@ -379,7 +379,7 @@ export abstract class BotAgent {
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
-        }), meeting.startedAtMs + MEETING_DISCUSSION_MS);
+        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
       manager.sendMeetingChat(lobby, self.slot, reply ?? fallback);
