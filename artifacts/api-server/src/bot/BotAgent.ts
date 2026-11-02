@@ -444,7 +444,11 @@ export abstract class BotAgent {
       // A smoothed waypoint may still be unsafe near a thin wall or corner.
       // Probe short, collision-safe detours rather than caching the rejected
       // waypoint forever. The next tick will run A* from the new cell.
-      const baseAngle = Math.atan2(dyGoal, dxGoal);
+      // Follow the next A* waypoint, not the final destination: when a
+      // wall blocks the smoothed segment, steering directly at the final
+      // goal can keep pushing the bot into the same obstacle and create a
+      // moving-but-never-arriving loop around corners.
+      const baseAngle = Math.atan2(dy, dx);
       const angleOffsets = [
         0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
         3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
@@ -464,8 +468,8 @@ export abstract class BotAgent {
             y: feetStart.y + Math.sin(angle) * length,
           };
           if (!canTraverse(feetStart, candidate)) continue;
-          const remaining = Math.hypot(feetGoal.x - candidate.x, feetGoal.y - candidate.y);
-          const progress = Math.hypot(feetGoal.x - feetStart.x, feetGoal.y - feetStart.y) - remaining;
+          const remaining = Math.hypot(waypoint.x - candidate.x, waypoint.y - candidate.y);
+          const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
           // Prefer progress, with a small penalty for wide detours and tiny steps.
           const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
           if (score > bestScore) {
