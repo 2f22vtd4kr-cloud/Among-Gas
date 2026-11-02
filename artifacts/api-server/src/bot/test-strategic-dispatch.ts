@@ -134,7 +134,7 @@ async function runScenario(apiKey: string, modelResponse: string, expectedTaskId
 async function testModelMeetingDialogueDispatch(): Promise<void> {
   // Use a unique key so the shared-provider cooldown from earlier dispatch
   // scenarios cannot make this test depend on their scheduling.
-  const apiKey = 'gsk_' + 'M'.repeat(48);
+  const apiKey = 'gsk_' + 'D'.repeat(48);
   const { lobby, bot: player } = makeLobby(apiKey);
   const publicObservation = 'I saw Blue leave the reactor after the lights failed.';
   const meeting = {
@@ -177,14 +177,13 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   }) as typeof fetch;
 
   const agent = new ProbeCrewmateBot();
-  // The production 5Hz scheduler initializes a per-slot discussion stagger
-  // on the first tick. Advance that scheduler explicitly rather than waiting
-  // before it has been initialized.
-  agent.tick(lobby, player, manager);
-  await new Promise(resolve => setTimeout(resolve, 650));
-  agent.tick(lobby, player, manager);
-  for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
-    await new Promise(resolve => setTimeout(resolve, 10));
+  // Slot 1 has a 1.15s initial discussion stagger. Keep driving the real
+  // dispatcher while waiting; a single second tick followed by a passive wait
+  // can stop just short of the scheduled request and falsely report zero calls.
+  const replyDeadline = Date.now() + 4_000;
+  while (replies.length === 0 && Date.now() < replyDeadline) {
+    agent.tick(lobby, player, manager);
+    await new Promise(resolve => setTimeout(resolve, 25));
   }
   assert.equal(providerCalls, 1, 'the real meeting dispatcher must make exactly one provider request');
   const system = capturedMessages.find(message => message.role === 'system')?.content ?? '';
