@@ -5,7 +5,7 @@ function sanitizePromptLabel(value: string): string {
   // (including bidi overrides and zero-width formatting) before they enter a
   // model prompt; JSON quoting alone does not prevent misleading prompt text.
   return Array.from(String(value))
-    .filter(character => !/[\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]/u.test(character))
+    .filter(character => !/[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(character))
     .join('')
     .slice(0, 32).trim();
 }
