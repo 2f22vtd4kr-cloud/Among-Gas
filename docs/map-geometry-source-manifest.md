@@ -102,13 +102,13 @@ Production overrides live in `lib/shared/src/collisionOverrides.ts`, in 3224×18
 
 | ID | Bounds | Current purpose |
 |---|---|---|
-| `green-service-van-bay` | [1985,1055,2260,1260] | Preserve the bay's internal walkable clearance; the hand-traced van body/wheel silhouette remains blocked. The bay is inside an intentionally isolated decorative room. |
+| `green-service-van-bay` | [1985,1055,2260,1260] | Preserve the bay's internal walkable clearance; the hand-traced van body/wheel silhouette remains blocked. The recovered source art shows a continuous perimeter with no authored entrance, but whether this region is intended to be inaccessible remains pending explicit design-owner sign-off. |
 | `east-generator-approach-aisle` | [2780,850,3100,950] | Restore the visually open central aisle in the east generator room; perimeter equipment and lower generator bank remain outside the replacement zone. |
 | `north-cafeteria-upper-furniture-strip` | [1337,19,2138,270] | Irregular blocked contour around non-playable upper cafeteria furniture. |
 | `northwest-tank-machinery-enclosure` | [590,500,932,808] | Irregular blocked contour around the tank/pipe machinery footprint. |
 | `south-central-playground-service-fixture-enclosure` | [590,671,1652,1538] | Irregular blocked contour around the lower-central playground/equipment enclosure. |
 | `southwest-shop-shelving-interior` | [145,1197,434,1562] | Irregular blocked contour around the shelving/canister display interior; adjacent shop/pump floor remains walkable. |
-| `east-office-vehicle-service-bay` | [1821,801,2589,1327] | Intentionally isolated decorative region: internal floor and van clearance stay walkable for movement/vision tests, but the source-art perimeter is sealed and no door, vent, teleport or other entry/exit mechanic exists. |
+| `east-office-vehicle-service-bay` | [1821,801,2589,1327] | Provisional isolated region: internal floor and van clearance stay walkable for movement/vision tests behind the current source-art perimeter; no door, vent, teleport or other entry/exit mechanic is currently authored. Intended accessibility remains unapproved pending explicit design-owner sign-off. |
 
 The four new non-playable prop/furniture contours are stored in `MANUAL_BLOCKED_POLYGONS`; the C38 room is represented by `INTENTIONALLY_ISOLATED_DECORATIVE_REGIONS` and its source-art wall, not by punching an extra hole or masking its interior. The van silhouette is also exposed through `MANUAL_BLOCKED_POLYGONS`. These are targeted overrides, not a comprehensive vector description of every map object, doorway, light blocker and shadow caster.
 
@@ -141,7 +141,7 @@ As of the recovery branch review:
 
 1. World/image coordinates remain test-covered for PNG and WebP. The original 1652×952 source is recovered, and a deterministic PNG/WebP verification generator records hashes, transform parameters and explicit pixel-error tolerances. Runtime image assets remain unchanged.
 2. Fine movement and client/server paths use the same shared helpers. The connectivity regression verifies all 24 defined gameplay anchors and five named sector targets have spawn-connected full-footprint approaches.
-3. All five large detached components have evidence-based dispositions against both the red-line reference and original artwork: four non-playable prop/furniture regions are blocked by named irregular contours; the east office/vehicle-service room remains internally walkable but intentionally isolated behind its continuous source-art wall, with no entry/exit mechanic.
+3. All five large detached components have source-art classifications against both the red-line reference and original artwork: four prop/furniture regions are currently blocked by named irregular contours; the east office/vehicle-service room remains internally walkable behind its continuous source-art wall, with no entry/exit mechanic currently authored. These are provisional geometry treatments, not approved design dispositions; explicit owner sign-off is still required.
 4. Raster-derived collision remains the base for much of the map. Four reviewed contours plus the van silhouette and generator-aisle/van-bay zones are targeted corrections, not a complete hand-authored map.
 5. Collision, vision and shadow share parts of the raster/override pipeline, but there is not yet a single complete canonical per-object geometry source that drives all three.
 
