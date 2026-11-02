@@ -25,7 +25,7 @@ assert.equal('x' in visible[0], false, 'observations do not expose exact coordin
 assert.equal('role' in visible[0], false, 'observations cannot encode hidden player roles');
 const sanitized = observeVisiblePlayers(
   0, 0, 0,
-  [{ slot: 1, username: 'Bad\\nName with a long suffix that must be cut', x: 10, y: 0, alive: true }],
+  [{ slot: 1, username: 'Bad' + String.fromCharCode(10) + 'Name with a long suffix that must be cut', x: 10, y: 0, alive: true }],
   100,
   () => true,
 );
