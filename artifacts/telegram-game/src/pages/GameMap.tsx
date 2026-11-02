@@ -2755,12 +2755,21 @@ export default function GameMap() {
             aria-hidden="true"
             style={{ width: 'min(76vw, 340px)', maxHeight: '42dvh', objectFit: 'contain' }}
           />
-          <div style={{ fontSize: 'clamp(25px, 7vw, 42px)', fontWeight: 900, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+          <div
+            data-testid="emergency-call-status"
+            style={{
+              fontSize: 'clamp(16px, 4vw, 22px)',
+              fontWeight: 800,
+              letterSpacing: '0.02em',
+              lineHeight: 1.25,
+              maxWidth: 340,
+            }}
+          >
             {emergencyCallStatus === 'calling'
-              ? (en ? 'Emergency call…' : 'Экстренный вызов…')
+              ? (en ? 'Waiting for server confirmation…' : 'Ожидаем подтверждение сервера…')
               : emergencyCallStatus === 'confirmed'
-                ? (en ? 'Meeting called!' : 'Собрание созвано!')
-                : (en ? 'Call could not be completed' : 'Не удалось созвать собрание')}
+                ? (en ? 'Meeting confirmed' : 'Собрание подтверждено')
+                : (en ? 'Call not confirmed' : 'Вызов не подтверждён')}
           </div>
           {emergencyCallStatus === 'failed' && (
             <div style={{ maxWidth: 300, fontSize: 15, color: 'rgba(255,244,223,0.78)' }}>
