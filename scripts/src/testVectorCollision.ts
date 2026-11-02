@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
-import { CollisionWorld, validateCollisionDocument, type CollisionShape, type Point } from "../../lib/shared/src/collision/index.js";
-import { History, shouldCloseLoop, simplifyRDP, snapPoint } from "../../lib/shared/src/collision/editorGeometry.js";
+import {
+  CollisionWorld,
+  validateCollisionDocument,
+  History,
+  shouldCloseLoop,
+  simplifyRDP,
+  snapPoint,
+  type CollisionShape,
+  type Point,
+} from "@workspace/shared/collision";
 
 const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true): CollisionShape =>
   ({ id, points, closed, blocksMove, blocksSight });
