@@ -7,5 +7,6 @@
   "include": [
     "src/testVectorCollision.ts",
     "../lib/shared/src/collision/**/*.ts"
-  ]
+  ],
+  "exclude": []
 }
