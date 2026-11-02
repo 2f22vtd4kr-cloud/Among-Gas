@@ -5,7 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 
-export const GROQ_CHAT_MODEL = 'llama-3.3-70b-versatile';
+export const GROQ_CHAT_MODEL = 'openai/gpt-oss-120b';
 const GROQ_KEY_PATTERN = /^gsk_[A-Za-z0-9_-]{20,240}$/;
 export const GROQ_MIN_REQUEST_INTERVAL_MS = 1_500;
 export const GROQ_REQUEST_TIMEOUT_MS = 6_500;
@@ -46,6 +46,8 @@ export interface GroqDialogueMessage {
 export interface GroqDialogueRequestOptions {
   /** Lower temperature for machine-readable decisions; dialogue keeps its natural default. */
   readonly temperature?: number;
+  /** Request provider-enforced JSON object output for machine decisions. */
+  readonly jsonMode?: boolean;
 }
 
 export async function requestGroqDialogue(
@@ -91,11 +93,14 @@ export async function requestGroqDialogue(
         body: JSON.stringify({
           model: GROQ_CHAT_MODEL,
           messages,
-          max_completion_tokens: 96,
+          max_completion_tokens: 256,
+          reasoning_effort: 'low',
+          include_reasoning: false,
           temperature: Number.isFinite(options.temperature)
             ? Math.max(0, Math.min(2, options.temperature!))
-            : 0.82,
-          stream: false,
+            : 0.65,
+          ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+        stream: false,
         }),
         signal: AbortSignal.timeout(GROQ_REQUEST_TIMEOUT_MS),
       });
