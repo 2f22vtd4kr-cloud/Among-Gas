@@ -66,6 +66,12 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.throws(() => new CollisionWorld([shape("zero", [[0, 0], [0, 0]])]), /Invalid collision geometry/);
   const world = new CollisionWorld([shape("wall", [[100, 0], [100, 200]])], 200, 200);
   assert.deepEqual(world.move(100, 100, -100, -100, 12), [100, 100]);
+  const bounds = new CollisionWorld([], 200, 200);
+  const [boundedX, boundedY] = bounds.move(20, 20, -100, -100, 12);
+  assert.ok(boundedX >= 12 && boundedY >= 12, "player footprint must remain inside map edges");
+  const edgeVision = bounds.visibility(30, 100, 100);
+  assert.ok(edgeVision.every(point => point[0] >= -1e-6 && point[0] <= 200 + 1e-6));
+  assert.ok(edgeVision.some(point => Math.abs(point[0]) < 1e-5), "map border must occlude rays at x=0");
   const nav = world.rasterizeNav(16, 12);
   assert.equal(nav.cols, 13);
   assert.equal(nav.rows, 13);
