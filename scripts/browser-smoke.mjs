@@ -536,8 +536,10 @@ try {
     'Emergency splash must fully obscure gameplay controls and text beneath it');
   await page.screenshot({ path: join(visualQaDir, 'emergency-call-splash.png'), fullPage: true });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
-  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  // The role-reveal sprite is transient; observe it before the slower cold-map
+  // loading gate, never after it may have unmounted.
   await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
 
   // Tactical map: rendered over the custom Among Gas map and safely dismissible.
   await page.getByRole('button', { name: /КАРТА/ }).click();
