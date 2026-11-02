@@ -155,24 +155,25 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
     },
   } as unknown as LobbyManager;
   const responseText = 'I can corroborate the reactor timeline, but we need another witness.';
+  let calls = 0;
+  let requestUrl: string | null = null;
+  let requestSystem = '';
+  let requestUser: {
+    livingRoster?: string;
+    meetingType?: string;
+    publicTranscript?: string;
+    hiddenRoles?: unknown;
+    privatePositions?: unknown;
+  } | null = null;
 
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-    assert.equal(String(input), 'https://api.groq.com/openai/v1/chat/completions');
+    calls++;
+    requestUrl = String(input);
     const request = JSON.parse(String(init?.body)) as {
       messages: Array<{ role: string; content: string }>;
     };
-    const system = request.messages.find(message => message.role === 'system')?.content ?? '';
-    const user = JSON.parse(request.messages.find(message => message.role === 'user')!.content) as {
-      livingRoster: string;
-      meetingType: string;
-      publicTranscript: string;
-    };
-    assert.match(system, /Use only the public meeting transcript and living-player roster/);
-    assert.ok(user.publicTranscript.includes(publicObservation),
-      'the real discussion dispatcher sends the actual public player statement to the model');
-    assert.equal(user.meetingType, 'emergency call');
-    assert.equal('hiddenRoles' in user, false, 'discussion prompt does not include hidden roles');
-    assert.equal('privatePositions' in user, false, 'discussion prompt does not include private player positions');
+    requestSystem = request.messages.find(message => message.role === 'system')?.content ?? '';
+    requestUser = JSON.parse(request.messages.find(message => message.role === 'user')!.content);
     return new Response(JSON.stringify({
       choices: [{ message: { content: responseText } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -180,11 +181,19 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
 
   const agent = new ProbeCrewmateBot();
   agent.tick(lobby, player, manager);
-  await new Promise(resolve => setTimeout(resolve, 1_200));
+  await new Promise(resolve => setTimeout(resolve, 1_250));
   agent.tick(lobby, player, manager);
-  for (let attempt = 0; attempt < 50 && replies.length === 0; attempt++) {
+  for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
+  assert.equal(calls, 1, 'the real discussion dispatcher makes one provider request for a relevant public message');
+  assert.equal(requestUrl, 'https://api.groq.com/openai/v1/chat/completions');
+  assert.match(requestSystem, /Use only the public meeting transcript and living-player roster/);
+  assert.ok(requestUser?.publicTranscript?.includes(publicObservation),
+    'the real discussion dispatcher sends the actual public player statement to the model');
+  assert.equal(requestUser?.meetingType, 'emergency call');
+  assert.equal('hiddenRoles' in (requestUser ?? {}), false, 'discussion prompt does not include hidden roles');
+  assert.equal('privatePositions' in (requestUser ?? {}), false, 'discussion prompt does not include private player positions');
   assert.equal(replies.length, 1, 'a relevant public message produces one asynchronous bot reply');
   assert.equal(replies[0].slot, player.slot, 'the reply is broadcast from the acting bot slot');
   assert.equal(replies[0].text, responseText, 'the real meeting dispatcher broadcasts the model response');
