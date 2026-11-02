@@ -52,7 +52,7 @@ The target document is `collision.v1.json` with world size, version, stable shap
 - Walls, tall props and the statue pedestal may block both; low benches/curbs/planter rings can block movement only; foliage can block sight only. Painted lines and baked art create no shape.
 - Trace object ground footprints, not sprite overhangs. Trace on the visible base boundary; collider radius provides clearance. Never globally shrink or expand all obstacles to solve a local path.
 - Validate finite in-bounds points, unique IDs, non-degenerate edges, closed polygon area and self-intersections before loading or saving.
-- Vector nav rasterization is a derived pathfinding artifact, not an independent source of movement truth.
+- Vector nav rasterization is a derived pathfinding artifact, not an independent source of movement truth. It must use the production three-circle feet footprint (radius 4px at horizontal offsets −10/0/+10px) and align with the existing 208×116 bot grid; do not substitute a 12px circular proxy.
 - The vector engine is foundation-only until all map zones are author-traced, reviewed and route-tested. Do not instantiate an empty or automatically vectorized guess as the production map.
 
 ## 5. Editor requirements
