@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { createHash } from 'node:crypto';
 import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -160,18 +161,33 @@ function vectorCollisionEditorApiPlugin(): Plugin {
             }
 
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
-            const temporaryPath = filePath + '.' + process.pid + '.tmp';
-            const backupPath = filePath + '.bak';
+            const temporaryPath = filePath + '.' + process.pid + '.' + Date.now() + '.tmp';
+            const backupDirectory = path.join(path.dirname(filePath), '.backups');
             const serialized = JSON.stringify(document, null, 2) + '\n';
+            const contentHash = createHash('sha256').update(serialized).digest('hex');
             try {
-              if (fs.existsSync(filePath)) fs.copyFileSync(filePath, backupPath);
-              fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', flag: 'w' });
+              if (fs.existsSync(filePath)) {
+                fs.mkdirSync(backupDirectory, { recursive: true });
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const backupName = 'collision.v1.' + stamp + '.' + process.pid + '.json';
+                fs.copyFileSync(filePath, path.join(backupDirectory, backupName));
+                const backups = fs.readdirSync(backupDirectory)
+                  .filter(name => name.startsWith('collision.v1.') && name.endsWith('.json'))
+                  .sort();
+                for (const stale of backups.slice(0, Math.max(0, backups.length - 20))) {
+                  fs.unlinkSync(path.join(backupDirectory, stale));
+                }
+              }
+              fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
               fs.renameSync(temporaryPath, filePath);
             } catch (error) {
               try { if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath); } catch { /* best-effort cleanup */ }
               throw error;
             }
-            respond(200, { ok: true, saved: true, shapeCount: document.shapes.length });
+            const backupCount = fs.existsSync(backupDirectory)
+              ? fs.readdirSync(backupDirectory).filter(name => name.startsWith('collision.v1.') && name.endsWith('.json')).length
+              : 0;
+            respond(200, { ok: true, saved: true, shapeCount: document.shapes.length, contentHash, backupCount });
           } catch (error) {
             respond(400, { error: error instanceof Error ? error.message : String(error) });
           }
