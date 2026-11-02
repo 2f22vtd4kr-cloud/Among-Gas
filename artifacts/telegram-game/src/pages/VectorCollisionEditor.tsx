@@ -17,6 +17,9 @@ type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableSh
 type Gesture =
   | { kind: "pan"; x: number; y: number }
   | { kind: "wall"; start: Point }
+  | { kind: "solid"; point: Point; close: boolean }
+  | { kind: "erase"; point: Point }
+  | { kind: "walk"; point: Point }
   | { kind: "vertex"; shapeId: string; index: number };
 
 const MAP_W = 3224;
@@ -422,23 +425,7 @@ export default function VectorCollisionEditor() {
 
     const point = worldPoint(event);
     if (tool === "walk") {
-      if (walkPoints.length !== 1) {
-        setWalkPoints([point]);
-        setWalkStatus("Start selected. Tap a destination to trace the production three-circle feet footprint.");
-      } else {
-        const start = walkPoints[0];
-        try {
-          const world = new CollisionWorld(docRef.current.shapes);
-          const end = world.movePlayerAtFeet(start[0], start[1], point[0] - start[0], point[1] - start[1]);
-          const remaining = Math.hypot(end[0] - point[0], end[1] - point[1]);
-          setWalkPoints([start, point]);
-          setWalkStatus(remaining <= 4
-            ? "PASS: the shared three-circle player footprint reached the destination."
-            : "BLOCKED / SLID: player footprint stopped " + Math.round(remaining) + "px from the destination.");
-        } catch (error) {
-          setWalkStatus("Walk test failed: " + (error instanceof Error ? error.message : String(error)));
-        }
-      }
+      gestureRef.current = { kind: "walk", point };
       return;
     }
     if (tool === "pan") {
@@ -452,17 +439,11 @@ export default function VectorCollisionEditor() {
     }
     if (tool === "solid") {
       const camera = cameraRef.current;
-      if (draftPoints.length >= 3 &&
-          Math.hypot(point[0] - draftPoints[0][0], point[1] - draftPoints[0][1]) <= 18 / camera.zoom) {
-        finishPolygon();
-        return;
-      }
       const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
-      setDraftPoints(previous => [...previous, nextPoint]);
-      setSaved(false);
-      setDirty(true);
-      setLocalDraft(null);
+      const close = draftPoints.length >= 3 &&
+        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= 18 / camera.zoom;
+      gestureRef.current = { kind: "solid", point: nextPoint, close };
       setPreviewPoint(nextPoint);
       return;
     }
@@ -488,12 +469,7 @@ export default function VectorCollisionEditor() {
       return;
     }
     if (tool === "erase") {
-      const target = nearestShape(point, 22 / cameraRef.current.zoom);
-      if (!target) return;
-      const current = cloneDocument(docRef.current);
-      const next: CollisionDocument = { ...current, shapes: current.shapes.filter(shape => shape.id !== target.id) };
-      replaceDocument(next);
-      setSelectedId(null);
+      gestureRef.current = { kind: "erase", point };
     }
   };
 
@@ -584,6 +560,41 @@ export default function VectorCollisionEditor() {
           label: shapeLabel.trim() || "Wall",
           zone,
         });
+      }
+    } else if (gesture?.kind === "solid") {
+      if (gesture.close) {
+        finishPolygon();
+      } else {
+        setDraftPoints(previous => [...previous, gesture.point]);
+        setSaved(false);
+        setDirty(true);
+        setLocalDraft(null);
+      }
+    } else if (gesture?.kind === "erase") {
+      const target = nearestShape(gesture.point, 22 / cameraRef.current.zoom);
+      if (target) {
+        const current = cloneDocument(docRef.current);
+        const next: CollisionDocument = { ...current, shapes: current.shapes.filter(shape => shape.id !== target.id) };
+        replaceDocument(next);
+        setSelectedId(null);
+      }
+    } else if (gesture?.kind === "walk") {
+      if (walkPoints.length !== 1) {
+        setWalkPoints([gesture.point]);
+        setWalkStatus("Start selected. Tap a destination to trace the production three-circle feet footprint.");
+      } else {
+        const start = walkPoints[0];
+        try {
+          const world = new CollisionWorld(docRef.current.shapes);
+          const end = world.movePlayerAtFeet(start[0], start[1], gesture.point[0] - start[0], gesture.point[1] - start[1]);
+          const remaining = Math.hypot(end[0] - gesture.point[0], end[1] - gesture.point[1]);
+          setWalkPoints([start, gesture.point]);
+          setWalkStatus(remaining <= 4
+            ? "PASS: the shared three-circle player footprint reached the destination."
+            : "BLOCKED / SLID: player footprint stopped " + Math.round(remaining) + "px from the destination.");
+        } catch (error) {
+          setWalkStatus("Walk test failed: " + (error instanceof Error ? error.message : String(error)));
+        }
       }
     } else if (gesture?.kind === "vertex") {
       historyRef.current.commit(docRef.current);
@@ -810,6 +821,8 @@ export default function VectorCollisionEditor() {
           data-editor-loaded={loaded ? "true" : "false"}
           data-shape-count={document.shapes.length}
           data-zoom={zoomDisplay}
+          data-draft-point-count={draftPoints.length}
+          data-walk-point-count={walkPoints.length}
           onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
