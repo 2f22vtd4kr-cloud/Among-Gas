@@ -212,7 +212,7 @@ function findVisibleTargetPair(): [Point, Point] {
 
 function makeImpostorLobby(
   apiKey: string,
-  targetPair: [Point, Point] = [{ x: 300, y: 300 }, { x: 600, y: 300 }],
+  targetPair: readonly Point[] = [{ x: 300, y: 300 }, { x: 600, y: 300 }],
 ): { lobby: Lobby; bot: LobbyPlayer; targets: LobbyPlayer[] } {
   const host: LobbyPlayer = {
     slot: 0,
