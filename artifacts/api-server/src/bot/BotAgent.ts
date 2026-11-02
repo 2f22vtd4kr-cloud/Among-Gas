@@ -22,13 +22,15 @@ import {
   FEET_OFFSET_Y,
   MAP_W,
   MAP_H,
+  MEETING_DISCUSSION_MS,
+  MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
 import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
-import { buildPublicBotDialogueMessages, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
 import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
 
@@ -162,7 +164,6 @@ export abstract class BotAgent {
   private lastDiscussionReplyAtMs = 0;
   private voteRequestMeeting: Lobby['meeting'] = null;
   private voteRequestPending = false;
-  private voteRequestStartedAtMs = 0;
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -224,25 +225,28 @@ export abstract class BotAgent {
     if (this.voteRequestMeeting !== meeting) {
       this.voteRequestMeeting = meeting;
       this.voteRequestPending = false;
-      this.voteRequestStartedAtMs = 0;
     }
-    if (this.voteRequestPending || meeting.votes.has(self.slot)) return;
+    if (meeting.votes.has(self.slot)) return;
+    const fallback = this.chooseVote(lobby, self);
+    const voteDeadlineAtMs = meeting.startedAtMs + MEETING_DISCUSSION_MS + MEETING_VOTING_MS;
+
+    // Do not let a slow provider or a long shared-key queue leave a bot with no
+    // vote. Commit its deterministic decision with one provider-timeout of
+    // safety margin; any eventual model response is rejected by the voted guard.
+    if (Date.now() >= voteDeadlineAtMs - GROQ_DECISION_RESERVE_MS) {
+      manager.castVote(lobby, self.slot, fallback);
+      return;
+    }
+    if (this.voteRequestPending) return;
 
     const sessionKey = lobby.players.get(lobby.hostSlot)?.groqApiKey ??
       Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
-    const fallback = this.chooseVote(lobby, self);
 
     // Without a configured provider, preserve immediate deterministic play.
     if (!sessionKey) {
       manager.castVote(lobby, self.slot, fallback);
       return;
     }
-
-    const now = Date.now();
-    if (this.voteRequestStartedAtMs === 0) this.voteRequestStartedAtMs = now;
-    // Groq keys are shared by bots in a lobby and are rate-limited per key.
-    // A 1.6s slot stagger prevents a burst of simultaneous calls at votingOpen.
-    if (now - this.voteRequestStartedAtMs < self.slot * 1_600) return;
 
     this.voteRequestPending = true;
     const publicRoster = Array.from(lobby.players.values())
@@ -255,22 +259,7 @@ export abstract class BotAgent {
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
 
     void (async () => {
-      let response = await requestGroqDialogue(sessionKey, prompt);
-      // The shared-key limiter can reject a request while the previous bot's
-      // call is still in flight. Retry once after the cooldown; never block the
-      // 5Hz loop, and abandon the retry if this meeting is no longer current.
-      if (response === null) {
-        await new Promise(resolve => setTimeout(resolve, 1_600));
-        if (!canCommitBotVote({
-          phase: lobby.phase,
-          currentMeeting: lobby.meeting,
-          requestedMeeting: meeting,
-          votingOpen: meeting.votingOpen,
-          alive: self.alive,
-          hasVoted: meeting.votes.has(self.slot),
-        })) return;
-        response = await requestGroqDialogue(sessionKey, prompt);
-      }
+      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs);
 
       if (!canCommitBotVote({
         phase: lobby.phase,
@@ -390,7 +379,7 @@ export abstract class BotAgent {
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
-        }));
+        }), meeting.startedAtMs + MEETING_DISCUSSION_MS);
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
       manager.sendMeetingChat(lobby, self.slot, reply ?? fallback);
