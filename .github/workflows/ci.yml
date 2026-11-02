@@ -215,5 +215,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-      - name: Run headless multiplayer gameplay simulations
-        run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0
+      - name: Run three independently seeded 100-game balance batches
+        run: |
+          set -euo pipefail
+          for seed in 17001 17002 17003; do
+            pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0 --seed "$seed"
+          done
