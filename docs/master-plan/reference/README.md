@@ -1,7 +1,7 @@
 # Master-plan reference inventory
 
 Original ZIP supplied in the 2026-11-02 task:
-- Archive SHA-256: `2e6840b90b8a27983780f2f03388ae6ff921e6b70c034088ebc0a36407bd66b3`
+- Archive SHA-256: `e675c8f0e0d629bd4bde3b5ec5970601182899592cd5ef81e842e55ab0c6be67`
 - `MASTER_PLAN.md`: `2e6840b90b8a27983780f2f03388ae6ff921e6b70c034088ebc0a36407bd66b3`
 - `vectorCollision.ts`: `598ccf6cb4838b0c07493d80869464dad89906ee365ec05e6bb8985a4e6e995c`
 - `vectorCollision.test.ts`: `183d583bc5fdf9c5a447f42f07e91fe6860408823c7e16690510abb0fc4126e3`
