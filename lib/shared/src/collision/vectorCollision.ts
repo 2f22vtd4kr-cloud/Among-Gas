@@ -260,6 +260,8 @@ export class CollisionWorld {
       const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: -1 };
       const mi = this.moveSegments.push(segment) - 1;
       this.insert(this.moveHash, mi, segment);
+      const si = this.sightSegments.push(segment) - 1;
+      this.insert(this.sightHash, si, segment);
     }
   }
 
