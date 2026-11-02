@@ -662,14 +662,24 @@ export default function VectorCollisionEditor() {
         headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
         body: JSON.stringify(docRef.current),
       });
-      const result = await response.json().catch(() => ({})) as { error?: string };
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        contentHash?: string;
+        backupCount?: number;
+      };
       if (!response.ok) throw new Error(result.error || "Save rejected (" + response.status + ")");
+      if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
+        throw new Error("Save response did not include a valid SHA-256 content hash");
+      }
       historyRef.current = new History<EditableDocument>(docRef.current, cloneDocument, 200);
       setSaved(true);
       setDirty(false);
       setLocalDraft(null);
       try { window.localStorage.removeItem(LOCAL_DRAFT_KEY); } catch { /* best-effort cleanup */ }
-      setStatus("Candidate saved with a rotating backup. Live gameplay still uses the reviewed raster mask.");
+      setStatus(
+        "Candidate saved · SHA-256 " + result.contentHash.slice(0, 12) +
+        " · " + (result.backupCount ?? 0) + " retained backups. Live gameplay still uses the reviewed raster mask.",
+      );
     } catch (error) {
       setStatus("Save failed: " + (error instanceof Error ? error.message : String(error)));
     } finally {
