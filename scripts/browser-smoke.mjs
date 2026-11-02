@@ -232,12 +232,16 @@ try {
       });
     }
   });
-  await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  // Use the dedicated, pinned reveal fixture here. The task-interaction
+  // fixture is intentionally for live gameplay controls and must not be used
+  // to infer that the opening role overlay is mounted.
+  await page.goto(`${origin}/?mock=reveal-crewmate`, { waitUntil: 'domcontentloaded' });
   // Role reveal is intentionally transient. Capture all sprite/shadow geometry
   // in one browser-side snapshot so separate locator calls cannot race the
   // 3.2-second reveal timer and lose the node between assertions.
   const roleRevealSnapshotHandle = await page.waitForFunction(() => {
-    const sprite = document.querySelector<HTMLElement>('.ag-character-sprite[data-pose]');
+    const reveal = document.querySelector<HTMLElement>('[data-testid="role-reveal-character"]');
+    const sprite = reveal?.querySelector<HTMLElement>('.ag-character-sprite[data-pose]');
     const shadow = document.querySelector<HTMLElement>('[data-role-reveal-shadow="true"]');
     if (!sprite || !shadow) return false;
     const spriteBounds = sprite.getBoundingClientRect();
@@ -288,7 +292,10 @@ try {
   assert.equal(roleRevealSnapshot.shadowAnimation, 'rrShadowPulse',
     'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
-  await waitForRoleRevealToFinish(page);
+  // The reveal fixture intentionally pins the overlay open for visual
+  // inspection. Switch to the gameplay fixture with reveal explicitly skipped
+  // before checking the map loader and interactive HUD.
+  await page.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
   assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
     'cold gameplay load should prefer the compact WebP map asset');
