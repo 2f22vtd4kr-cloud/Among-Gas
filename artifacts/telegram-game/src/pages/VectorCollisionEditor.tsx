@@ -659,11 +659,14 @@ export default function VectorCollisionEditor() {
     if (gesture?.kind === "wall") {
       const points = [...gesture.points];
       const end = worldPoint(event);
+      const camera = cameraRef.current;
+      const endSnap = snapPoint(docRef.current.shapes, end, 12 / camera.zoom);
+      const snappedEnd = endSnap.kind === "none" ? end : endSnap.point;
       const last = points[points.length - 1];
-      if (last && Math.hypot(end[0] - last[0], end[1] - last[1]) >= 0.5 / cameraRef.current.zoom) {
-        points.push(end);
+      if (last && Math.hypot(snappedEnd[0] - last[0], snappedEnd[1] - last[1]) >= 0.5 / camera.zoom) {
+        points.push(snappedEnd);
       }
-      const simplified = simplifyRDP(points, 1.25 / cameraRef.current.zoom);
+      const simplified = simplifyRDP(points, 1.25 / camera.zoom);
       if (simplified.length >= 2) {
         const nextChain = activeChain.length
           ? [...activeChain, ...simplified.slice(1)]
