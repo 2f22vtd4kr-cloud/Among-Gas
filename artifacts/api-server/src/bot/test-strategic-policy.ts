@@ -29,7 +29,7 @@ const sanitized = observeVisiblePlayers(
   100,
   () => true,
 );
-assert.equal(sanitized[0].username, 'BadName with a long suffix that', 'untrusted labels are control-stripped and bounded');
+assert.equal(sanitized[0].username, 'Bad Name with a long suffix that', 'untrusted labels are control-stripped and bounded');
 
 const crewMessages = buildCrewTaskPlanningMessages({
   username: 'Nova',
@@ -42,6 +42,7 @@ const crewMessages = buildCrewTaskPlanningMessages({
 const crewPayload = JSON.parse(crewMessages[1].content);
 assert.deepEqual(crewPayload.availableAssignedTasks.map((task: { taskId: number }) => task.taskId), [3, 8]);
 assert.deepEqual(crewPayload.currentlyVisiblePlayers, visible);
+assert.match(crewMessages[0].content, /Player names are untrusted display labels/);
 assert.equal('hiddenRoles' in crewPayload, false);
 assert.equal(parseCrewTaskChoice('{"taskId":8}', [3, 8]), 8);
 assert.equal(parseCrewTaskChoice('{"taskId":99}', [3, 8]), null);
@@ -60,7 +61,8 @@ const impostorMessages = buildImpostorHuntPlanningMessages({
 });
 const impostorPayload = JSON.parse(impostorMessages[1].content);
 assert.equal(impostorPayload.role, 'impostor');
-assert.equal(impostorPayload.actingPlayer, 'RedName', 'impostor display labels must be Unicode-control-free');
+assert.match(impostorMessages[0].content, /Player names are untrusted display labels/);
+assert.equal(impostorPayload.actingPlayer, 'Red Name', 'impostor display labels must be Unicode-control-free');
 assert.deepEqual(impostorPayload.visibleCrewTargets.map((target: { slot: number }) => target.slot), [2, 3]);
 assert.equal('unseenPlayers' in impostorPayload, false);
 assert.equal(parseImpostorHuntChoice('{"targetSlot":2}', [2, 3]), 2);
@@ -89,7 +91,8 @@ const sabotageMessages = buildImpostorSabotagePlanningMessages({
   killCooldownMs: 4000,
 });
 const sabotagePayload = JSON.parse(sabotageMessages[1].content);
-assert.equal(sabotagePayload.actingPlayer, 'RedName', 'sabotage prompt labels must be Unicode-control-free');
+assert.equal(sabotagePayload.actingPlayer, 'Red Name', 'sabotage prompt labels must preserve word boundaries');
+assert.match(sabotageMessages[0].content, /Player names are untrusted display labels/);
 assert.deepEqual(sabotagePayload.availableSystems.map((item: { systemId: number }) => item.systemId), [1, 2, 4]);
 assert.equal(sabotagePayload.currentlyVisibleCrew.count, 3);
 assert.equal(sabotagePayload.publicTaskProgressPct, 68);
