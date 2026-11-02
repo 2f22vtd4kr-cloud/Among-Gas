@@ -402,23 +402,26 @@ export class CollisionWorld {
     return { cols, rows, cell, walk };
   }
 
-  /** Rasterise the exact production three-circle feet footprint for bot/navigation consumers. */
-  rasterizePlayerNav(cell = 16): { cols: number; rows: number; cell: number; walk: Uint8Array } {
-    if (!Number.isFinite(cell) || cell < 2) {
-      throw new RangeError("navigation cell must be >=2px");
+  /** Rasterise the exact production three-circle feet footprint on the existing bot-grid dimensions. */
+  rasterizePlayerNav(cols = 208, rows = 116): {
+    cols: number; rows: number; cellX: number; cellY: number; walk: Uint8Array;
+  } {
+    if (!Number.isInteger(cols) || cols < 1 || !Number.isInteger(rows) || rows < 1 ||
+        cols * rows > 1_000_000) {
+      throw new RangeError("navigation grid dimensions must be positive integers with at most 1M cells");
     }
-    const cols = Math.ceil(this.w / cell);
-    const rows = Math.ceil(this.h / cell);
+    const cellX = this.w / cols;
+    const cellY = this.h / rows;
     const walk = new Uint8Array(cols * rows);
     for (let row = 0; row < rows; row++) {
       for (let col = 0; col < cols; col++) {
         walk[row * cols + col] = this.isPlayerWalkableAtFeet(
-          (col + 0.5) * cell,
-          (row + 0.5) * cell,
+          (col + 0.5) * cellX,
+          (row + 0.5) * cellY,
         ) ? 1 : 0;
       }
     }
-    return { cols, rows, cell, walk };
+    return { cols, rows, cellX, cellY, walk };
   }
 
   visibility(x: number, y: number, radius: number): Point[] {
