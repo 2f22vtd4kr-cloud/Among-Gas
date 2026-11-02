@@ -253,7 +253,9 @@ export class CrewmateBot extends BotAgent {
       self.slot,
       self.x,
       self.y,
-      Array.from(lobby.players.values()),
+      Array.from(lobby.players.values()).filter(player =>
+        !player.inVent && player.disconnectedAtMs === undefined,
+      ),
       visionRadiusPx,
       (x, y) => this.hasLineOfSightToPoint(self, { x, y }),
     );
