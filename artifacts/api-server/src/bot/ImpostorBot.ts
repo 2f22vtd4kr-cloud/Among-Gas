@@ -314,7 +314,7 @@ export class ImpostorBot extends BotAgent {
       self.x,
       self.y,
       Array.from(lobby.players.values())
-        .filter(player => player.role === 'crewmate')
+        .filter(player => player.role === 'crewmate' && !player.inVent && player.disconnectedAtMs === undefined)
         .map(player => ({
           slot: player.slot,
           username: player.username,
