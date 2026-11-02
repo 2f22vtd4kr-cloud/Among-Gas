@@ -238,7 +238,7 @@ try {
   });
   // Use the dedicated reveal fixture: the task-interaction fixture is
   // for gameplay controls and is not required to mount the role overlay.
-  await page.goto(`${origin}/?mock=reveal-crewmate`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=reveal-crewmate&animateReveal=true`, { waitUntil: 'domcontentloaded' });
   // Role reveal is intentionally transient. Capture all sprite/shadow geometry
   // in one browser-side snapshot so separate locator calls cannot race the
   // 3.2-second reveal timer and lose the node between assertions.
