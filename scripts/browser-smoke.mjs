@@ -233,9 +233,9 @@ try {
     }
   });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
-  // Capture the short role reveal as one browser-side snapshot. Separate
-  // locator calls raced the 3.2s reveal timer: the node could disappear
-  // between waitForSelector and the first getAttribute request.
+  // Role reveal is intentionally transient. Capture all sprite/shadow geometry
+  // in one browser-side snapshot so separate locator calls cannot race the
+  // 3.2-second reveal timer and lose the node between assertions.
   const roleRevealSnapshotHandle = await page.waitForFunction(() => {
     const sprite = document.querySelector<HTMLElement>('.ag-character-sprite[data-pose]');
     const shadow = document.querySelector<HTMLElement>('[data-role-reveal-shadow="true"]');
