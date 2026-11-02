@@ -63,6 +63,12 @@
       "workspace": "./src/adminTable.ts",
       "import": "./src/adminTable.ts",
       "default": "./src/adminTable.ts"
+    },
+    "./collision": {
+      "types": "./dist/collision/index.d.ts",
+      "workspace": "./src/collision/index.ts",
+      "import": "./src/collision/index.ts",
+      "default": "./src/collision/index.ts"
     }
   }
 }
