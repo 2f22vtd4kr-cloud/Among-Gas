@@ -130,7 +130,8 @@ try {
   let releaseDeadline: ((response: Response) => void) | undefined;
   globalThis.fetch = (async () => new Promise<Response>(resolve => { releaseDeadline = resolve; })) as typeof fetch;
   const activeDeadlineRequest = requestGroqDialogue(deadlineKey, []);
-  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(releaseDeadline !== undefined, true, 'the first deadline test request has started');
   const expiredQueuedRequest = requestGroqDialogue(deadlineKey, [], Date.now() + 100);
   assert.equal(await expiredQueuedRequest, null,
     'a queued decision is dropped rather than started when it cannot finish before its deadline');
