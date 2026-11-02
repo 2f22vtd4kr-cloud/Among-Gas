@@ -167,6 +167,7 @@ export default function VectorCollisionEditor() {
       });
     }
 
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     if (walkPoints.length) {
       context.strokeStyle = "#ffe079";
       context.lineWidth = 3;
@@ -187,7 +188,6 @@ export default function VectorCollisionEditor() {
       });
     }
 
-    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.fillStyle = "rgba(5,12,18,0.82)";
     context.fillRect(8, rect.height - 34, Math.min(560, rect.width - 16), 26);
     context.fillStyle = "#e4eef4";
