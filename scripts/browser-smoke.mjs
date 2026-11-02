@@ -233,11 +233,11 @@ try {
     }
   });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
+  // The role reveal is intentionally transient (3.2s). Capture its sprite and
+  // shadow before waiting for the map/gameplay readiness gate, which can take
+  // longer on a cold mobile load. Waiting for gameplay first races the reveal
+  // off-screen and makes the following DOM assertions fail nondeterministically.
   await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
-  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
-    'cold gameplay load should prefer the compact WebP map asset');
-  console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   const roleRevealSprite = page.locator('.ag-character-sprite[data-pose]').first();
   assert.equal(await roleRevealSprite.getAttribute('data-pose'), 'idle');
   assert.equal(await roleRevealSprite.getAttribute('data-source-height'), '136',
@@ -273,6 +273,10 @@ try {
     'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
   await waitForRoleRevealToFinish(page);
+  await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
+    'cold gameplay load should prefer the compact WebP map asset');
+  console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const movementJoystick = page.locator('[data-joystick-side]');
   await movementJoystick.waitFor({ state: 'visible' });
