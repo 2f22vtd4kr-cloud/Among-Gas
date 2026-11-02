@@ -324,8 +324,8 @@ export default function VectorCollisionEditor() {
   };
 
   const addShape = (shape: CollisionShape) => {
-    const next = cloneDocument(docRef.current);
-    next.shapes = [...next.shapes, shape];
+    const current = cloneDocument(docRef.current);
+    const next: CollisionDocument = { ...current, shapes: [...current.shapes, shape] };
     replaceDocument(next);
     setSelectedId(shape.id);
     setDraftPoints([]);
@@ -436,8 +436,8 @@ export default function VectorCollisionEditor() {
     if (tool === "erase") {
       const target = nearestShape(point, 22 / cameraRef.current.zoom);
       if (!target) return;
-      const next = cloneDocument(docRef.current);
-      next.shapes = next.shapes.filter(shape => shape.id !== target.id);
+      const current = cloneDocument(docRef.current);
+      const next: CollisionDocument = { ...current, shapes: current.shapes.filter(shape => shape.id !== target.id) };
       replaceDocument(next);
       setSelectedId(null);
     }
@@ -481,15 +481,18 @@ export default function VectorCollisionEditor() {
     }
     if (gesture.kind === "vertex") {
       const point = worldPoint(event);
-      const next = cloneDocument(docRef.current);
-      const shape = next.shapes.find(item => item.id === gesture.shapeId);
+      const current = cloneDocument(docRef.current);
+      const shape = current.shapes.find(item => item.id === gesture.shapeId);
       if (!shape) return;
-      const snapped = snapPoint(next.shapes.filter(item => item.id !== shape.id), point, 10 / cameraRef.current.zoom);
-      shape.points = shape.points.map((vertex, index) =>
-        index === gesture.index
-          ? (snapped.kind === "none" ? point : snapped.point)
-          : vertex
-      );
+      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, 10 / cameraRef.current.zoom);
+      const replacementPoint = snapped.kind === "none" ? point : snapped.point;
+      const next: CollisionDocument = {
+        ...current,
+        shapes: current.shapes.map(item => item.id !== shape.id ? item : {
+          ...item,
+          points: item.points.map((vertex, index) => index === gesture.index ? replacementPoint : vertex),
+        }),
+      };
       docRef.current = next;
       setDocument(next);
     }
@@ -583,8 +586,11 @@ export default function VectorCollisionEditor() {
 
   const updateSelected = (patch: Partial<CollisionShape>) => {
     if (!selectedId) return;
-    const next = cloneDocument(docRef.current);
-    next.shapes = next.shapes.map(shape => shape.id === selectedId ? { ...shape, ...patch } : shape);
+    const current = cloneDocument(docRef.current);
+    const next: CollisionDocument = {
+      ...current,
+      shapes: current.shapes.map(shape => shape.id === selectedId ? { ...shape, ...patch } : shape),
+    };
     replaceDocument(next);
   };
 
