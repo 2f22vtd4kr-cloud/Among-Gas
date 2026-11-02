@@ -316,9 +316,9 @@ export class CollisionWorld {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
     if (this.insideSolids(x, y, this.moveSolids)) return false;
-    if (radius === 0) return true;
     for (const index of this.query(this.moveHash, x, y, radius)) {
-      if (segmentDistance(x, y, this.moveSegments[index]) < radius - EPS) return false;
+      const nearest = segmentDistance(x, y, this.moveSegments[index]);
+      if (radius === 0 ? nearest <= EPS : nearest < radius - EPS) return false;
     }
     return true;
   }
