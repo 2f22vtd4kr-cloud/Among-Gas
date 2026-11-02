@@ -50,14 +50,18 @@ function cross(ax: number, ay: number, bx: number, by: number): number {
   return ax * by - ay * bx;
 }
 
+function magnitude(dx: number, dy: number): number {
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
 function distance(ax: number, ay: number, bx: number, by: number): number {
-  return Math.hypot(ax - bx, ay - by);
+  return magnitude(ax - bx, ay - by);
 }
 
 function pointOnSegment(p: Point, a: Point, b: Point): boolean {
   const dx = b[0] - a[0], dy = b[1] - a[1];
   const px = p[0] - a[0], py = p[1] - a[1];
-  if (Math.abs(cross(dx, dy, px, py)) > EPS * Math.max(1, Math.hypot(dx, dy))) return false;
+  if (Math.abs(cross(dx, dy, px, py)) > EPS * Math.max(1, magnitude(dx, dy))) return false;
   const dot = px * dx + py * dy;
   return dot >= -EPS && dot <= dx * dx + dy * dy + EPS;
 }
@@ -69,7 +73,7 @@ export function segmentsIntersect(a: Point, b: Point, c: Point, d: Point): boole
   const o2 = cross(abx, aby, d[0] - a[0], d[1] - a[1]);
   const o3 = cross(cdx, cdy, a[0] - c[0], a[1] - c[1]);
   const o4 = cross(cdx, cdy, b[0] - c[0], b[1] - c[1]);
-  const eps = EPS * Math.max(1, Math.hypot(abx, aby), Math.hypot(cdx, cdy));
+  const eps = EPS * Math.max(1, magnitude(abx, aby), magnitude(cdx, cdy));
   if (((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) &&
       ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))) return true;
   return (Math.abs(o1) <= eps && pointOnSegment(c, a, b)) ||
@@ -377,15 +381,47 @@ export class CollisionWorld {
     };
     for (let i = 0; i < VISION_SAMPLES; i++) addAngle(i / VISION_SAMPLES * Math.PI * 2);
 
+    const addEdgeAngles = (dx: number, dy: number): void => {
+      const angle = Math.atan2(dy, dx);
+      addAngle(angle - 1e-5);
+      addAngle(angle);
+      addAngle(angle + 1e-5);
+    };
+
     for (const index of candidates) {
       const segment = this.sightSegments[index];
-      for (const point of [[segment.ax, segment.ay], [segment.bx, segment.by]] as const) {
-        const dx = point[0] - x, dy = point[1] - y;
-        if (dx * dx + dy * dy > radius * radius * 1.05) continue;
-        const angle = Math.atan2(dy, dx);
-        addAngle(angle - 1e-5);
-        addAngle(angle);
-        addAngle(angle + 1e-5);
+      const ax = segment.ax - x, ay = segment.ay - y;
+      const bx = segment.bx - x, by = segment.by - y;
+      const vx = bx - ax, vy = by - ay;
+
+      // Segment endpoints inside the vision circle are angular discontinuities.
+      for (const [px, py] of [[ax, ay], [bx, by]] as const) {
+        if (px * px + py * py <= radius * radius + EPS) addEdgeAngles(px, py);
+      }
+
+      // A long wall can cross the vision circle while both authored endpoints
+      // lie outside it. Include the exact clipped endpoints, otherwise the
+      // uniform fallback rays approximate the wall and can leak around its edge.
+      const quadraticA = vx * vx + vy * vy;
+      if (quadraticA <= EPS * EPS) continue;
+      const quadraticB = 2 * (ax * vx + ay * vy);
+      const quadraticC = ax * ax + ay * ay - radius * radius;
+      const discriminant = quadraticB * quadraticB - 4 * quadraticA * quadraticC;
+      const tolerance = EPS * Math.max(
+        1,
+        Math.abs(quadraticB * quadraticB),
+        Math.abs(4 * quadraticA * quadraticC),
+      );
+      if (discriminant < -tolerance) continue;
+      const root = Math.sqrt(Math.max(0, discriminant));
+      const denominator = 2 * quadraticA;
+      for (const t of [
+        (-quadraticB - root) / denominator,
+        (-quadraticB + root) / denominator,
+      ]) {
+        if (t < -EPS || t > 1 + EPS) continue;
+        const clippedT = Math.max(0, Math.min(1, t));
+        addEdgeAngles(ax + vx * clippedT, ay + vy * clippedT);
       }
     }
 
