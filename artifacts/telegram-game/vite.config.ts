@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import path from 'path';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
@@ -161,7 +161,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
             }
 
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
-            const temporaryPath = filePath + '.' + process.pid + '.' + Date.now() + '.tmp';
+            const temporaryPath = filePath + '.' + process.pid + '.' + randomUUID() + '.tmp';
             const backupDirectory = path.join(path.dirname(filePath), '.backups');
             const serialized = JSON.stringify(document, null, 2) + '\n';
             const contentHash = createHash('sha256').update(serialized).digest('hex');
@@ -169,7 +169,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               if (fs.existsSync(filePath)) {
                 fs.mkdirSync(backupDirectory, { recursive: true });
                 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const backupName = 'collision.v1.' + stamp + '.' + process.pid + '.json';
+                const backupName = 'collision.v1.' + stamp + '.' + process.pid + '.' + randomUUID() + '.json';
                 fs.copyFileSync(filePath, path.join(backupDirectory, backupName));
                 const backups = fs.readdirSync(backupDirectory)
                   .filter(name => name.startsWith('collision.v1.') && name.endsWith('.json'))
