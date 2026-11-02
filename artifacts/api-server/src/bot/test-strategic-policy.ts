@@ -25,7 +25,7 @@ assert.equal('x' in visible[0], false, 'observations do not expose exact coordin
 assert.equal('role' in visible[0], false, 'observations cannot encode hidden player roles');
 const sanitized = observeVisiblePlayers(
   0, 0, 0,
-  [{ slot: 1, username: 'Bad' + String.fromCharCode(10) + 'Name with a long suffix that must be cut', x: 10, y: 0, alive: true }],
+  [{ slot: 1, username: 'Bad' + String.fromCharCode(10, 0x202e, 0x2066) + 'Name with a long suffix that must be cut', x: 10, y: 0, alive: true }],
   100,
   () => true,
 );
@@ -51,7 +51,7 @@ assert.equal(parseCrewTaskChoice('{"taskId":null}', [3, 8]), null);
 assert.equal(parseCrewTaskChoice('{"taskId":8} trailing', [3, 8]), null);
 
 const impostorMessages = buildImpostorHuntPlanningMessages({
-  username: 'Red',
+  username: 'Red' + String.fromCharCode(0x202e, 0x2066, 0x0000) + 'Name',
   killCooldownMs: 1200,
   visibleCrew: [
     { slot: 2, username: 'Blue', distancePx: 130, otherVisibleCrewNearby: 0 },
@@ -60,6 +60,7 @@ const impostorMessages = buildImpostorHuntPlanningMessages({
 });
 const impostorPayload = JSON.parse(impostorMessages[1].content);
 assert.equal(impostorPayload.role, 'impostor');
+assert.equal(impostorPayload.actingPlayer, 'RedName', 'impostor display labels must be Unicode-control-free');
 assert.deepEqual(impostorPayload.visibleCrewTargets.map((target: { slot: number }) => target.slot), [2, 3]);
 assert.equal('unseenPlayers' in impostorPayload, false);
 assert.equal(parseImpostorHuntChoice('{"targetSlot":2}', [2, 3]), 2);
@@ -76,7 +77,7 @@ import {
 } from './strategicPolicy.js';
 
 const sabotageMessages = buildImpostorSabotagePlanningMessages({
-  username: 'Red',
+  username: 'Red' + String.fromCharCode(0x202e, 0x2066, 0x0000) + 'Name',
   availableSystems: [
     { systemId: 1, name: 'Lights' },
     { systemId: 2, name: 'O₂' },
@@ -88,6 +89,7 @@ const sabotageMessages = buildImpostorSabotagePlanningMessages({
   killCooldownMs: 4000,
 });
 const sabotagePayload = JSON.parse(sabotageMessages[1].content);
+assert.equal(sabotagePayload.actingPlayer, 'RedName', 'sabotage prompt labels must be Unicode-control-free');
 assert.deepEqual(sabotagePayload.availableSystems.map((item: { systemId: number }) => item.systemId), [1, 2, 4]);
 assert.equal(sabotagePayload.currentlyVisibleCrew.count, 3);
 assert.equal(sabotagePayload.publicTaskProgressPct, 68);
