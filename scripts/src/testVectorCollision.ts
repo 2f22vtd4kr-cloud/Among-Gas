@@ -50,6 +50,24 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(contains([1900, 505], foliage.visibility(1500, 505, 500)), false);
 }
 
+// A long sight-only wall crossing the radius must contribute exact clipped
+// endpoints even though neither authored endpoint lies inside the vision circle.
+{
+  const longWall = new CollisionWorld([
+    shape("long-sight-wall", [[1400, 400], [1400, 1600]], false, false, true),
+  ], 2000, 2000);
+  const view = longWall.visibility(1000, 1000, 500);
+  assert.ok(
+    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 500) < 1e-4),
+    "visibility must include the upper circle-clipped endpoint of a long wall",
+  );
+  assert.ok(
+    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 1500) < 1e-4),
+    "visibility must include the lower circle-clipped endpoint of a long wall",
+  );
+  assert.equal(contains([1450, 1000], view), false, "long wall must occlude points behind it");
+}
+
 // A blocker is aligned to the authored outline, and open-room range is circular.
 {
   const pedestal = new CollisionWorld([shape("pedestal", [[1705, 475], [1782, 475], [1782, 532], [1705, 532]], true)]);
