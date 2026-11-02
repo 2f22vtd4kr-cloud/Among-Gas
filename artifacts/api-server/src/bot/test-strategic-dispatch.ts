@@ -30,6 +30,30 @@ class ProbeCrewmateBot extends CrewmateBot {
   isTaskPlanningPending(): boolean {
     return (this as unknown as { _taskPlanningPending: boolean })._taskPlanningPending;
   }
+
+  sessionKey(lobby: Lobby): string | undefined {
+    return this.getSessionGroqApiKey(lobby);
+  }
+
+  discussionDebug(): {
+    meeting: Lobby['meeting'];
+    nextChatAtMs: number;
+    lastMessageKey: string;
+    pending: boolean;
+  } {
+    const state = this as unknown as {
+      discussionMeeting: Lobby['meeting'];
+      nextDiscussionChatAtMs: number;
+      lastDiscussionMessageKey: string;
+      discussionRequestPending: boolean;
+    };
+    return {
+      meeting: state.discussionMeeting,
+      nextChatAtMs: state.nextDiscussionChatAtMs,
+      lastMessageKey: state.lastDiscussionMessageKey,
+      pending: state.discussionRequestPending,
+    };
+  }
 }
 
 function makeLobby(apiKey: string): { lobby: Lobby; bot: LobbyPlayer; manager: LobbyManager } {
@@ -177,15 +201,24 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   }) as typeof fetch;
 
   const agent = new ProbeCrewmateBot();
+  assert.equal(agent.sessionKey(lobby), apiKey,
+    'the host session key must be visible to the server-side bot key resolver');
   // First tick binds this bot to the new meeting and establishes its
-  // intentional per-slot discussion delay; the next tick may then respond.
+  // intentional per-slot discussion delay; wait against the scheduled time
+  // rather than assuming a particular timer duration under CI load.
   agent.tick(lobby, player, manager);
-  await new Promise(resolve => setTimeout(resolve, 1_250));
+  const afterFirstTick = agent.discussionDebug();
+  assert.equal(afterFirstTick.meeting, meeting, 'the first tick must bind the bot to this meeting');
+  const delayMs = Math.max(0, afterFirstTick.nextChatAtMs - Date.now() + 25);
+  await new Promise(resolve => setTimeout(resolve, delayMs));
   agent.tick(lobby, player, manager);
+  const afterSecondTick = agent.discussionDebug();
+  assert.equal(afterSecondTick.lastMessageKey, `0:${meeting.messages[0].sentAtMs}`,
+    'the second tick must recognize the new public host message as relevant');
   for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
   }
-  assert.equal(providerCalls, 1, 'the real meeting dispatcher must make exactly one provider request');
+  assert.equal(providerCalls, 1, `the real meeting dispatcher must make exactly one provider request (pending=${afterSecondTick.pending}, keyPresent=${!!agent.sessionKey(lobby)})`);
   const system = capturedMessages.find(message => message.role === 'system')?.content ?? '';
   const userContent = capturedMessages.find(message => message.role === 'user')?.content ?? '';
   assert.match(system, /Use only the public meeting transcript and living-player roster/);
