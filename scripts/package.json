@@ -11,7 +11,8 @@
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",
-    "test:telegram-start-param": "tsx ./test-telegram-start-param.ts"
+    "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
+    "test:vector-collision": "tsx ./src/testVectorCollision.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
