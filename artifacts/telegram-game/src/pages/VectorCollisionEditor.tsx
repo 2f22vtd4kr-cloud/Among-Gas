@@ -713,6 +713,8 @@ export default function VectorCollisionEditor() {
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
         <canvas
           ref={canvasRef}
+          data-editor-loaded={loaded ? "true" : "false"}
+          data-shape-count={document.shapes.length}
           onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
