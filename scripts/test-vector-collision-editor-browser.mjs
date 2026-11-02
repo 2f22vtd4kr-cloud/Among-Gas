@@ -56,7 +56,7 @@ try {
   await page.mouse.click(bounds.x + 40, bounds.y + 40);
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
   await page.mouse.click(bounds.x + 100, bounds.y + 40);
-  await page.getByText(/candidate 12px circular route|BLOCKED \/ SLID/).waitFor();
+  await page.getByText(/shared three-circle player footprint|BLOCKED \/ SLID/).waitFor();
 
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
