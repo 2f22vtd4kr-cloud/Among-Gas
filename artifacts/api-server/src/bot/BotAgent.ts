@@ -22,14 +22,17 @@ import {
   FEET_OFFSET_Y,
   MAP_W,
   MAP_H,
+  MEETING_DISCUSSION_MS,
+  MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
 import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
-import { buildPublicBotDialogueMessages, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
+import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
 
 export { NO_TARGET };
 
@@ -159,6 +162,8 @@ export abstract class BotAgent {
   private lastDiscussionMessageKey = '';
   private discussionRequestPending = false;
   private lastDiscussionReplyAtMs = 0;
+  private voteRequestMeeting: Lobby['meeting'] = null;
+  private voteRequestPending = false;
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -202,9 +207,94 @@ export abstract class BotAgent {
         return;
       }
       if (meeting.votes.has(self.slot)) return; // already voted
-      const target = this.chooseVote(lobby, self);
-      manager.castVote(lobby, self.slot, target);
+      this.requestMeetingVote(lobby, self, manager, meeting);
     }
+  }
+
+  /**
+   * Request an asynchronous model vote without blocking the 5Hz bot loop.
+   * Each bot's request is staggered to respect the shared per-key provider
+   * cooldown. The deterministic role-aware vote remains the fail-closed path.
+   */
+  private requestMeetingVote(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    meeting: NonNullable<Lobby['meeting']>,
+  ): void {
+    if (this.voteRequestMeeting !== meeting) {
+      this.voteRequestMeeting = meeting;
+      this.voteRequestPending = false;
+    }
+    if (meeting.votes.has(self.slot)) return;
+    const fallback = this.chooseVote(lobby, self);
+    const voteDeadlineAtMs = (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS + MEETING_VOTING_MS;
+
+    // Do not let a slow provider or a long shared-key queue leave a bot with no
+    // vote. Commit its deterministic decision with one provider-timeout of
+    // safety margin; any eventual model response is rejected by the voted guard.
+    if (Date.now() >= voteDeadlineAtMs - GROQ_DECISION_RESERVE_MS) {
+      manager.castVote(lobby, self.slot, fallback);
+      return;
+    }
+    if (this.voteRequestPending) return;
+
+    const sessionKey = lobby.players.get(lobby.hostSlot)?.groqApiKey ??
+      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+
+    // Without a configured provider, preserve immediate deterministic play.
+    if (!sessionKey) {
+      manager.castVote(lobby, self.slot, fallback);
+      return;
+    }
+
+    this.voteRequestPending = true;
+    const publicRoster = Array.from(lobby.players.values())
+      .filter(player => player.alive)
+      .map(player => ({ slot: player.slot, username: player.username, alive: true }));
+    const publicTranscript = meeting.messages.slice(-12).map(message => ({
+      slot: message.slot,
+      text: message.text,
+    }));
+    const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
+
+    void (async () => {
+      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs);
+
+      if (!canCommitBotVote({
+        phase: lobby.phase,
+        currentMeeting: lobby.meeting,
+        requestedMeeting: meeting,
+        votingOpen: meeting.votingOpen,
+        alive: self.alive,
+        hasVoted: meeting.votes.has(self.slot),
+      })) return;
+
+      const parsed = response === null
+        ? null
+        : parsePublicBotVoteResponse(response, self.slot, publicRoster);
+      const candidate = parsed === null ? fallback : parsed;
+      const target = candidate === NO_TARGET ? undefined : lobby.players.get(candidate);
+      // The model sees no roles. The authoritative server enforces role rules:
+      // impostors cannot vote for an impostor ally; nobody can vote for self/dead.
+      const legal = candidate === NO_TARGET ||
+        (!!target && target.alive && target.slot !== self.slot &&
+          (self.role !== 'impostor' || target.role !== 'impostor'));
+      manager.castVote(lobby, self.slot, legal ? candidate : fallback);
+    })().catch(() => {
+      if (canCommitBotVote({
+        phase: lobby.phase,
+        currentMeeting: lobby.meeting,
+        requestedMeeting: meeting,
+        votingOpen: meeting.votingOpen,
+        alive: self.alive,
+        hasVoted: meeting.votes.has(self.slot),
+      })) manager.castVote(lobby, self.slot, fallback);
+    }).finally(() => {
+      // A request from an older meeting must not clear the pending state of a
+      // newer meeting that started while the provider call was still in flight.
+      if (this.voteRequestMeeting === meeting) this.voteRequestPending = false;
+    });
   }
 
   /**
@@ -291,7 +381,7 @@ export abstract class BotAgent {
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
-        }));
+        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
       manager.sendMeetingChat(lobby, self.slot, reply ?? fallback);
@@ -300,8 +390,12 @@ export abstract class BotAgent {
         manager.sendMeetingChat(lobby, self.slot, fallback);
       }
     }).finally(() => {
-      this.discussionRequestPending = false;
-      this.nextDiscussionChatAtMs = Date.now() + 1000 + (self.slot % 4) * 300;
+      // Do not let a stale meeting request mutate the scheduling state of the
+      // next meeting after a fast meeting rollover.
+      if (this.discussionMeeting === meeting) {
+        this.discussionRequestPending = false;
+        this.nextDiscussionChatAtMs = Date.now() + 1000 + (self.slot % 4) * 300;
+      }
     });
   }
 
