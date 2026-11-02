@@ -963,8 +963,14 @@ try {
   const layoutSettings = page.locator('[role="dialog"]');
   await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
   const preview = layoutSettings.getByTestId('control-layout-preview');
-  const previewBox = await preview.boundingBox();
   const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
+  // The AI settings section now appears before the draggable-control editor.
+  // Bring the selected preview and handle into the scrollable dialog viewport
+  // before deriving touch coordinates; otherwise CDP touch events can target
+  // the clipped/off-screen preview rather than the actual drag handle.
+  await preview.scrollIntoViewIfNeeded();
+  await dragHandle.scrollIntoViewIfNeeded();
+  const previewBox = await preview.boundingBox();
   const dragBox = await dragHandle.boundingBox();
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
   const fixedHudLegend = layoutSettings.getByTestId('control-layout-fixed-hud');
