@@ -264,7 +264,7 @@ export abstract class BotAgent {
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
 
     void (async () => {
-      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs, { temperature: 0.1 });
+      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs, { temperature: 0.2, jsonMode: true });
 
       if (!canCommitBotVote({
         phase: lobby.phase,
