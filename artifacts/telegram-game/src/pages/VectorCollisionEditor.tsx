@@ -354,7 +354,16 @@ export default function VectorCollisionEditor() {
     event.currentTarget.setPointerCapture(event.pointerId);
     const position = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, position);
-    if (pointersRef.current.size >= 2 && tool === "pan") {
+    if (pointersRef.current.size === 2) {
+      // A second finger always takes over as a viewport gesture, regardless
+      // of the selected drawing/editing tool. Cancel a wall/vertex drag rather
+      // than allowing the second pointer-up to commit an accidental shape.
+      if (gestureRef.current?.kind === "vertex") {
+        historyRef.current.commit(docRef.current);
+        setSaved(false);
+      }
+      gestureRef.current = null;
+      setPreviewPoint(null);
       const values = Array.from(pointersRef.current.values());
       const rect = event.currentTarget.getBoundingClientRect();
       const center: Point = [
@@ -368,10 +377,9 @@ export default function VectorCollisionEditor() {
         zoom: camera.zoom,
         world: [camera.x + center[0] / camera.zoom, camera.y + center[1] / camera.zoom],
       };
-      gestureRef.current = null;
       return;
     }
-    if (pointersRef.current.size > 1) return;
+    if (pointersRef.current.size > 2) return;
 
     const point = worldPoint(event);
     if (tool === "walk") {
