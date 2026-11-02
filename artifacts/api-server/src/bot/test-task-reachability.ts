@@ -46,8 +46,9 @@ const results = TASK_DEFS.map(task => {
 
 for (const result of results) {
   console.log(`taskReachability ${JSON.stringify(result)}`);
-  assert.ok(result.reachable && result.visible,
-    `task ${result.id} (${result.name}) must have a spawn-reachable, LOS-clear interaction point`);
 }
+const unreachable = results.filter(result => !result.reachable || !result.visible);
+assert.equal(unreachable.length, 0,
+  `tasks without a spawn-reachable, LOS-clear interaction point: ${unreachable.map(task => `${task.id}:${task.name}`).join(', ')}`);
 
 console.log(`PASS: all ${results.length} task definitions have a reachable, visible approach point`);
