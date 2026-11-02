@@ -818,6 +818,9 @@ export default function GameMap() {
   // and hides itself after 3.2s regardless of state) so it can be screenshotted.
   const mockQuery = new URLSearchParams(window.location.search);
   const isMockReveal = import.meta.env.DEV && mockQuery.get('mock')?.startsWith('reveal-');
+  // Opt-in animation for visual QA while the mock reveal remains mounted.
+  // The default mock still disables animation for deterministic still captures.
+  const animateMockReveal = isMockReveal && mockQuery.get('animateReveal') === 'true';
   // Visual fixtures can skip the role overlay so screenshots of later events
   // (e.g. a kill sequence) do not get obscured by an unrelated opening screen.
   const skipMockReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
@@ -3130,7 +3133,7 @@ export default function GameMap() {
                   <div
                     className="ag-role-reveal-character"
                     data-testid="role-reveal-character"
-                    style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}
+                    style={{ animation: isMockReveal && !animateMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}
                   >
                     <CharSpriteUI
                       color={isImp ? 'maroon' : 'teal'}
@@ -3148,7 +3151,7 @@ export default function GameMap() {
                       background: 'rgba(0, 0, 0, 0.85)',
                       boxShadow: '0 0 8px rgba(0, 0, 0, 0.35)',
                       filter: 'blur(2.5px)',
-                      animation: isMockReveal ? 'none' : 'rrShadowPulse 1.2s ease-in-out infinite',
+                      animation: isMockReveal && !animateMockReveal ? 'none' : 'rrShadowPulse 1.2s ease-in-out infinite',
                     }}
                   />
                 </div>
