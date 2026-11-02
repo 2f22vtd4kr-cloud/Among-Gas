@@ -505,7 +505,8 @@ try {
   await emergencyButton.click();
   const emergencySplash = page.getByTestId('emergency-call-splash');
   await emergencySplash.waitFor({ state: 'visible' });
-  assert.match(await emergencySplash.innerText(), /Emergency call|Экстренный вызов/i);
+  assert.match(await emergencySplash.getByTestId('emergency-call-status').innerText(),
+    /Waiting for server confirmation|Ожидаем подтверждение сервера/i);
   assert.equal(await emergencySplash.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(4, 10, 17)',
     'Emergency splash must fully obscure gameplay controls and text beneath it');
   await page.screenshot({ path: join(visualQaDir, 'emergency-call-splash.png'), fullPage: true });
