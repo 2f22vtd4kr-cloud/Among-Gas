@@ -5,6 +5,7 @@ import {
   History,
   CollisionWorld,
   snapPoint,
+  simplifyRDP,
   validateCollisionDocument,
   type CollisionDocument,
   type CollisionShape,
@@ -16,7 +17,7 @@ type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
   | { kind: "pan"; x: number; y: number }
-  | { kind: "wall"; start: Point }
+  | { kind: "wall"; points: Point[] }
   | { kind: "solid"; point: Point; close: boolean }
   | { kind: "erase"; point: Point }
   | { kind: "walk"; point: Point }
@@ -80,12 +81,14 @@ export default function VectorCollisionEditor() {
   const [tool, setTool] = useState<Tool>("pan");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftPoints, setDraftPoints] = useState<Point[]>([]);
+  const [activeChain, setActiveChain] = useState<Point[]>([]);
+  const [draftWallPoints, setDraftWallPoints] = useState<Point[]>([]);
   const [previewPoint, setPreviewPoint] = useState<Point | null>(null);
   const [zoomDisplay, setZoomDisplay] = useState(0.2);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [localDraft, setLocalDraft] = useState<{ document: EditableDocument; draftPoints: Point[] } | null>(null);
+  const [localDraft, setLocalDraft] = useState<{ document: EditableDocument; draftPoints: Point[]; activeChain: Point[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
@@ -159,6 +162,39 @@ export default function VectorCollisionEditor() {
       }
     }
 
+    if (activeChain.length) {
+      context.beginPath();
+      activeChain.forEach((point, index) => {
+        if (index === 0) context.moveTo(point[0], point[1]);
+        else context.lineTo(point[0], point[1]);
+      });
+      context.strokeStyle = "#55d9ff";
+      context.lineWidth = 3 / camera.zoom;
+      context.setLineDash([7 / camera.zoom, 5 / camera.zoom]);
+      context.lineJoin = "round";
+      context.lineCap = "round";
+      context.stroke();
+      context.setLineDash([]);
+      context.fillStyle = "#8be5ff";
+      activeChain.forEach(point => {
+        context.beginPath();
+        context.arc(point[0], point[1], 5 / camera.zoom, 0, Math.PI * 2);
+        context.fill();
+      });
+    }
+    if (draftWallPoints.length) {
+      context.beginPath();
+      draftWallPoints.forEach((point, index) => {
+        if (index === 0) context.moveTo(point[0], point[1]);
+        else context.lineTo(point[0], point[1]);
+      });
+      context.strokeStyle = "#ffe079";
+      context.lineWidth = 3 / camera.zoom;
+      context.lineJoin = "round";
+      context.lineCap = "round";
+      context.stroke();
+    }
+
     if (draftPoints.length) {
       context.beginPath();
       draftPoints.forEach((point, index) => {
@@ -209,7 +245,7 @@ export default function VectorCollisionEditor() {
       16,
       rect.height - 17,
     );
-  }, [document, selectedId, draftPoints, previewPoint, walkPoints]);
+  }, [document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
 
   useEffect(() => { drawRef.current = draw; }, [draw]);
 
@@ -251,20 +287,23 @@ export default function VectorCollisionEditor() {
         try {
           const rawDraft = window.localStorage.getItem(LOCAL_DRAFT_KEY);
           if (rawDraft) {
-            const parsed = JSON.parse(rawDraft) as { document?: unknown; draftPoints?: unknown };
+            const parsed = JSON.parse(rawDraft) as { document?: unknown; draftPoints?: unknown; activeChain?: unknown };
             if (parsed.document) {
               const draftErrors = validateCollisionDocument(parsed.document);
               if (!draftErrors.length) {
                 const draft = cloneDocument(parsed.document as CollisionDocument);
-                const candidatePoints = Array.isArray(parsed.draftPoints) ? parsed.draftPoints : [];
-                const validDraftPoints = candidatePoints.filter((point): point is Point =>
+                const isValidPoint = (point: unknown): point is Point =>
                   Array.isArray(point) && point.length === 2 &&
                   Number.isFinite(point[0]) && Number.isFinite(point[1]) &&
-                  point[0] >= 0 && point[0] <= MAP_W && point[1] >= 0 && point[1] <= MAP_H,
-                );
+                  point[0] >= 0 && point[0] <= MAP_W && point[1] >= 0 && point[1] <= MAP_H;
+                const candidatePoints = Array.isArray(parsed.draftPoints) ? parsed.draftPoints : [];
+                const candidateChain = Array.isArray(parsed.activeChain) ? parsed.activeChain : [];
+                const validDraftPoints = candidatePoints.filter(isValidPoint);
+                const validActiveChain = candidateChain.filter(isValidPoint);
                 if (draft.mapW === MAP_W && draft.mapH === MAP_H &&
-                    (JSON.stringify(draft) !== JSON.stringify(next) || validDraftPoints.length > 0)) {
-                  setLocalDraft({ document: draft, draftPoints: validDraftPoints });
+                    (JSON.stringify(draft) !== JSON.stringify(next) ||
+                     validDraftPoints.length > 0 || validActiveChain.length > 0)) {
+                  setLocalDraft({ document: draft, draftPoints: validDraftPoints, activeChain: validActiveChain });
                 }
               }
             }
@@ -323,22 +362,27 @@ export default function VectorCollisionEditor() {
   useEffect(() => {
     if (!dirty || !loaded) return;
     try {
-      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), document, draftPoints }));
+      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), document, draftPoints, activeChain }));
     } catch {
       setStatus("Local autosave unavailable; use Export JSON before leaving this workspace.");
     }
-  }, [document, draftPoints, dirty, loaded]);
+  }, [document, draftPoints, activeChain, dirty, loaded]);
 
-  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints]);
+  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
 
-  const worldPoint = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
-    const rect = event.currentTarget.getBoundingClientRect();
+  const worldPointAt = (clientX: number, clientY: number): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return [0, 0];
+    const rect = canvas.getBoundingClientRect();
     const camera = cameraRef.current;
     return [
-      camera.x + (event.clientX - rect.left) / camera.zoom,
-      camera.y + (event.clientY - rect.top) / camera.zoom,
+      Math.max(0, Math.min(MAP_W, camera.x + (clientX - rect.left) / camera.zoom)),
+      Math.max(0, Math.min(MAP_H, camera.y + (clientY - rect.top) / camera.zoom)),
     ];
   };
+
+  const worldPoint = (event: ReactPointerEvent<HTMLCanvasElement>): Point =>
+    worldPointAt(event.clientX, event.clientY);
 
   const nearestShape = (point: Point, maxDistance: number): CollisionShape | undefined => {
     let best: CollisionShape | undefined;
@@ -392,6 +436,36 @@ export default function VectorCollisionEditor() {
     });
   };
 
+  const finishActiveChain = () => {
+    if (activeChain.length < 2) return;
+    const points = simplifyRDP(activeChain, 1.25 / cameraRef.current.zoom);
+    if (points.length < 2) return;
+    addShape({
+      id: newShapeId("wall"),
+      points,
+      closed: false,
+      blocksMove,
+      blocksSight,
+      label: shapeLabel.trim() || "Wall chain",
+      zone,
+    });
+    setActiveChain([]);
+    setDraftWallPoints([]);
+    setStatus("Wall chain committed to the candidate document. Live gameplay is unchanged.");
+  };
+
+  const jumpToChainEnd = () => {
+    const end = activeChain[activeChain.length - 1];
+    const canvas = canvasRef.current;
+    if (!end || !canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const camera = cameraRef.current;
+    camera.x = Math.max(0, Math.min(MAP_W - rect.width / camera.zoom, end[0] - rect.width / (2 * camera.zoom)));
+    camera.y = Math.max(0, Math.min(MAP_H - rect.height / camera.zoom, end[1] - rect.height / (2 * camera.zoom)));
+    scheduleDraw();
+    setStatus("Camera moved to the active wall-chain endpoint.");
+  };
+
   const onPointerDown = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     event.currentTarget.setPointerCapture(event.pointerId);
     const position = { x: event.clientX, y: event.clientY };
@@ -406,6 +480,7 @@ export default function VectorCollisionEditor() {
       }
       gestureRef.current = null;
       setPreviewPoint(null);
+      setDraftWallPoints([]);
       const values = Array.from(pointersRef.current.values());
       const rect = event.currentTarget.getBoundingClientRect();
       const center: Point = [
@@ -433,8 +508,22 @@ export default function VectorCollisionEditor() {
       return;
     }
     if (tool === "wall") {
-      gestureRef.current = { kind: "wall", start: point };
-      setPreviewPoint(point);
+      let start = point;
+      const camera = cameraRef.current;
+      if (activeChain.length) {
+        const end = activeChain[activeChain.length - 1];
+        if (Math.hypot(point[0] - end[0], point[1] - end[1]) > 24 / camera.zoom) {
+          setStatus("Active chain is open. Use Jump to end to continue, or Finish chain to commit it.");
+          return;
+        }
+        start = end;
+      } else {
+        const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+        if (snapped.kind !== "none") start = snapped.point;
+      }
+      gestureRef.current = { kind: "wall", points: [start] };
+      setDraftWallPoints([start]);
+      setPreviewPoint(start);
       return;
     }
     if (tool === "solid") {
@@ -506,7 +595,27 @@ export default function VectorCollisionEditor() {
       return;
     }
     if (gesture.kind === "wall") {
-      setPreviewPoint(worldPoint(event));
+      const nativeEvent = event.nativeEvent as PointerEvent;
+      let samples: PointerEvent[] = [nativeEvent];
+      try {
+        const coalesced = nativeEvent.getCoalescedEvents?.();
+        if (coalesced && coalesced.length) samples = coalesced;
+      } catch {
+        // Older mobile browsers may not expose coalesced pointer samples.
+      }
+      const nextPoints = [...gesture.points];
+      const minDistance = 1.25 / cameraRef.current.zoom;
+      for (const sample of samples) {
+        if (nextPoints.length >= 4096) break;
+        const candidate = worldPointAt(sample.clientX, sample.clientY);
+        const last = nextPoints[nextPoints.length - 1];
+        if (Math.hypot(candidate[0] - last[0], candidate[1] - last[1]) >= minDistance) {
+          nextPoints.push(candidate);
+        }
+      }
+      gestureRef.current = { kind: "wall", points: nextPoints };
+      setDraftWallPoints(nextPoints);
+      setPreviewPoint(nextPoints[nextPoints.length - 1] ?? null);
       return;
     }
     if (gesture.kind === "vertex") {
@@ -548,19 +657,24 @@ export default function VectorCollisionEditor() {
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
     const gesture = gestureRef.current;
     if (gesture?.kind === "wall") {
+      const points = [...gesture.points];
       const end = worldPoint(event);
-      if (Math.hypot(end[0] - gesture.start[0], end[1] - gesture.start[1]) >= 8) {
-        const points = [gesture.start, end];
-        addShape({
-          id: newShapeId("wall"),
-          points,
-          closed: false,
-          blocksMove,
-          blocksSight,
-          label: shapeLabel.trim() || "Wall",
-          zone,
-        });
+      const last = points[points.length - 1];
+      if (last && Math.hypot(end[0] - last[0], end[1] - last[1]) >= 0.5 / cameraRef.current.zoom) {
+        points.push(end);
       }
+      const simplified = simplifyRDP(points, 1.25 / cameraRef.current.zoom);
+      if (simplified.length >= 2) {
+        const nextChain = activeChain.length
+          ? [...activeChain, ...simplified.slice(1)]
+          : simplified;
+        setActiveChain(nextChain);
+        setSaved(false);
+        setDirty(true);
+        setLocalDraft(null);
+        setStatus("Active wall chain: " + nextChain.length + " points. Continue from its endpoint or Finish chain.");
+      }
+      setDraftWallPoints([]);
     } else if (gesture?.kind === "solid") {
       if (gesture.close) {
         finishPolygon();
@@ -713,6 +827,7 @@ export default function VectorCollisionEditor() {
     if (!localDraft) return;
     replaceDocument(localDraft.document);
     setDraftPoints(localDraft.draftPoints);
+    setActiveChain(localDraft.activeChain);
     setLocalDraft(null);
     setStatus("Local draft restored. Review it before saving; it is not live gameplay geometry.");
   };
@@ -741,6 +856,8 @@ export default function VectorCollisionEditor() {
       replaceDocument(next);
       setSelectedId(null);
       setDraftPoints([]);
+      setActiveChain([]);
+      setDraftWallPoints([]);
       setStatus("Imported as an unsaved candidate. Review the contours before saving.");
     } catch (error) {
       setStatus("Import rejected: " + (error instanceof Error ? error.message : String(error)));
@@ -784,6 +901,8 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(0.8)}>−</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
+        <button type="button" style={buttonStyle(activeChain.length > 0)} onClick={jumpToChainEnd} disabled={!activeChain.length}>Jump to end</button>
+        <button type="button" style={buttonStyle(activeChain.length > 1)} onClick={finishActiveChain} disabled={activeChain.length < 2}>Finish chain</button>
         {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
       </nav>
@@ -810,7 +929,7 @@ export default function VectorCollisionEditor() {
         <label style={{ ...buttonStyle(), display: "inline-flex", alignItems: "center" }}>
           Import JSON<input type="file" accept="application/json,.json" onChange={importDocument} style={{ display: "none" }} />
         </label>
-        <button type="button" style={{ ...buttonStyle(), background: "#4b432a", borderColor: "#e2bd6a" }} onClick={() => void save()} disabled={saving || !document.shapes.length}>
+        <button type="button" style={{ ...buttonStyle(), background: "#4b432a", borderColor: "#e2bd6a" }} onClick={() => void save()} disabled={saving || !document.shapes.length || activeChain.length > 1}>
           {saving ? "Saving…" : saved ? "Saved ✓" : "Save candidate"}
         </button>
       </section>
@@ -823,6 +942,8 @@ export default function VectorCollisionEditor() {
           data-zoom={zoomDisplay}
           data-draft-point-count={draftPoints.length}
           data-walk-point-count={walkPoints.length}
+          data-active-chain-point-count={activeChain.length}
+          data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
