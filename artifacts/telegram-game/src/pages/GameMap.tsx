@@ -818,6 +818,10 @@ export default function GameMap() {
   // and hides itself after 3.2s regardless of state) so it can be screenshotted.
   const mockQuery = new URLSearchParams(window.location.search);
   const isMockReveal = import.meta.env.DEV && mockQuery.get('mock')?.startsWith('reveal-');
+  // Browser QA can hold the timed reveal while the loading/asset checks finish.
+  // This is separate from isMockReveal so the character/shadow animations still run.
+  const holdRoleRevealForQa = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+    && mockQuery.get('holdReveal') === 'true';
   // Visual fixtures can skip the role overlay so screenshots of later events
   // (e.g. a kill sequence) do not get obscured by an unrelated opening screen.
   const skipMockReveal = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
@@ -833,10 +837,10 @@ export default function GameMap() {
     }
     setShowReveal(true);
     sfx('roundStart', 0.75);
-    if (isMockReveal) return;
+    if (isMockReveal || holdRoleRevealForQa) return;
     const timer = setTimeout(() => setShowReveal(false), 3200);
     return () => clearTimeout(timer);
-  }, [myRole, isMockReveal, skipMockReveal]);
+  }, [myRole, isMockReveal, skipMockReveal, holdRoleRevealForQa]);
 
   // ── Sound effects for game-over and meeting ───────────────────────────────
   useEffect(() => {
