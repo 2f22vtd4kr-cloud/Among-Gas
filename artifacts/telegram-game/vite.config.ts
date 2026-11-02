@@ -69,10 +69,14 @@ function vectorCollisionEditorApiPlugin(): Plugin {
           res.end(JSON.stringify(payload));
         };
 
-        const filePath = path.resolve(
-          import.meta.dirname,
-          '../../lib/shared/src/collision/collision.v1.json',
-        );
+        // CI injects a disposable path so the dev API can be tested without
+        // leaving generated candidate geometry in the production source tree.
+        const filePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
+          ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
+          : path.resolve(
+              import.meta.dirname,
+              '../../lib/shared/src/collision/collision.v1.json',
+            );
 
         if (req.method === 'GET') {
           try {
