@@ -60,9 +60,28 @@ try {
   const request = captured[0];
   assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal((request.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
-  assert.equal(JSON.parse(String(request.init?.body)).model, 'llama-3.3-70b-versatile');
-  assert.equal(JSON.parse(String(request.init?.body)).temperature, 0.82,
-    'natural dialogue retains the original default temperature');
+  assert.equal(JSON.parse(String(request.init?.body)).model, 'openai/gpt-oss-120b');
+  assert.equal(JSON.parse(String(request.init?.body)).temperature, 0.65,
+    'natural dialogue uses the tuned GPT-OSS default temperature');
+  const structuredKey = 'gsk_' + 'F'.repeat(48);
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    captured.push({ url: String(input), init });
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: '{"taskId":3}' } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+  const structuredReply = await requestGroqDialogue(structuredKey, [], undefined, {
+    temperature: 0.2,
+    jsonMode: true,
+  });
+  assert.equal(structuredReply, '{"taskId":3}');
+  const structuredBody = JSON.parse(String(captured[1].init?.body));
+  assert.deepEqual(structuredBody.response_format, { type: 'json_object' },
+    'machine decisions use provider-enforced JSON object mode');
+  assert.equal(structuredBody.reasoning_effort, 'low');
+  assert.equal(structuredBody.include_reasoning, false);
+  assert.equal(structuredBody.max_completion_tokens, 256);
+
   // A lobby key may be shared by several bots. Same-key calls must serialize
   // in FIFO order instead of returning null to contenders, and respect the
   // provider cooldown between request starts.
