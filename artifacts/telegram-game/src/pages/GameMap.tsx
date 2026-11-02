@@ -2745,7 +2745,7 @@ export default function GameMap() {
             position: 'fixed', inset: 0, zIndex: 120,
             display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
             gap: 16, padding: 24, textAlign: 'center',
-            background: 'rgba(4, 10, 17, 0.94)',
+            background: '#040a11',
             color: '#fff4df', fontFamily: "'Fredoka One', sans-serif",
           }}
         >
