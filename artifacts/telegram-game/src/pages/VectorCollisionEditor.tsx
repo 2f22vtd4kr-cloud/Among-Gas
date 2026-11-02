@@ -236,7 +236,7 @@ export default function VectorCollisionEditor() {
         if (errors.length) throw new Error(errors.join("; "));
         const next = cloneDocument(result.document);
         docRef.current = next;
-        historyRef.current = new History(next, cloneDocument, 200);
+        historyRef.current = new History<EditableDocument>(next, cloneDocument, 200);
         setDocument(next);
         setSaved(result.saved);
         setLoaded(true);
@@ -627,7 +627,7 @@ export default function VectorCollisionEditor() {
       });
       const result = await response.json().catch(() => ({})) as { error?: string };
       if (!response.ok) throw new Error(result.error || "Save rejected (" + response.status + ")");
-      historyRef.current = new History(docRef.current, cloneDocument, 200);
+      historyRef.current = new History<EditableDocument>(docRef.current, cloneDocument, 200);
       setSaved(true);
       setStatus("Candidate saved with a rotating backup. Live gameplay still uses the reviewed raster mask.");
     } catch (error) {
