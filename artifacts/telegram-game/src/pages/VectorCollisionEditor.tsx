@@ -377,17 +377,17 @@ export default function VectorCollisionEditor() {
     if (tool === "walk") {
       if (walkPoints.length !== 1) {
         setWalkPoints([point]);
-        setWalkStatus("Start selected. Tap a destination to trace a 12px circular candidate route.");
+        setWalkStatus("Start selected. Tap a destination to trace the production three-circle feet footprint.");
       } else {
         const start = walkPoints[0];
         try {
           const world = new CollisionWorld(docRef.current.shapes);
-          const end = world.move(start[0], start[1], point[0] - start[0], point[1] - start[1], 12);
+          const end = world.movePlayerAtFeet(start[0], start[1], point[0] - start[0], point[1] - start[1]);
           const remaining = Math.hypot(end[0] - point[0], end[1] - point[1]);
           setWalkPoints([start, point]);
           setWalkStatus(remaining <= 4
-            ? "PASS: the candidate 12px circle reached the destination."
-            : "BLOCKED / SLID: candidate stopped " + Math.round(remaining) + "px from the destination.");
+            ? "PASS: the shared three-circle player footprint reached the destination."
+            : "BLOCKED / SLID: player footprint stopped " + Math.round(remaining) + "px from the destination.");
         } catch (error) {
           setWalkStatus("Walk test failed: " + (error instanceof Error ? error.message : String(error)));
         }
