@@ -38,6 +38,9 @@ try {
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   await page.getByRole("button", { name: "Jump to end" }).click();
   await page.getByText(/Camera moved to the active wall-chain endpoint/).waitFor();
+  // A reload resets the editor tool to Pan / zoom; explicitly re-enter Draw wall
+  // before attempting to append to the restored chain.
+  await page.getByRole("button", { name: "Draw wall" }).click();
 
   // Jump to end centers the chain endpoint under the canvas; continue from there.
   bounds = await canvas.boundingBox();
