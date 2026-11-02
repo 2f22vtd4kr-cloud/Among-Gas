@@ -39,6 +39,8 @@ try {
   assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal((request.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
   assert.equal(JSON.parse(String(request.init?.body)).model, 'llama-3.3-70b-versatile');
+  assert.equal(JSON.parse(String(request.init?.body)).temperature, 0.82,
+    'natural dialogue retains the original default temperature');
   // A lobby key may be shared by several bots. Same-key calls must serialize
   // in FIFO order instead of returning null to contenders, and respect the
   // provider cooldown between request starts.
