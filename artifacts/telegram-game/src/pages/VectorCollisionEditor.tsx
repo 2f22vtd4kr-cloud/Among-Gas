@@ -82,7 +82,7 @@ export default function VectorCollisionEditor() {
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
-  const [localDraft, setLocalDraft] = useState<EditableDocument | null>(null);
+  const [localDraft, setLocalDraft] = useState<{ document: EditableDocument; draftPoints: Point[] } | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
@@ -248,13 +248,21 @@ export default function VectorCollisionEditor() {
         try {
           const rawDraft = window.localStorage.getItem(LOCAL_DRAFT_KEY);
           if (rawDraft) {
-            const parsed = JSON.parse(rawDraft) as { document?: unknown };
+            const parsed = JSON.parse(rawDraft) as { document?: unknown; draftPoints?: unknown };
             if (parsed.document) {
               const draftErrors = validateCollisionDocument(parsed.document);
               if (!draftErrors.length) {
                 const draft = cloneDocument(parsed.document as CollisionDocument);
+                const candidatePoints = Array.isArray(parsed.draftPoints) ? parsed.draftPoints : [];
+                const validDraftPoints = candidatePoints.filter((point): point is Point =>
+                  Array.isArray(point) && point.length === 2 &&
+                  Number.isFinite(point[0]) && Number.isFinite(point[1]) &&
+                  point[0] >= 0 && point[0] <= MAP_W && point[1] >= 0 && point[1] <= MAP_H,
+                );
                 if (draft.mapW === MAP_W && draft.mapH === MAP_H &&
-                    JSON.stringify(draft) !== JSON.stringify(next)) setLocalDraft(draft);
+                    (JSON.stringify(draft) !== JSON.stringify(next) || validDraftPoints.length > 0)) {
+                  setLocalDraft({ document: draft, draftPoints: validDraftPoints });
+                }
               }
             }
           }
@@ -312,11 +320,11 @@ export default function VectorCollisionEditor() {
   useEffect(() => {
     if (!dirty || !loaded) return;
     try {
-      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), document }));
+      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), document, draftPoints }));
     } catch {
       setStatus("Local autosave unavailable; use Export JSON before leaving this workspace.");
     }
-  }, [document, dirty, loaded]);
+  }, [document, draftPoints, dirty, loaded]);
 
   useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints]);
 
@@ -452,6 +460,9 @@ export default function VectorCollisionEditor() {
       const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
       setDraftPoints(previous => [...previous, nextPoint]);
+      setSaved(false);
+      setDirty(true);
+      setLocalDraft(null);
       setPreviewPoint(nextPoint);
       return;
     }
@@ -689,7 +700,8 @@ export default function VectorCollisionEditor() {
 
   const restoreLocalDraft = () => {
     if (!localDraft) return;
-    replaceDocument(localDraft);
+    replaceDocument(localDraft.document);
+    setDraftPoints(localDraft.draftPoints);
     setLocalDraft(null);
     setStatus("Local draft restored. Review it before saving; it is not live gameplay geometry.");
   };
@@ -756,7 +768,7 @@ export default function VectorCollisionEditor() {
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
         <button type="button" style={buttonStyle()} onClick={redo} disabled={!historyRef.current.canRedo}>Redo</button>
-        <button type="button" style={buttonStyle()} onClick={() => setDraftPoints([])} disabled={!draftPoints.length}>Cancel polygon</button>
+        <button type="button" style={buttonStyle()} onClick={() => { setDraftPoints([]); setDirty(true); setSaved(false); }} disabled={!draftPoints.length}>Cancel polygon</button>
         <button type="button" style={buttonStyle()} onClick={finishPolygon} disabled={draftPoints.length < 3}>Close polygon</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(0.8)}>−</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
