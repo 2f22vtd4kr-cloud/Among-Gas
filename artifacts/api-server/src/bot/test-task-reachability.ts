@@ -10,8 +10,10 @@ import {
   isBotNavigationReachable,
   NO_TARGET,
 } from './BotAgent.js';
+import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX, type TaskDef } from '@workspace/shared/tasks';
+import type { Point } from '@workspace/shared';
 
 class TaskReachabilityProbe extends BotAgent {
   roamingTick(_lobby: Lobby, _self: LobbyPlayer, _manager: LobbyManager): void {}
@@ -23,6 +25,10 @@ class TaskReachabilityProbe extends BotAgent {
       TASK_INTERACTION_RANGE_PX - 8,
       task.interactionTargetRadiusPx ?? 24,
     );
+  }
+
+  moveTo(player: LobbyPlayer, goal: Point): boolean {
+    return this.navigateTo(player, goal, 8);
   }
 }
 
