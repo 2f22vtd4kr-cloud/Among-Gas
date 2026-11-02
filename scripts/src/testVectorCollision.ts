@@ -100,6 +100,14 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(playerFootprint.isWalkable(105, 100, 4), true, "center circle alone is clear");
   assert.equal(playerFootprint.isPlayerWalkableAtFeet(105, 100), false, "side foot circle must preserve the current wider feet footprint");
   assert.deepEqual(playerFootprint.movePlayerAtFeet(110, 100, -10, 0), [110, 100], "player feet footprint must not clip the nearby wall");
+  const corridor = new CollisionWorld([
+    shape("corridor-lower", [[0, 100], [200, 100]], false, true, false),
+    shape("corridor-upper", [[0, 115], [200, 115]], false, true, false),
+  ], 200, 200);
+  assert.equal(corridor.isPlayerWalkableAtFeet(55, 105), true, "three-circle footprint fits the 15px corridor");
+  assert.equal(corridor.isWalkable(55, 105, 12), false, "12px circular proxy is too conservative for this corridor");
+  const playerNav = corridor.rasterizePlayerNav(10);
+  assert.equal(playerNav.walk[10 * playerNav.cols + 5], 1, "bot nav raster must use the production three-circle footprint");
   const bounds = new CollisionWorld([], 200, 200);
   const [boundedX, boundedY] = bounds.move(20, 20, -100, -100, 12);
   assert.ok(boundedX >= 12 && boundedY >= 12, "player footprint must remain inside map edges");
