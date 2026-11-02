@@ -7,7 +7,7 @@ function sanitizePromptLabel(value: string): string {
       return code >= 0x20 && code !== 0x7f;
     })
     .join('')
-    .slice(0, 32);
+    .slice(0, 32).trim();
 }
 
 export interface VisiblePlayerSource {
@@ -85,7 +85,7 @@ export function buildCrewTaskPlanningMessages(input: {
     {
       role: 'user',
       content: JSON.stringify({
-        actingPlayer: input.username,
+        actingPlayer: sanitizePromptLabel(input.username),
         role: 'crewmate',
         availableAssignedTasks: input.availableTasks,
         currentlyVisiblePlayers: input.nearbyPlayers,
