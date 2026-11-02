@@ -334,7 +334,7 @@ export class CollisionWorld {
   move(x: number, y: number, dx: number, dy: number, radius: number): [number, number] {
     if (![x, y, dx, dy, radius].every(Number.isFinite) || radius < 0 ||
         !this.isWalkable(x, y, radius)) return [x, y];
-    const length = Math.hypot(dx, dy);
+    const length = magnitude(dx, dy);
     if (length < EPS) return [x, y];
     const stepLength = Math.max(1, Math.min(4, radius * 0.5 || 1));
     const steps = Math.ceil(length / stepLength);
