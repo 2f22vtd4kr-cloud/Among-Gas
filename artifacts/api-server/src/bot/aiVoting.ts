@@ -75,6 +75,10 @@ export function parsePublicBotVoteResponse(
     return null;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  // Reject ambiguous/extended payloads rather than silently accepting a
+  // second instruction alongside the one authoritative vote field.
+  const keys = Object.keys(parsed);
+  if (keys.length !== 1 || keys[0] !== 'vote') return null;
   const vote = (parsed as { vote?: unknown }).vote;
   if (vote === null) return NO_TARGET;
   if (typeof vote !== 'number' || !Number.isInteger(vote) || vote === selfSlot) return null;
