@@ -73,6 +73,6 @@ export type { AdminTableDef } from './adminTable.js';
 
 // Vector geometry foundation (not yet the production map source).
 export { CollisionWorld, segmentsIntersect, validateCollisionDocument } from './collision/index.js';
-export type { Point, CollisionShape, CollisionDocument } from './collision/index.js';
+export type { Point as CollisionPoint, CollisionShape, CollisionDocument } from './collision/index.js';
 export { History, simplifyRDP, snapPoint, shouldCloseLoop } from './collision/index.js';
 export type { SnapResult } from './collision/index.js';
