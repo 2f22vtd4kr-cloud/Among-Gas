@@ -81,8 +81,8 @@ try {
   await page.getByRole('dialog', { name: 'Настройки' }).waitFor({ state: 'visible' });
   const lobbySettings = page.locator('[role="dialog"]');
   await page.keyboard.press('Shift+Tab');
-  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'groq-api-key-clear',
-    'Settings must keep reverse keyboard navigation inside the modal including the optional Groq controls');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('data-testid')), 'control-layout-save',
+    'Settings must wrap reverse keyboard navigation to the final in-dialog control after the AI section');
   await page.keyboard.press('Tab');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Закрыть настройки',
     'Settings must wrap forward keyboard navigation back to its first focus target');
@@ -91,11 +91,18 @@ try {
   assert.equal(await lobbySettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'false');
   const settingsBounds = await lobbySettings.boundingBox();
   const settingsSave = lobbySettings.getByTestId('control-layout-save');
+  const aiKeyField = lobbySettings.getByTestId('groq-api-key');
+  const aiKeySave = lobbySettings.getByTestId('groq-api-key-save');
   const viewport = page.viewportSize();
   assert.ok(settingsBounds && viewport, 'Settings dialog must be measurable');
   assert.ok(settingsBounds.y >= 0 && settingsBounds.y + settingsBounds.height <= viewport.height,
     'Settings dialog must remain entirely inside the mobile viewport');
+  const aiKeyBounds = await aiKeyField.boundingBox();
+  const aiSaveBounds = await aiKeySave.boundingBox();
+  assert.ok(aiKeyBounds && aiSaveBounds && aiKeyBounds.y >= 0 && aiSaveBounds.y + aiSaveBounds.height <= viewport.height,
+    'Optional bot AI configuration and its save action must be visible without scrolling the Settings dialog');
   await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
+  await page.screenshot({ path: join(visualQaDir, 'settings-ai-visible.png'), fullPage: true });
   await settingsSave.scrollIntoViewIfNeeded();
   const saveBounds = await settingsSave.boundingBox();
   assert.ok(saveBounds && saveBounds.y >= settingsBounds.y &&
@@ -499,6 +506,8 @@ try {
   const emergencySplash = page.getByTestId('emergency-call-splash');
   await emergencySplash.waitFor({ state: 'visible' });
   assert.match(await emergencySplash.innerText(), /Emergency call|Экстренный вызов/i);
+  assert.equal(await emergencySplash.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(4, 10, 17)',
+    'Emergency splash must fully obscure gameplay controls and text beneath it');
   await page.screenshot({ path: join(visualQaDir, 'emergency-call-splash.png'), fullPage: true });
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
@@ -954,8 +963,14 @@ try {
   const layoutSettings = page.locator('[role="dialog"]');
   await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
   const preview = layoutSettings.getByTestId('control-layout-preview');
-  const previewBox = await preview.boundingBox();
   const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
+  // The AI settings section now appears before the draggable-control editor.
+  // Bring the selected preview and handle into the scrollable dialog viewport
+  // before deriving touch coordinates; otherwise CDP touch events can target
+  // the clipped/off-screen preview rather than the actual drag handle.
+  await preview.scrollIntoViewIfNeeded();
+  await dragHandle.scrollIntoViewIfNeeded();
+  const previewBox = await preview.boundingBox();
   const dragBox = await dragHandle.boundingBox();
   assert.ok(previewBox && dragBox, 'drag editor and selected control are visible');
   const fixedHudLegend = layoutSettings.getByTestId('control-layout-fixed-hud');

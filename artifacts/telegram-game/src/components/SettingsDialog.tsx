@@ -358,6 +358,65 @@ export default function SettingsDialog({
           </div>
         </fieldset>
 
+        <div style={{ marginTop: 0, paddingTop: 14, borderTop: '1px solid rgba(170,200,208,.16)' }}>
+          <label htmlFor="ag-groq-api-key" style={{ display: 'block', marginBottom: 8, fontSize: 14, color: '#eaf4f5' }}>
+            {en ? 'Optional Groq AI for bots' : 'Groq AI для ботов (необязательно)'}
+          </label>
+          <input
+            id="ag-groq-api-key"
+            data-testid="groq-api-key"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={groqKeyDraft}
+            onChange={event => setGroqKeyDraft(event.target.value)}
+            placeholder="gsk_…"
+            maxLength={240}
+            style={{
+              width: '100%', minHeight: 44, boxSizing: 'border-box', padding: '10px 12px',
+              borderRadius: 10, border: '1px solid rgba(167,193,203,.28)',
+              background: 'rgba(3,10,17,.72)', color: '#f4ffff', fontFamily: 'monospace',
+            }}
+          />
+          <div style={{ marginTop: 7, fontFamily: 'system-ui, sans-serif', fontSize: 11, lineHeight: 1.45, color: 'rgba(226,238,241,.68)' }}>
+            {en
+              ? 'Sent directly to the game server over your authenticated connection. Kept in server memory for this lobby only; never stored in browser storage or sent to other players. Re-enter after a new session.'
+              : 'Передаётся серверу игры по защищённому соединению. Хранится только в памяти сервера для этой комнаты; не сохраняется в браузере и не передаётся другим игрокам. После нового сеанса введите снова.'}
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
+            <button
+              type="button"
+              data-testid="groq-api-key-save"
+              disabled={!/^gsk_[A-Za-z0-9_-]{20,240}$/.test(groqKeyDraft.trim())}
+              onClick={() => { onGroqApiKeyChange?.(groqKeyDraft.trim()); setGroqKeyDraft(''); }}
+              style={{
+                flex: 1, minHeight: 40, borderRadius: 9, border: '1px solid rgba(91,221,205,.8)',
+                background: 'linear-gradient(180deg, #208e83, #155c59)', color: '#f2fffd',
+                fontFamily: 'inherit', fontWeight: 800, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Use Groq key' : 'Подключить Groq'}
+            </button>
+            <button
+              type="button"
+              data-testid="groq-api-key-clear"
+              onClick={() => { setGroqKeyDraft(''); onGroqApiKeyChange?.(''); }}
+              style={{
+                minHeight: 40, padding: '0 12px', borderRadius: 9,
+                border: '1px solid rgba(255,145,145,.32)', background: 'rgba(105,24,36,.22)',
+                color: '#ffd9dc', fontFamily: 'inherit', fontWeight: 700, cursor: 'pointer',
+              }}
+            >
+              {en ? 'Clear' : 'Очистить'}
+            </button>
+          </div>
+          <div role="status" aria-live="polite" data-testid="groq-api-key-status" style={{ marginTop: 8, fontSize: 12, color: groqApiKeyConfigured ? '#80e3c1' : 'rgba(226,238,241,.55)' }}>
+            {groqApiKeyConfigured
+              ? (en ? 'Groq connected for this lobby' : 'Groq подключён для этой комнаты')
+              : (en ? 'No Groq key confirmed — bots use built-in AI' : 'Ключ Groq не подтверждён — используется встроенный ИИ')}
+          </div>
+        </div>
+
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend style={{ padding: 0, marginBottom: 9, color: 'rgba(226,239,241,.78)', fontSize: 14 }}>
             {en ? 'Movement joystick' : 'Джойстик движения'}
@@ -539,64 +598,7 @@ export default function SettingsDialog({
           </div>
         </fieldset>
 
-        <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(170,200,208,.16)' }}>
-          <label htmlFor="ag-groq-api-key" style={{ display: 'block', marginBottom: 8, fontSize: 14, color: '#eaf4f5' }}>
-            {en ? 'Optional Groq AI for bots' : 'Groq AI для ботов (необязательно)'}
-          </label>
-          <input
-            id="ag-groq-api-key"
-            data-testid="groq-api-key"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={groqKeyDraft}
-            onChange={event => setGroqKeyDraft(event.target.value)}
-            placeholder="gsk_…"
-            maxLength={240}
-            style={{
-              width: '100%', minHeight: 44, boxSizing: 'border-box', padding: '10px 12px',
-              borderRadius: 10, border: '1px solid rgba(167,193,203,.28)',
-              background: 'rgba(3,10,17,.72)', color: '#f4ffff', fontFamily: 'monospace',
-            }}
-          />
-          <div style={{ marginTop: 7, fontFamily: 'system-ui, sans-serif', fontSize: 11, lineHeight: 1.45, color: 'rgba(226,238,241,.68)' }}>
-            {en
-              ? 'Sent directly to the game server over your authenticated connection. Kept in server memory for this lobby only; never stored in browser storage or sent to other players. Re-enter after a new session.'
-              : 'Передаётся серверу игры по защищённому соединению. Хранится только в памяти сервера для этой комнаты; не сохраняется в браузере и не передаётся другим игрокам. После нового сеанса введите снова.'}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}>
-            <button
-              type="button"
-              data-testid="groq-api-key-save"
-              disabled={!/^gsk_[A-Za-z0-9_-]{20,240}$/.test(groqKeyDraft.trim())}
-              onClick={() => { onGroqApiKeyChange?.(groqKeyDraft.trim()); setGroqKeyDraft(''); }}
-              style={{
-                flex: 1, minHeight: 40, borderRadius: 9, border: '1px solid rgba(91,221,205,.8)',
-                background: 'linear-gradient(180deg, #208e83, #155c59)', color: '#f2fffd',
-                fontFamily: 'inherit', fontWeight: 800, cursor: 'pointer',
-              }}
-            >
-              {en ? 'Use Groq key' : 'Подключить Groq'}
-            </button>
-            <button
-              type="button"
-              data-testid="groq-api-key-clear"
-              onClick={() => { setGroqKeyDraft(''); onGroqApiKeyChange?.(''); }}
-              style={{
-                minHeight: 40, padding: '0 12px', borderRadius: 9,
-                border: '1px solid rgba(255,145,145,.32)', background: 'rgba(105,24,36,.22)',
-                color: '#ffd9dc', fontFamily: 'inherit', fontWeight: 700, cursor: 'pointer',
-              }}
-            >
-              {en ? 'Clear' : 'Очистить'}
-            </button>
-          </div>
-          <div role="status" aria-live="polite" data-testid="groq-api-key-status" style={{ marginTop: 8, fontSize: 12, color: groqApiKeyConfigured ? '#80e3c1' : 'rgba(226,238,241,.55)' }}>
-            {groqApiKeyConfigured
-              ? (en ? 'Groq connected for this lobby' : 'Groq подключён для этой комнаты')
-              : (en ? 'No Groq key confirmed — bots use built-in AI' : 'Ключ Groq не подтверждён — используется встроенный ИИ')}
-          </div>
-        </div>
+
 
         {showLeaveMatch && onLeaveMatch && (
           <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid rgba(170,200,208,.16)' }}>
