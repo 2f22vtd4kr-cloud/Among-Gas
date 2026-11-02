@@ -402,6 +402,25 @@ export class CollisionWorld {
     return { cols, rows, cell, walk };
   }
 
+  /** Rasterise the exact production three-circle feet footprint for bot/navigation consumers. */
+  rasterizePlayerNav(cell = 16): { cols: number; rows: number; cell: number; walk: Uint8Array } {
+    if (!Number.isFinite(cell) || cell < 2) {
+      throw new RangeError("navigation cell must be >=2px");
+    }
+    const cols = Math.ceil(this.w / cell);
+    const rows = Math.ceil(this.h / cell);
+    const walk = new Uint8Array(cols * rows);
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        walk[row * cols + col] = this.isPlayerWalkableAtFeet(
+          (col + 0.5) * cell,
+          (row + 0.5) * cell,
+        ) ? 1 : 0;
+      }
+    }
+    return { cols, rows, cell, walk };
+  }
+
   visibility(x: number, y: number, radius: number): Point[] {
     if (![x, y, radius].every(Number.isFinite) || radius <= 0 ||
         x < 0 || y < 0 || x > this.w || y > this.h ||
