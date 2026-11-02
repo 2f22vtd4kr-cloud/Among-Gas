@@ -58,3 +58,32 @@ assert.equal(unreachable.length, 0,
   `tasks without a spawn-reachable, LOS-clear interaction point: ${unreachable.map(task => `${task.id}:${task.name}`).join(', ')}`);
 
 console.log(`PASS: all ${results.length} task definitions have a reachable, visible approach point`);
+
+ 
+// Reproduce the only stuck-task state observed in seeded cohort 17001:
+// a live crewmate at (1656, 797) could not finish Empty Garbage (task 3).
+// Reachability from spawn alone is insufficient; exercise the production A*
+// path-following step from that exact in-game position as well.
+function assertRoute(start: Point, goal: Point, label: string): void {
+  const player = { x: start.x, y: start.y } as LobbyPlayer;
+  const routeProbe = new TaskReachabilityProbe();
+  let arrived = false;
+  let stalledTicks = 0;
+  for (let tick = 0; tick < 1_000; tick++) {
+    const beforeX = player.x;
+    const beforeY = player.y;
+    arrived = routeProbe.moveTo(player, goal);
+    if (arrived) break;
+    const moved = Math.hypot(player.x - beforeX, player.y - beforeY);
+    stalledTicks = moved < 0.01 ? stalledTicks + 1 : 0;
+    if (stalledTicks >= 20) break;
+  }
+  console.log(`taskRoute ${JSON.stringify({ label, start, goal, end: { x: player.x, y: player.y }, arrived, stalledTicks })}`);
+  assert.ok(arrived, `production bot path follower must reach ${label} from the observed start point`);
+}
+
+const emptyGarbage = TASK_DEFS.find(task => task.id === 3)!;
+const emptyGarbageApproach = probe.approach(emptyGarbage);
+assertRoute({ x: SPAWN_X, y: SPAWN_Y }, emptyGarbageApproach, 'Empty Garbage from spawn');
+assertRoute({ x: 1656, y: 797 }, emptyGarbageApproach, 'Empty Garbage from timeout position');
+
