@@ -739,6 +739,7 @@ export default function VectorCollisionEditor() {
           ref={canvasRef}
           data-editor-loaded={loaded ? "true" : "false"}
           data-shape-count={document.shapes.length}
+          data-zoom={zoomDisplay}
           onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
