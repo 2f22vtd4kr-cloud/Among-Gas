@@ -58,11 +58,11 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   ], 2000, 2000);
   const view = longWall.visibility(1000, 1000, 500);
   assert.ok(
-    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 500) < 1e-4),
+    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 700) < 1e-4),
     "visibility must include the upper circle-clipped endpoint of a long wall",
   );
   assert.ok(
-    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 1500) < 1e-4),
+    view.some(point => Math.abs(point[0] - 1400) < 1e-4 && Math.abs(point[1] - 1300) < 1e-4),
     "visibility must include the lower circle-clipped endpoint of a long wall",
   );
   assert.equal(contains([1450, 1000], view), false, "long wall must occlude points behind it");
