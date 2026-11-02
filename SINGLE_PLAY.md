@@ -187,3 +187,12 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 | Simulation speed multiplier | Real-time vs. accelerated | Accelerated (configurable), capped at 50× to avoid starvation bugs |
 | `0x10/0x06` vs. reuse existing Create | New sub-action vs. query param | New sub-action — cleaner, explicit intent |
 | Bot personality variety | All identical vs. tunable difficulty tiers | Single "medium" difficulty first; difficulty tiers as follow-up |
+
+## 2026-11-02 exact-head balance audit
+
+The first 100-game cohort (seed 17001) did **not** meet the current acceptance band: 70% crew wins, 30% impostor wins, and one 300-second timeout. The timed-out game ended at 15/16 task steps, with a live crewmate still assigned Empty Garbage (task 3).
+
+All task definitions now have a direct spawn-reachable, LOS-clear approach-point regression. The follow-up regression also exercises the production `BotAgent.navigateTo` path follower from spawn and from the exact observed timeout position (1656, 797) to Empty Garbage. These movement checks are not yet accepted until the exact-head Node 24 CI run passes.
+
+Do not tune kill cooldown, task dwell, or win conditions by guesswork. First identify and fix the repeatable movement/task-stall cause; then rerun all three independent 100-game cohorts and assess each against the 45–65% crew-win target with zero timeouts.
+
