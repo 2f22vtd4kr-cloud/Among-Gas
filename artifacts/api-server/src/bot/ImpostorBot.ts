@@ -26,7 +26,13 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { requestGroqDialogue } from './groqDialogue.js';
-import { buildImpostorHuntPlanningMessages, observeVisiblePlayers, parseImpostorHuntChoice } from './strategicPolicy.js';
+import {
+  buildImpostorHuntPlanningMessages,
+  buildImpostorSabotagePlanningMessages,
+  observeVisiblePlayers,
+  parseImpostorHuntChoice,
+  parseImpostorSabotageChoice,
+} from './strategicPolicy.js';
 
 type BotState = 'FAKING' | 'HUNTING' | 'COOLDOWN';
 
@@ -76,6 +82,7 @@ export class ImpostorBot extends BotAgent {
   private _huntLastKnownPosition: { slot: number; x: number; y: number; seenAtMs: number } | null = null;
   private _huntPlanningPending = false;
   private _huntPlanningGeneration = 0;
+  private _sabotagePlanningPending = false;
 
   /** Countdown ticks until the next sabotage attempt. */
   private _sabotageCountdown = Math.floor(Math.random() * SABOTAGE_INTERVAL_TICKS);
@@ -216,6 +223,7 @@ export class ImpostorBot extends BotAgent {
         return;
       }
       this._huntTargetSlot = newTarget;
+      this._huntLastKnownPosition = null;
       this.clearPath();
     }
 
@@ -418,21 +426,82 @@ export class ImpostorBot extends BotAgent {
   // ── Sabotage ─────────────────────────────────────────────────────────────
 
   private _trySabotage(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
-    if (lobby.sabotage !== null) return; // already active
-    if (lobby.sabotageCooldownMs > 0) return;
+    if (lobby.phase !== 'ROAMING' || lobby.sabotage !== null || lobby.sabotageCooldownMs > 0 ||
+        this._sabotagePlanningPending) return;
 
-    // Pick a sabotage system at random from available ones
-    const availableIds = Object.keys(SABOTAGE_DEFS)
-      .map(Number)
-      .filter(id => SABOTAGE_DEFS[id as SabotageSystemId] !== undefined);
-    if (availableIds.length === 0) return;
+    const availableSystems = Object.values(SABOTAGE_DEFS)
+      .map(definition => ({ systemId: definition.id, name: definition.name }));
+    if (availableSystems.length === 0) return;
+    const availableIds = availableSystems.map(system => system.systemId);
+    const fallback = availableIds[Math.floor(Math.random() * availableIds.length)] as SabotageSystemId;
+    const apiKey = this.getSessionGroqApiKey(lobby);
 
-    const systemId = availableIds[Math.floor(Math.random() * availableIds.length)] as SabotageSystemId;
-    const triggered = manager.triggerSabotage(lobby, self.slot, systemId);
-    if (triggered) {
-      manager.broadcastSabotageStart(lobby, systemId, self.slot);
-      if (systemId === SABOTAGE_DOORS) manager.broadcastDoorLocks(lobby);
+    // Without a model key, keep the known local policy. When configured, let
+    // the impostor reason over public task progress and currently visible
+    // crewmates, but never let its output bypass server sabotage validation.
+    if (!apiKey) {
+      this._commitSabotageChoice(lobby, self, manager, fallback);
+      return;
     }
+
+    const visibleCrew = this._visibleCrewPlayers(lobby, self);
+    let visiblePairsWithin350Px = 0;
+    for (let i = 0; i < visibleCrew.length; i++) {
+      for (let j = i + 1; j < visibleCrew.length; j++) {
+        if (Math.hypot(
+          visibleCrew[i].x - visibleCrew[j].x,
+          visibleCrew[i].y - visibleCrew[j].y,
+        ) <= 350) visiblePairsWithin350Px++;
+      }
+    }
+    const publicTaskProgressPct = lobby.totalTaskSteps > 0
+      ? (lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100
+      : 0;
+    const messages = buildImpostorSabotagePlanningMessages({
+      username: self.username,
+      availableSystems,
+      visibleCrewCount: visibleCrew.length,
+      visibleCrewPairsWithin350Px,
+      publicTaskProgressPct,
+      killCooldownMs: self.killCooldownMs,
+    });
+    const roundStartedAtMs = lobby.startedAtMs;
+    this._sabotagePlanningPending = true;
+
+    void requestGroqDialogue(apiKey, messages, Date.now() + 8_000)
+      .then(response => {
+        if (lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self || !self.alive ||
+            lobby.startedAtMs !== roundStartedAtMs) return;
+        const chosen = response
+          ? parseImpostorSabotageChoice(response, availableIds)
+          : null;
+        this._commitSabotageChoice(lobby, self, manager, (chosen ?? fallback) as SabotageSystemId);
+      })
+      .catch(() => {
+        if (lobby.phase === 'ROAMING' && lobby.players.get(self.slot) === self && self.alive &&
+            lobby.startedAtMs === roundStartedAtMs) {
+          this._commitSabotageChoice(lobby, self, manager, fallback);
+        }
+      })
+      .finally(() => {
+        this._sabotagePlanningPending = false;
+      });
+  }
+
+  private _commitSabotageChoice(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    manager: LobbyManager,
+    systemId: SabotageSystemId,
+  ): void {
+    if (lobby.phase !== 'ROAMING' || lobby.sabotage !== null || lobby.sabotageCooldownMs > 0 ||
+        !self.alive || lobby.players.get(self.slot) !== self ||
+        SABOTAGE_DEFS[systemId] === undefined) return;
+
+    const triggered = manager.triggerSabotage(lobby, self.slot, systemId);
+    if (!triggered) return;
+    manager.broadcastSabotageStart(lobby, systemId, self.slot);
+    if (systemId === SABOTAGE_DOORS) manager.broadcastDoorLocks(lobby);
   }
 
   /** Find a vent during kill cooldown and approach it using the shared collision/pathfinding. */
