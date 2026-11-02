@@ -237,8 +237,8 @@ try {
   // in one browser-side snapshot so separate locator calls cannot race the
   // 3.2-second reveal timer and lose the node between assertions.
   const roleRevealSnapshotHandle = await page.waitForFunction(() => {
-    const sprite = document.querySelector<HTMLElement>('.ag-character-sprite[data-pose]');
-    const shadow = document.querySelector<HTMLElement>('[data-role-reveal-shadow="true"]');
+    const sprite = document.querySelector('.ag-character-sprite[data-pose]');
+    const shadow = document.querySelector('[data-role-reveal-shadow="true"]');
     if (!sprite || !shadow) return false;
     const spriteBounds = sprite.getBoundingClientRect();
     const shadowBounds = shadow.getBoundingClientRect();
