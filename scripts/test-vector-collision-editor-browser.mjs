@@ -19,7 +19,7 @@ try {
     return !!element && Number(element.getAttribute("width")) > 0 && Number(element.getAttribute("height")) > 0;
   });
 
-  // Draw an open wall with a real pointer drag.
+  // Draw a freehand wall stroke. It remains an explicit active chain until Finish chain.
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
@@ -27,7 +27,29 @@ try {
   await page.mouse.down();
   await page.mouse.move(bounds.x + 165, bounds.y + 76, { steps: 5 });
   await page.mouse.up();
+  await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
+  assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
+
+  // Active chains survive reload via local autosave and have explicit endpoint navigation.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await canvas.waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Restore local draft" }).waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Restore local draft" }).click();
+  await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
+  await page.getByRole("button", { name: "Jump to end" }).click();
+  await page.getByText(/Camera moved to the active wall-chain endpoint/).waitFor();
+  await page.getByRole("button", { name: "Fit map" }).click();
+
+  // Continue from the first stroke's endpoint, then commit the multi-stroke chain.
+  bounds = await canvas.boundingBox();
+  await page.mouse.move(bounds.x + 165, bounds.y + 76);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 205, bounds.y + 110, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 3);
+  await page.getByRole("button", { name: "Finish chain" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
+  assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
 
   // Draw and close a solid polygon with three taps.
   await page.getByRole("button", { name: "Draw solid" }).click();
@@ -69,6 +91,8 @@ try {
     const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
     const beforeDraftPoints = Number(await canvas.getAttribute("data-draft-point-count"));
     const beforeWalkPoints = Number(await canvas.getAttribute("data-walk-point-count"));
+    const beforeActiveChain = Number(await canvas.getAttribute("data-active-chain-point-count"));
+    const beforeDraftWall = Number(await canvas.getAttribute("data-draft-wall-point-count"));
     bounds = await canvas.boundingBox();
     const centerX = bounds.x + bounds.width * 0.52;
     const centerY = bounds.y + bounds.height * 0.52;
@@ -107,6 +131,16 @@ try {
       beforeWalkPoints,
       "pinch in " + mode + " must not change walk-test points",
     );
+    assert.equal(
+      Number(await canvas.getAttribute("data-active-chain-point-count")),
+      beforeActiveChain,
+      "pinch in " + mode + " must not mutate the saved active chain",
+    );
+    assert.equal(
+      Number(await canvas.getAttribute("data-draft-wall-point-count")),
+      beforeDraftWall,
+      "pinch in " + mode + " must cancel the in-progress freehand stroke",
+    );
   }
   await touch.detach();
 
@@ -117,6 +151,8 @@ try {
   await page.getByRole("button", { name: "Restore local draft" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
   assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0);
+  assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
+  assert.equal(Number(await canvas.getAttribute("data-draft-wall-point-count")), 0);
 
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
