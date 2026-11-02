@@ -97,7 +97,7 @@ export async function requestGroqDialogue(
       };
       const content = payload.choices?.[0]?.message?.content;
       if (typeof content !== 'string') return null;
-      const clean = content.replace(/[\\u0000-\\u001f\\u007f]/g, ' ').replace(/\\s+/g, ' ').trim();
+      const clean = content.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
       return clean.length > 0 ? clean.slice(0, 220) : null;
     } catch {
       // Provider outages, invalid keys, DNS errors and timeouts all use the
