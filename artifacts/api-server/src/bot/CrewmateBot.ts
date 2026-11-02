@@ -14,7 +14,7 @@
 import { BotAgent, BOT_SPEED_PX } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
-import { NORMAL_VISION_RADIUS_PX, SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
+import { LIGHTS_CREWMATE_VISION_RADIUS_PX, NORMAL_VISION_RADIUS_PX, SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX, SABOTAGE_LIGHTS } from '@workspace/shared/sabotage';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { chooseEvidenceWeightedVote } from './voting.js';
@@ -246,12 +246,15 @@ export class CrewmateBot extends BotAgent {
     const apiKey = this.getSessionGroqApiKey(lobby);
     if (!apiKey || this._taskPlanningPending) return;
 
+    const visionRadiusPx = lobby.sabotage?.systemId === SABOTAGE_LIGHTS
+      ? LIGHTS_CREWMATE_VISION_RADIUS_PX
+      : NORMAL_VISION_RADIUS_PX;
     const nearbyPlayers = observeVisiblePlayers(
       self.slot,
       self.x,
       self.y,
       Array.from(lobby.players.values()),
-      NORMAL_VISION_RADIUS_PX,
+      visionRadiusPx,
       (x, y) => this.hasLineOfSightToPoint(self, { x, y }),
     );
     const messages = buildCrewTaskPlanningMessages({
