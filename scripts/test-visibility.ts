@@ -92,6 +92,36 @@ for (const point of openPolygon) {
   assert.ok(Math.abs(distance - 200) < 1e-6, 'open-space points lie on the sight-radius circle');
 }
 
+// A straight occluding edge must remain exactly straight after visual smoothing.
+{
+  const straightOrigin = { x: 0, y: 0 };
+  const straightWall = Array.from({ length: 41 }, (_, index) => {
+    const angle = -0.2 + index * 0.01;
+    const distance = 100 / Math.cos(angle);
+    return { x: distance * Math.cos(angle), y: distance * Math.sin(angle) };
+  });
+  const smoothedWall = smoothVisibilityPolygon(straightWall, straightOrigin, 6);
+  assert.deepEqual(smoothedWall, straightWall,
+    'collinear ray intersections stay pixel-identical instead of bowing inward');
+}
+
+// A genuinely stepped contour still receives conservative visual smoothing.
+{
+  const steppedOrigin = { x: 0, y: 0 };
+  const stepped = Array.from({ length: 41 }, (_, index) => {
+    const angle = -0.2 + index * 0.01;
+    const rawDistance = 100 + (Math.floor(index / 3) % 2) * 7;
+    return { x: Math.cos(angle) * rawDistance, y: Math.sin(angle) * rawDistance };
+  });
+  const smoothed = smoothVisibilityPolygon(stepped, steppedOrigin, 6);
+  assert.ok(smoothed.some((point, index) =>
+    Math.hypot(point.x, point.y) < Math.hypot(stepped[index].x, stepped[index].y) - 1e-4
+  ), 'stair-step transitions are still softened');
+  assert.ok(smoothed.every((point, index) =>
+    Math.hypot(point.x, point.y) <= Math.hypot(stepped[index].x, stepped[index].y) + 1e-6
+  ), 'stair-step smoothing never expands visibility');
+}
+
 // A blocked collision cell must truncate sight at its near boundary.
 const obstacleGrid = new Uint8Array(COLS * ROWS) as Grid;
 const wallCol = 51;
