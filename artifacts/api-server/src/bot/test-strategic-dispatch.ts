@@ -177,7 +177,10 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   }) as typeof fetch;
 
   const agent = new ProbeCrewmateBot();
-  await new Promise(resolve => setTimeout(resolve, 1_200));
+  // First tick binds this bot to the new meeting and establishes its
+  // intentional per-slot discussion delay; the next tick may then respond.
+  agent.tick(lobby, player, manager);
+  await new Promise(resolve => setTimeout(resolve, 1_250));
   agent.tick(lobby, player, manager);
   for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
