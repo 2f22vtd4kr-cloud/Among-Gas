@@ -12,6 +12,8 @@ import {
 } from "@workspace/shared/collision";
 
 type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk";
+type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
+type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
   | { kind: "pan"; x: number; y: number }
   | { kind: "wall"; start: Point }
@@ -19,7 +21,7 @@ type Gesture =
 
 const MAP_W = 3224;
 const MAP_H = 1858;
-const EMPTY_DOCUMENT: CollisionDocument = {
+const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
   mapW: MAP_W,
   mapH: MAP_H,
@@ -34,7 +36,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   walk: "Walk test",
 };
 
-function cloneDocument(document: CollisionDocument): CollisionDocument {
+function cloneDocument(document: CollisionDocument): EditableDocument {
   return {
     ...document,
     shapes: document.shapes.map(shape => ({
@@ -64,13 +66,13 @@ export default function VectorCollisionEditor() {
   const imageRef = useRef<HTMLImageElement | null>(null);
   const cameraRef = useRef({ x: 0, y: 0, zoom: 0.2, ready: false });
   const gestureRef = useRef<Gesture | null>(null);
-  const docRef = useRef<CollisionDocument>(EMPTY_DOCUMENT);
-  const historyRef = useRef(new History<CollisionDocument>(EMPTY_DOCUMENT, cloneDocument, 200));
+  const docRef = useRef<EditableDocument>(EMPTY_DOCUMENT);
+  const historyRef = useRef(new History<EditableDocument>(EMPTY_DOCUMENT, cloneDocument, 200));
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distance: number; zoom: number; world: Point } | null>(null);
   const rafRef = useRef<number | null>(null);
 
-  const [document, setDocument] = useState<CollisionDocument>(EMPTY_DOCUMENT);
+  const [document, setDocument] = useState<EditableDocument>(EMPTY_DOCUMENT);
   const [tool, setTool] = useState<Tool>("pan");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draftPoints, setDraftPoints] = useState<Point[]>([]);
@@ -87,7 +89,7 @@ export default function VectorCollisionEditor() {
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
 
-  const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
+  const replaceDocument = useCallback((next: EditableDocument, record = true) => {
     docRef.current = next;
     if (record) historyRef.current.commit(next);
     setDocument(next);
@@ -332,7 +334,7 @@ export default function VectorCollisionEditor() {
 
   const finishPolygon = () => {
     if (draftPoints.length < 3) return;
-    const points = draftPoints.length > 3 ? draftPoints : draftPoints;
+    const points = draftPoints;
     addShape({
       id: newShapeId("solid"),
       points,
@@ -414,10 +416,13 @@ export default function VectorCollisionEditor() {
       const camera = cameraRef.current;
       let best: { shapeId: string; index: number; distance: number } | null = null;
       for (const shape of docRef.current.shapes) {
-        shape.points.forEach((vertex, index) => {
+        for (let index = 0; index < shape.points.length; index++) {
+          const vertex = shape.points[index];
           const d = Math.hypot(point[0] - vertex[0], point[1] - vertex[1]);
-          if (d <= 16 / camera.zoom && (!best || d < best.distance)) best = { shapeId: shape.id, index, distance: d };
-        });
+          if (d <= 16 / camera.zoom && (!best || d < best.distance)) {
+            best = { shapeId: shape.id, index, distance: d };
+          }
+        }
       }
       if (best) {
         setSelectedId(best.shapeId);
