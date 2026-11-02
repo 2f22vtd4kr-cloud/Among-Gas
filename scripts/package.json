@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vector-collision.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
-    "test:vector-collision": "tsx ./src/testVectorCollision.ts"
+    "test:vector-collision": "tsx ./src/testVectorCollision.ts",
+    "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
