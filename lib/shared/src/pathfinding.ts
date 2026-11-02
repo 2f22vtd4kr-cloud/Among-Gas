@@ -38,12 +38,38 @@ const DEFAULT_PATH_GRID_GEOMETRY: PathGridGeometry = { cols: COLS, rows: ROWS, c
 
 // ─── Coordinate conversion ────────────────────────────────────────────────────
 
-/** Pixel → grid cell (clamped to valid range). */
+/** Pixel → grid cell. Callers must validate bounds before conversion. */
 function pixelToCell(px: number, py: number, geometry: PathGridGeometry): Cell {
   return {
-    col: Math.max(0, Math.min(geometry.cols - 1, Math.floor(px / geometry.cellX))),
-    row: Math.max(0, Math.min(geometry.rows - 1, Math.floor(py / geometry.cellY))),
+    col: Math.floor(px / geometry.cellX),
+    row: Math.floor(py / geometry.cellY),
   };
+}
+
+function isValidGridGeometry(geometry: PathGridGeometry): boolean {
+  return Number.isInteger(geometry.cols) && geometry.cols > 0 &&
+    Number.isInteger(geometry.rows) && geometry.rows > 0 &&
+    Number.isFinite(geometry.cellX) && geometry.cellX > 0 &&
+    Number.isFinite(geometry.cellY) && geometry.cellY > 0;
+}
+
+function isValidGeometry(grid: Grid, geometry: PathGridGeometry): boolean {
+  return isValidGridGeometry(geometry) && grid.length === geometry.cols * geometry.rows;
+}
+
+function isPointInsideGrid(point: Point, geometry: PathGridGeometry): boolean {
+  return Number.isFinite(point.x) && Number.isFinite(point.y) &&
+    point.x >= 0 && point.y >= 0 &&
+    point.x < geometry.cols * geometry.cellX &&
+    point.y < geometry.rows * geometry.cellY;
+}
+
+function isValidPathInput(
+  grid: Grid, start: Point, goal: Point, geometry: PathGridGeometry,
+): boolean {
+  return isValidGeometry(grid, geometry) &&
+    isPointInsideGrid(start, geometry) &&
+    isPointInsideGrid(goal, geometry);
 }
 
 /** Grid cell → pixel centre. */
@@ -66,15 +92,20 @@ function isWalkable(grid: Grid, col: number, row: number, geometry: PathGridGeom
 // ─── Heuristic ────────────────────────────────────────────────────────────────
 
 /**
- * Octile (diagonal) heuristic in pixel space.
- * Accounts for non-square cells (CELL_X ≠ CELL_Y).
+ * Obstacle-free shortest-path lower bound for 8-directional movement.
+ * Uses the true Euclidean diagonal cost, including non-square cell dimensions.
  */
 function heuristic(ac: number, ar: number, bc: number, br: number, geometry: PathGridGeometry): number {
-  const dx = Math.abs(ac - bc) * geometry.cellX;
-  const dy = Math.abs(ar - br) * geometry.cellY;
-  const D  = 1;
-  const D2 = Math.SQRT2;
-  return D * (dx + dy) + (D2 - 2 * D) * Math.min(dx, dy);
+  const columns = Math.abs(ac - bc);
+  const rows = Math.abs(ar - br);
+  const diagonalSteps = Math.min(columns, rows);
+  const straightColumns = columns - diagonalSteps;
+  const straightRows = rows - diagonalSteps;
+  // A diagonal step spans one cell on each axis, so its cost is the actual
+  // Euclidean diagonal of this (possibly non-square) grid cell.
+  return diagonalSteps * Math.hypot(geometry.cellX, geometry.cellY) +
+    straightColumns * geometry.cellX +
+    straightRows * geometry.cellY;
 }
 
 // ─── Min-heap (priority queue) ────────────────────────────────────────────────
@@ -133,7 +164,7 @@ class MinHeap {
 
 /**
  * 8-directional A* on the collision grid.
- * Diagonal moves cost √2 × the longer axis (pixel-space distance).
+ * Diagonal moves cost the Euclidean distance across one cell on each axis.
  * Diagonal cuts through corners are not allowed (both axis-aligned
  * neighbours must be walkable).
  *
@@ -316,6 +347,8 @@ export function findPath(
   goal:  Point,
   geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
 ): PathResult | null {
+  if (!isValidPathInput(grid, start, goal, geometry)) return null;
+
   const sc = pixelToCell(start.x, start.y, geometry);
   const gc = pixelToCell(goal.x,  goal.y, geometry);
 
@@ -356,6 +389,7 @@ export function findPath(
  */
 export class PathCache {
   private cache = new Map<string, PathResult | null>();
+  private cachedGrid: Grid | null = null;
 
   find(
     grid: Grid,
@@ -364,6 +398,14 @@ export class PathCache {
     forceRefresh = false,
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
   ): PathResult | null {
+    if (!isValidPathInput(grid, start, goal, geometry)) return null;
+    // A cache key made only from coordinates is unsafe across distinct map
+    // grids: the same cells can be walkable in one map and blocked in another.
+    if (this.cachedGrid !== grid) {
+      this.cache.clear();
+      this.cachedGrid = grid;
+    }
+
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
     const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
@@ -378,6 +420,7 @@ export class PathCache {
   }
 
   invalidate(goal: Point, geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY): void {
+    if (!isValidGridGeometry(geometry) || !isPointInsideGrid(goal, geometry)) return;
     const gc  = pixelToCell(goal.x, goal.y, geometry);
     const suffix = `→${gc.col},${gc.row}`;
     for (const key of this.cache.keys()) {
@@ -387,6 +430,7 @@ export class PathCache {
 
   clear(): void {
     this.cache.clear();
+    this.cachedGrid = null;
   }
 
   get size(): number { return this.cache.size; }
