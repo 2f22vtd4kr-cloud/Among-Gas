@@ -945,6 +945,7 @@ export default function VectorCollisionEditor() {
           data-zoom={zoomDisplay}
           data-draft-point-count={draftPoints.length}
           data-walk-point-count={walkPoints.length}
+          data-walk-status={walkStatus}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
