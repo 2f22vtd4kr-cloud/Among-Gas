@@ -139,6 +139,9 @@ jobs:
       - name: Run server gameplay invariants
         run: pnpm --filter @workspace/api-server run test:gameplay
 
+      - name: Verify evidence-weighted bot votes use only public meeting information
+        run: pnpm --filter @workspace/api-server exec tsx src/test_bot_voting.ts
+
       - name: Verify Telegram Mini App lobby invite start parameters
         run: pnpm --filter @workspace/scripts run test:telegram-start-param
 
