@@ -21,6 +21,7 @@ type Gesture =
 
 const MAP_W = 3224;
 const MAP_H = 1858;
+const LOCAL_DRAFT_KEY = "among-gas:vector-collision-editor:v1";
 const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
   mapW: MAP_W,
@@ -80,6 +81,8 @@ export default function VectorCollisionEditor() {
   const [zoomDisplay, setZoomDisplay] = useState(0.2);
   const [loaded, setLoaded] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [localDraft, setLocalDraft] = useState<EditableDocument | null>(null);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
@@ -95,6 +98,8 @@ export default function VectorCollisionEditor() {
     if (record) historyRef.current.commit(editable);
     setDocument(editable);
     setSaved(false);
+    setDirty(true);
+    setLocalDraft(null);
   }, []);
 
   const drawRef = useRef<() => void>(() => {});
@@ -239,6 +244,23 @@ export default function VectorCollisionEditor() {
         historyRef.current = new History<EditableDocument>(next, cloneDocument, 200);
         setDocument(next);
         setSaved(result.saved);
+        setDirty(false);
+        try {
+          const rawDraft = window.localStorage.getItem(LOCAL_DRAFT_KEY);
+          if (rawDraft) {
+            const parsed = JSON.parse(rawDraft) as { document?: unknown };
+            if (parsed.document) {
+              const draftErrors = validateCollisionDocument(parsed.document);
+              if (!draftErrors.length) {
+                const draft = cloneDocument(parsed.document as CollisionDocument);
+                if (draft.mapW === MAP_W && draft.mapH === MAP_H &&
+                    JSON.stringify(draft) !== JSON.stringify(next)) setLocalDraft(draft);
+              }
+            }
+          }
+        } catch {
+          // Storage may be unavailable in private browsing; the editor remains usable.
+        }
         setLoaded(true);
         setStatus(result.saved
           ? "Saved vector candidate loaded. It is not used by live gameplay."
@@ -286,6 +308,15 @@ export default function VectorCollisionEditor() {
     resize();
     return () => observer.disconnect();
   }, [scheduleDraw]);
+
+  useEffect(() => {
+    if (!dirty || !loaded) return;
+    try {
+      window.localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify({ savedAt: Date.now(), document }));
+    } catch {
+      setStatus("Local autosave unavailable; use Export JSON before leaving this workspace.");
+    }
+  }, [document, dirty, loaded]);
 
   useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints]);
 
@@ -546,6 +577,8 @@ export default function VectorCollisionEditor() {
     } else if (gesture?.kind === "vertex") {
       historyRef.current.commit(docRef.current);
       setSaved(false);
+      setDirty(true);
+      setLocalDraft(null);
     }
     gestureRef.current = null;
     pinchRef.current = null;
@@ -560,6 +593,8 @@ export default function VectorCollisionEditor() {
     docRef.current = next;
     setDocument(next);
     setSaved(false);
+    setDirty(true);
+    setLocalDraft(null);
   };
   const redo = () => {
     if (!historyRef.current.redo()) return;
@@ -567,6 +602,8 @@ export default function VectorCollisionEditor() {
     docRef.current = next;
     setDocument(next);
     setSaved(false);
+    setDirty(true);
+    setLocalDraft(null);
   };
   const zoomBy = (factor: number) => {
     const camera = cameraRef.current;
@@ -629,12 +666,22 @@ export default function VectorCollisionEditor() {
       if (!response.ok) throw new Error(result.error || "Save rejected (" + response.status + ")");
       historyRef.current = new History<EditableDocument>(docRef.current, cloneDocument, 200);
       setSaved(true);
+      setDirty(false);
+      setLocalDraft(null);
+      try { window.localStorage.removeItem(LOCAL_DRAFT_KEY); } catch { /* best-effort cleanup */ }
       setStatus("Candidate saved with a rotating backup. Live gameplay still uses the reviewed raster mask.");
     } catch (error) {
       setStatus("Save failed: " + (error instanceof Error ? error.message : String(error)));
     } finally {
       setSaving(false);
     }
+  };
+
+  const restoreLocalDraft = () => {
+    if (!localDraft) return;
+    replaceDocument(localDraft);
+    setLocalDraft(null);
+    setStatus("Local draft restored. Review it before saving; it is not live gameplay geometry.");
   };
 
   const exportDocument = () => {
@@ -704,6 +751,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(0.8)}>−</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
+        {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
       </nav>
 
