@@ -1,5 +1,15 @@
 import type { GroqDialogueMessage } from './groqDialogue.js';
 
+function sanitizePromptLabel(value: string): string {
+  return Array.from(String(value))
+    .filter(character => {
+      const code = character.charCodeAt(0);
+      return code >= 0x20 && code !== 0x7f;
+    })
+    .join('')
+    .slice(0, 32);
+}
+
 export interface VisiblePlayerSource {
   readonly slot: number;
   readonly username: string;
@@ -34,7 +44,7 @@ export function observeVisiblePlayers(
     .filter(player => player.alive && player.slot !== observerSlot)
     .map(player => ({
       slot: player.slot,
-      username: player.username,
+      username: sanitizePromptLabel(player.username),
       distancePx: Math.hypot(player.x - observerX, player.y - observerY),
       x: player.x,
       y: player.y,
