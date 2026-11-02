@@ -238,6 +238,7 @@ try {
   });
   // Use the dedicated reveal fixture: the task-interaction fixture is
   // for gameplay controls and is not required to mount the role overlay.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   await page.goto(`${origin}/?mock=reveal-crewmate&animateReveal=true`, { waitUntil: 'domcontentloaded' });
   // Role reveal is intentionally transient. Capture all sprite/shadow geometry
   // in one browser-side snapshot so separate locator calls cannot race the
@@ -265,6 +266,10 @@ try {
       shadowWidth: Number.parseFloat(shadowStyle.width),
       shadowHeight: Number.parseFloat(shadowStyle.height),
       shadowAnimation: shadowStyle.animationName,
+      shadowInlineAnimation: shadow.style.animation,
+      characterInlineAnimation: sprite.parentElement?.style.animation ?? '',
+      animateRevealQuery: new URLSearchParams(window.location.search).get('animateReveal'),
+      reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches,
       shadowBackground: shadowStyle.backgroundColor,
     };
   }, null, { timeout: 30_000 });
@@ -292,6 +297,17 @@ try {
   assert.ok(roleRevealSnapshot.shadowWidth >= 90 && roleRevealSnapshot.shadowHeight >= 14 &&
     roleRevealSnapshot.shadowBackground.includes('0.85'),
     'the ground shadow must have enough area and contrast to remain visible at mobile render scale');
+  console.log('Role reveal motion snapshot:', JSON.stringify({
+    animateRevealQuery: roleRevealSnapshot.animateRevealQuery,
+    reducedMotion: roleRevealSnapshot.reducedMotion,
+    shadowInlineAnimation: roleRevealSnapshot.shadowInlineAnimation,
+    characterInlineAnimation: roleRevealSnapshot.characterInlineAnimation,
+    shadowAnimation: roleRevealSnapshot.shadowAnimation,
+  }));
+  assert.equal(roleRevealSnapshot.animateRevealQuery, 'true',
+    'the dedicated role-reveal animation fixture flag must reach GameMap');
+  assert.equal(roleRevealSnapshot.reducedMotion, false,
+    'the role reveal browser fixture must request no-preference motion');
   assert.equal(roleRevealSnapshot.shadowAnimation, 'rrShadowPulse',
     'the role-reveal ground shadow must animate with the character bob');
   await page.screenshot({ path: join(visualQaDir, 'role-reveal-sprite-crop.png'), fullPage: true });
