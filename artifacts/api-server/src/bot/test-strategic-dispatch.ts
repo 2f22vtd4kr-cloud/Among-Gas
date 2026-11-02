@@ -142,7 +142,10 @@ try {
     JSON.stringify({ taskId: 999 }),
     4,
   );
-  console.log('PASS: real crewmate roaming dispatch accepts a valid mock-provider task choice and rejects an unassigned choice');
+
+  await testModelHuntDispatch();
+  await testModelSabotageDispatch();
+  console.log('PASS: live bot dispatch accepts bounded mock-provider task, hunt and sabotage choices with safe fallback');
 } finally {
   globalThis.fetch = originalFetch;
 }
@@ -337,7 +340,3 @@ async function testModelSabotageDispatch(): Promise<void> {
     'a valid model sabotage choice reaches the existing server-authoritative trigger path');
   assert.equal(broadcasts, 1, 'the accepted model choice follows the normal sabotage broadcast path');
 }
-
-await testModelHuntDispatch();
-await testModelSabotageDispatch();
-console.log('PASS: real impostor roaming dispatch accepts bounded mock-provider hunt and sabotage choices');
