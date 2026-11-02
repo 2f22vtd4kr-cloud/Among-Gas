@@ -314,6 +314,31 @@ const fineGardenRay = computeVisibilityPolygon(1600, 556, 220, realFineShadowGri
 assert.ok(fineGardenRay.x <= fineStatue.x - fineStatue.radius + 1,
   'garden sight stops at the statue itself, not at the decorative garden perimeter');
 
+// Real open-room fixture: this point is in the broad lower-left room, not the
+// narrow Clean Filters corridor used by the original task-interaction capture.
+// The player anchor sits 31px above its feet-space visibility origin.
+const openRoomOrigin = { x: 799, y: 1282 };
+assert.equal(
+  isPlayerPositionWalkable(realFineGrid, openRoomOrigin.x, openRoomOrigin.y - FEET_OFFSET_Y),
+  true,
+  'open-room vision fixture has a valid player-footprint-safe anchor',
+);
+const openRoomPolygon = computeVisibilityPolygon(
+  openRoomOrigin.x,
+  openRoomOrigin.y,
+  120,
+  realFineShadowGrid,
+  [],
+  true,
+  realFineShadowSegments,
+);
+assert.equal(openRoomPolygon.length, 720, 'real open-room fixture returns the full vision polygon');
+for (const point of openRoomPolygon) {
+  const distance = Math.hypot(point.x - openRoomOrigin.x, point.y - openRoomOrigin.y);
+  assert.ok(Math.abs(distance - 120) < 1e-5,
+    'unobstructed real-room rays reach the same circular radius instead of collapsing into a corridor');
+}
+
 const realOrigin = { x: 350 * (MAP_W / 1040), y: 150 * (MAP_H / 580) };
 const realPolygon = computeVisibilityPolygon(
   realOrigin.x,
