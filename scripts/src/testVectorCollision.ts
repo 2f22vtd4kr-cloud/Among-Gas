@@ -106,7 +106,7 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   ], 200, 200);
   assert.equal(corridor.isPlayerWalkableAtFeet(55, 105), true, "three-circle footprint fits the 15px corridor");
   assert.equal(corridor.isWalkable(55, 105, 12), false, "12px circular proxy is too conservative for this corridor");
-  const playerNav = corridor.rasterizePlayerNav(10);
+  const playerNav = corridor.rasterizePlayerNav(20, 20);
   assert.equal(playerNav.walk[10 * playerNav.cols + 5], 1, "bot nav raster must use the production three-circle footprint");
   const bounds = new CollisionWorld([], 200, 200);
   const [boundedX, boundedY] = bounds.move(20, 20, -100, -100, 12);
