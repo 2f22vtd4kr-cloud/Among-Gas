@@ -70,3 +70,9 @@ export type { VentDef } from './vents.js';
 
 export { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from './adminTable.js';
 export type { AdminTableDef } from './adminTable.js';
+
+// Vector geometry foundation (not yet the production map source).
+export { CollisionWorld, segmentsIntersect, validateCollisionDocument } from './collision/index.js';
+export type { Point, CollisionShape, CollisionDocument } from './collision/index.js';
+export { History, simplifyRDP, snapPoint, shouldCloseLoop } from './collision/index.js';
+export type { SnapResult } from './collision/index.js';
