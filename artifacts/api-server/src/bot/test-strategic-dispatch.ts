@@ -131,26 +131,6 @@ async function runScenario(apiKey: string, modelResponse: string, expectedTaskId
     'only a valid model-selected assigned task may replace the deterministic fallback');
 }
 
-try {
-  await runScenario(
-    'gsk_' + 'T'.repeat(48),
-    JSON.stringify({ taskId: 1 }),
-    1,
-  );
-  await runScenario(
-    'gsk_' + 'M'.repeat(48),
-    JSON.stringify({ taskId: 999 }),
-    4,
-  );
-
-  await testModelHuntDispatch();
-  await testModelSabotageDispatch();
-  console.log('PASS: live bot dispatch accepts bounded mock-provider task, hunt and sabotage choices with safe fallback');
-} finally {
-  globalThis.fetch = originalFetch;
-}
-
-
 class ProbeImpostorBot extends ImpostorBot {
   override nearestApproachPoint(target: Point, _maxRadius: number, _targetRadiusPx = 24): Point {
     return target;
@@ -339,4 +319,22 @@ async function testModelSabotageDispatch(): Promise<void> {
   assert.equal(triggered, chosen,
     'a valid model sabotage choice reaches the existing server-authoritative trigger path');
   assert.equal(broadcasts, 1, 'the accepted model choice follows the normal sabotage broadcast path');
+}
+
+try {
+  await runScenario(
+    'gsk_' + 'T'.repeat(48),
+    JSON.stringify({ taskId: 1 }),
+    1,
+  );
+  await runScenario(
+    'gsk_' + 'M'.repeat(48),
+    JSON.stringify({ taskId: 999 }),
+    4,
+  );
+  await testModelHuntDispatch();
+  await testModelSabotageDispatch();
+  console.log('PASS: live bot dispatch accepts bounded mock-provider task, hunt and sabotage choices with safe fallback');
+} finally {
+  globalThis.fetch = originalFetch;
 }
