@@ -167,10 +167,9 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
       messages: Array<{ role: string; content: string }>;
     };
     capturedMessages = request.messages;
-    // The production dialogue builder intentionally sends a plain text
-    // transcript, not JSON. Return a successful provider result first; assert
-    // against the captured prompt below so failures cannot be swallowed by
-    // requestGroqDialogue's safe provider-error fallback.
+    // The production dialogue builder sends a structured JSON data object.
+    // Return a successful provider result first; assert against the captured
+    // prompt below so assertion failures cannot be swallowed by the fallback.
     return new Response(JSON.stringify({
       choices: [{ message: { content: responseText } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
@@ -189,11 +188,18 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   const system = capturedMessages.find(message => message.role === 'system')?.content ?? '';
   const userContent = capturedMessages.find(message => message.role === 'user')?.content ?? '';
   assert.match(system, /Use only the public meeting transcript and living-player roster/);
-  assert.ok(userContent.includes(publicObservation),
+  const publicData = JSON.parse(userContent) as {
+    actingPlayer: string;
+    livingPlayers: string;
+    meetingType: string;
+    recentPublicTranscript: string;
+  };
+  assert.ok(publicData.recentPublicTranscript.includes(publicObservation),
     'the real discussion dispatcher sends the actual public player statement to the model');
-  assert.match(userContent, /Meeting type: emergency call/);
-  assert.equal(/hiddenRoles|privatePositions/.test(userContent), false,
-    'the user prompt excludes private role and position fields');
+  assert.equal(publicData.meetingType, 'emergency call');
+  assert.equal(publicData.actingPlayer, 'Nova');
+  assert.equal(/hiddenRoles|privatePositions|privateRole|serverOnly/.test(userContent), false,
+    'the structured user prompt excludes private role and server-only fields');
   assert.equal(replies.length, 1, 'a relevant public message produces one asynchronous bot reply');
   assert.equal(replies[0].slot, player.slot, 'the reply is broadcast from the acting bot slot');
   assert.equal(replies[0].text, responseText,
