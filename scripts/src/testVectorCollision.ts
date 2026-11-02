@@ -74,6 +74,10 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.throws(() => new CollisionWorld([shape("zero", [[0, 0], [0, 0]])]), /Invalid collision geometry/);
   const world = new CollisionWorld([shape("wall", [[100, 0], [100, 200]])], 200, 200);
   assert.deepEqual(world.move(100, 100, -100, -100, 12), [100, 100]);
+  const zeroRadius = new CollisionWorld([shape("thin-line", [[50, 0], [50, 100]])], 100, 100);
+  assert.equal(zeroRadius.isWalkable(50, 50, 0), false, "zero-radius point on an open wall must be blocked");
+  assert.equal(zeroRadius.isWalkable(49, 50, 0), true);
+  assert.equal(zeroRadius.move(49, 50, 2, 0, 0)[0], 49, "zero-radius movement must not cross an open wall");
   const bounds = new CollisionWorld([], 200, 200);
   const [boundedX, boundedY] = bounds.move(20, 20, -100, -100, 12);
   assert.ok(boundedX >= 12 && boundedY >= 12, "player footprint must remain inside map edges");
