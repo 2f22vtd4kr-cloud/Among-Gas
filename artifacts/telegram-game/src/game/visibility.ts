@@ -237,6 +237,29 @@ export function smoothVisibilityPolygon(
   return points.map((point, index) => {
     const distance = distances[index];
     if (distance <= 0) return point;
+
+    // Preserve authored straight silhouettes. Grid DDA already gives exact
+    // intersections along a straight wall, but radial averaging moves those
+    // intersections inward and turns a mathematically straight wall into a
+    // visibly bowed/serrated edge. Test the local contour against its chord
+    // before applying any smoothing.
+    const before = points[(index - radius + points.length) % points.length];
+    const after = points[(index + radius) % points.length];
+    const chordX = after.x - before.x;
+    const chordY = after.y - before.y;
+    const chordLength = Math.hypot(chordX, chordY);
+    if (chordLength > 1e-6) {
+      const offsetX = point.x - before.x;
+      const offsetY = point.y - before.y;
+      const perpendicularError = Math.abs(chordX * offsetY - chordY * offsetX) / chordLength;
+      const beforeX = point.x - before.x;
+      const beforeY = point.y - before.y;
+      const afterX = after.x - point.x;
+      const afterY = after.y - point.y;
+      const forwardProgress = beforeX * afterX + beforeY * afterY;
+      if (perpendicularError <= 0.75 && forwardProgress >= -1e-6) return point;
+    }
+
     let weightedSum = 0;
     let weightSum = 0;
     for (let offset = -radius; offset <= radius; offset++) {
@@ -245,8 +268,8 @@ export function smoothVisibilityPolygon(
       weightedSum += distances[wrapped] * weight;
       weightSum += weight;
     }
-    // Gaussian weights soften corners more naturally than a box average. Clamp
-    // to the original ray hit so smoothing can only darken, never leak through walls.
+    // Keep the conservative inward-only rule for stair-step transitions:
+    // smoothing may reduce visibility, but can never reveal beyond a raw hit.
     const smoothedDistance = Math.min(distance, weightedSum / weightSum);
     const dx = (point.x - origin.x) / distance;
     const dy = (point.y - origin.y) / distance;
