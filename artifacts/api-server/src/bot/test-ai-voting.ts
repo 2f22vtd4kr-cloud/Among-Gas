@@ -42,6 +42,8 @@ assert.equal(parsePublicBotVoteResponse('{"vote":"2"}', 0, roster), null, 'strin
 assert.equal(parsePublicBotVoteResponse('{"vote":2} extra', 0, roster), null, 'trailing text is rejected');
 assert.equal(parsePublicBotVoteResponse('I vote for Green', 0, roster), null, 'free-form answers are rejected');
 assert.equal(parsePublicBotVoteResponse('{"target":2}', 0, roster), null, 'wrong schema is rejected');
+assert.equal(parsePublicBotVoteResponse('{"vote":2,"role":"impostor"}', 0, roster), null,
+  'additional model fields are rejected rather than accepted as an extended schema');
 
 const meeting = {};
 const currentState = {
