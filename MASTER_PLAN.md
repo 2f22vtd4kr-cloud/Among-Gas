@@ -62,6 +62,7 @@ Dev-only `/dev/collision`, excluded from production routing and bundles. One-thu
 ## 6. Vision, sprites, product systems
 
 - Replace independent manual vision/shadow approximations only after the shared geometry is traced and verified from multiple origins. Keep low props move-only; prove open-area vision is circular and not corridor-shaped; profile on a mid-range phone.
+- Map asset memory: the runtime currently loads `map-hires.webp` at 6608×3808 (about 100.7 MB decoded as RGBA). Keep the hi-res file as a QA/source asset until every consumer is migrated; produce a 3224×1858 WebP or viewport tiles, preserve world-to-image transform tests, and measure decoded memory and first-frame time on target mobile devices. Compressed download size is not decoded-memory size.
 - Sprite extraction is a proposed pipeline, not approved output. Review all 63 source crops and compare the generated 18-colour runtime atlas against the current balaclava models, including visor/filter, suit shading, feet anchor, walk poses and corpse bone. Bake palettes only after golden-image QA; keep runtime API stable.
 - Split the 11 minigames from the monolith with no behaviour drift before redesigning each game.
 - Bot movement uses the same world and footprint as humans. Social assertions must be grounded in observed/public facts. LLM decisions are optional, bounded, asynchronously requested and fail closed to deterministic local logic.
