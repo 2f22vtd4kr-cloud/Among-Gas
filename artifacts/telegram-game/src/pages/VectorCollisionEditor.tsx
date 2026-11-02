@@ -460,8 +460,8 @@ export default function VectorCollisionEditor() {
     if (!end || !canvas) return;
     const rect = canvas.getBoundingClientRect();
     const camera = cameraRef.current;
-    camera.x = Math.max(0, Math.min(MAP_W - rect.width / camera.zoom, end[0] - rect.width / (2 * camera.zoom)));
-    camera.y = Math.max(0, Math.min(MAP_H - rect.height / camera.zoom, end[1] - rect.height / (2 * camera.zoom)));
+    camera.x = end[0] - rect.width / (2 * camera.zoom);
+    camera.y = end[1] - rect.height / (2 * camera.zoom);
     scheduleDraw();
     setStatus("Camera moved to the active wall-chain endpoint.");
   };
