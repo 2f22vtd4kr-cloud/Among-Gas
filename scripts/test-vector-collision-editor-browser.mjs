@@ -58,6 +58,46 @@ try {
   await page.mouse.click(bounds.x + 100, bounds.y + 40);
   await page.getByText(/shared three-circle player footprint|BLOCKED \/ SLID/).waitFor();
 
+  // Use real Chromium touch input (not mouse events) to verify pinch takeover
+  // in every non-destructive tool. A second finger must cancel an active wall
+  // drag rather than accidentally committing a stray segment.
+  const touch = await page.context().newCDPSession(page);
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test"];
+  for (const mode of pinchModes) {
+    await page.getByRole("button", { name: mode }).click();
+    const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
+    const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
+    bounds = await canvas.boundingBox();
+    const centerX = bounds.x + bounds.width * 0.52;
+    const centerY = bounds.y + bounds.height * 0.52;
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [
+        { id: 1, x: centerX - 18, y: centerY },
+        { id: 2, x: centerX + 18, y: centerY },
+      ],
+    });
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [
+        { id: 1, x: centerX - 34, y: centerY },
+        { id: 2, x: centerX + 34, y: centerY },
+      ],
+    });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForFunction(
+      before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,
+      beforeZoom,
+      { timeout: 5000 },
+    );
+    assert.equal(
+      Number(await canvas.getAttribute("data-shape-count")),
+      beforeShapes,
+      "pinch in " + mode + " must not accidentally create/delete a shape",
+    );
+  }
+  await touch.detach();
+
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
 } finally {
