@@ -89,11 +89,10 @@ try {
   assert.equal(structuredBody.include_reasoning, false);
   assert.equal(structuredBody.max_completion_tokens, 256);
 
-  // A lobby key may be shared by several bots. Same-key calls must serialize
-  // in FIFO order instead of returning null to contenders, and respect the
-  // provider cooldown between request starts.
+  // A lobby key may be shared by several bots. Reserve starts in FIFO order,
+  // but allow requests to overlap so a large lobby does not starve behind one slow response.
   const throttledKey = 'gsk_' + 'B'.repeat(48);
-  let releaseConcurrent: ((response: Response) => void) | undefined;
+  const releaseConcurrent: ((response: Response) => void)[] = [];
   let concurrentFetches = 0;
   let maxConcurrentFetches = 0;
   const fetchStartTimes: number[] = [];
@@ -101,8 +100,8 @@ try {
     concurrentFetches++;
     maxConcurrentFetches = Math.max(maxConcurrentFetches, concurrentFetches);
     fetchStartTimes.push(Date.now());
-    if (fetchStartTimes.length === 1) {
-      await new Promise<Response>(resolve => { releaseConcurrent = resolve; });
+    if (fetchStartTimes.length <= 2) {
+      await new Promise<Response>(resolve => { releaseConcurrent.push(resolve); });
     }
     concurrentFetches--;
     return new Response(JSON.stringify({
@@ -112,18 +111,20 @@ try {
   const firstRequest = requestGroqDialogue(throttledKey, []);
   await Promise.resolve();
   const secondRequest = requestGroqDialogue(throttledKey, []);
-  await Promise.resolve();
-  assert.equal(fetchStartTimes.length, 1, 'same-key request must wait while the active request is in flight');
-  assert.equal(releaseConcurrent !== undefined, true);
-  releaseConcurrent!(new Response(JSON.stringify({
+  await new Promise(resolve => setTimeout(resolve, 180));
+  assert.equal(fetchStartTimes.length, 2, 'both same-key requests start within the short rate interval');
+  assert.equal(maxConcurrentFetches, 2, 'a slow response does not block every other bot in the lobby');
+  assert.equal(releaseConcurrent.length, 2);
+  assert.ok(fetchStartTimes[1] - fetchStartTimes[0] >= 90,
+    'same-key provider starts still respect the minimum interval');
+  const completedResponse = new Response(JSON.stringify({
     choices: [{ message: { content: 'I can corroborate that route.' } }],
-  }), { status: 200, headers: { 'content-type': 'application/json' } }));
-  assert.equal(await firstRequest, 'I can corroborate that route.');
-  assert.equal(await secondRequest, 'I can corroborate that route.');
-  assert.equal(fetchStartTimes.length, 2, 'queued request is eventually served');
-  assert.equal(maxConcurrentFetches, 1, 'a shared key never has concurrent provider requests');
-  assert.ok(fetchStartTimes[1] - fetchStartTimes[0] >= 1_400,
-    'same-key provider starts respect the minimum interval');
+  }), { status: 200, headers: { 'content-type': 'application/json' } });
+  releaseConcurrent.forEach(release => release(completedResponse.clone()));
+  assert.deepEqual(await Promise.all([firstRequest, secondRequest]), [
+    'I can corroborate that route.',
+    'I can corroborate that route.',
+  ]);
 
   const deadlineKey = 'gsk_' + 'E'.repeat(48);
   let releaseDeadline: ((response: Response) => void) | undefined;
@@ -131,12 +132,12 @@ try {
   const activeDeadlineRequest = requestGroqDialogue(deadlineKey, []);
   await Promise.resolve();
   const expiredQueuedRequest = requestGroqDialogue(deadlineKey, [], Date.now() + 100);
+  assert.equal(await expiredQueuedRequest, null,
+    'a queued decision is dropped rather than started when it cannot finish before its deadline');
   releaseDeadline!(new Response(JSON.stringify({
     choices: [{ message: { content: 'done' } }],
   }), { status: 200, headers: { 'content-type': 'application/json' } }));
   assert.equal(await activeDeadlineRequest, 'done');
-  assert.equal(await expiredQueuedRequest, null,
-    'a queued decision is dropped rather than started when it cannot finish before its deadline');
 
   const rateLimitedKey = 'gsk_' + 'C'.repeat(48);
   globalThis.fetch = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
