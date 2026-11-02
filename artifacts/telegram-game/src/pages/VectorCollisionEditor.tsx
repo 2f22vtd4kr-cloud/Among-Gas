@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import type { PointerEvent as ReactPointerEvent, ChangeEvent } from "react";
+import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, ChangeEvent } from "react";
 import {
   History,
   CollisionWorld,
@@ -11,7 +11,7 @@ import {
   type Point,
 } from "@workspace/shared/collision";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase";
+type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk";
 type Gesture =
   | { kind: "pan"; x: number; y: number }
   | { kind: "wall"; start: Point }
@@ -31,6 +31,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   solid: "Draw solid",
   edit: "Edit vertices",
   erase: "Delete shape",
+  walk: "Walk test",
 };
 
 function cloneDocument(document: CollisionDocument): CollisionDocument {
@@ -83,7 +84,8 @@ export default function VectorCollisionEditor() {
   const [blocksSight, setBlocksSight] = useState(true);
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
-  const [showWalk, setShowWalk] = useState(false);
+  const [walkPoints, setWalkPoints] = useState<Point[]>([]);
+  const [walkStatus, setWalkStatus] = useState("");
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
     docRef.current = next;
@@ -165,6 +167,26 @@ export default function VectorCollisionEditor() {
       });
     }
 
+    if (walkPoints.length) {
+      context.strokeStyle = "#ffe079";
+      context.lineWidth = 3;
+      context.setLineDash([7, 5]);
+      if (walkPoints.length === 2) {
+        const first = walkPoints[0], last = walkPoints[1];
+        context.beginPath();
+        context.moveTo((first[0] - camera.x) * camera.zoom, (first[1] - camera.y) * camera.zoom);
+        context.lineTo((last[0] - camera.x) * camera.zoom, (last[1] - camera.y) * camera.zoom);
+        context.stroke();
+      }
+      context.setLineDash([]);
+      walkPoints.forEach((point, index) => {
+        context.beginPath();
+        context.fillStyle = index === 0 ? "#7ce0a3" : "#ff777e";
+        context.arc((point[0] - camera.x) * camera.zoom, (point[1] - camera.y) * camera.zoom, 7, 0, Math.PI * 2);
+        context.fill();
+      });
+    }
+
     context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.fillStyle = "rgba(5,12,18,0.82)";
     context.fillRect(8, rect.height - 34, Math.min(560, rect.width - 16), 26);
@@ -175,7 +197,7 @@ export default function VectorCollisionEditor() {
       16,
       rect.height - 17,
     );
-  }, [document, selectedId, draftPoints, previewPoint]);
+  }, [document, selectedId, draftPoints, previewPoint, walkPoints]);
 
   const scheduleDraw = useCallback(() => {
     if (rafRef.current !== null) return;
@@ -259,7 +281,7 @@ export default function VectorCollisionEditor() {
     return () => observer.disconnect();
   }, [scheduleDraw]);
 
-  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, showWalk]);
+  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints]);
 
   const worldPoint = (event: ReactPointerEvent<HTMLCanvasElement>): Point => {
     const rect = event.currentTarget.getBoundingClientRect();
@@ -346,6 +368,26 @@ export default function VectorCollisionEditor() {
     if (pointersRef.current.size > 1) return;
 
     const point = worldPoint(event);
+    if (tool === "walk") {
+      if (walkPoints.length !== 1) {
+        setWalkPoints([point]);
+        setWalkStatus("Start selected. Tap a destination to trace a 12px circular candidate route.");
+      } else {
+        const start = walkPoints[0];
+        try {
+          const world = new CollisionWorld(docRef.current.shapes);
+          const end = world.move(start[0], start[1], point[0] - start[0], point[1] - start[1], 12);
+          const remaining = Math.hypot(end[0] - point[0], end[1] - point[1]);
+          setWalkPoints([start, point]);
+          setWalkStatus(remaining <= 4
+            ? "PASS: the candidate 12px circle reached the destination."
+            : "BLOCKED / SLID: candidate stopped " + Math.round(remaining) + "px from the destination.");
+        } catch (error) {
+          setWalkStatus("Walk test failed: " + (error instanceof Error ? error.message : String(error)));
+        }
+      }
+      return;
+    }
     if (tool === "pan") {
       gestureRef.current = { kind: "pan", x: event.clientX, y: event.clientY };
       return;
@@ -446,6 +488,22 @@ export default function VectorCollisionEditor() {
       docRef.current = next;
       setDocument(next);
     }
+  };
+
+  const onWheel = (event: ReactWheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    const rect = event.currentTarget.getBoundingClientRect();
+    const camera = cameraRef.current;
+    const pointerX = event.clientX - rect.left;
+    const pointerY = event.clientY - rect.top;
+    const worldX = camera.x + pointerX / camera.zoom;
+    const worldY = camera.y + pointerY / camera.zoom;
+    const zoom = Math.max(0.04, Math.min(1.5, camera.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    camera.zoom = zoom;
+    camera.x = worldX - pointerX / zoom;
+    camera.y = worldY - pointerY / zoom;
+    setZoomDisplay(zoom);
+    scheduleDraw();
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
@@ -611,7 +669,7 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase"] as Tool[]).map(item => (
+        {(["pan", "wall", "solid", "edit", "erase", "walk"] as Tool[]).map(item => (
           <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => setTool(item)}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
@@ -622,7 +680,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(0.8)}>−</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
-        <button type="button" style={buttonStyle(showWalk)} onClick={() => setShowWalk(v => !v)}>Walk preview {showWalk ? "on" : "off"}</button>
+        <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
@@ -655,6 +713,7 @@ export default function VectorCollisionEditor() {
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
         <canvas
           ref={canvasRef}
+          onWheel={onWheel}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -665,13 +724,12 @@ export default function VectorCollisionEditor() {
       </div>
 
       <footer style={{ padding: "8px 10px", background: "#182633", borderTop: "1px solid #334c5e", fontSize: 11, color: "#b8cbd6", display: "flex", gap: 10, flexWrap: "wrap" }}>
-        <span>{status}</span>
+        <span>{status}{walkStatus ? " · " + walkStatus : ""}</span>
         {selected && (
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
             <strong>{selected.label || selected.id}</strong>
             <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
-            <button type="button" style={buttonStyle()} onClick={() => updateSelected({ label: (selected.label || "Shape") + " · reviewed" })}>Mark reviewed</button>
           </span>
         )}
       </footer>
