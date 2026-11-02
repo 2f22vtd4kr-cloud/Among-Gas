@@ -291,7 +291,9 @@ export abstract class BotAgent {
         hasVoted: meeting.votes.has(self.slot),
       })) manager.castVote(lobby, self.slot, fallback);
     }).finally(() => {
-      this.voteRequestPending = false;
+      // A request from an older meeting must not clear the pending state of a
+      // newer meeting that started while the provider call was still in flight.
+      if (this.voteRequestMeeting === meeting) this.voteRequestPending = false;
     });
   }
 
@@ -388,8 +390,12 @@ export abstract class BotAgent {
         manager.sendMeetingChat(lobby, self.slot, fallback);
       }
     }).finally(() => {
-      this.discussionRequestPending = false;
-      this.nextDiscussionChatAtMs = Date.now() + 1000 + (self.slot % 4) * 300;
+      // Do not let a stale meeting request mutate the scheduling state of the
+      // next meeting after a fast meeting rollover.
+      if (this.discussionMeeting === meeting) {
+        this.discussionRequestPending = false;
+        this.nextDiscussionChatAtMs = Date.now() + 1000 + (self.slot % 4) * 300;
+      }
     });
   }
 
