@@ -211,6 +211,12 @@ export abstract class BotAgent {
     }
   }
 
+  /** Retrieve the session-scoped Groq key without exposing it to client state. */
+  protected getSessionGroqApiKey(lobby: Lobby): string | undefined {
+    return lobby.players.get(lobby.hostSlot)?.groqApiKey ??
+      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+  }
+
   /**
    * Request an asynchronous model vote without blocking the 5Hz bot loop.
    * Each bot's request is staggered to respect the shared per-key provider
@@ -239,8 +245,7 @@ export abstract class BotAgent {
     }
     if (this.voteRequestPending) return;
 
-    const sessionKey = lobby.players.get(lobby.hostSlot)?.groqApiKey ??
-      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+    const sessionKey = this.getSessionGroqApiKey(lobby);
 
     // Without a configured provider, preserve immediate deterministic play.
     if (!sessionKey) {
@@ -362,8 +367,7 @@ export abstract class BotAgent {
     this.lastDiscussionMessageKey = messageKey;
     this.lastDiscussionReplyAtMs = now;
     this.discussionRequestPending = true;
-    const hostKey = lobby.players.get(lobby.hostSlot)?.groqApiKey;
-    const sessionKey = hostKey ?? Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+    const sessionKey = this.getSessionGroqApiKey(lobby);
     const roster = Array.from(lobby.players.values())
       .filter(player => player.alive)
       .map(player => player.username)
