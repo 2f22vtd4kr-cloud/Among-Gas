@@ -468,7 +468,7 @@ export class ImpostorBot extends BotAgent {
     const roundStartedAtMs = lobby.startedAtMs;
     this._sabotagePlanningPending = true;
 
-    void requestGroqDialogue(apiKey, messages, Date.now() + 8_000)
+    void requestGroqDialogue(apiKey, messages, Date.now() + 8_000, { temperature: 0.2, jsonMode: true })
       .then(response => {
         if (lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self || !self.alive ||
             lobby.startedAtMs !== roundStartedAtMs) return;
