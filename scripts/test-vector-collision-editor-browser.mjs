@@ -38,13 +38,14 @@ try {
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   await page.getByRole("button", { name: "Jump to end" }).click();
   await page.getByText(/Camera moved to the active wall-chain endpoint/).waitFor();
-  await page.getByRole("button", { name: "Fit map" }).click();
 
-  // Continue from the first stroke's endpoint, then commit the multi-stroke chain.
+  // Jump to end centers the chain endpoint under the canvas; continue from there.
   bounds = await canvas.boundingBox();
-  await page.mouse.move(bounds.x + 165, bounds.y + 76);
+  const chainEndX = bounds.x + bounds.width / 2;
+  const chainEndY = bounds.y + bounds.height / 2;
+  await page.mouse.move(chainEndX, chainEndY);
   await page.mouse.down();
-  await page.mouse.move(bounds.x + 205, bounds.y + 110, { steps: 5 });
+  await page.mouse.move(chainEndX + 45, chainEndY + 35, { steps: 5 });
   await page.mouse.up();
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 3);
   await page.getByRole("button", { name: "Finish chain" }).click();
