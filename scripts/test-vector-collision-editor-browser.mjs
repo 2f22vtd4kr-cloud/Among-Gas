@@ -50,7 +50,7 @@ try {
   const download = await downloadPromise;
   assert.equal(download.suggestedFilename(), "collision.v1.json");
 
-  // Walk test is explicitly identified as a 12px candidate preview, not live parity.
+  // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
   bounds = await canvas.boundingBox();
   await page.mouse.click(bounds.x + 40, bounds.y + 40);
@@ -109,6 +109,14 @@ try {
     );
   }
   await touch.detach();
+
+  // A reload must offer an explicit restore for the unsaved local document.
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.locator("canvas[data-editor-loaded='true']").waitFor({ timeout: 15000 });
+  await page.getByRole("button", { name: "Restore local draft" }).waitFor({ timeout: 5000 });
+  await page.getByRole("button", { name: "Restore local draft" }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
+  assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0);
 
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
