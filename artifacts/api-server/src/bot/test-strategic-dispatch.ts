@@ -391,6 +391,11 @@ try {
     JSON.stringify({ taskId: 999 }),
     4,
   );
+  await runScenario(
+    'gsk_' + 'I'.repeat(48),
+    'not valid JSON',
+    4,
+  );
   await testModelMeetingDialogueDispatch();
   await testModelHuntDispatch();
   await testModelSabotageDispatch();
