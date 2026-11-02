@@ -3,7 +3,7 @@ import { CrewmateBot } from './CrewmateBot.js';
 import { ImpostorBot } from './ImpostorBot.js';
 import { SABOTAGE_DEFS, IMPOSTOR_VISION_RADIUS_PX } from '@workspace/shared/sabotage';
 import { buildPreciseCollisionGrid, isLineOfSightClear, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
-import { FEET_OFFSET_Y } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, NO_TARGET } from '@workspace/shared/coords';
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
@@ -129,6 +129,65 @@ async function runScenario(apiKey: string, modelResponse: string, expectedTaskId
   assert.equal(calls, 1, 'the real bot dispatcher made exactly one provider request');
   assert.equal(bot.currentTargetTaskId(), expectedTaskId,
     'only a valid model-selected assigned task may replace the deterministic fallback');
+}
+
+async function testModelMeetingDialogueDispatch(): Promise<void> {
+  const apiKey = 'gsk_' + 'D'.repeat(48);
+  const { lobby, bot: player } = makeLobby(apiKey);
+  const publicObservation = 'I saw Blue leave the reactor after the lights failed.';
+  const meeting = {
+    reporterSlot: 0,
+    bodySlot: NO_TARGET,
+    startedAtMs: Date.now(),
+    messages: [{ slot: 0, text: publicObservation, sentAtMs: Date.now() }],
+    votes: new Map<number, number>(),
+    votingOpen: false,
+    discussionTimer: null,
+    votingTimer: null,
+  };
+  lobby.phase = 'MEETING';
+  lobby.meeting = meeting;
+  const replies: Array<{ slot: number; text: string }> = [];
+  const manager = {
+    sendMeetingChat: (_lobby: Lobby, slot: number, text: string) => {
+      replies.push({ slot, text });
+      meeting.messages.push({ slot, text, sentAtMs: Date.now() });
+    },
+  } as unknown as LobbyManager;
+  const responseText = 'I can corroborate the reactor timeline, but we need another witness.';
+
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    assert.equal(String(input), 'https://api.groq.com/openai/v1/chat/completions');
+    const request = JSON.parse(String(init?.body)) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    const system = request.messages.find(message => message.role === 'system')?.content ?? '';
+    const user = JSON.parse(request.messages.find(message => message.role === 'user')!.content) as {
+      livingRoster: string;
+      meetingType: string;
+      publicTranscript: string;
+    };
+    assert.match(system, /Use only the public meeting transcript and living-player roster/);
+    assert.ok(user.publicTranscript.includes(publicObservation),
+      'the real discussion dispatcher sends the actual public player statement to the model');
+    assert.equal(user.meetingType, 'emergency call');
+    assert.equal('hiddenRoles' in user, false, 'discussion prompt does not include hidden roles');
+    assert.equal('privatePositions' in user, false, 'discussion prompt does not include private player positions');
+    return new Response(JSON.stringify({
+      choices: [{ message: { content: responseText } }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch;
+
+  const agent = new ProbeCrewmateBot();
+  agent.tick(lobby, player, manager);
+  await new Promise(resolve => setTimeout(resolve, 1_200));
+  agent.tick(lobby, player, manager);
+  for (let attempt = 0; attempt < 50 && replies.length === 0; attempt++) {
+    await new Promise(resolve => setTimeout(resolve, 10));
+  }
+  assert.equal(replies.length, 1, 'a relevant public message produces one asynchronous bot reply');
+  assert.equal(replies[0].slot, player.slot, 'the reply is broadcast from the acting bot slot');
+  assert.equal(replies[0].text, responseText, 'the real meeting dispatcher broadcasts the model response');
 }
 
 class ProbeImpostorBot extends ImpostorBot {
@@ -332,9 +391,10 @@ try {
     JSON.stringify({ taskId: 999 }),
     4,
   );
+  await testModelMeetingDialogueDispatch();
   await testModelHuntDispatch();
   await testModelSabotageDispatch();
-  console.log('PASS: live bot dispatch accepts bounded mock-provider task, hunt and sabotage choices with safe fallback');
+  console.log('PASS: real bot dispatch handles mock-provider public dialogue, task, hunt and sabotage choices with safe fallback');
 } finally {
   globalThis.fetch = originalFetch;
 }
