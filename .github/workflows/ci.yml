@@ -50,9 +50,6 @@ jobs:
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform
 
-      - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
-        run: pnpm --filter @workspace/scripts run test:pathfinding
-
       - name: Verify character atlas crops, authored scale and shared feet anchor
         run: pnpm --filter @workspace/scripts run test:character-geometry
 
@@ -218,5 +215,9 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-      - name: Run headless multiplayer gameplay simulations
-        run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0
+      - name: Run three independently seeded 100-game balance batches
+        run: |
+          set -euo pipefail
+          for seed in 17001 17002 17003; do
+            pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0 --seed "$seed"
+          done

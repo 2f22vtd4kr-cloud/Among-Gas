@@ -14,10 +14,12 @@
 import { BotAgent, BOT_SPEED_PX } from './BotAgent.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { REPORT_RANGE_PX } from '@workspace/shared/collisionMap';
-import { SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX } from '@workspace/shared/sabotage';
+import { LIGHTS_CREWMATE_VISION_RADIUS_PX, NORMAL_VISION_RADIUS_PX, SABOTAGE_COMMS, SABOTAGE_DEFS, SABOTAGE_DOORS, SABOTAGE_INTERACTION_RANGE_PX, SABOTAGE_LIGHTS } from '@workspace/shared/sabotage';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { chooseEvidenceWeightedVote } from './voting.js';
+import { requestGroqDialogue } from './groqDialogue.js';
+import { buildCrewTaskPlanningMessages, observeVisiblePlayers, parseCrewTaskChoice } from './strategicPolicy.js';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
 const TASK_DWELL_TICKS = 5; // 5 × 200ms = 1s per task step
@@ -31,6 +33,9 @@ export class CrewmateBot extends BotAgent {
   private _dwellTicks = 0;
   /** Wander target (used when all tasks are complete). */
   private _wanderTarget: Point | null = null;
+  /** At most one structured task-planning request may be in flight per bot. */
+  private _taskPlanningPending = false;
+  private _taskPlanningGeneration = 0;
 
   override roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
     // ── 1. Sabotage active ────────────────────────────────────────────────
@@ -189,20 +194,106 @@ export class CrewmateBot extends BotAgent {
       return this._targetTaskId;
     }
 
-    // Pick a new unlocked task (first one with remaining steps)
-    for (const taskId of self.assignedTasks) {
-      if (!isDoorLocked(taskId) && this._nextStep(lobby, self, taskId) !== null) {
-        if (this._targetTaskId !== taskId) {
-          this._targetTaskId = taskId;
-          this._dwellTicks = 0;
-          this.clearPath();
-        }
-        return taskId;
-      }
+    // Build only from this crewmate's own assigned, unfinished tasks. The
+    // language model may rank this bounded candidate list but cannot invent a
+    // task or issue an authoritative game action.
+    const options = self.assignedTasks
+      .filter(taskId => !isDoorLocked(taskId))
+      .map(taskId => {
+        const definition = TASK_DEFS.find(task => task.id === taskId);
+        const nextStep = this._nextStep(lobby, self, taskId);
+        if (!definition || nextStep === null) return null;
+        return {
+          taskId,
+          name: definition.name,
+          remainingSteps: definition.steps - nextStep,
+          approximateDistancePx: Math.round(Math.hypot(definition.x - self.x, definition.y - self.y)),
+        };
+      })
+      .filter((option): option is NonNullable<typeof option> => option !== null)
+      .sort((a, b) => a.approximateDistancePx - b.approximateDistancePx || a.taskId - b.taskId);
+
+    const fallback = options[0];
+    if (!fallback) {
+      this._targetTaskId = null;
+      return null;
     }
 
-    this._targetTaskId = null;
-    return null;
+    this._targetTaskId = fallback.taskId;
+    this._dwellTicks = 0;
+    this.clearPath();
+    this._requestTaskPlan(lobby, self, options, fallback.taskId);
+    return fallback.taskId;
+  }
+
+  /**
+   * Let the crewmate model rank its own assigned tasks using only an
+   * observation snapshot: no hidden roles, unseen player positions, or private
+   * server events enter the prompt. The nearest-task choice remains the
+   * deterministic fallback whenever AI is unavailable or invalid.
+   */
+  private _requestTaskPlan(
+    lobby: Lobby,
+    self: LobbyPlayer,
+    options: readonly {
+      taskId: number;
+      name: string;
+      remainingSteps: number;
+      approximateDistancePx: number;
+    }[],
+    fallbackTaskId: number,
+  ): void {
+    const apiKey = this.getSessionGroqApiKey(lobby);
+    if (!apiKey || this._taskPlanningPending) return;
+
+    const visionRadiusPx = lobby.sabotage?.systemId === SABOTAGE_LIGHTS
+      ? LIGHTS_CREWMATE_VISION_RADIUS_PX
+      : NORMAL_VISION_RADIUS_PX;
+    const nearbyPlayers = observeVisiblePlayers(
+      self.slot,
+      self.x,
+      self.y,
+      Array.from(lobby.players.values()).filter(player =>
+        !player.inVent && player.disconnectedAtMs === undefined,
+      ),
+      visionRadiusPx,
+      (x, y) => this.hasLineOfSightToPoint(self, { x, y }),
+    );
+    const messages = buildCrewTaskPlanningMessages({
+      username: self.username,
+      availableTasks: options,
+      nearbyPlayers,
+    });
+    const generation = ++this._taskPlanningGeneration;
+    const roundStartedAtMs = lobby.startedAtMs;
+    this._taskPlanningPending = true;
+
+    void requestGroqDialogue(apiKey, messages, Date.now() + 8_000, { temperature: 0.2 })
+      .then(response => {
+        if (!response || lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self ||
+            !self.alive || lobby.startedAtMs !== roundStartedAtMs ||
+            this._targetTaskId !== fallbackTaskId) return;
+
+        const choice = parseCrewTaskChoice(response, options.map(option => option.taskId));
+        if (choice === null || choice === fallbackTaskId) return;
+        const chosenOption = options.find(option => option.taskId === choice);
+        if (!chosenOption || this._nextStep(lobby, self, choice) === null || this.isDoorLockedTask(lobby, choice)) return;
+
+        this._targetTaskId = choice;
+        this._dwellTicks = 0;
+        this.clearPath();
+      })
+      .catch(() => {
+        // The local nearest-task policy remains authoritative on provider errors.
+      })
+      .finally(() => {
+        if (this._taskPlanningGeneration === generation) this._taskPlanningPending = false;
+      });
+  }
+
+  private isDoorLockedTask(lobby: Lobby, taskId: number): boolean {
+    return lobby.sabotage?.systemId === SABOTAGE_DOORS &&
+      lobby.sabotage.lockedTaskIds.includes(taskId);
   }
 
   /** Ghosts retain their tasks and can pass through walls/closed doors. */
