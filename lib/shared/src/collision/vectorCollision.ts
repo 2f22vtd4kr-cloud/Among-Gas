@@ -1,3 +1,5 @@
+import { PLAYER_HALF_WIDTH, PLAYER_RADIUS } from "../coords.js";
+
 /**
  * Framework-free vector collision and vision primitives.
  * This is a foundation only: production use requires a complete reviewed
@@ -327,13 +329,27 @@ export class CollisionWorld {
     return true;
   }
 
-  /**
-   * Swept, sub-stepped circular collider. Blocked diagonal attempts try each
-   * axis independently to slide along walls. Excessive jumps fail closed.
-   */
-  move(x: number, y: number, dx: number, dy: number, radius: number): [number, number] {
-    if (![x, y, dx, dy, radius].every(Number.isFinite) || radius < 0 ||
-        !this.isWalkable(x, y, radius)) return [x, y];
+  /** The production player footprint: three radius-4px circles at feetX ±10px. */
+  isPlayerWalkableAtFeet(feetX: number, feetY: number): boolean {
+    if (![feetX, feetY].every(Number.isFinite)) return false;
+    return this.isWalkable(feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
+      this.isWalkable(feetX, feetY, PLAYER_RADIUS) &&
+      this.isWalkable(feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
+  }
+
+  private moveWithFootprint(
+    x: number,
+    y: number,
+    dx: number,
+    dy: number,
+    radius: number,
+    offsets: readonly number[],
+  ): [number, number] {
+    const canStand = (cx: number, cy: number): boolean =>
+      offsets.every(offset => this.isWalkable(cx + offset, cy, radius));
+    if (![x, y, dx, dy, radius].every(Number.isFinite) || radius < 0 || !canStand(x, y)) {
+      return [x, y];
+    }
     const length = magnitude(dx, dy);
     if (length < EPS) return [x, y];
     const stepLength = Math.max(1, Math.min(4, radius * 0.5 || 1));
@@ -342,16 +358,33 @@ export class CollisionWorld {
     const sx = dx / steps, sy = dy / steps;
     let px = x, py = y;
     for (let i = 0; i < steps; i++) {
-      if (this.isWalkable(px + sx, py + sy, radius)) {
+      if (canStand(px + sx, py + sy)) {
         px += sx;
         py += sy;
-      } else if (this.isWalkable(px + sx, py, radius)) {
+      } else if (canStand(px + sx, py)) {
         px += sx;
-      } else if (this.isWalkable(px, py + sy, radius)) {
+      } else if (canStand(px, py + sy)) {
         py += sy;
       }
     }
     return [px, py];
+  }
+
+  /** Swept circular collider with safe diagonal sliding and bounded substeps. */
+  move(x: number, y: number, dx: number, dy: number, radius: number): [number, number] {
+    return this.moveWithFootprint(x, y, dx, dy, radius, [0]);
+  }
+
+  /**
+   * Move with the exact current Among Gas player collision footprint.
+   * Inputs and output are the feet anchor in world pixels, not the sprite centre.
+   */
+  movePlayerAtFeet(feetX: number, feetY: number, dx: number, dy: number): [number, number] {
+    return this.moveWithFootprint(feetX, feetY, dx, dy, PLAYER_RADIUS, [
+      -PLAYER_HALF_WIDTH,
+      0,
+      PLAYER_HALF_WIDTH,
+    ]);
   }
 
   rasterizeNav(cell = 16, radius = 12): { cols: number; rows: number; cell: number; walk: Uint8Array } {
