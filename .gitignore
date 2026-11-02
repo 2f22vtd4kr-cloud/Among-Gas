@@ -56,3 +56,6 @@ Thumbs.db
 /artifacts/telegram-game/collision-reference-overlay.png
 /artifacts/telegram-game/collision-qa-tiles/
 /lib/shared/src/collisionDataFine.generated-preview.ts
+
+# Local vector-collision editor candidate backups
+/lib/shared/src/collision/.backups/
