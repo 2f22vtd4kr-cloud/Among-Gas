@@ -177,7 +177,11 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   }) as typeof fetch;
 
   const agent = new ProbeCrewmateBot();
-  await new Promise(resolve => setTimeout(resolve, 1_200));
+  // The production 5Hz scheduler initializes a per-slot discussion stagger
+  // on the first tick. Advance that scheduler explicitly rather than waiting
+  // before it has been initialized.
+  agent.tick(lobby, player, manager);
+  await new Promise(resolve => setTimeout(resolve, 650));
   agent.tick(lobby, player, manager);
   for (let attempt = 0; attempt < 100 && replies.length === 0; attempt++) {
     await new Promise(resolve => setTimeout(resolve, 10));
