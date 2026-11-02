@@ -61,8 +61,15 @@ try {
   assert.equal(request.url, 'https://api.groq.com/openai/v1/chat/completions');
   assert.equal((request.init?.headers as Record<string, string>).Authorization, `Bearer ${validKey}`);
   assert.equal(JSON.parse(String(request.init?.body)).model, 'openai/gpt-oss-120b');
-  assert.equal(JSON.parse(String(request.init?.body)).temperature, 0.65,
+  const naturalBody = JSON.parse(String(request.init?.body));
+  assert.equal(naturalBody.temperature, 0.65,
     'natural dialogue uses the tuned GPT-OSS default temperature');
+  assert.equal(naturalBody.reasoning_effort, 'low');
+  assert.equal(naturalBody.include_reasoning, false);
+  assert.equal(naturalBody.max_completion_tokens, 256);
+  assert.equal(naturalBody.response_format, undefined,
+    'natural dialogue must remain ordinary text rather than JSON mode');
+
   const structuredKey = 'gsk_' + 'F'.repeat(48);
   globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     captured.push({ url: String(input), init });
@@ -130,7 +137,6 @@ try {
   assert.equal(await activeDeadlineRequest, 'done');
   assert.equal(await expiredQueuedRequest, null,
     'a queued decision is dropped rather than started when it cannot finish before its deadline');
-
 
   const rateLimitedKey = 'gsk_' + 'C'.repeat(48);
   globalThis.fetch = (async () => new Response('rate limited', { status: 429 })) as typeof fetch;
