@@ -67,6 +67,8 @@ try {
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
     const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
+    const beforeDraftPoints = Number(await canvas.getAttribute("data-draft-point-count"));
+    const beforeWalkPoints = Number(await canvas.getAttribute("data-walk-point-count"));
     bounds = await canvas.boundingBox();
     const centerX = bounds.x + bounds.width * 0.52;
     const centerY = bounds.y + bounds.height * 0.52;
@@ -94,6 +96,16 @@ try {
       Number(await canvas.getAttribute("data-shape-count")),
       beforeShapes,
       "pinch in " + mode + " must not accidentally create/delete a shape",
+    );
+    assert.equal(
+      Number(await canvas.getAttribute("data-draft-point-count")),
+      beforeDraftPoints,
+      "pinch in " + mode + " must not add a polygon vertex",
+    );
+    assert.equal(
+      Number(await canvas.getAttribute("data-walk-point-count")),
+      beforeWalkPoints,
+      "pinch in " + mode + " must not change walk-test points",
     );
   }
   await touch.detach();
