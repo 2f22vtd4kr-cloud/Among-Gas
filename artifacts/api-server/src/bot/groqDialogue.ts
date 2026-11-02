@@ -7,7 +7,7 @@ import { createHash } from 'node:crypto';
 
 export const GROQ_CHAT_MODEL = 'openai/gpt-oss-120b';
 const GROQ_KEY_PATTERN = /^gsk_[A-Za-z0-9_-]{20,240}$/;
-export const GROQ_MIN_REQUEST_INTERVAL_MS = 1_500;
+export const GROQ_MIN_REQUEST_INTERVAL_MS = 100;
 export const GROQ_REQUEST_TIMEOUT_MS = 6_500;
 export const GROQ_DECISION_RESERVE_MS = GROQ_REQUEST_TIMEOUT_MS + 500;
 
@@ -59,21 +59,20 @@ export async function requestGroqDialogue(
   if (!isValidGroqApiKey(apiKey)) return null;
   const keyFingerprint = createHash('sha256').update(apiKey).digest('hex');
 
-  // A key can be shared by every bot in a lobby. Queue requests instead of
-  // rejecting contenders: rejection made otherwise healthy bots fall back to
-  // deterministic votes simply because another bot spoke first.
-  return withGroqKeyQueue(keyFingerprint, async () => {
+  // Reserve a per-key request start slot, but do not hold the queue while the
+  // network request is in flight. The provider's current developer tier allows
+  // 1K RPM; a short start interval plus bounded request timeouts permits several
+  // bots to receive decisions in one game tick without creating a request burst.
+  const slotGranted = await withGroqKeyQueue(keyFingerprint, async () => {
     const lastRequestAt = lastGroqRequestAt.get(keyFingerprint) ?? 0;
     const cooldownMs = Math.max(0, GROQ_MIN_REQUEST_INTERVAL_MS - (Date.now() - lastRequestAt));
 
     // Never start a request that cannot finish before the caller's deadline.
-    // The caller can then make its deterministic decision while the action is
-    // still legal instead of waiting for a response that will arrive too late.
     if (deadlineAtMs !== undefined &&
-        Date.now() + cooldownMs + GROQ_REQUEST_TIMEOUT_MS > deadlineAtMs) return null;
+        Date.now() + cooldownMs + GROQ_REQUEST_TIMEOUT_MS > deadlineAtMs) return false;
     if (cooldownMs > 0) await wait(cooldownMs);
     if (deadlineAtMs !== undefined &&
-        Date.now() + GROQ_REQUEST_TIMEOUT_MS > deadlineAtMs) return null;
+        Date.now() + GROQ_REQUEST_TIMEOUT_MS > deadlineAtMs) return false;
 
     const startedAt = Date.now();
     lastGroqRequestAt.set(keyFingerprint, startedAt);
@@ -82,42 +81,44 @@ export async function requestGroqDialogue(
         lastGroqRequestAt.delete(fingerprint);
       }
     }
-
-    try {
-      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: GROQ_CHAT_MODEL,
-          messages,
-          max_completion_tokens: 256,
-          reasoning_effort: 'low',
-          include_reasoning: false,
-          temperature: Number.isFinite(options.temperature)
-            ? Math.max(0, Math.min(2, options.temperature!))
-            : 0.65,
-          ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
-          stream: false,
-        }),
-        signal: AbortSignal.timeout(GROQ_REQUEST_TIMEOUT_MS),
-      });
-      if (!response.ok) return null;
-      const payload = await response.json() as {
-        choices?: Array<{ message?: { content?: unknown } }>;
-      };
-      const content = payload.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') return null;
-      const clean = content.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-      return clean.length > 0 ? clean.slice(0, 220) : null;
-    } catch {
-      // Provider outages, invalid keys, DNS errors and timeouts all use the
-      // deterministic in-game fallback. Never expose provider details.
-      return null;
-    }
+    return true;
   });
+  if (!slotGranted) return null;
+
+  try {
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + apiKey,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: GROQ_CHAT_MODEL,
+        messages,
+        max_completion_tokens: 256,
+        reasoning_effort: 'low',
+        include_reasoning: false,
+        temperature: Number.isFinite(options.temperature)
+          ? Math.max(0, Math.min(2, options.temperature!))
+          : 0.65,
+        ...(options.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+        stream: false,
+      }),
+      signal: AbortSignal.timeout(GROQ_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) return null;
+    const payload = await response.json() as {
+      choices?: Array<{ message?: { content?: unknown } }>;
+    };
+    const content = payload.choices?.[0]?.message?.content;
+    if (typeof content !== 'string') return null;
+    const clean = content.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
+    return clean.length > 0 ? clean.slice(0, 220) : null;
+  } catch {
+    // Provider outages, invalid keys, DNS errors and timeouts all use the
+    // deterministic in-game fallback. Never expose provider details.
+    return null;
+  }
 }
 
 function sanitizePublicDialogueText(value: string, maxLength: number): string {
