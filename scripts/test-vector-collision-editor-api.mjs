@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import path from "node:path";
 
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
-const backupPath = documentPath + ".bak";
+const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const endpoint = base.replace(/\/$/, "") + "/__vector-collision-api/document";
 const origin = new URL(base).origin;
 const headers = {
@@ -53,7 +54,7 @@ async function post(body, requestHeaders = headers) {
 
 try {
   fs.rmSync(documentPath, { force: true });
-  fs.rmSync(backupPath, { force: true });
+  fs.rmSync(backupDirectory, { recursive: true, force: true });
 
   const initialResponse = await fetch(endpoint, { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
@@ -107,23 +108,41 @@ try {
 
   const firstSave = await post(JSON.stringify(validDocument), headers);
   assert.equal(firstSave.status, 200, "a valid candidate can be saved");
-  assert.equal((await jsonResponse(firstSave)).shapeCount, 2);
+  const firstResult = await jsonResponse(firstSave);
+  assert.equal(firstResult.shapeCount, 2);
+  assert.match(firstResult.contentHash, /^[a-f0-9]{64}$/, "save returns a SHA-256 content hash");
+  assert.equal(firstResult.backupCount, 0);
   assert.ok(fs.existsSync(documentPath), "save writes the configured candidate file");
 
   const modified = structuredClone(validDocument);
   modified.shapes[0].label = "Updated wall label";
   const secondSave = await post(JSON.stringify(modified), headers);
   assert.equal(secondSave.status, 200, "a second candidate save succeeds");
-  assert.ok(fs.existsSync(backupPath), "the previous candidate is preserved as a backup");
-  const backup = JSON.parse(fs.readFileSync(backupPath, "utf8"));
+  const secondResult = await jsonResponse(secondSave);
+  assert.match(secondResult.contentHash, /^[a-f0-9]{64}$/);
+  assert.notEqual(secondResult.contentHash, firstResult.contentHash, "content hash changes with the saved document");
+  assert.equal(secondResult.backupCount, 1);
+  let backupFiles = fs.readdirSync(backupDirectory).filter(name => name.endsWith(".json"));
+  assert.equal(backupFiles.length, 1, "the previous candidate is preserved in the backup directory");
+  const backup = JSON.parse(fs.readFileSync(path.join(backupDirectory, backupFiles[0]), "utf8"));
   assert.equal(backup.shapes[0].label, "API test wall", "backup contains the prior saved version");
+
+  // Exercise retention: only the newest 20 timestamped versions may remain.
+  for (let index = 0; index < 21; index++) {
+    const rotating = structuredClone(modified);
+    rotating.shapes[0].label = "Rotation " + index;
+    const response = await post(JSON.stringify(rotating), headers);
+    assert.equal(response.status, 200, "rotating backup save " + index + " succeeds");
+  }
+  backupFiles = fs.readdirSync(backupDirectory).filter(name => name.endsWith(".json"));
+  assert.equal(backupFiles.length, 20, "only the newest 20 backups are retained");
 
   const reloadedResponse = await fetch(endpoint, { cache: "no-store" });
   const reloaded = await jsonResponse(reloadedResponse);
   assert.equal(reloaded.saved, true);
-  assert.equal(reloaded.document.shapes[0].label, "Updated wall label");
+  assert.equal(reloaded.document.shapes[0].label, "Rotation 20");
   console.log("VECTOR COLLISION EDITOR API TESTS PASSED");
 } finally {
   fs.rmSync(documentPath, { force: true });
-  fs.rmSync(backupPath, { force: true });
+  fs.rmSync(backupDirectory, { recursive: true, force: true });
 }
