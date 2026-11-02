@@ -34,6 +34,10 @@ try {
     isMobile: true,
     hasTouch: true,
   });
+  // The role-reveal animation assertion is for the normal-motion presentation.
+  // CI hosts may default to prefers-reduced-motion; set this context explicitly,
+  // then test reduced-motion behavior in its dedicated section below.
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
   page.on('pageerror', error => failures.push(error.message));
   await page.route('**/*', route => {
     const url = route.request().url();
