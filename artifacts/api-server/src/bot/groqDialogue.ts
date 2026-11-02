@@ -117,7 +117,7 @@ export async function requestGroqDialogue(
 
 function sanitizePublicDialogueText(value: string, maxLength: number): string {
   return Array.from(String(value ?? ''))
-    .map(character => /[\\p{Cc}\\p{Cf}\\p{Cs}\\p{Zl}\\p{Zp}]/u.test(character) ? ' ' : character)
+    .map(character => /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u.test(character) ? ' ' : character)
     .join('')
     .replace(/\\s+/gu, ' ')
     .trim()
