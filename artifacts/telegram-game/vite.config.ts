@@ -6,6 +6,7 @@ import { defineConfig, type Plugin } from 'vite';
 
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData';
+import { validateCollisionDocument } from '../../lib/shared/src/collision/vectorCollision';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dev-only API for the in-app Collision Editor (/collision-editor).
@@ -44,6 +45,137 @@ function encodeRuns(grid: number[]): number[] {
 // what is a throwaway dev-only tool.
 const EDITOR_HEADER = 'x-collision-editor';
 const MAX_BODY_BYTES = 1_000_000; // grid is ~30KB of JSON; generous cap against abuse
+
+
+const VECTOR_EDITOR_HEADER = 'x-vector-collision-editor';
+const VECTOR_EDITOR_MAX_BODY_BYTES = 512_000;
+
+function vectorCollisionEditorApiPlugin(): Plugin {
+  return {
+    name: 'vector-collision-editor-api',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use('/__vector-collision-api', (req, res, next) => {
+        const route = (req.url || '/').split('?')[0];
+        if (route !== '/document') {
+          next();
+          return;
+        }
+
+        const respond = (status: number, payload: unknown) => {
+          res.statusCode = status;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify(payload));
+        };
+
+        const filePath = path.resolve(
+          import.meta.dirname,
+          '../../lib/shared/src/collision/collision.v1.json',
+        );
+
+        if (req.method === 'GET') {
+          try {
+            const exists = fs.existsSync(filePath);
+            const document = exists
+              ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
+              : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
+            const errors = validateCollisionDocument(document);
+            if (errors.length) {
+              respond(500, { error: 'Saved candidate document is invalid: ' + errors.slice(0, 5).join('; ') });
+              return;
+            }
+            respond(200, { document, saved: exists });
+          } catch (error) {
+            respond(500, { error: error instanceof Error ? error.message : String(error) });
+          }
+          return;
+        }
+
+        if (req.method !== 'POST') {
+          respond(405, { error: 'Method not allowed' });
+          return;
+        }
+
+        // This is a local authoring endpoint, not a public game API. Require a
+        // same-origin browser request and a custom header (CORS preflight blocks
+        // cross-origin form/script posts that cannot set the header).
+        const origin = req.headers.origin;
+        const host = req.headers.host;
+        let sameOrigin = false;
+        try {
+          sameOrigin = typeof origin === 'string' && typeof host === 'string' && new URL(origin).host === host;
+        } catch {
+          sameOrigin = false;
+        }
+        if (!sameOrigin || req.headers[VECTOR_EDITOR_HEADER] !== '1') {
+          respond(403, { error: 'Forbidden: same-origin editor request required' });
+          return;
+        }
+        if (!String(req.headers['content-type'] || '').toLowerCase().startsWith('application/json')) {
+          respond(415, { error: 'Content-Type must be application/json' });
+          return;
+        }
+
+        let body = '';
+        let bytes = 0;
+        let tooLarge = false;
+        req.on('data', chunk => {
+          bytes += chunk.length;
+          if (bytes > VECTOR_EDITOR_MAX_BODY_BYTES) {
+            tooLarge = true;
+            body = '';
+            return;
+          }
+          if (!tooLarge) body += chunk.toString('utf8');
+        });
+        req.on('end', () => {
+          if (tooLarge) {
+            respond(413, { error: 'Candidate document exceeds 512 KB' });
+            return;
+          }
+          try {
+            const candidate = JSON.parse(body) as unknown;
+            const errors = validateCollisionDocument(candidate);
+            if (errors.length) {
+              respond(400, { error: errors.slice(0, 12).join('; ') });
+              return;
+            }
+            const document = candidate as { version: number; mapW: number; mapH: number; shapes: unknown[] };
+            if (document.mapW !== 3224 || document.mapH !== 1858) {
+              respond(400, { error: 'Candidate dimensions must exactly match the 3224×1858 world' });
+              return;
+            }
+            if (!Array.isArray(document.shapes) || document.shapes.length === 0) {
+              respond(400, { error: 'Refusing to save an empty document; author and review real map contours first' });
+              return;
+            }
+            if (document.shapes.length > 1000) {
+              respond(400, { error: 'Candidate document may contain at most 1000 shapes' });
+              return;
+            }
+
+            fs.mkdirSync(path.dirname(filePath), { recursive: true });
+            const temporaryPath = filePath + '.' + process.pid + '.tmp';
+            const backupPath = filePath + '.bak';
+            const serialized = JSON.stringify(document, null, 2) + '\n';
+            try {
+              if (fs.existsSync(filePath)) fs.copyFileSync(filePath, backupPath);
+              fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', flag: 'w' });
+              fs.renameSync(temporaryPath, filePath);
+            } catch (error) {
+              try { if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath); } catch { /* best-effort cleanup */ }
+              throw error;
+            }
+            respond(200, { ok: true, saved: true, shapeCount: document.shapes.length });
+          } catch (error) {
+            respond(400, { error: error instanceof Error ? error.message : String(error) });
+          }
+        });
+      });
+    },
+  };
+}
 
 function collisionEditorApiPlugin(): Plugin {
   return {
@@ -151,6 +283,7 @@ export default defineConfig({
     tailwindcss(),
     runtimeErrorOverlay(),
     collisionEditorApiPlugin(),
+    vectorCollisionEditorApiPlugin(),
     ...(process.env.NODE_ENV !== 'production' &&
     process.env.REPL_ID !== undefined
       ? [
