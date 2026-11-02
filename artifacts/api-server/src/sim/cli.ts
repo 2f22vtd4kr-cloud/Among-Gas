@@ -13,6 +13,7 @@
  *   --quiet        Suppress per-event NDJSON lines (still prints per-game results + summary)
  *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout (unless --maxTimeouts is set)
  *   --maxTimeouts   Maximum tolerated safety timeouts (default: all, or 0 with --failOnTimeout)
+ *   --seed         Unsigned 32-bit seed for this batch's Math.random stream
  *
  * Output: NDJSON to stdout — one line per lifecycle event, one line per
  * finished game (`type":"gameResult"`), and one final `"type":"summary"`
@@ -21,6 +22,7 @@
 import { runSimulationBatch } from './simulateGame.js';
 import { MAX_PLAYERS } from '../ws/lobby.js';
 import type { SimGameResult } from './types.js';
+import { createSeededRandom } from './seededRandom.js';
 
 function parseArgs(argv: string[]): Record<string, string> {
   const out: Record<string, string> = {};
@@ -92,6 +94,9 @@ async function main(): Promise<void> {
     : undefined;
   const concurrency = requirePositiveInt(args.concurrency, 'concurrency', Math.min(25, games));
   const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 300_000, { min: 1000 });
+  const seed = args.seed === undefined
+    ? undefined
+    : requirePositiveInt(args.seed, 'seed', 0, { min: 0, max: 0xffff_ffff });
   const quiet = args.quiet === 'true';
   const failOnTimeout = args.failOnTimeout === 'true';
   const maxTimeouts = args.maxTimeouts !== undefined
@@ -102,11 +107,16 @@ async function main(): Promise<void> {
   console.error(
     `[simulate] ${games} game(s), ${bots} bots/game` +
     (impostors !== undefined ? `, ${impostors} impostor(s) forced` : ', default impostor count') +
-    `, concurrency=${concurrency}, timeout=${timeoutMs}ms`,
+    `, concurrency=${concurrency}, timeout=${timeoutMs}ms` +
+    (seed === undefined ? '' : `, batchSeed=${seed}`),
   );
 
   const startedAt = Date.now();
-  const results = await runSimulationBatch({
+  const originalRandom = Math.random;
+  if (seed !== undefined) Math.random = createSeededRandom(seed);
+  let results: SimGameResult[];
+  try {
+    results = await runSimulationBatch({
     games, bots, impostors, concurrency, timeoutMs,
     onEvent: (event) => {
       const code = event.code;
@@ -129,9 +139,12 @@ async function main(): Promise<void> {
       }
       recentEvents.delete(result.code);
     },
-  });
+    });
+  } finally {
+    if (seed !== undefined) Math.random = originalRandom;
+  }
 
-  const summary = summarize(results, Date.now() - startedAt);
+  const summary = { ...summarize(results, Date.now() - startedAt), seed: seed ?? null };
   console.log(JSON.stringify(summary));
 
   console.error('');
