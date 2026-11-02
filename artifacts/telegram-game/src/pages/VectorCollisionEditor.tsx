@@ -465,7 +465,7 @@ export default function VectorCollisionEditor() {
       const centerX = (values[0].x + values[1].x) / 2 - rect.left;
       const centerY = (values[0].y + values[1].y) / 2 - rect.top;
       const currentDistance = Math.max(1, Math.hypot(values[0].x - values[1].x, values[0].y - values[1].y));
-      const zoom = Math.max(0.04, Math.min(1.5, pinchRef.current.zoom * currentDistance / pinchRef.current.distance));
+      const zoom = Math.max(0.1, Math.min(8, pinchRef.current.zoom * currentDistance / pinchRef.current.distance));
       cameraRef.current.zoom = zoom;
       cameraRef.current.x = pinchRef.current.world[0] - centerX / zoom;
       cameraRef.current.y = pinchRef.current.world[1] - centerY / zoom;
@@ -519,7 +519,7 @@ export default function VectorCollisionEditor() {
     const pointerY = event.clientY - rect.top;
     const worldX = camera.x + pointerX / camera.zoom;
     const worldY = camera.y + pointerY / camera.zoom;
-    const zoom = Math.max(0.04, Math.min(1.5, camera.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
+    const zoom = Math.max(0.1, Math.min(8, camera.zoom * (event.deltaY < 0 ? 1.12 : 1 / 1.12)));
     camera.zoom = zoom;
     camera.x = worldX - pointerX / zoom;
     camera.y = worldY - pointerY / zoom;
@@ -575,7 +575,7 @@ export default function VectorCollisionEditor() {
     const rect = canvas.getBoundingClientRect();
     const centerX = rect.width / 2, centerY = rect.height / 2;
     const world: Point = [camera.x + centerX / camera.zoom, camera.y + centerY / camera.zoom];
-    const zoom = Math.max(0.04, Math.min(1.5, camera.zoom * factor));
+    const zoom = Math.max(0.1, Math.min(8, camera.zoom * factor));
     camera.zoom = zoom;
     camera.x = world[0] - centerX / zoom;
     camera.y = world[1] - centerY / zoom;
@@ -673,7 +673,7 @@ export default function VectorCollisionEditor() {
 
   const buttonStyle = (active = false): React.CSSProperties => ({
     flex: "0 0 auto",
-    minHeight: 38,
+    minHeight: 48,
     padding: "7px 11px",
     borderRadius: 8,
     border: "1px solid " + (active ? "#e5bd66" : "#536879"),
@@ -716,8 +716,8 @@ export default function VectorCollisionEditor() {
           <input type="checkbox" checked={blocksSight} onChange={event => setBlocksSight(event.target.checked)} />
           Blocks sight
         </label>
-        <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", fontSize: 12 }} />
-        <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, fontSize: 12 }}>
+        <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", minHeight: 48, fontSize: 12 }} />
+        <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, minHeight: 48, fontSize: 12 }}>
           <option value="unassigned">Zone: unassigned</option>
           <option value="A">A · north-west</option>
           <option value="B">B · north-east</option>
