@@ -62,3 +62,30 @@ assert.equal(parseImpostorHuntChoice('{"targetSlot":null}', [2, 3]), null);
 assert.deepEqual(observeVisiblePlayers(0, 0, 0, [], 100, () => true), []);
 
 console.log('PASS: role-scoped bot observations, visible-only candidates and strict task/hunt decision schemas');
+
+import {
+  buildImpostorSabotagePlanningMessages,
+  parseImpostorSabotageChoice,
+} from './strategicPolicy.js';
+
+const sabotageMessages = buildImpostorSabotagePlanningMessages({
+  username: 'Red',
+  availableSystems: [
+    { systemId: 1, name: 'Lights' },
+    { systemId: 2, name: 'O₂' },
+    { systemId: 4, name: 'Comms' },
+  ],
+  visibleCrewCount: 3,
+  visibleCrewPairsWithin350Px: 2,
+  publicTaskProgressPct: 68,
+  killCooldownMs: 4000,
+});
+const sabotagePayload = JSON.parse(sabotageMessages[1].content);
+assert.deepEqual(sabotagePayload.availableSystems.map((item: { systemId: number }) => item.systemId), [1, 2, 4]);
+assert.equal(sabotagePayload.currentlyVisibleCrew.count, 3);
+assert.equal(sabotagePayload.publicTaskProgressPct, 68);
+assert.equal('unseenPlayerPositions' in sabotagePayload, false);
+assert.equal(parseImpostorSabotageChoice('{"sabotageId":2}', [1, 2, 4]), 2);
+assert.equal(parseImpostorSabotageChoice('{"sabotageId":3}', [1, 2, 4]), null);
+assert.equal(parseImpostorSabotageChoice('{"sabotageId":2,"kill":true}', [1, 2, 4]), null);
+assert.equal(parseImpostorSabotageChoice('{"sabotageId":null}', [1, 2, 4]), null);
