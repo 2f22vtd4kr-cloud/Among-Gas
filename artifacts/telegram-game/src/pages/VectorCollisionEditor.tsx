@@ -89,10 +89,11 @@ export default function VectorCollisionEditor() {
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
 
-  const replaceDocument = useCallback((next: EditableDocument, record = true) => {
-    docRef.current = next;
-    if (record) historyRef.current.commit(next);
-    setDocument(next);
+  const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
+    const editable = cloneDocument(next);
+    docRef.current = editable;
+    if (record) historyRef.current.commit(editable);
+    setDocument(editable);
     setSaved(false);
   }, []);
 
@@ -496,8 +497,9 @@ export default function VectorCollisionEditor() {
           points: item.points.map((vertex, index) => index === gesture.index ? replacementPoint : vertex),
         }),
       };
-      docRef.current = next;
-      setDocument(next);
+      const editableNext = cloneDocument(next);
+      docRef.current = editableNext;
+      setDocument(editableNext);
     }
   };
 
