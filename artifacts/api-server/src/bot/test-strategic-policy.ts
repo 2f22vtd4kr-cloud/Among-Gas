@@ -23,6 +23,13 @@ assert.deepEqual(visible, [{ slot: 1, username: 'Near', distancePx: 80 }],
   'only living, in-range, line-of-sight players become observations');
 assert.equal('x' in visible[0], false, 'observations do not expose exact coordinates');
 assert.equal('role' in visible[0], false, 'observations cannot encode hidden player roles');
+const sanitized = observeVisiblePlayers(
+  0, 0, 0,
+  [{ slot: 1, username: 'Bad\\nName with a long suffix that must be cut', x: 10, y: 0, alive: true }],
+  100,
+  () => true,
+);
+assert.equal(sanitized[0].username, 'BadName with a long suffix that', 'untrusted labels are control-stripped and bounded');
 
 const crewMessages = buildCrewTaskPlanningMessages({
   username: 'Nova',
