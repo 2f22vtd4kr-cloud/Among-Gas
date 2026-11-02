@@ -33,13 +33,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
-          # Keep CI aligned with .replit's nodejs-20 runtime.
+          # Keep CI aligned with .replit's patched nodejs-24 LTS runtime.
           node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Assert CI runtime matches Replit
-        run: node -e "if (process.versions.node.split('.')[0] !== '24') throw new Error('CI must match Replit Node.js 20 runtime')"
+      - name: Assert CI runtime matches patched Replit Node.js LTS
+        run: |
+          node -e "const [major, minor, patch] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 22 || (minor === 22 && patch < 1)) throw new Error('CI requires patched Node.js 24.22.1+ LTS')"
 
       - name: Verify Replit post-merge hook skips an empty database schema
         run: env -u DATABASE_URL bash scripts/post-merge.sh
