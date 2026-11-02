@@ -96,6 +96,10 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(zeroRadius.isWalkable(50, 50, 0), false, "zero-radius point on an open wall must be blocked");
   assert.equal(zeroRadius.isWalkable(49, 50, 0), true);
   assert.equal(zeroRadius.move(49, 50, 2, 0, 0)[0], 49, "zero-radius movement must not cross an open wall");
+  const playerFootprint = new CollisionWorld([shape("near-foot-wall", [[96, 0], [96, 200]])], 200, 200);
+  assert.equal(playerFootprint.isWalkable(105, 100, 4), true, "center circle alone is clear");
+  assert.equal(playerFootprint.isPlayerWalkableAtFeet(105, 100), false, "side foot circle must preserve the current wider feet footprint");
+  assert.deepEqual(playerFootprint.movePlayerAtFeet(110, 100, -10, 0), [110, 100], "player feet footprint must not clip the nearby wall");
   const bounds = new CollisionWorld([], 200, 200);
   const [boundedX, boundedY] = bounds.move(20, 20, -100, -100, 12);
   assert.ok(boundedX >= 12 && boundedY >= 12, "player footprint must remain inside map edges");
