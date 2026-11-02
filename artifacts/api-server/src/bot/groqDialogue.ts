@@ -43,10 +43,16 @@ export interface GroqDialogueMessage {
   content: string;
 }
 
+export interface GroqDialogueRequestOptions {
+  /** Lower temperature for machine-readable decisions; dialogue keeps its natural default. */
+  readonly temperature?: number;
+}
+
 export async function requestGroqDialogue(
   apiKey: string,
   messages: readonly GroqDialogueMessage[],
   deadlineAtMs?: number,
+  options: GroqDialogueRequestOptions = {},
 ): Promise<string | null> {
   if (!isValidGroqApiKey(apiKey)) return null;
   const keyFingerprint = createHash('sha256').update(apiKey).digest('hex');
@@ -86,7 +92,9 @@ export async function requestGroqDialogue(
           model: GROQ_CHAT_MODEL,
           messages,
           max_completion_tokens: 96,
-          temperature: 0.82,
+          temperature: Number.isFinite(options.temperature)
+            ? Math.max(0, Math.min(2, options.temperature!))
+            : 0.82,
           stream: false,
         }),
         signal: AbortSignal.timeout(GROQ_REQUEST_TIMEOUT_MS),
