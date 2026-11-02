@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import {
   buildCrewTaskPlanningMessages,
   buildImpostorHuntPlanningMessages,
+  buildImpostorSabotagePlanningMessages,
   observeVisiblePlayers,
   parseCrewTaskChoice,
   parseImpostorHuntChoice,
+  parseImpostorSabotageChoice,
 } from './strategicPolicy.js';
 
 const visible = observeVisiblePlayers(
@@ -72,11 +74,6 @@ assert.equal(parseImpostorHuntChoice('{"targetSlot":null}', [2, 3]), null);
 assert.deepEqual(observeVisiblePlayers(0, 0, 0, [], 100, () => true), []);
 
 console.log('PASS: role-scoped bot observations, visible-only candidates and strict task/hunt decision schemas');
-
-import {
-  buildImpostorSabotagePlanningMessages,
-  parseImpostorSabotageChoice,
-} from './strategicPolicy.js';
 
 const sabotageMessages = buildImpostorSabotagePlanningMessages({
   username: 'Red' + String.fromCharCode(0x202e, 0x2066, 0x0000) + 'Name',
