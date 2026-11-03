@@ -55,12 +55,12 @@ export async function generateMapMaster(
   if (Math.abs(sourceScaleX - sourceScaleY) > 0.002) {
     throw new Error(`Map source aspect ratio mismatch: ${metadata.width}×${metadata.height}`);
   }
-  await sharp(sourcePath)
+  let pipeline = sharp(sourcePath)
     .removeAlpha()
-    .resize(MAP_TILE_TEX_W, MAP_TILE_TEX_H, { fit: "fill", kernel: "lanczos3" })
-    .sharpen({ sigma })
-    .png({ compressionLevel: 1 })
-    .toFile(outputPath);
+    .resize(MAP_TILE_TEX_W, MAP_TILE_TEX_H, { fit: "fill", kernel: "lanczos3" });
+  // Sigma zero is the faithful baseline: resampling only, no edge invention.
+  if (sigma > 0) pipeline = pipeline.sharpen({ sigma });
+  await pipeline.png({ compressionLevel: 1 }).toFile(outputPath);
 }
 
 export async function writeMapTileSet(
