@@ -17,8 +17,7 @@
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
     "build:map-tiles": "tsx src/buildMapTiles.ts",
     "test:map-tiles": "tsx src/testMapTiles.ts",
-    "test:map-tiles-browser": "node ./test-map-tiles-browser.mjs",
-    "test:production-world": "pnpm run build:collision && tsx src/testProductionCollisionWorld.ts"
+    "test:map-tiles-browser": "node ./test-map-tiles-browser.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
