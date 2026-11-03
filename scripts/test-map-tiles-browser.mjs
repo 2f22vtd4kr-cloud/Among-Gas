@@ -40,6 +40,7 @@ try {
       return route.abort();
     });
 
+    const startedAt = Date.now();
     await page.goto(`${origin}/?mock=task-interaction&skipReveal=true${testCase.query}`, {
       waitUntil: "domcontentloaded",
     });
@@ -57,9 +58,12 @@ try {
       `${testCase.name}: the game must not load the divergent full-size PNG/WebP paths`);
     assert.ok(!pageErrors.length, `${testCase.name}: browser errors: ${pageErrors.join("; ")}`);
     assert.ok(status && typeof status === "object", `${testCase.name}: tile status must be observable`);
+    assert.ok(status.totalDecodedBytes <= 56 * 1024 * 1024,
+      `${testCase.name}: overview plus visible tile decoded memory must stay below 56 MiB (observed ${status.totalDecodedBytes})`);
+    const tileReadyMs = Date.now() - startedAt;
 
     await page.screenshot({ path: join(outputDir, `map-tiles-${testCase.name}.png`), fullPage: true });
-    console.log(`${testCase.name}: ${tileRequests.length} tile requests; ${JSON.stringify(status)}`);
+    console.log(`${testCase.name}: ${tileRequests.length} tile requests; tile-ready ${tileReadyMs}ms; ${JSON.stringify(status)}`);
     await context.close();
   }
 
