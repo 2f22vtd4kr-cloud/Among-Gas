@@ -106,7 +106,7 @@ export class TiledMap {
         loading++;
         continue;
       }
-      if (image === "failed" || image === null) {
+      if (image === "failed") {
         failed++;
         continue;
       }
