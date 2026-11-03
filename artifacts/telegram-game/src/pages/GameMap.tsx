@@ -44,6 +44,7 @@ import {
   toWire,
   fromWire,
   FEET_OFFSET_Y,
+  KILL_COOLDOWN_MS,
   NO_TARGET,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
@@ -66,6 +67,7 @@ import { smoothVisibilityPolygon } from '../game/visibility';
 import { PRODUCTION_COLLISION_WORLD } from '@workspace/shared/collision/productionWorld';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
+import GameActionBar from '../components/GameActionBar';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
@@ -1800,6 +1802,18 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
+  const useActionKind = nearestTask !== null && myRole === 'crewmate'
+    ? 'task'
+    : nearestRepairPad !== null
+      ? 'repair'
+      : amIImpostor && nearestVentId !== null && myVentId === null
+        ? 'vent'
+        : nearestAdminTableId !== null
+          ? 'admin'
+          : null;
+  const useActionEnabled = useActionKind !== null && activeTaskId === null &&
+    myVentId === null && !showAdminTable && !showMiniMap;
+
   return (
     <div
       onPointerDown={unlockSfx}
@@ -2292,45 +2306,6 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── Vent interaction (living impostors only) ───────────────────────── */}
-      {loaded && !amIDead && amIImpostor && myVentId === null && nearestVentId !== null && meeting === null && (
-        <div style={{ position: 'fixed', bottom: 220, right: 24, zIndex: 28 }}>
-          <button
-            onClick={() => { haptic.tap(); enterVent(nearestVentId); }}
-            style={{
-              padding: '11px 16px', borderRadius: 12,
-              background: 'linear-gradient(180deg, #394b54, #17272e)',
-              color: '#e3fbff', border: '2px solid rgba(170,220,230,0.75)',
-              boxShadow: '0 4px 0 #071015, 0 0 18px rgba(50,180,200,0.25)',
-              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
-              cursor: 'pointer', touchAction: 'manipulation',
-            }}
-          >
-            {en ? 'ENTER VENT' : 'ВЛЕЗТЬ В ЛЮК'}
-          </button>
-        </div>
-      )}
-
-      {/* ── Admin Table action (living players at the custom-map console) ─── */}
-      {loaded && !amIDead && myRole !== null && myVentId === null && meeting === null &&
-        nearestAdminTableId !== null && (
-        <div style={{ position: 'fixed', bottom: 300, right: 24, zIndex: 28 }}>
-          <button
-            onClick={() => { haptic.tap(); setShowAdminTable(true); }}
-            style={{
-              padding: '11px 16px', borderRadius: 12,
-              background: 'linear-gradient(180deg, #23606d, #15323a)',
-              color: '#e4ffff', border: '2px solid rgba(105,225,235,0.8)',
-              boxShadow: '0 4px 0 #071015, 0 0 18px rgba(50,190,205,0.28)',
-              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
-              cursor: 'pointer', touchAction: 'manipulation',
-            }}
-          >
-            {en ? '◉ ADMIN TABLE' : '◉ ПЛАНШЕТ'}
-          </button>
-        </div>
-      )}
-
       {/* Live room table from the original game, using Among Gas's own map asset. */}
       {showAdminTable && myRole !== null && !amIDead && meeting === null && (() => {
         const agents = players.flatMap(player => {
@@ -2485,95 +2460,47 @@ export default function GameMap() {
         );
       })()}
 
-      {/* ── Do Task button (Phase 7, crewmates only) ────────────────────────── */}
-      {loaded && myRole === 'crewmate' && meeting === null && activeTaskId === null && nearestTask !== null && (
-        <div style={{
-          // Reserve a complete vertical lane above the kill/report action row on short portrait screens.
-          position: 'fixed', bottom: 'clamp(218px, 31vh, 260px)',
-          left: joystickSide === 'right' ? 16 : 'auto',
-          right: joystickSide === 'left' ? 16 : 'auto',
-          zIndex: 25,
-          ...customControlPositionStyle('taskAction', controlLayout, joystickSide),
-        }}>
-          <button
-            data-testid="gameplay-task-action"
-            onClick={() => { haptic.tap(); setActiveTaskId(nearestTask.taskId); }}
-            style={{
-              padding: '10px 24px', borderRadius: 10,
-              background: 'rgba(28,110,200,0.9)', color: '#dff0ff',
-              border: '1px solid rgba(100,180,255,0.5)',
-              fontFamily: 'sans-serif', fontWeight: 700, fontSize: 13,
-              letterSpacing: '0.03em', cursor: 'pointer',
-              backdropFilter: 'blur(6px)',
-              boxShadow: '0 0 18px rgba(60,140,255,0.35)',
-            }}
-          >
-            {taskRu(TASK_DEFS[nearestTask.taskId]?.name, language)}
-          </button>
-        </div>
+      {/* Report and Use stay visible while alive; their disabled state is neutral. */}
+      {loaded && myRole !== null && !amIDead && meeting === null && !voteResult?.winner && (
+        <GameActionBar
+          isImpostor={amIImpostor}
+          killCooldownMs={killCooldownMs}
+          killCooldownMaxMs={KILL_COOLDOWN_MS}
+          killAvailable={nearestTarget !== null && myVentId === null}
+          reportAvailable={nearestBody !== null && sabotage === null && myVentId === null}
+          useAvailable={useActionEnabled}
+          english={en}
+          positionStyle={customControlPositionStyle('killReport', controlLayout, joystickSide)}
+          onKill={() => {
+            if (nearestTarget !== null && killCooldownMs <= 0 && myVentId === null) {
+              haptic.tap();
+              sfx('kill', 0.48);
+              sendKill(nearestTarget);
+            }
+          }}
+          onReport={() => {
+            if (nearestBody !== null && sabotage === null && myVentId === null) {
+              haptic.tap();
+              sfx('uiSelect', 0.3);
+              reportBody(nearestBody);
+            }
+          }}
+          onUse={() => {
+            if (!useActionEnabled) return;
+            haptic.tap();
+            sfx('uiSelect', 0.3);
+            if (useActionKind === 'task' && nearestTask !== null) {
+              setActiveTaskId(nearestTask.taskId);
+            } else if (useActionKind === 'repair' && nearestRepairPad !== null) {
+              repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId);
+            } else if (useActionKind === 'vent' && nearestVentId !== null) {
+              enterVent(nearestVentId);
+            } else if (useActionKind === 'admin') {
+              setShowAdminTable(true);
+            }
+          }}
+        />
       )}
-
-      {/* ── Kill / Report action row (Phase 5 kill, Phase 6 report) ───────── */}
-      {/* Report is blocked server-side while a sabotage is active (GAME_SPEC.md §10 —
-          meetings can't be called mid-sabotage), so hide it (but not Kill) to match. */}
-      {loaded && !amIDead && meeting === null && (amIImpostor || (sabotage === null && nearestBody !== null)) && (
-        <div style={{
-          position: 'fixed', bottom: 130, left: '50%', transform: 'translateX(-50%)',
-          display: 'flex', alignItems: 'center', gap: 16, zIndex: 25,
-          ...customControlPositionStyle('killReport', controlLayout, joystickSide),
-        }}>
-          {amIImpostor && (
-            <button
-              aria-label={killCooldownMs > 0
-                ? (en ? `Kill cooldown ${Math.ceil(killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(killCooldownMs / 1000)} секунд`)
-                : (en ? 'Kill' : 'Убить')}
-              disabled={killCooldownMs > 0 || nearestTarget === null}
-              onClick={() => {
-                if (nearestTarget !== null) {
-                  haptic.tap();
-                  // Start audio on the user's gesture instead of waiting for
-                  // the server round-trip and React's authoritative kill event.
-                  sfx('kill', 0.48);
-                  sendKill(nearestTarget);
-                }
-              }}
-              style={{
-                width: 88, height: 88, borderRadius: '50%',
-                fontFamily: 'sans-serif', fontWeight: 900, fontSize: 12,
-                letterSpacing: '0.05em', textTransform: 'uppercase',
-                color: killCooldownMs > 0 || nearestTarget === null ? 'rgba(255,150,150,0.35)' : '#ffe8e8',
-                background: killCooldownMs > 0 || nearestTarget === null
-                  ? 'rgba(90,20,20,0.55)'
-                  : 'radial-gradient(circle, rgba(210,20,20,0.95), rgba(120,0,0,0.95))',
-                border: `2px solid ${killCooldownMs > 0 || nearestTarget === null ? 'rgba(200,80,80,0.25)' : 'rgba(255,120,120,0.85)'}`,
-                boxShadow: killCooldownMs > 0 || nearestTarget === null ? 'none' : '0 0 22px rgba(255,40,40,0.55)',
-                cursor: killCooldownMs > 0 || nearestTarget === null ? 'default' : 'pointer',
-                backdropFilter: 'blur(4px)',
-              }}
-            >
-              {killCooldownMs > 0 ? Math.ceil(killCooldownMs / 1000) : <img src={`${import.meta.env.BASE_URL}au-assets/kill_icon.png`} alt="" aria-hidden="true" style={{ width: 66, height: 66, objectFit: 'contain', display: 'block', opacity: nearestTarget === null ? 0.45 : 1 }} />}
-            </button>
-          )}
-          {sabotage === null && nearestBody !== null && (
-            <button
-              onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); reportBody(nearestBody); }}
-              style={{
-                width: 88, height: 88, borderRadius: '50%',
-                fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
-                letterSpacing: '0.03em', textTransform: 'uppercase',
-                color: '#fff6d8',
-                background: 'radial-gradient(circle, rgba(220,160,20,0.95), rgba(140,90,0,0.95))',
-                border: '2px solid rgba(255,210,100,0.85)',
-                boxShadow: '0 0 22px rgba(255,190,40,0.5)',
-                cursor: 'pointer', backdropFilter: 'blur(4px)',
-              }}
-            >
-              {en ? 'Report' : 'Доложить'}
-            </button>
-          )}
-        </div>
-      )}
-
       {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
       {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
         <div style={{
@@ -2600,30 +2527,10 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 66, height: 66, objectFit: 'contain', display: 'block', opacity: 1 }} />}
-          </button>
-        </div>
-      )}
-
-      {/* ── Repair button (Phase 8, crewmates only) ─────────────────────────── */}
-      {loaded && !amIDead && !amIImpostor && meeting === null && sabotage !== null && nearestRepairPad !== null && (
-        <div style={{
-          position: 'fixed', bottom: 220, left: '50%', transform: 'translateX(-50%)', zIndex: 25,
-          ...customControlPositionStyle('repair', controlLayout, joystickSide),
-        }}>
-          <button
-            onClick={() => { haptic.tap(); sfx('uiSelect', 0.3); repairSabotage(nearestRepairPad.systemId, nearestRepairPad.padId); }}
-            style={{
-              padding: '10px 24px', borderRadius: 10,
-              background: 'rgba(200,50,50,0.9)', color: '#ffe8e8',
-              border: '1px solid rgba(255,120,120,0.5)',
-              fontFamily: 'sans-serif', fontWeight: 700, fontSize: 13,
-              letterSpacing: '0.03em', cursor: 'pointer',
-              backdropFilter: 'blur(6px)',
-              boxShadow: '0 0 18px rgba(255,60,60,0.35)',
-            }}
-          >
-            {en ? 'Fix' : 'Починить'} {sabotageRu(sabotageDef?.name, language)}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true">
+              <path d="M24 5 45 42H3L24 5Z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+              <path d="M24 17v12m0 6v1" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+            </svg>}
           </button>
         </div>
       )}
