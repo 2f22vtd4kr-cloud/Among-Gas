@@ -6,11 +6,11 @@ import {
   FINE_CELL_Y,
   FINE_COLS,
   FINE_ROWS,
-} from "@workspace/shared/collisionDataFine";
-import { MAP_H, MAP_W } from "@workspace/shared/coords";
-import { buildPreciseCollisionGrid } from "@workspace/shared/collisionMap";
-import { MANUAL_BLOCKED_POLYGONS } from "@workspace/shared/collisionOverrides";
-import { validateCollisionDocument } from "@workspace/shared/collision";
+} from "../../lib/shared/src/collisionDataFine.js";
+import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
+import { buildPreciseCollisionGrid } from "../../lib/shared/src/collisionMap.js";
+import { MANUAL_BLOCKED_POLYGONS } from "../../lib/shared/src/collisionOverrides.js";
+import { validateCollisionDocument } from "../../lib/shared/src/collision/vectorCollision.js";
 import type { CollisionDocument, CollisionShape } from "../../lib/shared/src/collision/vectorCollision.js";
 import {
   buildFineShadowGrid,
