@@ -25,8 +25,9 @@ const [baselineCurrent, sharpenedCurrent, overviewCurrent] = await Promise.all([
   tileSetIsCurrent(sharpenedDir, sourceSha256, SHARPENED_SIGMA),
   fs.readFile(overviewManifestPath, "utf8").then(async raw => {
     const manifest = JSON.parse(raw) as { sourceSha256?: string; width?: number; height?: number };
-    await fs.access(overviewPath);
-    return manifest.sourceSha256 === sourceSha256 && manifest.width === 1612 && manifest.height === 929;
+    const overview = await sharp(overviewPath).metadata();
+    return manifest.sourceSha256 === sourceSha256 && manifest.width === 1612 && manifest.height === 929 &&
+      overview.width === 1612 && overview.height === 929;
   }).catch(() => false),
 ]);
 
