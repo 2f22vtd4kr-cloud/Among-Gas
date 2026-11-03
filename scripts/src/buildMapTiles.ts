@@ -15,6 +15,7 @@ const sourcePath = path.join(publicDir, "map-hires.webp");
 const baselineDir = path.join(publicDir, "map-tiles");
 const sharpenedDir = path.join(publicDir, "map-tiles-sharp");
 const overviewPath = path.join(publicDir, "map-overview.webp");
+const overviewManifestPath = path.join(publicDir, "map-overview.manifest.json");
 const BASELINE_SIGMA = 0;
 const SHARPENED_SIGMA = 2.2;
 
@@ -22,7 +23,10 @@ const sourceSha256 = await sha256File(sourcePath);
 const [baselineCurrent, sharpenedCurrent, overviewCurrent] = await Promise.all([
   tileSetIsCurrent(baselineDir, sourceSha256, BASELINE_SIGMA),
   tileSetIsCurrent(sharpenedDir, sourceSha256, SHARPENED_SIGMA),
-  fs.access(overviewPath).then(() => true).catch(() => false),
+  fs.readFile(overviewManifestPath, "utf8").then(raw => {
+    const manifest = JSON.parse(raw) as { sourceSha256?: string; width?: number; height?: number };
+    return manifest.sourceSha256 === sourceSha256 && manifest.width === 1612 && manifest.height === 929;
+  }).catch(() => false),
 ]);
 
 if (baselineCurrent && sharpenedCurrent && overviewCurrent) {
@@ -42,10 +46,15 @@ if (baselineCurrent && sharpenedCurrent && overviewCurrent) {
       const manifest = await writeMapTileSet(sharpenedMaster, sharpenedDir, sourceSha256, SHARPENED_SIGMA);
       console.log(`optional sharpened map tiles generated: ${manifest.tiles.length}`);
     }
-    await sharp(baselineMaster)
-      .resize(1612, 929, { fit: "fill", kernel: "lanczos3" })
-      .webp({ quality: 82, effort: 6 })
-      .toFile(overviewPath);
+    if (!overviewCurrent) {
+      await sharp(baselineMaster)
+        .resize(1612, 929, { fit: "fill", kernel: "lanczos3" })
+        .webp({ quality: 82, effort: 6 })
+        .toFile(overviewPath);
+      await fs.writeFile(overviewManifestPath, JSON.stringify({
+        sourceSha256, width: 1612, height: 929, scale: 0.5,
+      }, null, 2) + "\n");
+    }
   } finally {
     await fs.rm(tempDir, { recursive: true, force: true });
   }
