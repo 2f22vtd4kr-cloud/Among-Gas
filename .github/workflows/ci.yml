@@ -53,6 +53,9 @@ jobs:
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
 
+      - name: Verify vector collision engine and mobile editor geometry helpers
+        run: pnpm --filter @workspace/scripts run test:vector-collision
+
       - name: Verify character atlas crops, authored scale and shared feet anchor
         run: pnpm --filter @workspace/scripts run test:character-geometry
 
@@ -174,14 +177,19 @@ jobs:
           node test_reconnect_ws.mjs
 
       - name: Prepare Playwright for mobile and desktop browser smoke tests
-        run: npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
+        run: |
+          npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
+          /tmp/among-gas-playwright/node_modules/.bin/playwright install chromium
 
       - name: Start Telegram Mini App and play a mobile UI smoke test
         env:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
           VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
+          VECTOR_COLLISION_DOCUMENT_PATH: ${{ runner.temp }}/vector-collision-editor-test.json
+          VECTOR_COLLISION_EDITOR_BASE_URL: http://127.0.0.1:5173
         run: |
-          nohup env VITE_ENABLE_GAME_MOCKS=true pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          rm -f "${RUNNER_TEMP}/vector-collision-editor-test.json" "${RUNNER_TEMP}/vector-collision-editor-test.json.bak"
+          nohup env VITE_ENABLE_GAME_MOCKS=true VECTOR_COLLISION_DOCUMENT_PATH="${VECTOR_COLLISION_DOCUMENT_PATH}" pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
             sleep 1
@@ -191,6 +199,8 @@ jobs:
           node scripts/test-audio-preload.mjs
           node scripts/test-character-atlas-browser.mjs
           node scripts/test-ingame-settings.mjs
+          node scripts/test-vector-collision-editor-browser.mjs
+          pnpm --filter @workspace/scripts run test:vector-collision-editor-api
 
       - name: Render production-map collision overlay for visual QA
         run: pnpm --filter @workspace/scripts exec tsx src/renderCollisionQa.ts
