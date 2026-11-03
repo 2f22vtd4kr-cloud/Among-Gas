@@ -1,0 +1,175 @@
+/**
+ * Browser tile renderer for the canonical 3224×1858 world.
+ * Tiles are 2× WebP; only the camera-visible 4–6 tiles stay decoded in memory.
+ * Shared world boundaries are rounded with the same expression on both
+ * neighbouring tiles, so no fractional-zoom hairline gaps can appear.
+ */
+export interface TileMeta {
+  file: string;
+  row: number;
+  col: number;
+  tex: [number, number, number, number];
+  world: [number, number, number, number];
+}
+
+export interface TileManifest {
+  version: 1;
+  worldW: number;
+  worldH: number;
+  scale: number;
+  texW: number;
+  texH: number;
+  tilePx: number;
+  cols: number;
+  rows: number;
+  format: "webp";
+  tiles: TileMeta[];
+}
+
+type CacheEntry = HTMLImageElement | "loading" | "failed";
+
+function validateManifest(value: unknown): TileManifest {
+  if (!value || typeof value !== "object") throw new Error("Map tile manifest must be an object");
+  const manifest = value as Partial<TileManifest>;
+  if (manifest.version !== 1 || manifest.worldW !== 3224 || manifest.worldH !== 1858 ||
+      manifest.scale !== 2 || manifest.texW !== 6448 || manifest.texH !== 3716 ||
+      manifest.tilePx !== 1024 || manifest.cols !== 7 || manifest.rows !== 4 ||
+      manifest.format !== "webp" || !Array.isArray(manifest.tiles) ||
+      manifest.tiles.length !== manifest.cols * manifest.rows) {
+    throw new Error("Map tile manifest does not match the canonical 2× world");
+  }
+  const seen = new Set<string>();
+  for (let index = 0; index < manifest.tiles.length; index++) {
+    const tile = manifest.tiles[index];
+    const row = Math.floor(index / manifest.cols);
+    const col = index % manifest.cols;
+    const x = col * manifest.tilePx;
+    const y = row * manifest.tilePx;
+    const width = Math.min(manifest.tilePx, manifest.texW - x);
+    const height = Math.min(manifest.tilePx, manifest.texH - y);
+    if (!tile || typeof tile.file !== "string" || !/^tile_r\d+_c\d+\.webp$/.test(tile.file) ||
+        seen.has(tile.file) || tile.row !== row || tile.col !== col ||
+        !Array.isArray(tile.tex) || tile.tex.length !== 4 ||
+        !Array.isArray(tile.world) || tile.world.length !== 4 ||
+        tile.tex[0] !== x || tile.tex[1] !== y || tile.tex[2] !== width || tile.tex[3] !== height ||
+        tile.world[0] !== x / 2 || tile.world[1] !== y / 2 ||
+        tile.world[2] !== width / 2 || tile.world[3] !== height / 2) {
+      throw new Error(`Invalid map tile manifest entry at index ${index}`);
+    }
+    seen.add(tile.file);
+  }
+  return manifest as TileManifest;
+}
+
+export class TiledMap {
+  private readonly cache = new Map<string, CacheEntry>();
+  private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0 };
+
+  private constructor(
+    private readonly manifest: TileManifest,
+    private readonly baseUrl: string,
+    private readonly maxResident = 12,
+  ) {}
+
+  static async load(baseUrl: string, maxResident = 12): Promise<TiledMap> {
+    const normalizedBase = baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+    const response = await fetch(`${normalizedBase}manifest.json`, { cache: "force-cache" });
+    if (!response.ok) throw new Error(`Map tile manifest request failed: HTTP ${response.status}`);
+    const manifest = validateManifest(await response.json());
+    return new TiledMap(manifest, normalizedBase, Math.max(6, maxResident));
+  }
+
+  /** Draw visible tiles over the low-resolution overview fallback. */
+  draw(
+    ctx: CanvasRenderingContext2D,
+    camera: { x: number; y: number; w: number; h: number },
+    zoom: number,
+    dpr: number,
+  ): boolean {
+    let visibleTotal = 0;
+    let visibleLoaded = 0;
+    let loading = 0;
+    let failed = 0;
+    const visible = new Set<string>();
+    const deviceScale = zoom * dpr;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    for (const tile of this.manifest.tiles) {
+      const [wx, wy, ww, wh] = tile.world;
+      if (wx + ww <= camera.x || wy + wh <= camera.y ||
+          wx >= camera.x + camera.w || wy >= camera.y + camera.h) continue;
+      visibleTotal++;
+      visible.add(tile.file);
+      const image = this.get(tile);
+      if (image === "loading") {
+        loading++;
+        continue;
+      }
+      if (image === "failed" || image === null) {
+        failed++;
+        continue;
+      }
+
+      // Both sides of a shared edge calculate the same rounded device pixel.
+      const left = Math.round((wx - camera.x) * deviceScale);
+      const top = Math.round((wy - camera.y) * deviceScale);
+      const right = Math.round((wx + ww - camera.x) * deviceScale);
+      const bottom = Math.round((wy + wh - camera.y) * deviceScale);
+      if (right <= left || bottom <= top) continue;
+      ctx.drawImage(
+        image,
+        0, 0, image.naturalWidth, image.naturalHeight,
+        left, top, right - left, bottom - top,
+      );
+      visibleLoaded++;
+    }
+
+    this.evict(visible);
+    this.status = {
+      visibleTotal,
+      visibleLoaded,
+      loading,
+      failed,
+      cached: this.cache.size,
+    };
+    return visibleTotal > 0 && visibleLoaded === visibleTotal;
+  }
+
+  getStatus(): Readonly<typeof this.status> {
+    return this.status;
+  }
+
+  private get(tile: TileMeta): CacheEntry {
+    const existing = this.cache.get(tile.file);
+    if (existing) {
+      this.touch(tile.file, existing);
+      return existing;
+    }
+
+    const image = new Image();
+    image.decoding = "async";
+    this.cache.set(tile.file, "loading");
+    image.onload = () => {
+      if (this.cache.get(tile.file) === "loading") this.touch(tile.file, image);
+    };
+    image.onerror = () => {
+      if (this.cache.get(tile.file) === "loading") this.touch(tile.file, "failed");
+    };
+    image.src = this.baseUrl + tile.file;
+    return "loading";
+  }
+
+  private touch(file: string, value: CacheEntry): void {
+    this.cache.delete(file);
+    this.cache.set(file, value);
+  }
+
+  private evict(visible: ReadonlySet<string>): void {
+    if (this.cache.size <= this.maxResident) return;
+    for (const file of this.cache.keys()) {
+      if (this.cache.size <= this.maxResident) break;
+      if (!visible.has(file)) this.cache.delete(file);
+    }
+  }
+}
