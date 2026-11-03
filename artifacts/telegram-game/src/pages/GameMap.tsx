@@ -2550,7 +2550,12 @@ export default function GameMap() {
               backdropFilter: 'blur(4px)',
             }}
           >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : <img src={`${import.meta.env.BASE_URL}au-assets/sabotage_icon.png`} alt="" aria-hidden="true" style={{ width: 66, height: 66, objectFit: 'contain', display: 'block', opacity: 1 }} />}
+            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (
+              <svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true">
+                <path d="M24 5 45 42H3L24 5Z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+                <path d="M24 17v12m0 6v1" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
+              </svg>
+            )}
           </button>
         </div>
       )}
