@@ -75,7 +75,7 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   ], 200, 200);
   assert.equal(ring.isPlayerWalkableAtFeet(100, 100), true,
     "the interior of a low planter boundary remains walkable");
-  assert.equal(ring.isPlayerWalkableAtFeet(100, 30), false,
+  assert.equal(ring.isPlayerWalkableAtFeet(100, 40), false,
     "the authored planter boundary itself blocks the player footprint");
 }
 
