@@ -23,7 +23,7 @@ const publicDir = path.join(root, "artifacts/telegram-game/public");
 const sourcePath = path.join(publicDir, "map-hires.webp");
 const sourceSha256 = await sha256File(sourcePath);
 const variants = [
-  { name: "baseline", dir: path.join(publicDir, "map-tiles"), sigma: 0 },
+  { name: "baseline", dir: path.join(publicDir, "map-tiles"), sigma: 1.2 },
   { name: "sharpened", dir: path.join(publicDir, "map-tiles-sharp"), sigma: 2.2 },
 ] as const;
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "among-gas-map-tile-qa-"));
@@ -76,6 +76,9 @@ try {
   for (const variant of variants) {
     const manifestPath = path.join(variant.dir, "manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as MapTileManifest;
+    assert.equal(manifest.version, 1);
+    assert.equal(manifest.pipelineVersion, 1);
+    assert.equal(manifest.sharpenSigma, variant.sigma);
     assert.equal(manifest.sourceSha256, sourceSha256, `${variant.name}: source digest must match the live WebP master`);
     assert.equal(manifest.worldW, MAP_TILE_WORLD_W);
     assert.equal(manifest.worldH, MAP_TILE_WORLD_H);
