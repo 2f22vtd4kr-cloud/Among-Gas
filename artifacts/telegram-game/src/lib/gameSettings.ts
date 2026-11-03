@@ -177,7 +177,7 @@ export function customControlPositionStyle(
     settings: { halfWidth: 22, halfHeight: 22 },
     emergency: { halfWidth: 74, halfHeight: 30 },
     taskAction: { halfWidth: 84, halfHeight: 20 },
-    killReport: { halfWidth: 84, halfHeight: 38 },
+    killReport: { halfWidth: 120, halfHeight: 38 },
     sabotage: { halfWidth: 38, halfHeight: 38 },
     repair: { halfWidth: 90, halfHeight: 20 },
   };
