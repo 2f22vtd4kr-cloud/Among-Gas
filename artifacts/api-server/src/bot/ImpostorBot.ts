@@ -53,14 +53,11 @@ const ISOLATION_THRESHOLD_PX = 300;
 const HUNT_ACQUIRE_THRESHOLD_PX = -200; // one-variable, 50px more permissive after the 2.4s dwell cohort remained 66%
 
 /**
- * Sabotage trigger interval: ~30s = 150 × 200ms ticks for the 2026-11-03 one-variable balance retest.
- * (SINGLE_PLAY.md §9 Phase E tuning notes: this was raised to 450 in an
- * earlier pass of the same session, then reverted back to 300 after a
- * separate correctness fix — ejected crewmates also drop their incomplete
- * steps from the task-bar denominator, same as killed ones — pushed crew
- * win rate to ~65% at interval=450. 300 + the ejection fix together landed
- * back in the 55/45±10% target band; see SINGLE_PLAY.md for the full
- * measurement history before changing this again.)
+ * Recurring sabotage interval: 30s = 150 × 200ms ticks, plus the existing
+ * 0–12s jitter. The 10s opening cooldown is unchanged. The 2026-11-03
+ * 3×100-game cohorts passed at 60%, 65%, and 58% crew wins (zero timeouts);
+ * seed 17002 is exactly at the upper acceptance boundary. See SINGLE_PLAY.md
+ * §9 for the prior 300/450-tick measurements and current evidence.
  */
 const SABOTAGE_INTERVAL_TICKS = 150; // 30s recurring interval; one-variable balance retest
 // The Skeld's opening sabotage cooldown is 10 seconds. Keep the recurring
