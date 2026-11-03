@@ -24,9 +24,11 @@ const [baselineCurrent, sharpenedCurrent, overviewCurrent] = await Promise.all([
   tileSetIsCurrent(baselineDir, sourceSha256, BASELINE_SIGMA),
   tileSetIsCurrent(sharpenedDir, sourceSha256, SHARPENED_SIGMA),
   fs.readFile(overviewManifestPath, "utf8").then(async raw => {
-    const manifest = JSON.parse(raw) as { sourceSha256?: string; width?: number; height?: number };
+    const manifest = JSON.parse(raw) as { sourceSha256?: string; overviewSha256?: string; width?: number; height?: number };
     const overview = await sharp(overviewPath).metadata();
-    return manifest.sourceSha256 === sourceSha256 && manifest.width === 1612 && manifest.height === 929 &&
+    const overviewSha256 = await sha256File(overviewPath);
+    return manifest.sourceSha256 === sourceSha256 && manifest.overviewSha256 === overviewSha256 &&
+      manifest.width === 1612 && manifest.height === 929 &&
       overview.width === 1612 && overview.height === 929;
   }).catch(() => false),
 ]);
@@ -53,8 +55,9 @@ if (baselineCurrent && sharpenedCurrent && overviewCurrent) {
         .resize(1612, 929, { fit: "fill", kernel: "lanczos3" })
         .webp({ quality: 82, effort: 6 })
         .toFile(overviewPath);
+      const overviewSha256 = await sha256File(overviewPath);
       await fs.writeFile(overviewManifestPath, JSON.stringify({
-        sourceSha256, width: 1612, height: 929, scale: 0.5,
+        sourceSha256, overviewSha256, width: 1612, height: 929, scale: 0.5,
       }, null, 2) + "\n");
     }
   } finally {
