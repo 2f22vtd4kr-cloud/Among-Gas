@@ -260,9 +260,10 @@ async function main(): Promise<void> {
     console.log("Bootstrapped the editable vector candidate from the current fine-grid and vision sources.");
   }
 
+  const serializedDocument = JSON.stringify(activeDocument);
   await writeFile(
     outputTs,
-    `import type { CollisionDocument } from "./vectorCollision.js";\nexport const COLLISION_DOCUMENT = ${JSON.stringify(activeDocument)} as CollisionDocument;\n`,
+    `import type { CollisionDocument } from "./vectorCollision.js";\nconst COLLISION_DOCUMENT_JSON = ${JSON.stringify(serializedDocument)};\nexport const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n`,
   );
 
   console.log(JSON.stringify({
