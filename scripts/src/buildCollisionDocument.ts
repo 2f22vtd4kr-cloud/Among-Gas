@@ -217,22 +217,60 @@ async function main(): Promise<void> {
     },
   };
 
-  const errors = validateCollisionDocument(document);
-  if (errors.length) throw new Error("Generated collision document is invalid: " + errors.join("; "));
+  const generatedErrors = validateCollisionDocument(document);
+  if (generatedErrors.length) {
+    throw new Error("Generated collision baseline is invalid: " + generatedErrors.join("; "));
+  }
 
   await mkdir(outputDir, { recursive: true });
-  await writeFile(outputJson, JSON.stringify(document, null, 2) + "\n");
+  let activeDocument = document;
+  try {
+    const existing = JSON.parse(await readFile(outputJson, "utf8")) as CollisionDocument;
+    const existingErrors = validateCollisionDocument(existing);
+    if (existingErrors.length) {
+      throw new Error("Saved vector candidate is invalid; refusing to overwrite it: " + existingErrors.join("; "));
+    }
+    if (!existing.source?.sourceFiles) {
+      throw new Error("Saved vector candidate has no source manifest; refusing to use it in live gameplay.");
+    }
+    for (const [name, current] of Object.entries(sourceFiles)) {
+      const saved = existing.source.sourceFiles[name];
+      if (!saved || saved.sha256 !== current.sha256) {
+        throw new Error(
+          "Saved vector candidate is stale because source input '" + name +
+          "' changed. Export/review the candidate before regenerating it.",
+        );
+      }
+    }
+    activeDocument = {
+      ...existing,
+      source: {
+        ...existing.source,
+        shapeCounts: {
+          ...existing.source.shapeCounts,
+          total: existing.shapes.length,
+        },
+      },
+    };
+    await writeFile(outputJson, JSON.stringify(activeDocument, null, 2) + "\n");
+    console.log("Using saved vector candidate as the runtime collision source.");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await writeFile(outputJson, JSON.stringify(document, null, 2) + "\n");
+    console.log("Bootstrapped the editable vector candidate from the current fine-grid and vision sources.");
+  }
+
   await writeFile(
     outputTs,
-    `import type { CollisionDocument } from "./vectorCollision.js";\nexport const COLLISION_DOCUMENT = ${JSON.stringify(document)} as CollisionDocument;\n`,
+    `import type { CollisionDocument } from "./vectorCollision.js";\nexport const COLLISION_DOCUMENT = ${JSON.stringify(activeDocument)} as CollisionDocument;\n`,
   );
 
   console.log(JSON.stringify({
     ok: true,
     generatorVersion: GENERATOR_VERSION,
-    sourceKind: document.source.kind,
+    sourceKind: activeDocument.source?.kind,
     fineGridCells: movementGrid.length,
-    shapes: document.source.shapeCounts,
+    shapes: activeDocument.source?.shapeCounts,
     sourceFiles,
     outputJson: path.relative(root, outputJson),
     outputTs: path.relative(root, outputTs),
