@@ -126,12 +126,17 @@ export class TiledMap {
     }
 
     this.evict(visible);
+    const decodedBytes = [...this.cache.values()].reduce((total, entry) =>
+      entry instanceof HTMLImageElement
+        ? total + entry.naturalWidth * entry.naturalHeight * 4
+        : total, 0);
     this.status = {
       visibleTotal,
       visibleLoaded,
       loading,
       failed,
       cached: this.cache.size,
+      decodedBytes,
     };
     return visibleTotal > 0 && visibleLoaded === visibleTotal;
   }
