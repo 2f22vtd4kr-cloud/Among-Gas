@@ -619,9 +619,19 @@ try {
     button => button.getAttribute('aria-label') === 'Убить' && !button.disabled,
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
-  const killIconBox = await killButton.locator('img').boundingBox();
-  assert.ok(killIconBox && killIconBox.width >= 64 && killIconBox.height >= 64,
-    'Kill action must display the large original kill icon asset');
+  assert.equal(await killButton.locator('svg').count(), 1,
+    'Kill action uses its own original vector glyph, not a copied game asset');
+  const reportAlwaysVisible = page.getByTestId('game-action-report');
+  const useAlwaysVisible = page.getByTestId('game-action-use');
+  await reportAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
+  await useAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
+  assert.equal(await reportAlwaysVisible.isEnabled(), false,
+    'Report remains visible but disabled when no body is nearby');
+  assert.equal(await useAlwaysVisible.isEnabled(), false,
+    'Use remains visible but disabled when no interaction is nearby');
+  const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
+  assert.match(neutralReport, /#77838a|#465158/i,
+    'disabled Report uses the neutral grey surface, not a hidden or active colour');
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
   await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
@@ -638,6 +648,8 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const reportButton = page.getByRole('button', { name: /Доложить/ });
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await reportButton.isEnabled(), true, 'Report is enabled when a living player is in range of a body');
+  assert.equal(await page.getByTestId('game-action-use').isVisible(), true, 'Use remains visible beside Report');
   await page.screenshot({ path: join(visualQaDir, 'corpse-report-ready.png'), fullPage: true });
   const litMapPixel = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
