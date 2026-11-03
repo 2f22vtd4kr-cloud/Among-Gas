@@ -68,7 +68,7 @@ const lobby = {
 const manager = new LobbyManager();
 const bot = new CrewmateBot();
 try {
-  // Allow the 2.2s task dwell (11 × 200ms) plus scheduling margin.
+  // Allow the 2.4s task dwell (12 × 200ms) plus scheduling margin.
   for (let tick = 0; tick < 15; tick++) bot.roamingTick(lobby, botPlayer, manager);
 
   assert.equal(lobby.phase, 'ROAMING',
