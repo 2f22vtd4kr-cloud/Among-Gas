@@ -1308,6 +1308,8 @@ export default function GameMap() {
         if (import.meta.env.DEV) {
           (window as Window & { __AG_TILE_DEBUG?: unknown }).__AG_TILE_DEBUG = {
             ...tiledMap.getStatus(),
+            overviewDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4,
+            totalDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4 + tiledMap.getStatus().decodedBytes,
             ready: tilesReady,
           };
         }
