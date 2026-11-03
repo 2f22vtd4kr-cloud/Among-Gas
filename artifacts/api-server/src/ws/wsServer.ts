@@ -25,7 +25,7 @@ import { isValidGroqApiKey } from '../bot/groqDialogue.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
-import { PRODUCTION_COLLISION_WORLD } from '@workspace/shared/collision/productionWorld';
+import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
 import {
   fromWire,
   toWire,
@@ -90,7 +90,7 @@ function sanitizeUsername(raw: string): string {
 const lobbyManager = new LobbyManager();
 
 /** Collision grid — built once at startup, shared across all validations. */
-const collisionWorld = PRODUCTION_COLLISION_WORLD;
+const collisionGrid = buildPreciseCollisionGrid();
 
 export function attachWsServer(httpServer: HttpServer): WebSocketServer {
   validateAuthConfig();
@@ -355,7 +355,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
         // walkable tiles or skip over a thin wall with one forged target.
         const pixelX = fromWire(wireX, MAP_W);
         const pixelY = fromWire(wireY, MAP_H);
-        const decision = validateMovementIntent(player, pixelX, pixelY, Date.now(), collisionWorld);
+        const decision = validateMovementIntent(player, pixelX, pixelY, Date.now(), collisionGrid);
         player.movementPacketTokens = decision.movementPacketTokens;
         player.movementPacketTokensUpdatedAtMs = decision.movementPacketTokensUpdatedAtMs;
         if (decision.rateLimited) return;
