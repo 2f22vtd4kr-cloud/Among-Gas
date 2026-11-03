@@ -2,8 +2,6 @@ import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
-  buildPreciseCollisionGrid,
-  isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
   REPORT_RANGE_PX,
@@ -51,7 +49,6 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
-import { isLineOfSightClear, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
@@ -65,7 +62,8 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
+import { smoothVisibilityPolygon } from '../game/visibility';
+import { PRODUCTION_COLLISION_WORLD } from '@workspace/shared/collision/productionWorld';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
@@ -271,7 +269,6 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
-  const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -524,9 +521,7 @@ export default function GameMap() {
         const dx = pad.x - myPos.x;
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
-          myPos.x, myPos.y + FEET_OFFSET_Y,
+        const hasLineOfSight = PRODUCTION_COLLISION_WORLD.isLineOfSightToInteractionTarget(myPos.x, myPos.y + FEET_OFFSET_Y,
           pad.x, pad.y + FEET_OFFSET_Y,
           24,
         );
@@ -539,7 +534,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, amIImpostor, sabotage, taskInteractionGrid]);
+  }, [amIDead, amIImpostor, sabotage]);
 
   // Local countdown clock for the sabotage banner, ticked independently of
   // the canvas rAF loop — same pattern as meetingNow above.
@@ -577,9 +572,7 @@ export default function GameMap() {
         const dx = body.x - myPos.x;
         const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
-          myPos.x, myPos.y + FEET_OFFSET_Y,
+        const hasLineOfSight = PRODUCTION_COLLISION_WORLD.isLineOfSightClear(myPos.x, myPos.y + FEET_OFFSET_Y,
           body.x, body.y + FEET_OFFSET_Y,
         );
         if (distSq <= bestDistSq && hasLineOfSight) { best = body.slot; bestDistSq = distSq; }
@@ -588,7 +581,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting, taskInteractionGrid]);
+  }, [amIDead, meeting]);
 
   // Local countdown clock for the meeting overlay, ticked independently of
   // the canvas rAF loop (this UI lives outside the canvas).
@@ -634,9 +627,7 @@ export default function GameMap() {
         const dx = rp.x - myPos.x;
         const dy = rp.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
-          myPos.x, myPos.y + FEET_OFFSET_Y,
+        const hasLineOfSight = PRODUCTION_COLLISION_WORLD.isLineOfSightClear(myPos.x, myPos.y + FEET_OFFSET_Y,
           rp.x, rp.y + FEET_OFFSET_Y,
         );
         if (distSq <= bestDistSq && hasLineOfSight) { best = rp.slot; bestDistSq = distSq; }
@@ -645,7 +636,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIImpostor, amIDead, taskInteractionGrid]);
+  }, [amIImpostor, amIDead]);
 
   // ── Task system (Phase 7) ─────────────────────────────────────────────────
   // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
@@ -720,9 +711,7 @@ export default function GameMap() {
         const dy = def.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         // Ghosts intentionally keep through-wall task access on both client and server.
-        const hasLineOfSight = amIDead || isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
-          myPos.x,
+        const hasLineOfSight = amIDead || PRODUCTION_COLLISION_WORLD.isLineOfSightToInteractionTarget(myPos.x,
           myPos.y + FEET_OFFSET_Y,
           def.x,
           def.y + FEET_OFFSET_Y,
@@ -752,7 +741,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage, amIDead, taskInteractionGrid]);
+  }, [meeting, myRole, sabotage, amIDead]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -1076,9 +1065,7 @@ export default function GameMap() {
         const dx = vent.x - myPos.x;
         const dy = vent.y - myPos.y;
         const distSq = dx * dx + dy * dy;
-        const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
-          myPos.x, myPos.y + FEET_OFFSET_Y,
+        const hasLineOfSight = PRODUCTION_COLLISION_WORLD.isLineOfSightToInteractionTarget(myPos.x, myPos.y + FEET_OFFSET_Y,
           vent.x, vent.y + FEET_OFFSET_Y,
           20,
         );
@@ -1087,7 +1074,7 @@ export default function GameMap() {
       setNearestVentId(best);
     }, 150);
     return () => clearInterval(id);
-  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner, taskInteractionGrid]);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner]);
 
 
   useEffect(() => {
@@ -1115,8 +1102,6 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = taskInteractionGrid;
-    const fineGrid = grid;
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
@@ -1131,9 +1116,8 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
-          const hasLineOfSight = isLineOfSightToInteractionTarget(
-            fineGrid, x, y + FEET_OFFSET_Y,
+          if (!PRODUCTION_COLLISION_WORLD.isPlayerWalkableAtFeet(x, y + FEET_OFFSET_Y)) continue;
+          const hasLineOfSight = PRODUCTION_COLLISION_WORLD.isLineOfSightToInteractionTarget(x, y + FEET_OFFSET_Y,
             fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
             fixtureTask.interactionTargetRadiusPx ?? 24,
           );
@@ -1149,10 +1133,7 @@ export default function GameMap() {
     }
     // Player prediction and visual occlusion share the canonical fine grid.
     // Compact geometry remains available to navigation consumers that need A*.
-    const shadowGrid = buildShadowGrid(fineGrid);
-    const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    const narrowSegments = buildFineShadowSegments(fineGrid);
-    if (!isSpawnWalkable(fineGrid)) {
+    if (!isSpawnWalkable(PRODUCTION_COLLISION_WORLD)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
@@ -1200,7 +1181,7 @@ export default function GameMap() {
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
-        fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        PRODUCTION_COLLISION_WORLD, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       // The ghost-only browser fixture deliberately starts behind a wall.
       // Keep its test position after physics so React mount ordering cannot
@@ -1743,7 +1724,7 @@ export default function GameMap() {
             ? LIGHTS_CREWMATE_VISION_RADIUS_PX
             : NORMAL_VISION_RADIUS_PX;
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
+        const rawVisiblePolygon = PRODUCTION_COLLISION_WORLD.visibility(px, py, visionRadius).map(([x, y]) => ({ x, y }));
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
