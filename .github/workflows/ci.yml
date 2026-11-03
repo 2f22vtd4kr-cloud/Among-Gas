@@ -73,6 +73,9 @@ jobs:
       - name: Build and verify the production vector collision world
         run: pnpm --filter @workspace/scripts run test:production-world
 
+      - name: Generate and quality-check baseline and optional sharpened 2× map tiles
+        run: pnpm --filter @workspace/scripts run build:map-tiles && pnpm --filter @workspace/scripts run test:map-tiles
+
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
@@ -200,6 +203,7 @@ jobs:
           done
           curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null
           node scripts/browser-smoke.mjs
+          pnpm --filter @workspace/scripts run test:map-tiles-browser
           node scripts/test-audio-preload.mjs
           node scripts/test-character-atlas-browser.mjs
           node scripts/test-ingame-settings.mjs
