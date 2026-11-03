@@ -2157,7 +2157,7 @@ export default function GameMap() {
               position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
               overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
             }}>
-              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
+              <img src={`${import.meta.env.BASE_URL}map-overview.webp`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
               {myRole === 'crewmate' && myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
@@ -2389,7 +2389,7 @@ export default function GameMap() {
                 border: '1px solid rgba(120,200,220,0.45)', background: '#13212a',
               }}>
                 <img
-                  src={`${import.meta.env.BASE_URL}map-hires.png`}
+                  src={`${import.meta.env.BASE_URL}map-overview.webp`}
                   alt={en ? 'Among Gas map' : 'Карта Among Gas'}
                   draggable={false}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }}
