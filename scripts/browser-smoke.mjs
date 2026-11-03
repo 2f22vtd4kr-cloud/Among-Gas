@@ -226,11 +226,15 @@ try {
   await page.waitForTimeout(150);
 
   const mapAssetTimings = [];
+  const mapAssetRequests = [];
   const mapAssetStartedAt = new Map();
   const isGameplayMapAsset = url =>
     /map-overview\.webp|map-tiles(?:-sharp)?\/(?:manifest\.json|tile_r\d+_c\d+\.webp)/.test(url);
   page.on('request', request => {
-    if (isGameplayMapAsset(request.url())) mapAssetStartedAt.set(request.url(), Date.now());
+    if (isGameplayMapAsset(request.url())) {
+      mapAssetRequests.push(request.url());
+      mapAssetStartedAt.set(request.url(), Date.now());
+    }
   });
   page.on('requestfinished', request => {
     if (isGameplayMapAsset(request.url())) {
@@ -319,11 +323,11 @@ try {
   // visible for inspection. Navigate to gameplay only after capturing it.
   await page.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-overview.webp')),
+  assert.ok(mapAssetRequests.some(asset => asset.includes('map-overview.webp')),
     'cold gameplay load must fetch the canonical overview fallback');
-  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('/map-tiles/manifest.json')),
+  assert.ok(mapAssetRequests.some(asset => asset.includes('/map-tiles/manifest.json')),
     'cold gameplay load must fetch the canonical tile manifest');
-  assert.ok(mapAssetTimings.some(entry => /map-tiles\/(?:tile_r\d+_c\d+\.webp)/.test(String(entry.asset))),
+  assert.ok(mapAssetRequests.some(asset => /map-tiles\/(?:tile_r\d+_c\d+\.webp)/.test(asset)),
     'cold gameplay load must fetch camera-visible high-resolution WebP tiles');
   console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   await page.waitForSelector('canvas', { timeout: 30_000 });
