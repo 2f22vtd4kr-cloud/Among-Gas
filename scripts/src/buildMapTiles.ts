@@ -23,8 +23,9 @@ const sourceSha256 = await sha256File(sourcePath);
 const [baselineCurrent, sharpenedCurrent, overviewCurrent] = await Promise.all([
   tileSetIsCurrent(baselineDir, sourceSha256, BASELINE_SIGMA),
   tileSetIsCurrent(sharpenedDir, sourceSha256, SHARPENED_SIGMA),
-  fs.readFile(overviewManifestPath, "utf8").then(raw => {
+  fs.readFile(overviewManifestPath, "utf8").then(async raw => {
     const manifest = JSON.parse(raw) as { sourceSha256?: string; width?: number; height?: number };
+    await fs.access(overviewPath);
     return manifest.sourceSha256 === sourceSha256 && manifest.width === 1612 && manifest.height === 929;
   }).catch(() => false),
 ]);
