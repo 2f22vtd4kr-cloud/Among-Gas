@@ -42,16 +42,12 @@ try {
     });
     await page.waitForSelector("canvas", { state: "visible", timeout: 30_000 });
     await page.waitForFunction(() => {
-      const status = (window as Window & { __AG_TILE_DEBUG?: {
-        visibleTotal?: number; visibleLoaded?: number; failed?: number; ready?: boolean;
-      } }).__AG_TILE_DEBUG;
+      const status = window.__AG_TILE_DEBUG;
       return !!status && (status.visibleTotal ?? 0) > 0 &&
         status.visibleLoaded === status.visibleTotal && status.failed === 0;
     }, { timeout: 25_000 });
 
-    const status = await page.evaluate(() =>
-      (window as Window & { __AG_TILE_DEBUG?: unknown }).__AG_TILE_DEBUG,
-    );
+    const status = await page.evaluate(() => window.__AG_TILE_DEBUG);
     const tileRequests = requests.filter(url => /\/map-tiles(?:-sharp)?\/tile_r\d+_c\d+\.webp(?:\?|$)/.test(url));
     assert.ok(tileRequests.length >= 4, `${testCase.name}: camera must load several independent map tiles`);
     assert.equal(requests.some(url => /map-hires\.(png|webp)(?:\?|$)/.test(url)), false,
