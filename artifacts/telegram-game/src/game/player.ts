@@ -142,7 +142,7 @@ export function stepPlayer(
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
 export function isSpawnWalkable(grid: Grid | CollisionWorld): boolean {
-  return 'isPlayerWalkableAtFeet' in grid
-    ? grid.isPlayerWalkableAtFeet(PLAYER_SPAWN.x, PLAYER_SPAWN.y + FEET_OFFSET_Y)
+  return 'isPlayerSpawnPositionClear' in grid
+    ? grid.isPlayerSpawnPositionClear(PLAYER_SPAWN.x, PLAYER_SPAWN.y)
     : isPlayerSpawnPositionClear(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
 }
