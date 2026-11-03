@@ -93,6 +93,7 @@ export default function VectorCollisionEditor() {
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
+  const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
@@ -579,16 +580,21 @@ export default function VectorCollisionEditor() {
         setSelectedId(null);
       }
     } else if (gesture?.kind === "walk") {
-      if (walkPoints.length !== 1) {
-        setWalkPoints([gesture.point]);
+      const previousWalkPoints = walkPointsRef.current;
+      if (previousWalkPoints.length !== 1) {
+        walkPointsRef.current = [gesture.point];
+        setWalkPoints(walkPointsRef.current);
         setWalkStatus("Start selected. Tap a destination to trace the production three-circle feet footprint.");
       } else {
-        const start = walkPoints[0];
+        const start = previousWalkPoints[0];
+        // Keep point selection responsive even when a malformed candidate makes
+        // the collision preview fail; report that failure in the status text.
+        walkPointsRef.current = [start, gesture.point];
+        setWalkPoints(walkPointsRef.current);
         try {
           const world = new CollisionWorld(docRef.current.shapes);
           const end = world.movePlayerAtFeet(start[0], start[1], gesture.point[0] - start[0], gesture.point[1] - start[1]);
           const remaining = Math.hypot(end[0] - gesture.point[0], end[1] - gesture.point[1]);
-          setWalkPoints([start, gesture.point]);
           setWalkStatus(remaining <= 4
             ? "PASS: the shared three-circle player footprint reached the destination."
             : "BLOCKED / SLID: player footprint stopped " + Math.round(remaining) + "px from the destination.");
@@ -785,7 +791,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
         {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
-        <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
+        <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { walkPointsRef.current = []; setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
