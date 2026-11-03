@@ -54,7 +54,9 @@ function recolored(source: Buffer): Buffer {
 function seamDamaged(source: Buffer, width: number, height: number): Buffer {
   const out = Buffer.from(source);
   for (let y = 0; y < height; y++) {
-    for (let c = 0; c < 3; c++) out[(y * width + (width - 1)) * 3 + c] = 0;
+    for (let x = Math.max(0, width - 4); x < width; x++) {
+      for (let c = 0; c < 3; c++) out[(y * width + x) * 3 + c] = 0;
+    }
   }
   return out;
 }
