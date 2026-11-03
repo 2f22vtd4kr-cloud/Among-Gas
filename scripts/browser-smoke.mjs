@@ -638,6 +638,13 @@ try {
   const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
   assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
     'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.waitForTimeout(100);
+  const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
+  assert.ok(actionBarBox && actionBarBox.x >= 0 && actionBarBox.x + actionBarBox.width <= 320,
+    'the three-button impostor action bar must remain inside a narrow 320px phone viewport');
+  await page.screenshot({ path: join(visualQaDir, 'game-action-bar-320px.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
   await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
