@@ -468,7 +468,7 @@ try {
   const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
     fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="game-action-use"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
   }));
   console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
   assert.equal(blockedTaskDiagnostics.actionCount, 0,
@@ -499,7 +499,7 @@ try {
   }, undefined, { timeout: 5_000 });
   const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="game-action-use"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
   }));
   assert.equal(ghostBlockedTaskDiagnostics.debug?.isGhost, true,
     'the occluded fixture must run as a server-authoritative ghost');
