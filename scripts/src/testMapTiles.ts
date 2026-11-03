@@ -23,7 +23,7 @@ const publicDir = path.join(root, "artifacts/telegram-game/public");
 const sourcePath = path.join(publicDir, "map-hires.webp");
 const sourceSha256 = await sha256File(sourcePath);
 const variants = [
-  { name: "baseline", dir: path.join(publicDir, "map-tiles"), sigma: 1.2 },
+  { name: "baseline", dir: path.join(publicDir, "map-tiles"), sigma: 0 },
   { name: "sharpened", dir: path.join(publicDir, "map-tiles-sharp"), sigma: 2.2 },
 ] as const;
 const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "among-gas-map-tile-qa-"));
