@@ -227,15 +227,15 @@ try {
 
   const mapAssetTimings = [];
   const mapAssetStartedAt = new Map();
+  const isGameplayMapAsset = url =>
+    /map-overview\\.webp|map-tiles(?:-sharp)?\\/(?:manifest\\.json|tile_r\\d+_c\\d+\\.webp)/.test(url);
   page.on('request', request => {
-    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
-      mapAssetStartedAt.set(request.url(), Date.now());
-    }
+    if (isGameplayMapAsset(request.url())) mapAssetStartedAt.set(request.url(), Date.now());
   });
   page.on('requestfinished', request => {
-    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+    if (isGameplayMapAsset(request.url())) {
       mapAssetTimings.push({
-        asset: request.url().split('/').pop(),
+        asset: request.url(),
         durationMs: Date.now() - (mapAssetStartedAt.get(request.url()) ?? Date.now()),
       });
     }
@@ -319,8 +319,12 @@ try {
   // visible for inspection. Navigate to gameplay only after capturing it.
   await page.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
-    'cold gameplay load should prefer the compact WebP map asset');
+  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-overview.webp')),
+    'cold gameplay load must fetch the canonical overview fallback');
+  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('/map-tiles/manifest.json')),
+    'cold gameplay load must fetch the canonical tile manifest');
+  assert.ok(mapAssetTimings.some(entry => /map-tiles\\/(?:tile_r\\d+_c\\d+\\.webp)/.test(String(entry.asset))),
+    'cold gameplay load must fetch camera-visible high-resolution WebP tiles');
   console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const movementJoystick = page.locator('[data-joystick-side]');
