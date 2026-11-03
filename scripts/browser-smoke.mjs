@@ -417,9 +417,9 @@ try {
   const taskDiagnostics = await page.evaluate(() => ({
     taskFixturePosition: window.__AG_TASK_FIXTURE_POSITION ?? null,
     taskDebug: window.__AG_TASK_DEBUG ?? null,
-    taskActionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    taskActionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
     taskAction: (() => {
-      const element = document.querySelector('[data-testid="gameplay-task-action"]');
+      const element = document.querySelector('[data-testid="game-action-use"][data-use-action="task"]');
       if (!element) return null;
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -429,11 +429,17 @@ try {
     bodyText: document.body.innerText.slice(-1200),
   }));
   console.log('Task interaction fixture diagnostics:', JSON.stringify(taskDiagnostics));
-  const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
+  const taskButton = page.getByTestId('game-action-use');
+  assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
+    'the persistent Use control must expose the nearby actionable task');
+  assert.equal(await taskButton.isEnabled(), true, 'Use must enable when a task is in range and visible');
+  const idleReportButton = page.getByTestId('game-action-report');
+  assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
+  assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
   const movementJoystickBox = await movementJoystick.boundingBox();
-  assert.ok(taskPromptBox && movementJoystickBox, 'task prompt and joystick must be measurable');
+  assert.ok(taskPromptBox && movementJoystickBox, 'Use action and joystick must be measurable');
   assert.ok(
     taskPromptBox.x + taskPromptBox.width <= movementJoystickBox.x ||
       movementJoystickBox.x + movementJoystickBox.width <= taskPromptBox.x ||
@@ -462,7 +468,7 @@ try {
   const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
     fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"]').length,
   }));
   console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
   assert.equal(blockedTaskDiagnostics.actionCount, 0,
@@ -489,11 +495,11 @@ try {
   await ghostBlockedTaskPage.waitForFunction(() => {
     const fixture = window.__AG_TASK_FIXTURE_POSITION;
     return fixture !== undefined &&
-      document.querySelectorAll('[data-testid="gameplay-task-action"]').length === 1;
+      document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"][data-use-available="true"]').length === 1;
   }, undefined, { timeout: 5_000 });
   const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"]').length,
   }));
   assert.equal(ghostBlockedTaskDiagnostics.debug?.isGhost, true,
     'the occluded fixture must run as a server-authoritative ghost');
@@ -513,11 +519,11 @@ try {
     }, undefined, { timeout: 3_000 });
     const prompt = await taskButton.boundingBox();
     const stick = await movementJoystick.boundingBox();
-    assert.ok(prompt && stick, 'task prompt and joystick must remain measurable after resize');
+    assert.ok(prompt && stick, 'Use action and joystick must remain measurable after resize');
     assert.ok(
       prompt.x + prompt.width <= stick.x || stick.x + stick.width <= prompt.x ||
         prompt.y + prompt.height <= stick.y || stick.y + stick.height <= prompt.y,
-      `task prompt must not overlap joystick at ${size.width}×${size.height}`,
+      `Use action must not overlap joystick at ${size.width}×${size.height}`,
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1040,9 +1046,9 @@ try {
   }, undefined, { timeout: 3_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
-  await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await layoutSettings.getByTestId('control-layout-select').selectOption('killReport');
   const preview = layoutSettings.getByTestId('control-layout-preview');
-  const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
+  const dragHandle = layoutSettings.getByTestId('control-drag-killReport');
   // The AI settings section now appears before the draggable-control editor.
   // Bring the selected preview and handle into the scrollable dialog viewport
   // before deriving touch coordinates; otherwise CDP touch events can target
@@ -1086,7 +1092,7 @@ try {
   await landscapePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await landscapePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const landscapeSettings = landscapePage.locator('[role="dialog"]');
-  await landscapeSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await landscapeSettings.getByTestId('control-layout-select').selectOption('killReport');
   const landscapePreview = landscapeSettings.getByTestId('control-layout-preview');
   const landscapePreviewBox = await landscapePreview.boundingBox();
   const landscapeFixedHud = await landscapeSettings.getByTestId('control-layout-fixed-hud').boundingBox();
@@ -1132,7 +1138,7 @@ try {
   await smallPhonePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await smallPhonePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const smallPhoneSettings = smallPhonePage.locator('[role="dialog"]');
-  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('killReport');
   const smallPhonePreview = smallPhoneSettings.getByTestId('control-layout-preview');
   const smallPhonePreviewBox = await smallPhonePreview.boundingBox();
   const smallPhoneFixedHud = await smallPhoneSettings.getByTestId('control-layout-fixed-hud').boundingBox();
@@ -1188,12 +1194,12 @@ try {
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
-  let movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
-  assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
+  let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
+  assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
   assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
-    'dragged task action X position must be applied to the gameplay HUD');
+    'dragged action bar X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
-    'dragged task action Y position must be applied to the gameplay HUD');
+    'dragged action bar Y position must be applied to the gameplay HUD');
 
   // Persisted layout survives a fresh page load. Return to a stable lobby mock
   // before reloading, because the gameplay mock intentionally navigates to /game.
@@ -1203,25 +1209,25 @@ try {
   await settingsButtonAfterReload.waitFor({ state: 'visible', timeout: 15_000 });
   await settingsButtonAfterReload.click();
   const reloadedSettings = page.locator('[role="dialog"]');
-  await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await reloadedSettings.getByTestId('control-layout-select').selectOption('killReport');
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
-  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
   assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
-    'saved task action X position must hydrate after reload');
+    'saved action bar X position must hydrate after reload');
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
-    'saved task action Y position must hydrate after reload');
+    'saved action bar Y position must hydrate after reload');
 
   // Drag directly onto the joystick: the editor should find a nearby free spot.
   const joystickHandle = reloadedSettings.getByTestId('control-drag-joystick');
   const joystickHandleBox = await joystickHandle.boundingBox();
-  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(joystickHandleBox && taskHandleBox, 'overlap regression controls are visible');
   await page.mouse.move(taskHandleBox.x + taskHandleBox.width / 2, taskHandleBox.y + taskHandleBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(joystickHandleBox.x + joystickHandleBox.width / 2, joystickHandleBox.y + joystickHandleBox.height / 2, { steps: 8 });
   await page.mouse.up();
-  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   const currentJoystickBox = await joystickHandle.boundingBox();
   assert.ok(nudgedTaskBox && currentJoystickBox, 'dragged control and joystick remain visible');
   const previewOverlap =
@@ -1236,9 +1242,9 @@ try {
   await reloadedSettings.getByTestId('control-layout-cancel').click();
   await settingsButtonAfterReload.click();
   const cancelledSettings = page.locator('[role="dialog"]');
-  await cancelledSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await cancelledSettings.getByTestId('control-layout-select').selectOption('killReport');
   const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
-  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
   assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
     'Cancel must preserve the previously saved X position');
