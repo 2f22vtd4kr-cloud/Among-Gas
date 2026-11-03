@@ -1,17 +1,51 @@
-import { CollisionWorld } from './vectorCollision.js';
-import { COLLISION_DOCUMENT } from './generatedDocument.js';
+import {
+  CollisionWorld,
+  validateCollisionDocument,
+  type CollisionDocument,
+} from "./vectorCollision.js";
+import { COLLISION_DOCUMENT } from "./generatedDocument.js";
 
 /**
- * Legacy module path retained for the vector-editor preview only.
- * The document is auto-derived from raster collision/vision sources and is
- * NOT the production gameplay world. Do not import it from client/server
- * runtime code until every map zone is author-traced, independently reviewed,
- * and passes full-footprint route plus client/server parity gates.
+ * Canonical gameplay collision/vision world.
+ *
+ * build:collision bootstraps collision.v1.json from the current fine-grid
+ * movement and vision sources only when no candidate exists. The vector
+ * editor then saves to that same collision.v1.json file. Every build validates
+ * the saved candidate and regenerates this module from it; editor saves also
+ * refresh this module so client HMR sees the new geometry.
  */
-export const GENERATED_COLLISION_PREVIEW_WORLD = new CollisionWorld(
-  COLLISION_DOCUMENT.shapes,
-  COLLISION_DOCUMENT.mapW,
-  COLLISION_DOCUMENT.mapH,
+let activeDocument: CollisionDocument = COLLISION_DOCUMENT;
+let activeWorld = new CollisionWorld(
+  activeDocument.shapes,
+  activeDocument.mapW,
+  activeDocument.mapH,
 );
 
-export const GENERATED_COLLISION_PREVIEW_DOCUMENT = COLLISION_DOCUMENT;
+export const PRODUCTION_COLLISION_DOCUMENT = activeDocument;
+export const PRODUCTION_COLLISION_WORLD = activeWorld;
+
+export function getProductionCollisionDocument(): CollisionDocument {
+  return activeDocument;
+}
+
+export function getProductionCollisionWorld(): CollisionWorld {
+  return activeWorld;
+}
+
+/** Hot-reload the server-side world after the editor saves a reviewed candidate. */
+export function replaceProductionCollisionDocument(document: CollisionDocument): void {
+  const errors = validateCollisionDocument(document);
+  if (errors.length) {
+    throw new Error("Refusing invalid production collision candidate: " + errors.join("; "));
+  }
+  activeDocument = document;
+  activeWorld = new CollisionWorld(
+    activeDocument.shapes,
+    activeDocument.mapW,
+    activeDocument.mapH,
+  );
+}
+
+// Retain these names for the editor's existing preview/test integrations.
+export const GENERATED_COLLISION_PREVIEW_WORLD = PRODUCTION_COLLISION_WORLD;
+export const GENERATED_COLLISION_PREVIEW_DOCUMENT = PRODUCTION_COLLISION_DOCUMENT;
