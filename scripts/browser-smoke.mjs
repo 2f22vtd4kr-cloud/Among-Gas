@@ -1291,7 +1291,7 @@ try {
     const pendingByImage = new WeakMap();
     HTMLImageElement.prototype.decode = function () {
       const source = this.currentSrc || this.src;
-      if (!source.includes('map-hires.webp') && !source.includes('characters.png')) {
+      if (!source.includes('map-overview.webp') && !source.includes('characters.png')) {
         return originalDecode.call(this);
       }
       if (!pendingByImage.has(this)) {
@@ -1310,7 +1310,7 @@ try {
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
 
-  // If WebP loading fails, the original PNG map must still render and unlock play.
+  // If optional detail tiles fail, the canonical overview still renders and unlocks play.
   const fallbackPage = await browser.newPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -1318,42 +1318,38 @@ try {
     hasTouch: true,
   });
   fallbackPage.on('pageerror', error => failures.push(error.message));
-  let pngFallbackLoaded = false;
+  let overviewLoaded = false;
+  let tileManifestRejected = false;
   const mapAssetEvents = [];
   fallbackPage.on('request', request => {
-    if (request.url().includes('map-hires.')) mapAssetEvents.push(`request ${request.url()}`);
-  });
-  fallbackPage.on('requestfailed', request => {
-    if (request.url().includes('map-hires.')) mapAssetEvents.push(`failed ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`);
+    if (request.url().includes('map-overview.webp') || request.url().includes('/map-tiles/manifest.json')) {
+      mapAssetEvents.push('request ' + request.url());
+    }
+    assert.equal(/map-hires\\.(?:png|webp)/.test(request.url()), false,
+      'gameplay must not request either divergent full-map source asset');
   });
   fallbackPage.on('response', response => {
-    if (response.url().includes('map-hires.')) {
-      mapAssetEvents.push(`response ${response.status()} ${response.url()}`);
-      if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+    if (response.url().includes('map-overview.webp') && response.ok()) overviewLoaded = true;
+    if (response.url().includes('/map-tiles/manifest.json') && response.status() === 503) {
+      tileManifestRejected = true;
     }
   });
-  // Simulate a server-side WebP failure deterministically; the image's error
-  // handler must then request and decode the original PNG map.
   await fallbackPage.route('**/*', route => {
     const url = route.request().url();
-    if (url.includes('map-hires.webp')) {
-      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional WebP fallback test failure' });
+    if (url.includes('/map-tiles/manifest.json')) {
+      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional optional tile manifest failure' });
     }
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  const pngResponsePromise = fallbackPage.waitForResponse(
-    response => response.url().includes('map-hires.png') && response.ok(),
-    { timeout: 15_000 },
-  );
-  await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
-  // A missing locator is considered "hidden" by Playwright; require the actual
-  // game canvas before judging the loading screen or fallback behavior.
+  await fallbackPage.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await pngResponsePromise;
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.equal(pngFallbackLoaded, true,
-    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}; page errors: ${failures.join(' | ') || 'none'}`);
+  assert.equal(overviewLoaded, true,
+    `overview fallback must load when detail tiles fail; observed: ${mapAssetEvents.join(' | ')}`);
+  assert.equal(tileManifestRejected, true,
+    'the browser test must actually exercise a failed optional tile manifest');
+  await fallbackPage.screenshot({ path: join(visualQaDir, 'map-overview-tiles-fallback.png'), fullPage: true });
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
