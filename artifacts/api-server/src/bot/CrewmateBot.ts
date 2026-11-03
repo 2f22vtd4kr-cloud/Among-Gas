@@ -22,7 +22,7 @@ import { requestGroqDialogue } from './groqDialogue.js';
 import { buildCrewTaskPlanningMessages, observeVisiblePlayers, parseCrewTaskChoice } from './strategicPolicy.js';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
-const TASK_DWELL_TICKS = 11; // 11 × 200ms = 2.2s per task step; one-variable balance adjustment after 300-game seed spread
+const TASK_DWELL_TICKS = 12; // 12 × 200ms = 2.4s per task step; 2.2s reproducibly put seed 17002 at 66% crew wins
 
 export class CrewmateBot extends BotAgent {
   /** Current target task ID (null = none selected yet). */
