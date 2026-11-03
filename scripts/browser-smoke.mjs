@@ -636,7 +636,7 @@ try {
   assert.equal(await useAlwaysVisible.isEnabled(), false,
     'Use remains visible but disabled when no interaction is nearby');
   const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
-  assert.match(neutralReport, /#77838a|#465158/i,
+  assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
     'disabled Report uses the neutral grey surface, not a hidden or active colour');
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
