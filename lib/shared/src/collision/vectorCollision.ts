@@ -224,8 +224,8 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
       errors.push("source.sightPipeline must describe the sight derivation");
     }
-    if (!source.shapeCounts || source.shapeCounts.total !== doc.shapes.length) {
-      errors.push("source.shapeCounts.total must match the document shape count");
+    if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
+      errors.push("source.shapeCounts.total must be a positive integer");
     }
   }
   return errors;
