@@ -3,6 +3,7 @@
  */
 
 export type SimWinner = 'crew' | 'impostor' | 'timeout';
+export type SimWinReason = 'tasks' | 'vote' | 'elimination' | 'parity' | 'sabotage' | 'timeout' | 'unknown';
 
 export interface SimTimeoutSnapshot {
   phase: string;
@@ -27,9 +28,16 @@ export interface SimGameResult {
   botCount: number;
   impostorCount: number;
   winner: SimWinner;
+  winReason: SimWinReason;
+  aliveCrewAtEnd: number;
+  aliveImpostorsAtEnd: number;
+  ejectedSlot: number | null;
   durationMs: number;
   kills: number;
   meetings: number;
+  sabotageStarts: number;
+  sabotageResolved: number;
+  sabotageFixed: number;
   tasksCompleted: number;
   totalTaskSteps: number;
   /** Snapshot captured before cleanup when the simulator safety watchdog fires. */

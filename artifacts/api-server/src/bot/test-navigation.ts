@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
 import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
-import { FEET_OFFSET_Y, NO_TARGET } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 
@@ -10,6 +10,9 @@ class NavigationProbe extends BotAgent {
   override chooseVote(_lobby: Lobby, _self: LobbyPlayer): number { return NO_TARGET; }
   approach(target: {x:number;y:number}, radius: number, targetRadiusPx = 24) {
     return this.nearestApproachPoint(target, radius, targetRadiusPx);
+  }
+  moveTo(self: LobbyPlayer, goal: {x:number;y:number}, arrivalTolerancePx = 25) {
+    return this.navigateTo(self, goal, arrivalTolerancePx);
   }
 }
 
@@ -30,4 +33,39 @@ for (const task of TASK_DEFS) {
   ), true, task.name + ' bot approach must satisfy server-authoritative line of sight');
 }
 
-console.log('PASS: every assigned task has a walkable, spawn-reachable, visible bot approach within interaction range');
+const assertPathFollowerRoute = (
+  start: { x: number; y: number },
+  goal: { x: number; y: number },
+  label: string,
+) => {
+  const routeProbe = new NavigationProbe();
+  const self = { x: start.x, y: start.y } as LobbyPlayer;
+  let arrived = false;
+  let bestDistance = Math.hypot(goal.x - self.x, goal.y - self.y);
+  let ticks = 0;
+  for (; ticks < 500; ticks++) {
+    arrived = routeProbe.moveTo(self, goal, 25);
+    const distance = Math.hypot(goal.x - self.x, goal.y - self.y);
+    bestDistance = Math.min(bestDistance, distance);
+    assert.equal(isPlayerPositionWalkable(grid, self.x, self.y), true,
+      label + ' must keep the complete player footprint walkable at tick ' + (ticks + 1));
+    if (arrived) {
+      ticks++;
+      break;
+    }
+  }
+  assert.ok(arrived,
+    label + ' path follower failed to arrive after 500 ticks (best distance ' + bestDistance.toFixed(1) + 'px)');
+  console.log('PASS: ' + label + ' (' + ticks + ' ticks)');
+};
+
+// Coarse A* reachability is only a preflight. These routes exercise the actual
+// BotAgent path follower and fine swept-footprint collision in both directions,
+// so a connected coarse cell cannot hide an impassable doorway or corner.
+for (const task of TASK_DEFS) {
+  const goal = probe.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
+  assertPathFollowerRoute({ x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y }, goal, task.name + ' spawn-to-task');
+  assertPathFollowerRoute(goal, { x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y }, task.name + ' task-to-spawn');
+}
+
+console.log('PASS: every task approach has a bidirectional production path-follower route with full-footprint collision');

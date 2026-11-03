@@ -237,6 +237,22 @@ export function smoothVisibilityPolygon(
   return points.map((point, index) => {
     const distance = distances[index];
     if (distance <= 0) return point;
+    const before = points[(index - radius + points.length) % points.length];
+    const after = points[(index + radius) % points.length];
+    const chordX = after.x - before.x;
+    const chordY = after.y - before.y;
+    const chordLength = Math.hypot(chordX, chordY);
+    if (chordLength > 1e-6) {
+      const perpendicularError = Math.abs(
+        chordX * (point.y - before.y) - chordY * (point.x - before.x),
+      ) / chordLength;
+      const forwardProgress =
+        (point.x - before.x) * (after.x - point.x) +
+        (point.y - before.y) * (after.y - point.y);
+      // Keep straight wall/fence segments exact. Radial averaging otherwise
+      // pulls their intersections inward and makes straight silhouettes bow.
+      if (perpendicularError <= 0.75 && forwardProgress >= -1e-6) return point;
+    }
     let weightedSum = 0;
     let weightSum = 0;
     for (let offset = -radius; offset <= radius; offset++) {
@@ -245,8 +261,8 @@ export function smoothVisibilityPolygon(
       weightedSum += distances[wrapped] * weight;
       weightSum += weight;
     }
-    // Gaussian weights soften corners more naturally than a box average. Clamp
-    // to the original ray hit so smoothing can only darken, never leak through walls.
+    // Stair-step transitions remain conservative: smoothing can darken,
+    // but can never extend visibility beyond the original ray hit.
     const smoothedDistance = Math.min(distance, weightedSum / weightSum);
     const dx = (point.x - origin.x) / distance;
     const dy = (point.y - origin.y) / distance;

@@ -351,6 +351,38 @@ assert.equal(isPlayerPositionWalkable(grid, MAP_W / 2, MAP_H - FEET_OFFSET_Y - 1
  assert.equal(isPlayerPositionWalkable(canonical,1735,449),true,'the decorative garden floor remains walkable');
  assert.equal(isPlayerPositionWalkable(canonical,1735,556-FEET_OFFSET_Y),false,'the statue base remains blocked at its feet-space position');
  assert.equal(isPlayerPositionWalkable(canonical,1450,449),true,'open west lobby floor stays walkable');
+
+ // The two parked cars in the north-west garage leave a visibly open
+ // person-sized aisle between their mirrors. Test the full player footprint
+ // through that aisle, not merely isolated endpoints or point samples.
+ let bestGarageAisle: { x: number; startY: number; endY: number; length: number } | null = null;
+ for (let x = 610; x <= 675; x += 2) {
+   let runStart: number | null = null;
+   for (let y = 380; y <= 610; y += 4) {
+     const walkable = isPlayerPositionWalkable(canonical, x, y);
+     if (walkable && runStart === null) runStart = y;
+     if ((!walkable || y === 610) && runStart !== null) {
+       const endY = walkable ? y : y - 4;
+       const length = endY - runStart;
+       if (!bestGarageAisle || length > bestGarageAisle.length) {
+         bestGarageAisle = { x, startY: runStart, endY, length };
+       }
+       runStart = null;
+     }
+   }
+ }
+ console.log('northWestGarageAisleCandidate', JSON.stringify(bestGarageAisle));
+ assert.ok(bestGarageAisle && bestGarageAisle.length >= 140,
+   'the visible gap between the two north-west parked cars must contain a continuous 140px full-footprint walking lane');
+ const { x: garageGapX, startY: garageGapStartY, endY: garageGapEndY } = bestGarageAisle;
+ assert.equal(isMovementPathWalkable(canonical, garageGapX, garageGapStartY, garageGapX, garageGapEndY), true,
+   'server movement must allow continuous traversal through the measured north-west car aisle');
+ assert.equal(isMovementPathWalkableWide(canonical, garageGapX, garageGapStartY, garageGapX, garageGapEndY), true,
+   'client movement must allow the same continuous north-west car-aisle traversal');
+ assert.equal(isMovementPathWalkable(canonical, garageGapX, garageGapEndY, garageGapX, garageGapStartY), true,
+   'server movement must allow reverse traversal through the car aisle');
+ assert.equal(isMovementPathWalkableWide(canonical, garageGapX, garageGapEndY, garageGapX, garageGapStartY), true,
+   'client movement must allow reverse traversal through the car aisle');
 }
 
 console.log('PASS: movement, vector obstacle collision, stale echoes, thin walls, diagonal corners and map edges');

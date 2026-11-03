@@ -3100,7 +3100,7 @@ export default function GameMap() {
           ? ',0 0 40px rgba(255,50,50,0.8),0 0 80px rgba(255,50,50,0.3)'
           : ',0 0 40px rgba(60,180,255,0.8),0 0 80px rgba(60,180,255,0.3)';
         return (
-          <div style={{
+          <div data-testid="role-reveal-overlay" style={{
             position: 'fixed', inset: 0, zIndex: 50,
             display: 'flex', flexDirection: 'column',
             alignItems: 'center', justifyContent: 'center',

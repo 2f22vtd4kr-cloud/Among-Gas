@@ -25,6 +25,7 @@ import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@w
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import { buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import type { SimGameResult, SimWinner } from './types.js';
+import { createSeededRandom, withSeededRandom } from './seededRandom.js';
 
 export interface SimBatchOptions {
   /** Total number of games to run. */
@@ -35,6 +36,8 @@ export interface SimBatchOptions {
   impostors?: number;
   /** How many games run concurrently at once. Default 25. */
   concurrency?: number;
+  /** Optional batch seed; each game receives a stable independent stream. */
+  seed?: number;
   /** Safety watchdog per game (ms). A game with no terminal resolution past this is recorded as 'timeout'. Active critical sabotage gets time to resolve. Default 300000. */
   timeoutMs?: number;
   /** Called for every structured lifecycle event across every in-flight game. */
@@ -73,7 +76,7 @@ function assignBotAgentsByRole(lobby: Lobby): void {
 }
 
 export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGameResult[]> {
-  const { games, bots, impostors, concurrency = 25, timeoutMs = 300_000 } = opts;
+  const { games, bots, impostors, concurrency = 25, timeoutMs = 300_000, seed } = opts;
   if (bots < 2) throw new Error('bots must be at least 2 (need at least one crewmate and one impostor)');
   if (games < 1) throw new Error('games must be at least 1');
 
@@ -114,11 +117,19 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
     function startOne(): void {
       if (nextGameIndex >= games) return;
       const gameIndex = nextGameIndex++;
+      const gameRandom = seed === undefined
+        ? null
+        : createSeededRandom((seed + Math.imul(gameIndex + 1, 0x9e37_79b9)) >>> 0);
+      const withGameRandom = <T>(operation: () => T): T =>
+        gameRandom ? withSeededRandom(gameRandom, operation) : operation();
 
-      const lobby = manager.createHeadlessLobby();
+      const lobby = withGameRandom(() => manager.createHeadlessLobby());
       const startedAt = Date.now();
       let kills = 0;
       let meetings = 0;
+      let sabotageStarts = 0;
+      let sabotageResolved = 0;
+      let sabotageFixed = 0;
       let settled = false;
       let collisionMonitor: ReturnType<typeof setInterval> | null = null;
       let collisionViolation: { slot: number; x: number; y: number } | undefined;
@@ -170,10 +181,24 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         manager.disposeLobby(lobby);
         diagnosticsByLobby.delete(lobby.code);
 
-        const impostorCount = Array.from(lobby.players.values()).filter(p => p.role === 'impostor').length;
+        const playersAtEnd = Array.from(lobby.players.values());
+        const aliveCrewAtEnd = playersAtEnd.filter(p => p.alive && p.role !== 'impostor').length;
+        const aliveImpostorsAtEnd = playersAtEnd.filter(p => p.alive && p.role === 'impostor').length;
+        const ejectedSlotValue = lobby.gameOverResult?.ejectedSlot ?? 0xff; // NO_TARGET
+        const ejectedSlot = ejectedSlotValue === 0xff ? null : ejectedSlotValue;
+        const tasksWon = lobby.totalTaskSteps > 0 && lobby.completedTaskSteps.size >= lobby.totalTaskSteps;
+        const winReason = winner === 'timeout' ? 'timeout'
+          : ejectedSlot !== null ? 'vote'
+          : tasksWon ? 'tasks'
+          : winner === 'crew' && aliveImpostorsAtEnd === 0 ? 'elimination'
+          : winner === 'impostor' && aliveImpostorsAtEnd >= aliveCrewAtEnd ? 'parity'
+          : winner === 'impostor' ? 'sabotage'
+          : 'unknown';
+        const impostorCount = playersAtEnd.filter(p => p.role === 'impostor').length;
         const result: SimGameResult = {
           gameIndex, code: lobby.code, botCount: bots, impostorCount,
-          winner, durationMs: Date.now() - startedAt, kills, meetings,
+          winner, winReason, aliveCrewAtEnd, aliveImpostorsAtEnd, ejectedSlot,
+          durationMs: Date.now() - startedAt, kills, meetings, sabotageStarts, sabotageResolved, sabotageFixed,
           tasksCompleted: lobby.completedTaskSteps.size, totalTaskSteps: lobby.totalTaskSteps,
           ...(timeoutState ? { timeoutState } : {}),
         };
@@ -205,14 +230,21 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         opts.onEvent?.(event);
         if (event.type === 'kill') kills++;
         else if (event.type === 'meetingStart') meetings++;
+        else if (event.type === 'sabotageStart') sabotageStarts++;
+        else if (event.type === 'sabotageResolved') {
+          sabotageResolved++;
+          if (event.fixed) sabotageFixed++;
+        }
         else if (event.type === 'gameOver') finish(event.winFlag === 1 ? 'crew' : 'impostor');
       });
 
-      for (let i = 0; i < bots; i++) {
-        manager.addBotPlayer(lobby, i, botName(i), new CrewmateBot());
-      }
-      manager.startGame(lobby, impostors);
-      assignBotAgentsByRole(lobby);
+      withGameRandom(() => {
+        for (let i = 0; i < bots; i++) {
+          manager.addBotPlayer(lobby, i, botName(i), new CrewmateBot());
+        }
+        manager.startGame(lobby, impostors);
+        assignBotAgentsByRole(lobby);
+      });
       for (const player of lobby.players.values()) {
         const agent = player.botAgent as BotAgent | undefined;
         if (!player.isBot || !agent) continue;
@@ -231,14 +263,14 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           diagnostic.ghostAfter = { x: Math.round(currentPlayer.x), y: Math.round(currentPlayer.y) };
           diagnostic.lastTargetTaskId = (agent as unknown as { _targetTaskId?: number | null })._targetTaskId ?? null;
         };
-        agent.tick = (currentLobby, currentPlayer, currentManager) => {
+        agent.tick = (currentLobby, currentPlayer, currentManager) => withGameRandom(() => {
           diagnostic.tickCount++;
           diagnostic.lastPhase = currentLobby.phase;
           diagnostic.lastAlive = currentPlayer.alive;
           originalTick(currentLobby, currentPlayer, currentManager);
           diagnostic.lastX = Math.round(currentPlayer.x);
           diagnostic.lastY = Math.round(currentPlayer.y);
-        };
+        });
       }
 
       // Independently audit every living bot position throughout the real

@@ -97,6 +97,8 @@ function makeOverlaySvg(
   fill: string,
   opacity: number,
   includeSpawn: boolean,
+  offsetX = 0,
+  offsetY = 0,
 ): Buffer {
   const cellWidth = (MAP_W / FINE_COLS) * scaleX;
   const cellHeight = (MAP_H / FINE_ROWS) * scaleY;
@@ -109,8 +111,8 @@ function makeOverlaySvg(
       const blocked = col < FINE_COLS && sourceGrid[row * FINE_COLS + col] === 1;
       if (blocked && runStart < 0) runStart = col;
       if (!blocked && runStart >= 0) {
-        const x = runStart * cellWidth;
-        const y = row * cellHeight;
+        const x = runStart * cellWidth - offsetX;
+        const y = row * cellHeight - offsetY;
         const runWidth = (col - runStart) * cellWidth;
         rects.push(
           '<rect x="' + x.toFixed(2) + '" y="' + y.toFixed(2) +
@@ -124,7 +126,7 @@ function makeOverlaySvg(
 
   const polygonLines = MANUAL_BLOCKED_POLYGONS.map(polygon => {
     const points = polygon.points.map(([x, y]) =>
-      (x * scaleX).toFixed(2) + ',' + (y * scaleY).toFixed(2),
+      (x * scaleX - offsetX).toFixed(2) + ',' + (y * scaleY - offsetY).toFixed(2),
     ).join(' ');
     return '<polygon points="' + points + '" fill="none" stroke="#ffd740" stroke-width="' +
       (3 * scaleX) + '" stroke-linejoin="round"/>';
@@ -132,8 +134,8 @@ function makeOverlaySvg(
 
   let spawn = '';
   if (includeSpawn) {
-    const x = PLAYER_SPAWN_X * scaleX;
-    const y = PLAYER_SPAWN_Y * scaleY;
+    const x = PLAYER_SPAWN_X * scaleX - offsetX;
+    const y = PLAYER_SPAWN_Y * scaleY - offsetY;
     const feetY = (PLAYER_SPAWN_Y + FEET_OFFSET_Y) * scaleY;
     const radius = PLAYER_RADIUS * scaleX;
     const halfWidth = PLAYER_HALF_WIDTH * scaleX;
@@ -307,7 +309,14 @@ for (let row = 0; row < rowStarts.length; row++) {
       width: Math.round(width * pngScale.x),
       height: Math.round(height * pngScale.y),
     };
-    await sharp(outputPath).extract(extract).png().toFile(path.join(tileDir, stem + '-collision.png'));
+    const collisionTileSvg = makeOverlaySvg(
+      grid, extract.width, extract.height, pngScale.x, pngScale.y, '#ff1744', 0.32, false,
+      extract.left, extract.top,
+    );
+    // Render a tile-local mask rather than cropping the full-map diagnostic,
+    // so the spawn annotation never obscures unrelated room/prop contours.
+    await sharp(mapPath).extract(extract).composite([{ input: collisionTileSvg }]).png()
+      .toFile(path.join(tileDir, stem + '-collision.png'));
     await sharp(outputShadowPath).extract(extract).png().toFile(path.join(tileDir, stem + '-shadow.png'));
     const sample = visionSamples.find(item => item.row === row && item.col === col);
     if (sample) {
@@ -320,6 +329,70 @@ for (let row = 0; row < rowStarts.length; row++) {
   }
 }
 
+
+const detailRegions = [
+  { id: 'northwest-garage', label: 'North-west garage: parked cars and aisle', left: 100, top: 75, width: 280, height: 170 },
+  { id: 'central-atrium', label: 'Central atrium: planter, statue and benches', left: 610, top: 100, width: 290, height: 240 },
+  { id: 'upper-right-tech', label: 'Upper-right equipment room', left: 920, top: 40, width: 250, height: 190 },
+  { id: 'upper-right-entry', label: 'Upper-right approach around the bench', left: 800, top: 100, width: 130, height: 120 },
+  { id: 'south-lobby-threshold', label: 'South lobby doorway and threshold', left: 650, top: 290, width: 140, height: 120 },
+  { id: 'west-pipe-room', label: 'West pipe room and lower wall runs', left: 0, top: 270, width: 520, height: 250 },
+  { id: 'gas-forecourt', label: 'Gas forecourt: pumps, cones and perimeter', left: 0, top: 480, width: 330, height: 304 },
+  { id: 'service-van-generator', label: 'Service van bay and lower generator aisle', left: 790, top: 420, width: 370, height: 364 },
+];
+const detailScale = 3;
+for (const region of detailRegions) {
+  const sourceRect = {
+    left: region.left, top: region.top, width: region.width, height: region.height,
+  };
+  const mapLeft = Math.max(0, Math.min(metadata.width! - 1,
+    Math.round((region.left / refScale.x) * pngScale.x)));
+  const mapTop = Math.max(0, Math.min(metadata.height! - 1,
+    Math.round((region.top / refScale.y) * pngScale.y)));
+  const mapRect = {
+    left: mapLeft,
+    top: mapTop,
+    width: Math.min(metadata.width! - mapLeft,
+      Math.max(1, Math.round((region.width / refScale.x) * pngScale.x))),
+    height: Math.min(metadata.height! - mapTop,
+      Math.max(1, Math.round((region.height / refScale.y) * pngScale.y))),
+  };
+  const panelWidth = region.width * detailScale;
+  const panelHeight = region.height * detailScale;
+  const collisionSvg = makeOverlaySvg(
+    grid, mapRect.width, mapRect.height, pngScale.x, pngScale.y, '#ff1744', 0.32, false,
+    mapRect.left, mapRect.top,
+  );
+  const [referenceCrop, collisionCrop] = await Promise.all([
+    sharp(referencePath).extract(sourceRect)
+      .resize({ width: panelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+    sharp(mapPath).extract(mapRect).composite([{ input: collisionSvg }])
+      .resize({ width: panelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+  ]);
+  const gap = 24;
+  const headerHeight = 52;
+  const canvasWidth = panelWidth * 2 + gap;
+  const headerSvg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasWidth + '" height="' + headerHeight + '">' +
+    '<rect width="100%" height="100%" fill="#101820"/>' +
+    '<text x="14" y="33" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff">SOURCE RED-LINE REFERENCE</text>' +
+    '<text x="' + (panelWidth + gap + 14) + '" y="33" font-family="sans-serif" font-size="22" font-weight="bold" fill="#ffffff">PRODUCTION COLLISION OVERLAY</text>' +
+    '</svg>',
+  );
+  await sharp({
+    create: {
+      width: canvasWidth,
+      height: panelHeight + headerHeight,
+      channels: 3,
+      background: '#101820',
+    },
+  }).composite([
+    { input: headerSvg, left: 0, top: 0 },
+    { input: referenceCrop, left: 0, top: headerHeight },
+    { input: collisionCrop, left: panelWidth + gap, top: headerHeight },
+  ]).png().toFile(path.join(tileDir, 'detail-' + region.id + '-comparison.png'));
+}
+
 console.log(JSON.stringify({
   collision: outputPath,
   shadow: outputShadowPath,
@@ -327,6 +400,8 @@ console.log(JSON.stringify({
   reference: referenceOutputPath,
   tileDirectory: tileDir,
   tileCount: visionSamples.length,
+  detailCount: detailRegions.length,
+  detailScale: detailScale + 'x',
   tileDimensions: tileWidth + 'x' + tileHeight,
   logicalMap: MAP_W + 'x' + MAP_H,
   png: metadata.width + 'x' + metadata.height,
