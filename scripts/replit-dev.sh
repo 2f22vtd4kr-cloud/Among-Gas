@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Regenerate the canonical vector collision document and its fine compatibility
+# raster from the reviewed source red-line reference before either runtime starts.
+pnpm --filter @workspace/scripts run build:collision
+
 # Replit exposes Vite as the public web process; the API runs privately on 8080.
 # Vite proxies HTTP API calls and WebSocket upgrades to that process.
 setsid env PORT=8080 pnpm --filter @workspace/api-server run dev &
@@ -9,8 +13,6 @@ vite_pid=
 kill_tree() {
   local pid="$1" child
   local children
-  # Each service is launched with setsid, so terminate its entire process group
-  # (pnpm, shell wrappers, Node, Vite, and esbuild) instead of orphaning children.
   if kill -TERM -- "-$pid" 2>/dev/null; then return 0; fi
   if [ -r "/proc/$pid/task/$pid/children" ]; then
     children="$(cat "/proc/$pid/task/$pid/children" 2>/dev/null || true)"
