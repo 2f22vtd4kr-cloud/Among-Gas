@@ -146,6 +146,10 @@ try {
   const overview = await sharp(path.join(publicDir, "map-overview.webp")).metadata();
   assert.equal(overview.width, 1612);
   assert.equal(overview.height, 929);
+  const overviewManifest = JSON.parse(await fs.readFile(path.join(publicDir, "map-overview.manifest.json"), "utf8"));
+  assert.equal(overviewManifest.sourceSha256, sourceSha256,
+    "overview fallback must be regenerated from the same canonical source as the tile sets");
+  assert.equal(overviewManifest.scale, 0.5);
   console.log("MAP TILE QA PASSED: 2× world scale, full coverage, pixel fidelity, edge fidelity, shift/recolour/seam rejection");
 } finally {
   await fs.rm(tempDir, { recursive: true, force: true });
