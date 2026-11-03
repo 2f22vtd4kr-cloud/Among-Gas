@@ -7,10 +7,8 @@ export type GameplayControlId =
   | 'tasks'
   | 'settings'
   | 'emergency'
-  | 'taskAction'
   | 'killReport'
-  | 'sabotage'
-  | 'repair';
+  | 'sabotage';
 
 export interface ControlPosition {
   /** Horizontal center as a percentage of the viewport width. */
@@ -31,7 +29,7 @@ const CHANGE_EVENT = 'among-gas-settings-change';
 const DEFAULT_SETTINGS: GameSettings = { joystickSide: 'right', controlLayout: {} };
 const CONTROL_IDS: readonly GameplayControlId[] = [
   'joystick', 'map', 'tasks', 'settings', 'emergency',
-  'taskAction', 'killReport', 'sabotage', 'repair',
+  'killReport', 'sabotage',
 ];
 
 export const CONTROL_LABELS: Record<GameplayControlId, { en: string; ru: string }> = {
@@ -40,10 +38,8 @@ export const CONTROL_LABELS: Record<GameplayControlId, { en: string; ru: string 
   tasks: { en: 'Task list button', ru: 'Кнопка заданий' },
   settings: { en: 'Settings button', ru: 'Кнопка настроек' },
   emergency: { en: 'Emergency button', ru: 'Кнопка тревоги' },
-  taskAction: { en: 'Nearby task action', ru: 'Действие задания рядом' },
-  killReport: { en: 'Kill / Report actions', ru: 'Убить / доложить' },
+  killReport: { en: 'Kill / Report / Use action bar', ru: 'Убить / доложить / использовать' },
   sabotage: { en: 'Sabotage button', ru: 'Кнопка саботажа' },
-  repair: { en: 'Repair button', ru: 'Кнопка ремонта' },
 };
 
 export function defaultControlPosition(
@@ -58,10 +54,8 @@ export function defaultControlPosition(
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
-    case 'taskAction': return { x: 50, y: 62 };
     case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 90 };
     case 'sabotage': return { x: oppositeSide, y: 74 };
-    case 'repair': return { x: 88, y: 50 };
   }
 }
 
@@ -176,10 +170,8 @@ export function customControlPositionStyle(
     tasks: { halfWidth: 54, halfHeight: 24 },
     settings: { halfWidth: 22, halfHeight: 22 },
     emergency: { halfWidth: 74, halfHeight: 30 },
-    taskAction: { halfWidth: 84, halfHeight: 20 },
     killReport: { halfWidth: 120, halfHeight: 38 },
     sabotage: { halfWidth: 38, halfHeight: 38 },
-    repair: { halfWidth: 90, halfHeight: 20 },
   };
   const { halfWidth, halfHeight } = safeBounds[id];
   return {
