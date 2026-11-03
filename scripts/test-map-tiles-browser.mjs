@@ -45,7 +45,7 @@ try {
       const status = window.__AG_TILE_DEBUG;
       return !!status && (status.visibleTotal ?? 0) > 0 &&
         status.visibleLoaded === status.visibleTotal && status.failed === 0;
-    }, { timeout: 25_000 });
+    }, undefined, { timeout: 25_000 });
 
     const status = await page.evaluate(() => window.__AG_TILE_DEBUG);
     const tileRequests = requests.filter(url => /\/map-tiles(?:-sharp)?\/tile_r\d+_c\d+\.webp(?:\?|$)/.test(url));
