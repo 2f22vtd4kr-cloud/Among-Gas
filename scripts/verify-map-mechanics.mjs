@@ -321,7 +321,7 @@ assert.match(crewmateBotSource, /navigateTo\(self, goal, 8\)/, 'task bots must a
 assert.match(crewmateBotSource, /SABOTAGE_INTERACTION_RANGE_PX - 8/, 'sabotage repair bots must use the same safe-radius approach strategy');
 assert.match(crewmateBotSource, /TASK_INTERACTION_RANGE_PX - 8/, 'ghost task completion must stay inside the authoritative interaction range with a floating-point safety margin');
 assert.match(crewmateBotSource, /interactionDistance \+ 1/, 'ghost task approach must tolerate sub-pixel floating-point residue at arrival');
-assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 11/, 'The one-variable balance retest must use 2.2s task-step dwell at the 5Hz bot AI rate');
+assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 12/, 'The one-variable balance retest must use 2.4s task-step dwell at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 300/, 'Sabotage timing must remain about 60s at the 5Hz tick rate');
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => buildPreciseCollisionGrid\(\), \[\]\)/, 'GameMap must build one shared fine grid for task LOS and live movement');
 assert.match(gameMapSource, /isLineOfSightToInteractionTarget\(/, 'task actions must enforce the same line-of-sight contract as the authoritative server');
