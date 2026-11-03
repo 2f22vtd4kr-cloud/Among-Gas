@@ -188,13 +188,13 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 | `0x10/0x06` vs. reuse existing Create | New sub-action vs. query param | New sub-action — cleaner, explicit intent |
 | Bot personality variety | All identical vs. tunable difficulty tiers | Single "medium" difficulty first; difficulty tiers as follow-up |
 
-## 2026-11-02 exact-head balance audit
+## 2026-11-02 provisional balance audit (superseded)
 
 The initial 2.0s dwell cohort was inconsistent across seeds: run [41449987137](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41449987137) produced 63%, 57%, and 70% crew wins (zero timeouts), so seed 17003 exceeded the per-cohort 65% ceiling. The 70% cohort was not dismissed as noise.
 
 All task definitions now have a direct spawn-reachable, LOS-clear approach-point regression. The follow-up regression exercises the production `BotAgent.navigateTo` path follower from spawn and from the exact previously observed timeout position (1656, 797) to Empty Garbage. These checks passed in exact-head run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699).
 
-**Accepted one-variable retest:** increasing only `TASK_DWELL_TICKS` from 10 to 11 (2.0s → 2.2s) produced three passing 100-game cohorts in run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699):
+**Historical 2.2s retest (not accepted as reproducible):** run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699) initially reported 62%, 64%, and 58% crew wins with zero timeouts:
 
 | Seed | Crew wins | Impostor wins | Crew win rate | Timeouts | Average duration |
 |---|---:|---:|---:|---:|---:|
@@ -202,15 +202,13 @@ All task definitions now have a direct spawn-reachable, LOS-clear approach-point
 | 17002 | 64 | 36 | 64% | 0 | 51.7s |
 | 17003 | 58 | 42 | 58% | 0 | 50.9s |
 
-All three cohorts meet the 45–65% acceptance band with zero safety timeouts. The new win-reason diagnostics classify all crew wins as task victories and all impostor wins as sabotage victories; there were no vote/ejection or parity/elimination wins in these 300 games. This is a balance pass for the tested six-player bot configuration, not proof that voting/social-deduction behavior is complete. Keep the voting/ejection path as a separate gameplay acceptance item.
+Those figures were initially recorded as a pass, but later corrected per-game PRNG tests exposed a shared process-global random stream that made concurrent game outcomes interleaving-dependent. The figures are historical only, not accepted balance evidence. Voting/ejection acceptance remains a separate gameplay gate.
 
+## 2026-11-03 reproducibility and strategy retests
 
+The simulator now creates an independent seeded random stream per game and scopes it around lobby initialization and each synchronous bot tick. Corrected 2.2s exact-head runs [41587901874](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41587901874) and [41590309325](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41590309325) reproduced the same outcomes: seed 17001 = 61%, seed 17002 = 66%, seed 17003 = 59%, all with zero timeouts. Seed 17002 is a repeatable one-point breach of the 65% ceiling.
 
-## 2026-11-03 reproducibility follow-up and one-variable retest
-
-## 2026-11-03 2.4s dwell retest and next strategy experiment
-
-Exact-head run [41592553232](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41592553232) completed all 30 setup, build, gameplay, browser and visual-QA checks successfully. Its corrected per-game PRNG cohorts at `TASK_DWELL_TICKS = 12` (2.4s) were:
+**2.4s dwell retest:** exact-head run [41592553232](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41592553232) completed all 30 setup, build, gameplay, browser and visual-QA checks, then produced:
 
 | Seed | Crew wins | Impostor wins | Crew win rate | Timeouts |
 |---|---:|---:|---:|---:|
@@ -218,8 +216,6 @@ Exact-head run [41592553232](https://github.com/2f22vtd4kr-cloud/Among-Gas/actio
 | 17002 | 66 | 34 | 66% | 0 |
 | 17003 | 59 | 41 | 59% | 0 |
 
-Seed 17002 remains at 66%, so increasing task dwell from 2.2s to 2.4s did not resolve the reproducible breach. The next one-variable experiment changes only `HUNT_ACQUIRE_THRESHOLD_PX` from -150 to -200. The existing strategy comment explains that a more negative acquisition threshold allows slightly less-isolated visible targets and increases kill frequency; server range, cooldown, line-of-sight and kill authorization remain authoritative. Task dwell stays at 12 ticks, and sabotage timing, isolation-abort threshold, task counts and win conditions remain unchanged. Do not accept this candidate until all three seeded cohorts pass 45–65% with zero timeouts.
+Increasing `TASK_DWELL_TICKS` from 11 to 12 (2.2s → 2.4s) did not resolve seed 17002. The next one-variable experiment changes only `HUNT_ACQUIRE_THRESHOLD_PX` from -150 to -200. The existing strategy comment explains that a more negative acquisition threshold allows slightly less-isolated visible targets and increases kill frequency; server range, cooldown, line-of-sight and kill authorization remain authoritative. Task dwell stays at 12 ticks, while sabotage timing, isolation-abort threshold, task counts and win conditions remain unchanged.
 
-The per-game seeded random streams made the 300-game harness reproducible across concurrent lobbies. Exact-head runs [41587901874](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41587901874) and [41590309325](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41590309325) both produced the same three cohort outcomes: seed 17001 = 61%, seed 17002 = 66%, seed 17003 = 59%, with zero timeouts. Seed 17002 is a repeatable 1-point breach of the 65% upper bound, not an isolated run fluctuation. The previous 2.2s setting therefore does not satisfy the current per-seed gate.
-
-**Current isolated adjustment:** `TASK_DWELL_TICKS` increases from 11 to 12 (2.2s → 2.4s). The initial sabotage delay remains 10 seconds; recurring sabotage interval, kill cooldown, task counts, win conditions, navigation and collision rules remain unchanged. Re-run all three 100-game cohorts on the exact new head before accepting this adjustment. Do not widen the 45–65% band or omit seed 17002.
+Do not accept this candidate until the exact-head run passes all three cohorts in the 45–65% band with zero timeouts. All corrected cohorts so far ended only by task completion or critical sabotage; no vote/ejection or parity/elimination wins occurred. This is a six-player bot-vs-bot balance check, not human-vs-bot or social-deduction sign-off.
