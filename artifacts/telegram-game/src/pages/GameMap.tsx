@@ -2469,6 +2469,7 @@ export default function GameMap() {
           killAvailable={nearestTarget !== null && myVentId === null}
           reportAvailable={nearestBody !== null && sabotage === null && myVentId === null}
           useAvailable={useActionEnabled}
+          useActionKind={useActionKind}
           english={en}
           positionStyle={customControlPositionStyle('killReport', controlLayout, joystickSide)}
           onKill={() => {
