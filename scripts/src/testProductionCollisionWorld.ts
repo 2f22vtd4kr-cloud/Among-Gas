@@ -3,7 +3,8 @@ import {
   PRODUCTION_COLLISION_DOCUMENT,
   PRODUCTION_COLLISION_WORLD,
 } from "@workspace/shared/collision/productionWorld";
-import { validateCollisionDocument } from "@workspace/shared/collision/vectorCollision";
+import { validateCollisionDocument } from "@workspace/shared/collision";
+import { FEET_OFFSET_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from "@workspace/shared/coords";
 
 const world = PRODUCTION_COLLISION_WORLD;
 const document = PRODUCTION_COLLISION_DOCUMENT;
@@ -13,7 +14,7 @@ assert.equal(document.mapW, 3224);
 assert.equal(document.mapH, 1858);
 assert.ok(document.shapes.length >= 80, "the production document must contain the traced map geometry");
 assert.deepEqual(validateCollisionDocument(document), [], "the generated production geometry must validate");
-assert.equal(world.isPlayerWalkableAtFeet(1612, 929), true, "the documented lobby spawn footprint is walkable");
+assert.equal(world.isPlayerWalkableAtFeet(PLAYER_SPAWN_X, PLAYER_SPAWN_Y + FEET_OFFSET_Y), true, "the documented lobby spawn footprint is walkable");
 
 // The low planter is a boundary, not a filled polygon. Its floor remains open,
 // while the central pedestal blocks movement and sight at its actual footprint.
