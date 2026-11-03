@@ -1,3 +1,9 @@
+/**
+ * Build an ignored, non-production vector-analysis preview from the current
+ * fine raster movement mask and vision derivations. This is deliberately not
+ * the authored map: do not import its output into client/server gameplay.
+ * Runtime cut-over remains blocked on all-zone author tracing and review.
+ */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
