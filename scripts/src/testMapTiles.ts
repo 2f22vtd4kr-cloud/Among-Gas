@@ -46,7 +46,9 @@ function shifted(source: Buffer, width: number, height: number): Buffer {
 }
 
 function recolored(source: Buffer): Buffer {
-  return Buffer.from(source, value => Math.min(255, value + 36));
+  const out = Buffer.from(source);
+  for (let index = 0; index < out.length; index++) out[index] = Math.min(255, out[index] + 36);
+  return out;
 }
 
 function seamDamaged(source: Buffer, width: number, height: number): Buffer {
