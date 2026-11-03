@@ -956,10 +956,14 @@ export default function GameMap() {
     const variant = new URLSearchParams(window.location.search).get('map-art') === 'sharp'
       ? 'map-tiles-sharp/'
       : 'map-tiles/';
-    void Promise.all([
-      overviewPromise,
-      TiledMap.load(`${import.meta.env.BASE_URL}${variant}`),
-    ]).then(([image, tiledMap]) => {
+    void overviewPromise.then(async image => {
+      let tiledMap: TiledMap | null = null;
+      try {
+        tiledMap = await TiledMap.load(`${import.meta.env.BASE_URL}${variant}`);
+      } catch (tileError) {
+        // The overview remains a complete playable fallback if optional tiles fail.
+        if (import.meta.env.DEV) console.warn('Map detail tiles unavailable; using overview fallback', tileError);
+      }
       if (cancelled) return;
       mapImgRef.current = image;
       tiledMapRef.current = tiledMap;
