@@ -303,9 +303,6 @@ const MANUAL_NARROW_OCCLUDERS: readonly VisualOccluderCircle[] = [
     y: 8 * CELL_Y,
     radius: Math.min(CELL_X, CELL_Y) * 0.2,
   },
-  // Tall central statue: the decorative garden perimeter is walkable and
-  // does not occlude vision. Only the statue's small physical base blocks sight.
-  { x: 1735, y: 556, radius: 26 },
 ];
 
 function isNonOccludingFurniture(index: number): boolean {
@@ -391,8 +388,8 @@ export function buildNarrowShadowOccluders(
 /**
  * Fine vision mask: large architectural components stay opaque while small
  * isolated low props remain movement blockers but do not cast square shadows.
- * The garden ring is walkable in the fine collision source; the statue is
- * represented separately by its measured narrow visual occluder.
+ * The garden floor is walkable. The live statue pedestal outline and sight
+ * occlusion come from the production vector world, not a guessed raster circle.
  */
 export function buildFineShadowGrid(collisionGrid: Grid): Grid {
   const total = FINE_COLS * FINE_ROWS;
