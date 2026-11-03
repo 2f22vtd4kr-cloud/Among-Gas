@@ -71,6 +71,7 @@ import { useLanguage } from '../lib/language';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
+import { TiledMap } from '../game/TiledMap';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -276,6 +277,7 @@ export default function GameMap() {
   const en = language === 'en';
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const mapImgRef    = useRef<HTMLImageElement | null>(null);
+  const tiledMapRef  = useRef<TiledMap | null>(null);
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
   /** Per-slot animation state for remote players, maintained across rAF frames. */
   const remoteAnimMapRef = useRef<Map<number, RemoteAnim>>(new Map());
@@ -929,42 +931,46 @@ export default function GameMap() {
   // ── Load map image ─────────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false;
-    let triedPngFallback = false;
-    let completedSource = '';
-    const img = new Image();
-    const fallbackOrFail = () => {
+    const overview = new Image();
+    overview.decoding = 'async';
+    const overviewPromise = new Promise<HTMLImageElement>((resolve, reject) => {
+      const decode = async () => {
+        try {
+          if (typeof overview.decode === 'function') await overview.decode();
+          if (overview.naturalWidth <= 0 || overview.naturalHeight <= 0) {
+            throw new Error('Map overview decoded with empty dimensions');
+          }
+          resolve(overview);
+        } catch (error) {
+          reject(error);
+        }
+      };
+      overview.onload = () => { void decode(); };
+      overview.onerror = () => reject(new Error('Failed to load the canonical map overview'));
+      overview.src = `${import.meta.env.BASE_URL}map-overview.webp`;
+      if (overview.complete && overview.naturalWidth > 0) void decode();
+    });
+
+    const variant = new URLSearchParams(window.location.search).get('map-art') === 'sharp'
+      ? 'map-tiles-sharp/'
+      : 'map-tiles/';
+    void Promise.all([
+      overviewPromise,
+      TiledMap.load(`${import.meta.env.BASE_URL}${variant}`),
+    ]).then(([image, tiledMap]) => {
       if (cancelled) return;
-      if (!triedPngFallback) {
-        triedPngFallback = true;
-        completedSource = '';
-        img.src = `${import.meta.env.BASE_URL}map-hires.png`;
-        return;
-      }
-      setError(true);
-    };
-    const finishDecodedLoad = async () => {
-      if (cancelled || !img.complete || img.naturalWidth <= 0) return;
-      const source = img.currentSrc || img.src;
-      if (completedSource === source) return;
-      try {
-        // load fires before some browsers finish decoding. Do not release the
-        // gameplay-ready handshake until the map can be drawn without a decode stall.
-        if (typeof img.decode === 'function') await img.decode();
-      } catch {
-        if (!cancelled && (img.currentSrc || img.src) === source) fallbackOrFail();
-        return;
-      }
-      if (cancelled || (img.currentSrc || img.src) !== source) return;
-      completedSource = source;
-      mapImgRef.current = img;
+      mapImgRef.current = image;
+      tiledMapRef.current = tiledMap;
       setLoaded(true);
+    }).catch(() => {
+      if (!cancelled) setError(true);
+    });
+
+    return () => {
+      cancelled = true;
+      overview.onload = null;
+      overview.onerror = null;
     };
-    img.onload = () => { void finishDecodedLoad(); };
-    img.onerror = fallbackOrFail;
-    // Prefer the smaller WebP map asset on mobile; fall back to PNG if loading or decoding fails.
-    img.src = `${import.meta.env.BASE_URL}map-hires.webp`;
-    if (img.complete && img.naturalWidth > 0) void finishDecodedLoad();
-    return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, []);
 
   // Do not let bots or other players act against this client while its
@@ -1271,6 +1277,17 @@ export default function GameMap() {
         mapSourceRect.x, mapSourceRect.y, mapSourceRect.width, mapSourceRect.height,
         0, 0, cw, ch,
       );
+      // The overview is a safe fallback while the camera-visible 2× tiles decode.
+      const tiledMap = tiledMapRef.current;
+      if (tiledMap) {
+        const tilesReady = tiledMap.draw(ctx, { x: srcX, y: srcY, w: srcW, h: srcH }, ZOOM, dpr);
+        if (import.meta.env.DEV) {
+          (window as Window & { __AG_TILE_DEBUG?: unknown }).__AG_TILE_DEBUG = {
+            ...tiledMap.getStatus(),
+            ready: tilesReady,
+          };
+        }
+      }
 
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
       {
@@ -2102,7 +2119,7 @@ export default function GameMap() {
               position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
               overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
             }}>
-              <img src={`${import.meta.env.BASE_URL}map-hires.png`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
+              <img src={`${import.meta.env.BASE_URL}map-overview.webp`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
                 style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
               {myRole === 'crewmate' && myTasks.filter(task => {
                 const def = TASK_DEFS.find(item => item.id === task.taskId);
@@ -2373,7 +2390,7 @@ export default function GameMap() {
                 border: '1px solid rgba(120,200,220,0.45)', background: '#13212a',
               }}>
                 <img
-                  src={`${import.meta.env.BASE_URL}map-hires.png`}
+                  src={`${import.meta.env.BASE_URL}map-overview.webp`}
                   alt={en ? 'Among Gas map' : 'Карта Among Gas'}
                   draggable={false}
                   style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }}
