@@ -10,12 +10,6 @@
 import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
-  buildPreciseCollisionGrid,
-  isPlayerFootprintWalkableAtFeet,
-  isPlayerPositionWalkable,
-  isPlayerPathWalkable,
-  isLineOfSightClear,
-  isLineOfSightToInteractionTarget,
   type Grid,
 } from '@workspace/shared/collisionMap';
 import {
@@ -26,6 +20,7 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
+import { PRODUCTION_COLLISION_WORLD } from '@workspace/shared/collision/productionWorld';
 import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
@@ -38,43 +33,23 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
-const movementGrid = buildPreciseCollisionGrid();
 const NAV_COLS = COLS * 2;
 const NAV_ROWS = ROWS * 2;
-const NAV_CELL_X = CELL_X / 2;
-const NAV_CELL_Y = CELL_Y / 2;
+const vectorNavigation = PRODUCTION_COLLISION_WORLD.rasterizePlayerNav(NAV_COLS, NAV_ROWS);
+const NAV_CELL_X = vectorNavigation.cellX;
+const NAV_CELL_Y = vectorNavigation.cellY;
+const navigationGrid = new Uint8Array(vectorNavigation.walk.length);
+for (let index = 0; index < vectorNavigation.walk.length; index++) {
+  // PathCache uses 0 for walkable and 1 for blocked; the vector raster uses
+  // the inverse convention (1 = walkable).
+  navigationGrid[index] = vectorNavigation.walk[index] === 1 ? 0 : 1;
+}
 const navigationGeometry: PathGridGeometry = {
   cols: NAV_COLS,
   rows: NAV_ROWS,
   cellX: NAV_CELL_X,
   cellY: NAV_CELL_Y,
 };
-
-/** Same three-circle foot footprint used by client prediction and server authority. */
-function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
-  return isPlayerFootprintWalkableAtFeet(collision, feetX, feetY);
-}
-
-/**
- * Pathfinding uses grid cells, while live movement validates the character's
- * actual collision radius. Trace a clearance-aware navigation grid so A*
- * doesn't repeatedly send bots to cell-centres the real collision check
- * rejects (the old failure mode left a bot stationary forever at a task).
- */
-function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(NAV_COLS * NAV_ROWS);
-  for (let row = 0; row < NAV_ROWS; row++) {
-    for (let col = 0; col < NAV_COLS; col++) {
-      const index = row * NAV_COLS + col;
-      const x = (col + 0.5) * NAV_CELL_X;
-      const y = (row + 0.5) * NAV_CELL_Y;
-      result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
-    }
-  }
-  return result;
-}
-
-const navigationGrid = buildNavigationGrid(movementGrid);
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
@@ -138,13 +113,10 @@ function canTraverse(from: Point, to: Point): boolean {
   if (!isNavigationPositionWalkable(to.x, to.y)) return false;
   // Bot waypoints are stored in feet-space; the shared helper accepts the
   // sprite anchor and applies the canonical feet offset internally.
-  return isPlayerPathWalkable(
-    movementGrid,
-    from.x,
-    from.y - FEET_OFFSET_Y,
-    to.x,
-    to.y - FEET_OFFSET_Y,
+  const [resolvedX, resolvedY] = PRODUCTION_COLLISION_WORLD.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
   );
+  return Math.hypot(resolvedX - to.x, resolvedY - to.y) <= 1;
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
@@ -504,7 +476,7 @@ export abstract class BotAgent {
       const x = 80 + Math.random() * (MAP_W - 160);
       const y = 80 + Math.random() * (MAP_H - 160);
       if (
-        isPlayerPositionWalkable(movementGrid, x, y) &&
+        PRODUCTION_COLLISION_WORLD.isPlayerWalkableAtFeet(x, y + FEET_OFFSET_Y) &&
         isBotNavigationReachable(x, y + FEET_OFFSET_Y)
       ) return { x, y };
     }
@@ -534,8 +506,7 @@ export abstract class BotAgent {
    * static for the lifetime of the process.
    */
   protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
-    return isLineOfSightClear(
-      movementGrid,
+    return PRODUCTION_COLLISION_WORLD.isLineOfSightClear(
       from.x, from.y + FEET_OFFSET_Y,
       to.x, to.y + FEET_OFFSET_Y,
     );
@@ -552,11 +523,10 @@ export abstract class BotAgent {
     if (cached) return cached;
 
     const reachable = (p: Point): boolean =>
-      isPlayerPositionWalkable(movementGrid, p.x, p.y) &&
+      PRODUCTION_COLLISION_WORLD.isPlayerWalkableAtFeet(p.x, p.y + FEET_OFFSET_Y) &&
       isBotNavigationReachable(p.x, p.y + FEET_OFFSET_Y);
     const visible = (p: Point): boolean =>
-      isLineOfSightToInteractionTarget(
-        movementGrid,
+      PRODUCTION_COLLISION_WORLD.isLineOfSightToInteractionTarget(
         p.x, p.y + FEET_OFFSET_Y,
         target.x, target.y + FEET_OFFSET_Y,
         targetRadiusPx,
