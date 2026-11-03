@@ -136,8 +136,19 @@ export async function tileSetIsCurrent(outputDir: string, sourceSha256: string, 
         manifest.texW !== MAP_TILE_TEX_W ||
         manifest.texH !== MAP_TILE_TEX_H ||
         manifest.tiles.length !== MAP_TILE_COLS * MAP_TILE_ROWS) return false;
-    for (const tile of manifest.tiles) {
-      await fs.access(path.join(outputDir, tile.file));
+    for (let index = 0; index < manifest.tiles.length; index++) {
+      const tile = manifest.tiles[index];
+      const row = Math.floor(index / MAP_TILE_COLS);
+      const col = index % MAP_TILE_COLS;
+      const x = col * MAP_TILE_PX;
+      const y = row * MAP_TILE_PX;
+      const width = Math.min(MAP_TILE_PX, MAP_TILE_TEX_W - x);
+      const height = Math.min(MAP_TILE_PX, MAP_TILE_TEX_H - y);
+      if (tile.row !== row || tile.col !== col ||
+          tile.tex.join(",") !== [x, y, width, height].join(",") ||
+          tile.world.join(",") !== [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE].join(",")) return false;
+      const metadata = await sharp(path.join(outputDir, tile.file)).metadata();
+      if (metadata.width !== width || metadata.height !== height) return false;
     }
     return true;
   } catch {
