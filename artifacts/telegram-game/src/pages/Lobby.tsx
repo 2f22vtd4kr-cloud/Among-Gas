@@ -569,6 +569,20 @@ export default function Lobby() {
               marginTop: -2,
             }}
           >
+            <button
+              type="button"
+              data-testid="join-code-back"
+              aria-label={en ? 'Back from join code' : 'Назад от ввода кода'}
+              onClick={() => { setJoinExpanded(false); haptic.tap(); sfx('uiSelect', 0.2); }}
+              style={{
+                minHeight: 48, minWidth: 48, borderRadius: 8,
+                border: '1px solid rgba(170,205,211,.24)',
+                background: 'rgba(5,15,23,.55)', color: '#eaf6f5',
+                fontFamily: "'Fredoka One', sans-serif", fontSize: 18, cursor: 'pointer',
+              }}
+            >
+              ←
+            </button>
             <input
               className="au-input"
               type="text"
@@ -602,6 +616,19 @@ export default function Lobby() {
             color: '#eaf6f5', fontFamily: "'Fredoka One', sans-serif",
           }}
         >
+          <button
+            type="button"
+            data-testid="main-menu-guide-back"
+            onClick={() => { setActiveMenuTab('play'); haptic.tap(); sfx('uiSelect', 0.2); }}
+            style={{
+              minHeight: 40, marginBottom: 12, padding: '0 14px', borderRadius: 9,
+              border: '1px solid rgba(111,224,208,.38)', background: 'rgba(20,93,87,.35)',
+              color: '#bff8ef', fontFamily: "'Fredoka One', sans-serif",
+              fontSize: 13, letterSpacing: '0.04em', cursor: 'pointer',
+            }}
+          >
+            ← {en ? 'BACK TO MENU' : 'НАЗАД В МЕНЮ'}
+          </button>
           <h2 id="ag-main-menu-guide-title" style={{ margin: '0 0 12px', fontSize: 20, textAlign: 'center' }}>
             {en ? 'How to Play' : 'Как играть'}
           </h2>
