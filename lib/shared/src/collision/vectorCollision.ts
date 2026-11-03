@@ -2,8 +2,10 @@ import { PLAYER_HALF_WIDTH, PLAYER_RADIUS } from "../coords.js";
 
 /**
  * Framework-free vector collision and vision primitives.
- * This is a foundation only: production use requires a complete reviewed
- * collision.v1.json. An empty or guessed map must never replace the raster.
+ * Production documents are generated from the live fine-grid collision mask,
+ * its explicit overrides, and the matching vision outline pipeline. The
+ * generated source manifest and parity tests are required before changing
+ * those inputs; an empty or guessed map must never replace the raster.
  */
 export type Point = readonly [number, number];
 
@@ -17,11 +19,31 @@ export interface CollisionShape {
   readonly zone?: string;
 }
 
+export interface CollisionSourceManifest {
+  readonly kind: "fine-grid-derived";
+  readonly generatorVersion: number;
+  readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
+  readonly fineGrid: {
+    readonly cols: number;
+    readonly rows: number;
+    readonly cellX: number;
+    readonly cellY: number;
+  };
+  readonly sightPipeline: {
+    readonly largeComponentGrid: string;
+    readonly mediumAndSmallOutlines: string;
+    readonly narrowOccluders: number;
+    readonly obsoleteStatueCircleExcluded: boolean;
+  };
+  readonly shapeCounts: Readonly<Record<string, number>>;
+}
+
 export interface CollisionDocument {
   readonly version: 1;
   readonly mapW: number;
   readonly mapH: number;
   readonly shapes: readonly CollisionShape[];
+  readonly source?: CollisionSourceManifest;
 }
 
 interface Segment {
