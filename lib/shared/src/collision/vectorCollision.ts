@@ -191,6 +191,33 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".zone must be a string up to 64 characters");
     }
   });
+  if (doc.source !== undefined) {
+    const source = doc.source as Partial<CollisionSourceManifest>;
+    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
+    if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
+      errors.push("source.generatorVersion must be a positive integer");
+    }
+    if (!source.sourceFiles || typeof source.sourceFiles !== "object") {
+      errors.push("source.sourceFiles must be an object");
+    } else {
+      for (const [name, file] of Object.entries(source.sourceFiles)) {
+        if (!file || typeof file.path !== "string" || !/^[a-f0-9]{64}$/i.test(file.sha256)) {
+          errors.push("source.sourceFiles." + name + " must include a path and SHA-256 digest");
+        }
+      }
+    }
+    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
+        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
+        !(source.fineGrid.cellY > 0)) {
+      errors.push("source.fineGrid must describe a positive raster grid");
+    }
+    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
+      errors.push("source.sightPipeline must describe the sight derivation");
+    }
+    if (!source.shapeCounts || source.shapeCounts.total !== doc.shapes.length) {
+      errors.push("source.shapeCounts.total must match the document shape count");
+    }
+  }
   return errors;
 }
 
