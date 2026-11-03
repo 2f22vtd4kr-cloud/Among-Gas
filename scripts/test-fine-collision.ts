@@ -173,11 +173,11 @@ assert.equal(shadowGrid[fineCell(1735, 556)], 0, 'statue is not rasterized as a 
 // The upper-atrium table remains solid for movement but transparent to vision.
 assert.equal(isBlocked(grid, 1740, 210), true, 'upper-atrium table still blocks player movement');
 assert.equal(shadowGrid[fineCell(1740, 210)], 0, 'upper-atrium table does not cast a broad shadow');
-const statue = buildNarrowShadowOccluders(grid, true).find(item =>
+const obsoleteOffsetStatueOccluder = buildNarrowShadowOccluders(grid, true).find(item =>
   Math.hypot(item.x - 1735, item.y - 556) < 1,
 );
-assert.ok(statue, 'tall statue has its own narrow vision occluder');
-assert.ok(statue.radius >= 20 && statue.radius <= 30, 'statue occluder follows its measured base');
+assert.equal(obsoleteOffsetStatueOccluder, undefined,
+  'the known misplaced statue shadow circle is removed; a replacement waits for measured contour review');
 
 assert.equal(isBlocked(grid, -1, 100), true, 'out-of-map coordinates remain blocked');
 assert.equal(isBlocked(grid, MAP_W + 1, 100), true, 'east map boundary remains blocked');
@@ -191,5 +191,5 @@ console.log(JSON.stringify({
   blockedCells: grid.reduce((sum, cell) => sum + cell, 0),
   shadowCells: shadowGrid.reduce((sum, cell) => sum + cell, 0),
   garden: 'walkable, non-occluding',
-  statue: { x: statue.x, y: statue.y, radius: statue.radius },
+  statue: { obsoleteOffsetOccluderPresent: obsoleteOffsetStatueOccluder !== undefined },
 }, null, 2));
