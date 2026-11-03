@@ -69,51 +69,61 @@ export async function writeMapTileSet(
   sourceSha256: string,
   sharpenSigma: number,
 ): Promise<MapTileManifest> {
-  await fs.rm(outputDir, { recursive: true, force: true });
-  await fs.mkdir(outputDir, { recursive: true });
+  const stagingDir = outputDir + ".staging-" + process.pid;
+  const backupDir = outputDir + ".backup-" + process.pid;
+  await fs.rm(stagingDir, { recursive: true, force: true });
+  await fs.rm(backupDir, { recursive: true, force: true });
+  await fs.mkdir(stagingDir, { recursive: true });
   const tiles: MapTileMeta[] = [];
 
-  for (let row = 0; row < MAP_TILE_ROWS; row++) {
-    for (let col = 0; col < MAP_TILE_COLS; col++) {
-      const x = col * MAP_TILE_PX;
-      const y = row * MAP_TILE_PX;
-      const width = Math.min(MAP_TILE_PX, MAP_TILE_TEX_W - x);
-      const height = Math.min(MAP_TILE_PX, MAP_TILE_TEX_H - y);
-      const file = `tile_r${row}_c${col}.webp`;
-      await sharp(masterPath)
-        .extract({ left: x, top: y, width, height })
-        .webp({ quality: 90, effort: 6 })
-        .toFile(path.join(outputDir, file));
-      tiles.push({
-        file,
-        row,
-        col,
-        tex: [x, y, width, height],
-        world: [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE],
-      });
+  try {
+    for (let row = 0; row < MAP_TILE_ROWS; row++) {
+      for (let col = 0; col < MAP_TILE_COLS; col++) {
+        const x = col * MAP_TILE_PX;
+        const y = row * MAP_TILE_PX;
+        const width = Math.min(MAP_TILE_PX, MAP_TILE_TEX_W - x);
+        const height = Math.min(MAP_TILE_PX, MAP_TILE_TEX_H - y);
+        const file = "tile_r" + row + "_c" + col + ".webp";
+        await sharp(masterPath)
+          .extract({ left: x, top: y, width, height })
+          .webp({ quality: 90, effort: 6 })
+          .toFile(path.join(stagingDir, file));
+        tiles.push({
+          file, row, col,
+          tex: [x, y, width, height],
+          world: [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE],
+        });
+      }
     }
+
+    const manifest: MapTileManifest = {
+      version: 1, pipelineVersion: MAP_TILE_PIPELINE_VERSION, sourceSha256, sharpenSigma,
+      worldW: MAP_TILE_WORLD_W, worldH: MAP_TILE_WORLD_H, scale: MAP_TILE_SCALE,
+      texW: MAP_TILE_TEX_W, texH: MAP_TILE_TEX_H, tilePx: MAP_TILE_PX,
+      cols: MAP_TILE_COLS, rows: MAP_TILE_ROWS, format: "webp", tiles,
+    };
+    await fs.writeFile(path.join(stagingDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
+
+    let movedExisting = false;
+    try {
+      await fs.rename(outputDir, backupDir);
+      movedExisting = true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    try {
+      await fs.rename(stagingDir, outputDir);
+    } catch (error) {
+      if (movedExisting) await fs.rename(backupDir, outputDir);
+      throw error;
+    }
+    if (movedExisting) await fs.rm(backupDir, { recursive: true, force: true });
+    return manifest;
+  } catch (error) {
+    await fs.rm(stagingDir, { recursive: true, force: true });
+    throw error;
   }
-
-  const manifest: MapTileManifest = {
-    version: 1,
-    pipelineVersion: MAP_TILE_PIPELINE_VERSION,
-    sourceSha256,
-    sharpenSigma,
-    worldW: MAP_TILE_WORLD_W,
-    worldH: MAP_TILE_WORLD_H,
-    scale: MAP_TILE_SCALE,
-    texW: MAP_TILE_TEX_W,
-    texH: MAP_TILE_TEX_H,
-    tilePx: MAP_TILE_PX,
-    cols: MAP_TILE_COLS,
-    rows: MAP_TILE_ROWS,
-    format: "webp",
-    tiles,
-  };
-  await fs.writeFile(path.join(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-  return manifest;
 }
-
 export async function tileSetIsCurrent(outputDir: string, sourceSha256: string, sharpenSigma: number): Promise<boolean> {
   try {
     const manifest = JSON.parse(await fs.readFile(path.join(outputDir, "manifest.json"), "utf8")) as MapTileManifest;
