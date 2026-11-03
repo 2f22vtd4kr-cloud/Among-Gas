@@ -117,8 +117,12 @@ try {
   await page.getByTestId('main-menu-tab-guide').click();
   await page.getByTestId('main-menu-guide').waitFor({ state: 'visible' });
   await page.getByRole('heading', { name: 'How to Play' }).waitFor({ state: 'visible' });
-  await page.getByTestId('main-menu-tab-play').click();
+  await page.getByTestId('main-menu-guide-back').click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'JOIN WITH CODE' }).click();
+  await page.locator('.au-input').waitFor({ state: 'visible' });
+  await page.getByTestId('join-code-back').click();
+  await page.locator('.au-input').waitFor({ state: 'hidden' });
   await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
 
   // Preserve the three distinct waiting-room states for visual QA as well.
