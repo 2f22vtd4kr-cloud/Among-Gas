@@ -152,6 +152,8 @@ try {
   const overviewManifest = JSON.parse(await fs.readFile(path.join(publicDir, "map-overview.manifest.json"), "utf8"));
   assert.equal(overviewManifest.sourceSha256, sourceSha256,
     "overview fallback must be regenerated from the same canonical source as the tile sets");
+  assert.equal(overviewManifest.overviewSha256, await sha256File(path.join(publicDir, "map-overview.webp")),
+    "overview fallback pixels must match the recorded generated artifact digest");
   assert.equal(overviewManifest.scale, 0.5);
   console.log("MAP TILE QA PASSED: 2× world scale, full coverage, pixel fidelity, edge fidelity, shift/recolour/seam rejection");
 } finally {
