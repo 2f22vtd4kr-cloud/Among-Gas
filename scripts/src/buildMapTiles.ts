@@ -15,7 +15,7 @@ const sourcePath = path.join(publicDir, "map-hires.webp");
 const baselineDir = path.join(publicDir, "map-tiles");
 const sharpenedDir = path.join(publicDir, "map-tiles-sharp");
 const overviewPath = path.join(publicDir, "map-overview.webp");
-const BASELINE_SIGMA = 1.2;
+const BASELINE_SIGMA = 0;
 const SHARPENED_SIGMA = 2.2;
 
 const sourceSha256 = await sha256File(sourcePath);
