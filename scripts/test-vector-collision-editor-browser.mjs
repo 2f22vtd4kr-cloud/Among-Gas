@@ -54,6 +54,9 @@ try {
   await page.getByRole("button", { name: "Finish chain" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
   assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
+  // Jump to end changes the camera; restore the full-map view before drawing
+  // the independent polygon so its vertices remain inside the authored map.
+  await page.getByRole("button", { name: "Fit map" }).click();
 
   // Draw and close a solid polygon with three taps.
   await page.getByRole("button", { name: "Draw solid" }).click();
