@@ -7,6 +7,7 @@ export interface GameActionBarProps {
   killAvailable: boolean;
   reportAvailable: boolean;
   useAvailable: boolean;
+  useActionKind: string | null;
   english: boolean;
   positionStyle: CSSProperties;
   onKill: () => void;
@@ -42,7 +43,7 @@ export default function GameActionBar(props: GameActionBarProps) {
   const useDisabled = !props.useAvailable;
 
   return (
-    <div style={{
+    <div data-testid="game-action-bar" style={{
       position: "fixed",
       bottom: 130,
       left: "50%",
@@ -57,6 +58,8 @@ export default function GameActionBar(props: GameActionBarProps) {
         <button
           type="button"
           data-testid="game-action-kill"
+          data-kill-available={String(props.killAvailable)}
+          data-cooldown-ms={props.killCooldownMs}
           aria-label={props.killCooldownMs > 0
             ? (props.english ? `Kill cooldown ${Math.ceil(props.killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(props.killCooldownMs / 1000)} секунд`)
             : props.killAvailable ? (props.english ? "Kill" : "Убить") : (props.english ? "Kill unavailable" : "Убийство недоступно")}
@@ -91,6 +94,7 @@ export default function GameActionBar(props: GameActionBarProps) {
       <button
         type="button"
         data-testid="game-action-report"
+        data-report-available={String(props.reportAvailable)}
         aria-label={props.reportAvailable ? (props.english ? "Report body" : "Доложить о теле") : (props.english ? "Report unavailable" : "Доклад недоступен")}
         disabled={reportDisabled}
         onClick={props.onReport}
@@ -113,6 +117,8 @@ export default function GameActionBar(props: GameActionBarProps) {
       <button
         type="button"
         data-testid="game-action-use"
+        data-use-action={props.useActionKind ?? "none"}
+        data-use-available={String(props.useAvailable)}
         aria-label={useDisabled ? (props.english ? "Use unavailable" : "Использование недоступно") : (props.english ? "Use" : "Использовать")}
         disabled={useDisabled}
         onClick={props.onUse}
