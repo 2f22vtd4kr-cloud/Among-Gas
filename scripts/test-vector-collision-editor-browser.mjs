@@ -85,7 +85,7 @@ try {
     null,
     { timeout: 10000 },
   );
-  await page.getByText(/Start selected\\. Tap a destination/).waitFor();
+  await page.getByText(/Start selected\. Tap a destination/).waitFor();
   await page.mouse.move(bounds.x + 100, bounds.y + 40);
   await page.mouse.down();
   await page.mouse.up();
