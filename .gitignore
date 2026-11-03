@@ -67,4 +67,3 @@ Thumbs.db
 
 # Generated production vector collision artifacts (reproducibly rebuilt before dev/build)
 /lib/shared/src/collision/generatedDocument.ts
-/lib/shared/src/collision/collision.v1.json
