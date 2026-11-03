@@ -211,6 +211,12 @@ export abstract class BotAgent {
     }
   }
 
+  /** Retrieve the session-scoped Groq key without exposing it to client state. */
+  protected getSessionGroqApiKey(lobby: Lobby): string | undefined {
+    return lobby.players.get(lobby.hostSlot)?.groqApiKey ??
+      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+  }
+
   /**
    * Request an asynchronous model vote without blocking the 5Hz bot loop.
    * Each bot's request is staggered to respect the shared per-key provider
@@ -239,8 +245,7 @@ export abstract class BotAgent {
     }
     if (this.voteRequestPending) return;
 
-    const sessionKey = lobby.players.get(lobby.hostSlot)?.groqApiKey ??
-      Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+    const sessionKey = this.getSessionGroqApiKey(lobby);
 
     // Without a configured provider, preserve immediate deterministic play.
     if (!sessionKey) {
@@ -259,7 +264,7 @@ export abstract class BotAgent {
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
 
     void (async () => {
-      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs);
+      const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs, { temperature: 0.2, jsonMode: true });
 
       if (!canCommitBotVote({
         phase: lobby.phase,
@@ -362,8 +367,7 @@ export abstract class BotAgent {
     this.lastDiscussionMessageKey = messageKey;
     this.lastDiscussionReplyAtMs = now;
     this.discussionRequestPending = true;
-    const hostKey = lobby.players.get(lobby.hostSlot)?.groqApiKey;
-    const sessionKey = hostKey ?? Array.from(lobby.players.values()).find(player => !player.isBot && player.groqApiKey)?.groqApiKey;
+    const sessionKey = this.getSessionGroqApiKey(lobby);
     const roster = Array.from(lobby.players.values())
       .filter(player => player.alive)
       .map(player => player.username)
@@ -440,7 +444,11 @@ export abstract class BotAgent {
       // A smoothed waypoint may still be unsafe near a thin wall or corner.
       // Probe short, collision-safe detours rather than caching the rejected
       // waypoint forever. The next tick will run A* from the new cell.
-      const baseAngle = Math.atan2(dyGoal, dxGoal);
+      // Follow the next A* waypoint, not the final destination: when a
+      // wall blocks the smoothed segment, steering directly at the final
+      // goal can keep pushing the bot into the same obstacle and create a
+      // moving-but-never-arriving loop around corners.
+      const baseAngle = Math.atan2(dy, dx);
       const angleOffsets = [
         0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
         3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
@@ -460,8 +468,8 @@ export abstract class BotAgent {
             y: feetStart.y + Math.sin(angle) * length,
           };
           if (!canTraverse(feetStart, candidate)) continue;
-          const remaining = Math.hypot(feetGoal.x - candidate.x, feetGoal.y - candidate.y);
-          const progress = Math.hypot(feetGoal.x - feetStart.x, feetGoal.y - feetStart.y) - remaining;
+          const remaining = Math.hypot(waypoint.x - candidate.x, waypoint.y - candidate.y);
+          const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
           // Prefer progress, with a small penalty for wide detours and tiny steps.
           const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
           if (score > bestScore) {

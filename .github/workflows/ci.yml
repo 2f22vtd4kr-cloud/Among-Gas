@@ -23,23 +23,24 @@ jobs:
       BASE_PATH: /
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.6.5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          # Keep CI aligned with .replit's nodejs-20 runtime.
-          node-version: 20
+          # Keep CI aligned with .replit's patched nodejs-24 LTS runtime.
+          node-version: 24
           cache: pnpm
           cache-dependency-path: pnpm-lock.yaml
 
-      - name: Assert CI runtime matches Replit
-        run: node -e "if (process.versions.node.split('.')[0] !== '20') throw new Error('CI must match Replit Node.js 20 runtime')"
+      - name: Assert CI runtime matches Replit Node.js 24 LTS
+        run: |
+          node -e "const [major, minor] = process.versions.node.split('.').map(Number); if (major !== 24 || minor < 22) throw new Error('CI requires Node.js 24.22.0+ LTS')"
 
       - name: Verify Replit post-merge hook skips an empty database schema
         run: env -u DATABASE_URL bash scripts/post-merge.sh
@@ -132,7 +133,7 @@ jobs:
           curl -fsS "http://127.0.0.1:5173/" | grep -q '<div id="root">'
           WS_URL=ws://127.0.0.1:5173/api/ws node test_sabotage.mjs
       - name: Archive production Telegram Mini App build for deployment verification
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: telegram-game-static-build
           path: artifacts/telegram-game/dist/public/
@@ -211,7 +212,7 @@ jobs:
 
       - name: Upload gameplay visual QA screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: among-gas-visual-qa
           path: |
@@ -228,5 +229,18 @@ jobs:
           if-no-files-found: warn
           retention-days: 3
 
-      - name: Run headless multiplayer gameplay simulations
-        run: pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0
+      - name: Run three independently seeded 100-game balance batches
+        run: |
+          set -uo pipefail
+          cohort_status=0
+          for seed in 17001 17002 17003; do
+            echo "::group::Seeded balance cohort $seed"
+            if pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0 --minCrewWinRatePct 45 --maxCrewWinRatePct 65 --seed "$seed"; then
+              echo "Cohort $seed passed the 45–65% crew-win band with zero timeouts."
+            else
+              echo "::error::Cohort $seed failed its balance or timeout gate."
+              cohort_status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$cohort_status"

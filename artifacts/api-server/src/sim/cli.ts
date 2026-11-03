@@ -13,6 +13,8 @@
  *   --quiet        Suppress per-event NDJSON lines (still prints per-game results + summary)
  *   --failOnTimeout Exit with status 1 if any game reaches the safety timeout (unless --maxTimeouts is set)
  *   --maxTimeouts   Maximum tolerated safety timeouts (default: all, or 0 with --failOnTimeout)
+ *   --seed         Unsigned 32-bit seed for this batch's Math.random stream
+ *   --minCrewWinRatePct / --maxCrewWinRatePct  Optional inclusive crew win-rate acceptance band
  *
  * Output: NDJSON to stdout — one line per lifecycle event, one line per
  * finished game (`type":"gameResult"`), and one final `"type":"summary"`
@@ -53,6 +55,10 @@ function summarize(results: SimGameResult[], wallMs: number) {
   const timeouts = results.length - finished.length;
   const crewWins = finished.filter(r => r.winner === 'crew').length;
   const impostorWins = finished.filter(r => r.winner === 'impostor').length;
+  const winReasons = finished.reduce<Record<string, number>>((counts, result) => {
+    counts[result.winReason] = (counts[result.winReason] ?? 0) + 1;
+    return counts;
+  }, {});
   const avg = (f: (r: SimGameResult) => number) =>
     finished.length > 0 ? finished.reduce((s, r) => s + f(r), 0) / finished.length : 0;
 
@@ -64,10 +70,14 @@ function summarize(results: SimGameResult[], wallMs: number) {
     impostorWins,
     crewWinRatePct: finished.length > 0 ? Math.round((crewWins / finished.length) * 100) : null,
     impostorWinRatePct: finished.length > 0 ? Math.round((impostorWins / finished.length) * 100) : null,
+    winReasons,
     avgDurationMs: Math.round(avg(r => r.durationMs)),
     avgTasksCompleted: Number(avg(r => r.tasksCompleted).toFixed(1)),
     avgKills: Number(avg(r => r.kills).toFixed(1)),
     avgMeetings: Number(avg(r => r.meetings).toFixed(1)),
+    avgSabotages: Number(avg(r => r.sabotageStarts).toFixed(1)),
+    avgSabotagesResolved: Number(avg(r => r.sabotageResolved).toFixed(1)),
+    avgSabotagesFixed: Number(avg(r => r.sabotageFixed).toFixed(1)),
     wallMs,
   };
 }
@@ -92,22 +102,40 @@ async function main(): Promise<void> {
     : undefined;
   const concurrency = requirePositiveInt(args.concurrency, 'concurrency', Math.min(25, games));
   const timeoutMs = requirePositiveInt(args.timeoutMs, 'timeoutMs', 300_000, { min: 1000 });
+  const seed = args.seed === undefined
+    ? undefined
+    : requirePositiveInt(args.seed, 'seed', 0, { min: 0, max: 0xffff_ffff });
   const quiet = args.quiet === 'true';
   const failOnTimeout = args.failOnTimeout === 'true';
   const maxTimeouts = args.maxTimeouts !== undefined
     ? requirePositiveInt(args.maxTimeouts, 'maxTimeouts', 0, { min: 0, max: games })
     : failOnTimeout ? 0 : games;
+  const hasMinCrewRate = args.minCrewWinRatePct !== undefined;
+  const hasMaxCrewRate = args.maxCrewWinRatePct !== undefined;
+  if (hasMinCrewRate !== hasMaxCrewRate) {
+    throw new Error('--minCrewWinRatePct and --maxCrewWinRatePct must be provided together');
+  }
+  const minCrewWinRatePct = hasMinCrewRate
+    ? requirePositiveInt(args.minCrewWinRatePct, 'minCrewWinRatePct', 0, { min: 0, max: 100 })
+    : undefined;
+  const maxCrewWinRatePct = hasMaxCrewRate
+    ? requirePositiveInt(args.maxCrewWinRatePct, 'maxCrewWinRatePct', 0, { min: 0, max: 100 })
+    : undefined;
+  if (minCrewWinRatePct !== undefined && maxCrewWinRatePct !== undefined && minCrewWinRatePct > maxCrewWinRatePct) {
+    throw new Error('--minCrewWinRatePct cannot exceed --maxCrewWinRatePct');
+  }
   const recentEvents = new Map<string, string[]>();
 
   console.error(
     `[simulate] ${games} game(s), ${bots} bots/game` +
     (impostors !== undefined ? `, ${impostors} impostor(s) forced` : ', default impostor count') +
-    `, concurrency=${concurrency}, timeout=${timeoutMs}ms`,
+    `, concurrency=${concurrency}, timeout=${timeoutMs}ms` +
+    (seed === undefined ? '' : `, batchSeed=${seed}`),
   );
 
   const startedAt = Date.now();
-  const results = await runSimulationBatch({
-    games, bots, impostors, concurrency, timeoutMs,
+  const results: SimGameResult[] = await runSimulationBatch({
+    games, bots, impostors, concurrency, timeoutMs, seed,
     onEvent: (event) => {
       const code = event.code;
       if (code) {
@@ -131,13 +159,22 @@ async function main(): Promise<void> {
     },
   });
 
-  const summary = summarize(results, Date.now() - startedAt);
+  const summary = { ...summarize(results, Date.now() - startedAt), seed: seed ?? null };
   console.log(JSON.stringify(summary));
 
   console.error('');
   console.error(`── Simulation results (${summary.games} games, ${fmtDuration(summary.wallMs)} wall-clock) ──`);
   console.error(`Crewmate win rate: ${pct(summary.crewWins, summary.games - summary.timeouts)}   Impostor win rate: ${pct(summary.impostorWins, summary.games - summary.timeouts)}`);
-  console.error(`Avg game length:   ${fmtDuration(summary.avgDurationMs)}   Avg tasks completed: ${summary.avgTasksCompleted}   Avg kills/game: ${summary.avgKills}   Avg meetings/game: ${summary.avgMeetings}`);
+  console.error(`Win reasons: ${JSON.stringify(summary.winReasons)}`);
+  console.error(`Avg game length:   ${fmtDuration(summary.avgDurationMs)}   Avg tasks completed: ${summary.avgTasksCompleted}   Avg kills/game: ${summary.avgKills}   Avg meetings/game: ${summary.avgMeetings}   Avg sabotages/game: ${summary.avgSabotages}   Avg sabotages resolved: ${summary.avgSabotagesResolved}   Avg sabotages fixed: ${summary.avgSabotagesFixed}`);
+  if (minCrewWinRatePct !== undefined && maxCrewWinRatePct !== undefined) {
+    const actualCrewRate = summary.games > summary.timeouts
+      ? (summary.crewWins / (summary.games - summary.timeouts)) * 100
+      : null;
+    const accepted = actualCrewRate !== null && actualCrewRate >= minCrewWinRatePct && actualCrewRate <= maxCrewWinRatePct;
+    console.error(`Crew win-rate acceptance: ${actualCrewRate === null ? 'n/a' : actualCrewRate.toFixed(1) + '%'} (required ${minCrewWinRatePct}–${maxCrewWinRatePct}%) ${accepted ? 'PASS' : 'FAIL'}`);
+    if (!accepted) process.exitCode = 1;
+  }
   if (summary.timeouts > 0) {
     console.error(`⚠️  ${summary.timeouts} game(s) hit the --timeoutMs safety timeout without reaching GAMEOVER (allowed: ${maxTimeouts})`);
   }

@@ -173,7 +173,7 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 2. **Task-bar semantics follow the base game:** dead and ejected crewmates become ghosts, retain their assigned unfinished tasks, and can finish them through `BotAgent.ghostTick`. Their unfinished steps remain in `totalTaskSteps`; ghost task completion counts toward the crew win condition. The gameplay invariant suite explicitly covers both death and ejection. Do not reintroduce the old workaround that removed a ghost's remaining tasks from the denominator.
 3. **Permanent departures differ from deaths:** when a crewmate disconnects/leaves mid-game, `removePlayer` removes that departed player's unfinished steps from the denominator and rechecks win conditions. A player who remains in the game as a ghost must not be treated as a departure.
 4. **Simulation safety timeouts are not game timers.** A 100-game batch using a 180-second safety limit recorded two timeouts where a critical sabotage began just before the limit; the sabotage's real 45-second countdown had not yet elapsed. Those traces do not establish a stalled game. CI now allows 300 seconds per game while still requiring zero safety timeouts, giving legitimate late critical-sabotage resolution time without masking indefinite stalls.
-5. **Win-rate tuning is historical, not a correctness oracle.** Earlier measurements were made while task-bar handling was being changed and should not be treated as proof of current behavior. Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. Keep `SABOTAGE_INTERVAL_TICKS = 300` (5Hz) to preserve the ~60s real-time interval, along with `HUNT_ACQUIRE_THRESHOLD_PX = -150` and `ISOLATION_THRESHOLD_PX = 300`, unless repeatable measurements justify a change.
+5. **Win-rate tuning is measured, not a correctness oracle.** Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. The 2026-11-02 retest justifies `TASK_DWELL_TICKS = 11` (2.2s at the 5Hz bot AI rate); no other timing/strategy constants were changed. Keep `SABOTAGE_INTERVAL_TICKS = 300` (5Hz) to preserve the ~60s real-time interval, along with `HUNT_ACQUIRE_THRESHOLD_PX = -150` and `ISOLATION_THRESHOLD_PX = 300`, unless repeatable measurements justify a change.
 6. **Verified invariant:** kill, ejection, and permanent disconnect are distinct state transitions. Death/ejection preserve ghost tasks; a permanent disconnect removes unfinished tasks; each path must re-evaluate the applicable crew-task and impostor-parity win conditions.
 
 ---
@@ -187,3 +187,20 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 | Simulation speed multiplier | Real-time vs. accelerated | Accelerated (configurable), capped at 50× to avoid starvation bugs |
 | `0x10/0x06` vs. reuse existing Create | New sub-action vs. query param | New sub-action — cleaner, explicit intent |
 | Bot personality variety | All identical vs. tunable difficulty tiers | Single "medium" difficulty first; difficulty tiers as follow-up |
+
+## 2026-11-02 exact-head balance audit
+
+The initial 2.0s dwell cohort was inconsistent across seeds: run [41449987137](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41449987137) produced 63%, 57%, and 70% crew wins (zero timeouts), so seed 17003 exceeded the per-cohort 65% ceiling. The 70% cohort was not dismissed as noise.
+
+All task definitions now have a direct spawn-reachable, LOS-clear approach-point regression. The follow-up regression exercises the production `BotAgent.navigateTo` path follower from spawn and from the exact previously observed timeout position (1656, 797) to Empty Garbage. These checks passed in exact-head run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699).
+
+**Accepted one-variable retest:** increasing only `TASK_DWELL_TICKS` from 10 to 11 (2.0s → 2.2s) produced three passing 100-game cohorts in run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699):
+
+| Seed | Crew wins | Impostor wins | Crew win rate | Timeouts | Average duration |
+|---|---:|---:|---:|---:|---:|
+| 17001 | 62 | 38 | 62% | 0 | 53.6s |
+| 17002 | 64 | 36 | 64% | 0 | 51.7s |
+| 17003 | 58 | 42 | 58% | 0 | 50.9s |
+
+All three cohorts meet the 45–65% acceptance band with zero safety timeouts. The new win-reason diagnostics classify all crew wins as task victories and all impostor wins as sabotage victories; there were no vote/ejection or parity/elimination wins in these 300 games. This is a balance pass for the tested six-player bot configuration, not proof that voting/social-deduction behavior is complete. Keep the voting/ejection path as a separate gameplay acceptance item.
+
