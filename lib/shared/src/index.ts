@@ -34,6 +34,7 @@ export {
   TASK_DEFS,
   TASK_COUNT,
   TASKS_PER_CREWMATE,
+  TASKS_PER_CREWMATE as TASKS_PER_CREWMATE_COUNT,
   TASK_INTERACTION_RANGE_PX,
   OPCODE_TASK_ASSIGN,
 } from './tasks.js';
@@ -71,8 +72,8 @@ export type { VentDef } from './vents.js';
 export { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from './adminTable.js';
 export type { AdminTableDef } from './adminTable.js';
 
-// Canonical vector collision: the same world is consumed by movement, bots and vision.
-export { CollisionWorld, PRODUCTION_COLLISION_WORLD, PRODUCTION_COLLISION_DOCUMENT, segmentsIntersect, validateCollisionDocument } from './collision/index.js';
+// Vector geometry foundation; production world is generated lazily by the build step.
+export { CollisionWorld, segmentsIntersect, validateCollisionDocument } from './collision/index.js';
 export type { Point as CollisionPoint, CollisionShape, CollisionDocument } from './collision/index.js';
 export { History, simplifyRDP, snapPoint, shouldCloseLoop } from './collision/index.js';
 export type { SnapResult } from './collision/index.js';
