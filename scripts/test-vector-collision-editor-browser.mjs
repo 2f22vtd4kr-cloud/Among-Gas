@@ -80,13 +80,24 @@ try {
   await page.getByRole("button", { name: "Walk test" }).click();
   bounds = await canvas.boundingBox();
   await page.mouse.click(bounds.x + 40, bounds.y + 40);
-  await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await page.mouse.click(bounds.x + 100, bounds.y + 40);
-  await page.waitForFunction(() => {
-    const canvas = document.querySelector("canvas");
-    return canvas?.getAttribute("data-walk-point-count") === "2" &&
-      Boolean(canvas.getAttribute("data-walk-status"));
-  }, { timeout: 10000 });
+  await page.waitForFunction(
+    () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
+    null,
+    { timeout: 10000 },
+  );
+  await page.getByText(/Start selected\\. Tap a destination/).waitFor();
+  await page.mouse.move(bounds.x + 100, bounds.y + 40);
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForFunction(
+    () => {
+      const canvas = document.querySelector("canvas");
+      return canvas?.getAttribute("data-walk-point-count") === "2" &&
+        Boolean(canvas.getAttribute("data-walk-status"));
+    },
+    null,
+    { timeout: 10000 },
+  );
 
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
