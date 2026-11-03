@@ -73,8 +73,10 @@ jobs:
       - name: Generate and quality-check baseline and optional sharpened 2× map tiles
         run: pnpm --filter @workspace/scripts run build:map-tiles && pnpm --filter @workspace/scripts run test:map-tiles
 
-      - name: Verify generated vector preview is not used by live gameplay
-        run: pnpm --filter @workspace/scripts run test:vector-runtime-isolation
+      - name: Generate and verify the saved production vector collision candidate
+        run: pnpm --filter @workspace/scripts run test:production-world
+      - name: Verify the vector world is wired into client, server, and bots
+        run: pnpm --filter @workspace/scripts run test:vector-runtime-integration
 
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
