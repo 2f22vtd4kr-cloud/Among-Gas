@@ -337,6 +337,44 @@ export class CollisionWorld {
       this.isWalkable(feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
   }
 
+  /** True when the open segment between two world points is not occluded. */
+  isLineOfSightClear(ax: number, ay: number, bx: number, by: number): boolean {
+    if (![ax, ay, bx, by].every(Number.isFinite) ||
+        ax < 0 || ay < 0 || bx < 0 || by < 0 ||
+        ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
+    if (this.insideSolids(ax, ay, this.sightSolids) ||
+        this.insideSolids(bx, by, this.sightSolids)) return false;
+    const dx = bx - ax, dy = by - ay;
+    const length = magnitude(dx, dy);
+    if (length <= EPS) return true;
+    const ux = dx / length, uy = dy / length;
+    for (const index of this.query(this.sightHash, ax, ay, length)) {
+      const hit = raySegmentDistance(ax, ay, ux, uy, this.sightSegments[index]);
+      // Ignore contacts at the observer/target endpoint. A target placed on
+      // a solid is handled by the perimeter-aware interaction helper below.
+      if (hit > 0.75 && hit < length - 0.75) return false;
+    }
+    return true;
+  }
+
+  /** Interaction visibility succeeds when any point on the target perimeter is visible. */
+  isLineOfSightToInteractionTarget(
+    ax: number, ay: number, targetX: number, targetY: number, targetRadius = 24,
+  ): boolean {
+    if (![ax, ay, targetX, targetY, targetRadius].every(Number.isFinite) || targetRadius < 0) return false;
+    if (targetRadius === 0) return this.isLineOfSightClear(ax, ay, targetX, targetY);
+    const samples = Math.max(16, Math.ceil((Math.PI * 2 * targetRadius) / 8));
+    for (let index = 0; index < samples; index++) {
+      const angle = (index / samples) * Math.PI * 2;
+      if (this.isLineOfSightClear(
+        ax, ay,
+        targetX + Math.cos(angle) * targetRadius,
+        targetY + Math.sin(angle) * targetRadius,
+      )) return true;
+    }
+    return false;
+  }
+
   private moveWithFootprint(
     x: number,
     y: number,
