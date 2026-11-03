@@ -173,7 +173,7 @@ Verified: `pnpm --filter @workspace/scripts run test:pathfinding` → 13/13 pass
 2. **Task-bar semantics follow the base game:** dead and ejected crewmates become ghosts, retain their assigned unfinished tasks, and can finish them through `BotAgent.ghostTick`. Their unfinished steps remain in `totalTaskSteps`; ghost task completion counts toward the crew win condition. The gameplay invariant suite explicitly covers both death and ejection. Do not reintroduce the old workaround that removed a ghost's remaining tasks from the denominator.
 3. **Permanent departures differ from deaths:** when a crewmate disconnects/leaves mid-game, `removePlayer` removes that departed player's unfinished steps from the denominator and rechecks win conditions. A player who remains in the game as a ghost must not be treated as a departure.
 4. **Simulation safety timeouts are not game timers.** A 100-game batch using a 180-second safety limit recorded two timeouts where a critical sabotage began just before the limit; the sabotage's real 45-second countdown had not yet elapsed. Those traces do not establish a stalled game. CI now allows 300 seconds per game while still requiring zero safety timeouts, giving legitimate late critical-sabotage resolution time without masking indefinite stalls.
-5. **Win-rate tuning is measured, not a correctness oracle.** Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. The 2026-11-02 retest originally justified `TASK_DWELL_TICKS = 11` (2.2s at the 5Hz bot AI rate), but later independently isolated runs reproduced a 66% crew-win rate for seed 17002. The current candidate uses 12 ticks (2.4s); no sabotage, kill, or win-condition constants were changed. Keep `SABOTAGE_INTERVAL_TICKS = 300` (5Hz) to preserve the ~60s real-time interval, along with `HUNT_ACQUIRE_THRESHOLD_PX = -150` and `ISOLATION_THRESHOLD_PX = 300`, unless repeatable measurements justify a change.
+5. **Win-rate tuning is measured, not a correctness oracle.** Re-run multiple 100-game batches after any change to ghost tasks, sabotage, kill parity, voting, or bot decision thresholds. The 2026-11-02 retest originally justified `TASK_DWELL_TICKS = 11` (2.2s at the 5Hz bot AI rate), but later independently isolated runs reproduced a 66% crew-win rate for seed 17002. The 2.4s dwell run [41592553232](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41592553232) produced 60%, 66%, and 59% crew wins with zero timeouts; seed 17002 remained one point above the ceiling. Keep `TASK_DWELL_TICKS = 12` for the next candidate and change only `HUNT_ACQUIRE_THRESHOLD_PX` from -150 to -200, allowing a slightly broader visible-target acquisition band to increase impostor kill opportunities. Keep `SABOTAGE_INTERVAL_TICKS = 300` (5Hz) and `ISOLATION_THRESHOLD_PX = 300` unchanged.
 6. **Verified invariant:** kill, ejection, and permanent disconnect are distinct state transitions. Death/ejection preserve ghost tasks; a permanent disconnect removes unfinished tasks; each path must re-evaluate the applicable crew-task and impostor-parity win conditions.
 
 ---
@@ -207,6 +207,18 @@ All three cohorts meet the 45–65% acceptance band with zero safety timeouts. T
 
 
 ## 2026-11-03 reproducibility follow-up and one-variable retest
+
+## 2026-11-03 2.4s dwell retest and next strategy experiment
+
+Exact-head run [41592553232](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41592553232) completed all 30 setup, build, gameplay, browser and visual-QA checks successfully. Its corrected per-game PRNG cohorts at `TASK_DWELL_TICKS = 12` (2.4s) were:
+
+| Seed | Crew wins | Impostor wins | Crew win rate | Timeouts |
+|---|---:|---:|---:|---:|
+| 17001 | 60 | 40 | 60% | 0 |
+| 17002 | 66 | 34 | 66% | 0 |
+| 17003 | 59 | 41 | 59% | 0 |
+
+Seed 17002 remains at 66%, so increasing task dwell from 2.2s to 2.4s did not resolve the reproducible breach. The next one-variable experiment changes only `HUNT_ACQUIRE_THRESHOLD_PX` from -150 to -200. The existing strategy comment explains that a more negative acquisition threshold allows slightly less-isolated visible targets and increases kill frequency; server range, cooldown, line-of-sight and kill authorization remain authoritative. Task dwell stays at 12 ticks, and sabotage timing, isolation-abort threshold, task counts and win conditions remain unchanged. Do not accept this candidate until all three seeded cohorts pass 45–65% with zero timeouts.
 
 The per-game seeded random streams made the 300-game harness reproducible across concurrent lobbies. Exact-head runs [41587901874](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41587901874) and [41590309325](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41590309325) both produced the same three cohort outcomes: seed 17001 = 61%, seed 17002 = 66%, seed 17003 = 59%, with zero timeouts. Seed 17002 is a repeatable 1-point breach of the 65% upper bound, not an isolated run fluctuation. The previous 2.2s setting therefore does not satisfy the current per-seed gate.
 
