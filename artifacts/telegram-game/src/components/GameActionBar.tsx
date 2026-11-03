@@ -71,7 +71,7 @@ export default function GameActionBar(props: GameActionBarProps) {
             letterSpacing: "0.06em",
             color: killDisabled ? "#d8dfe3" : "#fff0f0",
             background: props.killCooldownMs > 0
-              ? `conic-gradient(from -90deg, rgba(190,200,206,0.9) 0deg ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) 0deg 360deg)`
+              ? `conic-gradient(from -90deg, rgba(190,200,206,0.9) 0deg, rgba(190,200,206,0.9) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) 360deg)`
               : killDisabled ? neutralSurface : "radial-gradient(circle, rgba(210,20,20,0.96), rgba(120,0,0,0.98))",
             border: killDisabled ? neutralBorder : "2px solid rgba(255,135,135,0.9)",
             boxShadow: killDisabled ? "none" : "0 0 18px rgba(255,40,40,0.45)",
