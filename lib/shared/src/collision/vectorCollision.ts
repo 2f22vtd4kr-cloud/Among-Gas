@@ -1,4 +1,14 @@
-import { PLAYER_HALF_WIDTH, PLAYER_RADIUS } from "../coords.js";
+import {
+  FEET_OFFSET_Y,
+  PLAYER_HALF_WIDTH,
+  PLAYER_RADIUS,
+  PLAYER_SPAWN_CLEARANCE_PX,
+  PLAYER_SPAWN_MAX_FEET_Y,
+  PLAYER_SPAWN_MAX_X,
+  PLAYER_SPAWN_MIN_X,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+} from "../coords.js";
 
 /**
  * Framework-free vector collision and vision primitives.
@@ -232,6 +242,41 @@ function pointInPolygon(x: number, y: number, points: readonly Point[]): boolean
   return inside;
 }
 
+function pointInRect(point: Point, minX: number, minY: number, maxX: number, maxY: number): boolean {
+  return point[0] >= minX && point[0] <= maxX && point[1] >= minY && point[1] <= maxY;
+}
+
+function segmentIntersectsRect(
+  segment: Segment,
+  minX: number, minY: number, maxX: number, maxY: number,
+): boolean {
+  const a: Point = [segment.ax, segment.ay];
+  const b: Point = [segment.bx, segment.by];
+  if (pointInRect(a, minX, minY, maxX, maxY) || pointInRect(b, minX, minY, maxX, maxY)) return true;
+  const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+  for (let index = 0; index < 4; index++) {
+    if (segmentsIntersect(a, b, corners[index], corners[(index + 1) % 4])) return true;
+  }
+  return false;
+}
+
+function polygonIntersectsRect(
+  points: readonly Point[],
+  minX: number, minY: number, maxX: number, maxY: number,
+): boolean {
+  const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+  if (corners.some(point => pointInPolygon(point[0], point[1], points))) return true;
+  if (points.some(point => pointInRect(point, minX, minY, maxX, maxY))) return true;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index], b = points[(index + 1) % points.length];
+    if (segmentIntersectsRect(
+      { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: -1 },
+      minX, minY, maxX, maxY,
+    )) return true;
+  }
+  return false;
+}
+
 function segmentDistance(px: number, py: number, segment: Segment): number {
   const dx = segment.bx - segment.ax, dy = segment.by - segment.ay;
   const length2 = dx * dx + dy * dy;
@@ -384,6 +429,35 @@ export class CollisionWorld {
     return this.isWalkable(feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
       this.isWalkable(feetX, feetY, PLAYER_RADIUS) &&
       this.isWalkable(feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
+  }
+
+  /** Full visible-sprite spawn clearance, matching the legacy raster spawn contract. */
+  isPlayerSpawnPositionClear(x: number, y: number): boolean {
+    const feetY = y + FEET_OFFSET_Y;
+    if (![x, y].every(Number.isFinite) ||
+        x < PLAYER_SPAWN_MIN_X || x > PLAYER_SPAWN_MAX_X ||
+        feetY > PLAYER_SPAWN_MAX_FEET_Y ||
+        !this.isPlayerWalkableAtFeet(x, feetY)) return false;
+
+    const minX = x - PLAYER_SPRITE_HALF_WIDTH_PX - PLAYER_SPAWN_CLEARANCE_PX;
+    const maxX = x + PLAYER_SPRITE_HALF_WIDTH_PX + PLAYER_SPAWN_CLEARANCE_PX;
+    const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX - PLAYER_SPAWN_CLEARANCE_PX;
+    const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
+    if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
+
+    for (const solid of this.moveSolids) {
+      const bounds = solid.bounds;
+      if (bounds[2] < minX || bounds[0] > maxX || bounds[3] < minY || bounds[1] > maxY) continue;
+      if (polygonIntersectsRect(solid.points, minX, minY, maxX, maxY)) return false;
+    }
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    for (const index of this.query(this.moveHash, centerX, centerY, radius)) {
+      if (segmentIntersectsRect(this.moveSegments[index], minX, minY, maxX, maxY)) return false;
+    }
+    return true;
   }
 
   /** True when the open segment between two world points is not occluded. */
