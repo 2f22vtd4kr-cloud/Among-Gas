@@ -204,6 +204,9 @@ All task definitions now have a direct spawn-reachable, LOS-clear approach-point
 
 Those figures were initially recorded as a pass, but later corrected per-game PRNG tests exposed a shared process-global random stream that made concurrent game outcomes interleaving-dependent. The figures are historical only, not accepted balance evidence. Voting/ejection acceptance remains a separate gameplay gate.
 
+
+
+**2026-11-03 hunt-threshold negative result:** exact-head run [41594814515](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41594814515) completed all non-balance checks successfully but again returned 60%, 66%, and 59% for seeds 17001–17003, zero timeouts. The -200 threshold did not alter the prior -150 outcomes. The candidate is therefore superseded; the next single variable is the recurring sabotage interval, now 150 ticks (30s) instead of 300 ticks (60s), retaining the existing initial 50-tick cooldown and 0–12s jitter. This creates a chance of a second sabotage near the current median game duration. Do not merge unless all three seeded cohorts pass the existing 45–65% band with zero timeouts.
 ## 2026-11-03 reproducibility and strategy retests
 
 The simulator now creates an independent seeded random stream per game and scopes it around lobby initialization and each synchronous bot tick. Corrected 2.2s exact-head runs [41587901874](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41587901874) and [41590309325](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41590309325) reproduced the same outcomes: seed 17001 = 61%, seed 17002 = 66%, seed 17003 = 59%, all with zero timeouts. Seed 17002 is a repeatable one-point breach of the 65% ceiling.
@@ -216,6 +219,6 @@ The simulator now creates an independent seeded random stream per game and scope
 | 17002 | 66 | 34 | 66% | 0 |
 | 17003 | 59 | 41 | 59% | 0 |
 
-Increasing `TASK_DWELL_TICKS` from 11 to 12 (2.2s → 2.4s) did not resolve seed 17002. The next one-variable experiment changes only `HUNT_ACQUIRE_THRESHOLD_PX` from -150 to -200. The existing strategy comment explains that a more negative acquisition threshold allows slightly less-isolated visible targets and increases kill frequency; server range, cooldown, line-of-sight and kill authorization remain authoritative. Task dwell stays at 12 ticks, while sabotage timing, isolation-abort threshold, task counts and win conditions remain unchanged.
+Increasing `TASK_DWELL_TICKS` from 11 to 12 (2.2s → 2.4s) did not resolve seed 17002. The -200 hunt-acquisition threshold did not change any cohort result: the 2.4s dwell run and the subsequent exact-head candidate both returned 60%, 66%, and 59%. The threshold is not the active bottleneck because the best visible-target isolation scores already clear both thresholds. The next one-variable experiment therefore changes only `SABOTAGE_INTERVAL_TICKS` from 300 to 150 (60s → 30s recurring interval, plus the existing 0–12s jitter). The 10s opening cooldown, task dwell (12 ticks), kill cooldown, isolation-abort threshold, task counts, and win conditions remain unchanged. This tests whether a second sabotage opportunity before the typical ~51s task-win time can counter the repeatable 66% crew cohort.
 
 Do not accept this candidate until the exact-head run passes all three cohorts in the 45–65% band with zero timeouts. All corrected cohorts so far ended only by task completion or critical sabotage; no vote/ejection or parity/elimination wins occurred. This is a six-player bot-vs-bot balance check, not human-vs-bot or social-deduction sign-off.
