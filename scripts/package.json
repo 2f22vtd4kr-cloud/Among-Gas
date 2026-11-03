@@ -19,7 +19,7 @@
     "test:map-tiles": "tsx src/testMapTiles.ts",
     "test:map-tiles-browser": "node ./test-map-tiles-browser.mjs",
     "test:production-world": "pnpm run build:collision && tsx ./src/testProductionCollisionWorld.ts",
-    "test:vector-runtime-integration": "node ./test-vector-runtime-integration.mjs"
+    "test:vector-runtime-integration": "node ./test-vector-runtime-isolation.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
