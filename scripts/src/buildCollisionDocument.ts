@@ -1,14 +1,9 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import {
-  FINE_CELL_X,
-  FINE_CELL_Y,
-  FINE_COLS,
-  FINE_ROWS,
-} from "../../lib/shared/src/collisionDataFine.js";
+import { FINE_COLS, FINE_ROWS } from "../../lib/shared/src/collisionDataFine.js";
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
-import { buildPreciseCollisionGrid } from "../../lib/shared/src/collisionMap.js";
+import { buildPreciseCollisionGrid, FINE_CELL_X, FINE_CELL_Y } from "../../lib/shared/src/collisionMap.js";
 import { MANUAL_BLOCKED_POLYGONS } from "../../lib/shared/src/collisionOverrides.js";
 import { validateCollisionDocument } from "../../lib/shared/src/collision/vectorCollision.js";
 import type { CollisionDocument, CollisionShape } from "../../lib/shared/src/collision/vectorCollision.js";
