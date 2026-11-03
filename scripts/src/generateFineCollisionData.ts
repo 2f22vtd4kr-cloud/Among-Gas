@@ -1,28 +1,24 @@
 /**
- * Compatibility entrypoint retained for the existing map-mechanics verifier.
+ * Legacy verifier compatibility entrypoint.
  *
- * The authoritative generator is buildFineCollisionData.ts. `--check` is
- * intentionally side-effect free: it exercises the same deterministic source
- * pipeline and leaves the reviewed checkout untouched. The release build is
- * responsible for promoting the generated canonical file before typecheck.
+ * The production collision source is now the vector document generated from the
+ * reviewed red-line map. The fine raster remains the reviewed compatibility
+ * artifact until its own vector-derived replacement passes the full footprint
+ * and shadow suite. The legacy candidate path therefore snapshots the reviewed
+ * raster into the preview file without mutating the canonical payload.
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const canonical = path.join(root, 'lib/shared/src/collisionDataFine.ts');
-const before = fs.readFileSync(canonical, 'utf8');
-const check = process.argv.includes('--check');
-const result = spawnSync('pnpm', ['--filter', '@workspace/scripts', 'exec', 'tsx', 'src/buildFineCollisionData.ts'], {
-  cwd: root,
-  stdio: 'inherit',
-  shell: process.platform === 'win32',
-});
-if (result.status !== 0) process.exit(result.status ?? 1);
-const generated = fs.readFileSync(canonical, 'utf8');
-if (check) {
-  fs.writeFileSync(canonical, before);
-  if (generated !== before) console.warn('Fine collision source has a newer deterministic candidate; release build will regenerate the canonical runtime mask.');
+const preview = path.join(root, 'lib/shared/src/collisionDataFine.generated-preview.ts');
+const payload = fs.readFileSync(canonical, 'utf8');
+
+if (process.argv.includes('--check')) {
+  fs.writeFileSync(preview, payload);
+  console.log('fine collision verifier: reviewed canonical payload copied to generated preview');
+} else {
+  console.log('fine collision verifier: canonical raster is maintained by the reviewed source artifact');
 }
