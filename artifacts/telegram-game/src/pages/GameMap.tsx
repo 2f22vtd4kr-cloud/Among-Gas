@@ -2485,7 +2485,7 @@ export default function GameMap() {
       })()}
 
       {/* Persistent Report and Use; Kill remains impostor-only. */}
-      {loaded && myRole !== null && meeting === null && !voteResult?.winner && (
+      {loaded && myRole !== null && (!amIDead || myRole === 'crewmate') && meeting === null && !voteResult?.winner && (
         <GameActionBar
           isImpostor={amIImpostor && !amIDead}
           isGhost={amIDead}
