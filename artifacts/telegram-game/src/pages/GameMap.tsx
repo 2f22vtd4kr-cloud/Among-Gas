@@ -1217,13 +1217,20 @@ export default function GameMap() {
       playerStateRef.current = stepPlayer(
         fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
-      // The ghost-only browser fixture deliberately starts behind a wall.
-      // Keep its test position after physics so React mount ordering cannot
-      // make the first living-player frame snap it back to the spawn.
-      if (taskMockMode === 'task-interaction-ghost-blocked' &&
-          deadSlotsRef.current.has(mySlotRef.current ?? -1)) {
+      // Browser task fixtures must remain at their measured collision-grid
+      // position. The first authoritative WebSocket spawn can arrive after the
+      // fixture setup and otherwise overwrite it before the LOS assertion.
+      // This branch is enabled only by the explicit development mock modes.
+      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+          (taskMockMode === 'task-interaction' ||
+           taskMockMode === 'task-interaction-blocked' ||
+           taskMockMode === 'task-interaction-ghost-blocked')) {
         const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
-        if (fixture) playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
+        if (fixture) {
+          playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
+          cameraX = fixture.x;
+          cameraY = fixture.y;
+        }
       }
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
       if (
