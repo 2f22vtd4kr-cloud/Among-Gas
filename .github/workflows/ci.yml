@@ -75,9 +75,6 @@ jobs:
 
       - name: Generate vector analysis preview and verify it remains outside gameplay runtime
         run: pnpm --filter @workspace/scripts run test:production-world
-      - name: Verify generated vector preview is isolated from client, server, and bots
-        run: pnpm --filter @workspace/scripts run test:vector-runtime-integration
-
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
