@@ -500,11 +500,23 @@ try {
   });
   await ghostBlockedTaskPage.goto(`${origin}/?mock=task-interaction-ghost-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await ghostBlockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await ghostBlockedTaskPage.waitForFunction(() => {
-    const fixture = window.__AG_TASK_FIXTURE_POSITION;
-    return fixture !== undefined &&
-      document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"][data-use-available="true"]').length === 1;
-  }, undefined, { timeout: 5_000 });
+  try {
+    await ghostBlockedTaskPage.waitForFunction(() => {
+      const fixture = window.__AG_TASK_FIXTURE_POSITION;
+      return fixture !== undefined &&
+        document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"][data-use-available="true"]').length === 1;
+    }, undefined, { timeout: 5_000 });
+  } catch (error) {
+    const diagnostics = await ghostBlockedTaskPage.evaluate(() => ({
+      fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
+      debug: window.__AG_TASK_DEBUG ?? null,
+      bodyText: document.body.innerText.slice(0, 500),
+      actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
+      pageReady: document.readyState,
+    }));
+    console.error('Ghost blocked task fixture diagnostics:', JSON.stringify(diagnostics));
+    throw error;
+  }
   const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
     debug: window.__AG_TASK_DEBUG ?? null,
     actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
