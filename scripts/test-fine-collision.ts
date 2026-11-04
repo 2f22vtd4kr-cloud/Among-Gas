@@ -162,7 +162,7 @@ for (const [x, y] of [[1640, 449], [1810, 449], [1600, 550], [1860, 550]] as con
 assert.equal(isBlocked(grid, 1735, 556), true, 'statue base remains a precise movement obstacle');
 
 // Collision and vision are separate: the garden and statue footprint do not
-// become a large square shadow; the statue is a small dedicated visual circle.
+// become a large square shadow; the statue's sight boundary comes from its fine-grid contour segments.
 const fineCell = (x: number, y: number) =>
   Math.floor(y / (MAP_H / FINE_ROWS)) * FINE_COLS + Math.floor(x / (MAP_W / FINE_COLS));
 for (const [x, y] of [[1640, 449], [1810, 449], [1600, 550], [1860, 550]] as const) {
