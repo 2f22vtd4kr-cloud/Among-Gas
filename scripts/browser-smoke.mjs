@@ -527,6 +527,12 @@ try {
     'the ghost fixture must be within the task interaction range');
   assert.equal(ghostBlockedTaskDiagnostics.actionCount, 1,
     'a ghost must retain the task prompt through a wall when the task is within interaction range');
+  assert.equal(await ghostBlockedTaskPage.getByTestId('game-action-report').count(), 0,
+    'ghosts do not receive the living-player Report control');
+  assert.equal(await ghostBlockedTaskPage.getByTestId('game-action-kill').count(), 0,
+    'ghosts do not receive the Kill control');
+  await ghostBlockedTaskPage.getByTestId('game-action-use').click();
+  await ghostBlockedTaskPage.getByText(/Заправить двигатель|Fuel Engine/).waitFor({ state: 'visible', timeout: 5_000 });
   await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
   await ghostBlockedTaskPage.close();
 
