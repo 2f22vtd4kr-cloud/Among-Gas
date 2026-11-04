@@ -472,7 +472,7 @@ try {
   });
   await blockedTaskPage.goto(`${origin}/?mock=task-interaction-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await blockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await blockedTaskPage.waitForFunction(() => window.__AG_TASK_FIXTURE_POSITION !== undefined, undefined, { timeout: 15_000 });
+  await blockedTaskPage.waitForFunction(() => window.__AG_TASK_FIXTURE_POSITION !== undefined && window.__AG_TASK_DEBUG?.distance !== undefined, undefined, { timeout: 15_000 });
   const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
     fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
     debug: window.__AG_TASK_DEBUG ?? null,
