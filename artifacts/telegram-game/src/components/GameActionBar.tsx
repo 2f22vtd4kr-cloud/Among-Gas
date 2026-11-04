@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 
 export interface GameActionBarProps {
   isImpostor: boolean;
+  isGhost: boolean;
   killCooldownMs: number;
   killCooldownMaxMs: number;
   killAvailable: boolean;
@@ -91,7 +92,7 @@ export default function GameActionBar(props: GameActionBarProps) {
         </button>
       )}
 
-      <button
+      {!props.isGhost && <button
         type="button"
         data-testid="game-action-report"
         data-report-available={String(props.reportAvailable)}
@@ -112,7 +113,7 @@ export default function GameActionBar(props: GameActionBarProps) {
           <path d="M24 16v8m0 5v1" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
         </svg>
         <span>{props.english ? "REPORT" : "ДОЛОЖИТЬ"}</span>
-      </button>
+      </button>}
 
       <button
         type="button"
