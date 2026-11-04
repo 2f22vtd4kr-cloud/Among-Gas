@@ -18,7 +18,7 @@
     "build:map-tiles": "tsx src/buildMapTiles.ts",
     "test:map-tiles": "tsx src/testMapTiles.ts",
     "test:map-tiles-browser": "node ./test-map-tiles-browser.mjs",
-    "test:production-world": "pnpm run build:collision && tsx ./src/testProductionCollisionWorld.ts",
+    "test:production-world": "pnpm run build:collision && node ./test-vector-runtime-isolation.mjs",
     "test:vector-runtime-integration": "node ./test-vector-runtime-isolation.mjs"
   },
   "devDependencies": {
