@@ -2485,13 +2485,14 @@ export default function GameMap() {
       })()}
 
       {/* Persistent Report and Use; Kill remains impostor-only. */}
-      {loaded && myRole !== null && !amIDead && meeting === null && !voteResult?.winner && (
+      {loaded && myRole !== null && meeting === null && !voteResult?.winner && (
         <GameActionBar
-          isImpostor={amIImpostor}
+          isImpostor={amIImpostor && !amIDead}
+          isGhost={amIDead}
           killCooldownMs={killCooldownMs}
           killCooldownMaxMs={KILL_COOLDOWN_MS}
-          killAvailable={nearestTarget !== null && myVentId === null}
-          reportAvailable={nearestBody !== null && sabotage === null && myVentId === null}
+          killAvailable={!amIDead && nearestTarget !== null && myVentId === null}
+          reportAvailable={!amIDead && nearestBody !== null && sabotage === null && myVentId === null}
           useAvailable={useActionEnabled}
           useActionKind={useActionKind}
           english={en}
