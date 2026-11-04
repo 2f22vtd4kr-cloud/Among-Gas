@@ -63,7 +63,7 @@ function validateManifest(value: unknown): TileManifest {
 
 export class TiledMap {
   private readonly cache = new Map<string, CacheEntry>();
-  private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0 };
+  private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0, decodedBytes: 0 };
 
   private constructor(
     private readonly manifest: TileManifest,
