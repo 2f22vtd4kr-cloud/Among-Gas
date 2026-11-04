@@ -681,13 +681,16 @@ export default function GameMap() {
     }
   }, [myRole, meeting, activeTaskId, voteResult?.winner]);
 
-  // Close an in-progress minigame on death; ghosts can reopen the same
-  // assigned task afterward and continue contributing to the shared task bar.
+  // Close an in-progress minigame on the transition into death; once dead,
+  // ghosts may reopen their assigned tasks and keep contributing to the bar.
+  const wasDeadRef = useRef(amIDead);
   useEffect(() => {
+    const justDied = amIDead && !wasDeadRef.current;
+    wasDeadRef.current = amIDead;
     const activeTaskLocked = activeTaskId !== null &&
       (sabotage?.systemId === SABOTAGE_COMMS ||
        (sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(activeTaskId)));
-    if (meeting !== null || amIDead || myRole !== 'crewmate' || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
+    if (meeting !== null || justDied || myRole !== 'crewmate' || voteResult?.winner || activeTaskLocked) setActiveTaskId(null);
   }, [meeting, amIDead, myRole, voteResult?.winner, sabotage, activeTaskId]);
 
   useEffect(() => {
