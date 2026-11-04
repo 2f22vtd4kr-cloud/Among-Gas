@@ -231,12 +231,9 @@ const westernGardenCell = 14 * COLS + Math.floor(1640 / CELL_X);
 const easternGardenCell = 14 * COLS + Math.floor(1810 / CELL_X);
 assert.equal(realShadowGrid[westernGardenCell], 0, 'walkable garden floor does not cast a hard shadow');
 assert.equal(realShadowGrid[easternGardenCell], 0, 'the opposite garden path also remains clear in the vision grid');
-const statueOccluder = realNarrowOccluders.find(item =>
+assert.equal(realNarrowOccluders.some(item =>
   Math.hypot(item.x - 1735, item.y - 556) < 1,
-);
-assert.ok(statueOccluder, 'the central statue remains a dedicated narrow vision occluder');
-assert.ok(statueOccluder.radius >= 20 && statueOccluder.radius <= 30,
-  'the statue vision circle follows its measured 26px base instead of the full garden');
+), false, 'the obsolete offset statue circle must not be added as a second visual shadow');
 assert.ok(realNarrowOccluders.length < 100, 'narrow visual occluders remain cheap to ray-cast on mobile');
 // Low furniture in the upper atrium remains blocked for movement, while the
 // table/bench cells do not cast hard shadows. The enclosing room walls still do.
@@ -251,8 +248,6 @@ assert.equal(realGrid[upperAtriumTable], 1, 'upper-atrium table remains collidab
 const upperAtriumWall = 4 * COLS + 40;
 assert.equal(realGrid[upperAtriumWall], 1, 'upper atrium wall remains blocked for movement');
 assert.equal(realShadowGrid[upperAtriumWall], 1, 'architectural wall remains a vision occluder');
-const statueRay=computeVisibilityPolygon(1450,556,500,realShadowGrid,realNarrowOccluders,true)[360];
-assert.ok(statueRay.x>1707&&statueRay.x<1711,'vision ray stops at the narrow statue footprint, not the decorative garden perimeter');
 
 // The 680×392 grid is authoritative for movement and visual occlusion.
 const realFineGrid = buildPreciseCollisionGrid();
@@ -315,16 +310,20 @@ const fineCell = (x: number, y: number) =>
 assert.equal(realFineShadowGrid[fineCell(1640, 449)], 0, 'fine garden floor does not cast a hard shadow');
 assert.equal(realFineShadowGrid[fineCell(1810, 449)], 0, 'opposite fine garden path remains clear');
 assert.equal(realFineShadowGrid[fineCell(1250, 600)], 1, 'architectural wall remains a precise vision occluder');
-const fineStatue = buildNarrowShadowOccluders(realFineGrid, true).find(item =>
-  Math.hypot(item.x - 1735, item.y - 556) < 1,
+const statueSegments = realFineShadowSegments.filter(segment =>
+  Math.max(segment.ax, segment.bx) >= 1680 &&
+  Math.min(segment.ax, segment.bx) <= 1790 &&
+  Math.max(segment.ay, segment.by) >= 500 &&
+  Math.min(segment.ay, segment.by) <= 620,
 );
-assert.ok(fineStatue, 'tall statue has a dedicated narrow visual occluder');
-assert.equal(realFineShadowGrid[fineCell(1735, 556)], 0, 'statue is not rasterized as a square shadow');
+assert.ok(statueSegments.length > 0, 'the statue base keeps its measured fine-grid sight contour');
+assert.equal(realFineShadowGrid[fineCell(1735, 556)], 0, 'statue is not rasterized as a broad square shadow');
 assert.equal(isBlocked(realFineGrid, 1740, 210), true, 'upper-atrium table remains solid for movement');
 assert.equal(realFineShadowGrid[fineCell(1740, 210)], 0, 'upper-atrium table does not cast a broad shadow');
-const fineGardenRay = computeVisibilityPolygon(1600, 556, 220, realFineShadowGrid, [fineStatue], true)[360];
-assert.ok(fineGardenRay.x <= fineStatue.x - fineStatue.radius + 1,
-  'garden sight stops at the statue itself, not at the decorative garden perimeter');
+const statueWestEdge = Math.min(...statueSegments.map(segment => Math.min(segment.ax, segment.bx)));
+const fineGardenRay = computeVisibilityPolygon(1600, 556, 220, realFineShadowGrid, [], true, statueSegments)[360];
+assert.ok(fineGardenRay.x <= statueWestEdge + 1,
+  'garden sight stops at the statue base contour, without the obsolete offset circle');
 
 // Real open-room fixture: this point is in the broad lower-left room, not the
 // narrow Clean Filters corridor used by the original task-interaction capture.
