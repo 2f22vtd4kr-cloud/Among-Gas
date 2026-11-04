@@ -472,13 +472,18 @@ try {
   });
   await blockedTaskPage.goto(`${origin}/?mock=task-interaction-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await blockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await blockedTaskPage.waitForTimeout(450);
+  await blockedTaskPage.waitForFunction(() => window.__AG_TASK_FIXTURE_POSITION !== undefined, undefined, { timeout: 15_000 });
   const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
     fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
     debug: window.__AG_TASK_DEBUG ?? null,
     actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
   }));
   console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
+  assert.ok(blockedTaskDiagnostics.fixture, 'the blocked-task fixture must position the player in the measured interaction zone');
+  assert.ok(blockedTaskDiagnostics.debug?.distance <= blockedTaskDiagnostics.debug?.range,
+    'the blocked-task fixture must be within numeric interaction range');
+  assert.equal(blockedTaskDiagnostics.debug?.best, null,
+    'the wall must be the reason the nearby task is not selected');
   assert.equal(blockedTaskDiagnostics.actionCount, 0,
     'task prompt must stay hidden when the player is in range but has no line of sight');
   await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
@@ -525,6 +530,8 @@ try {
     'the occluded fixture must run as a server-authoritative ghost');
   assert.ok(ghostBlockedTaskDiagnostics.debug?.distance <= ghostBlockedTaskDiagnostics.debug?.range,
     'the ghost fixture must be within the task interaction range');
+  assert.equal(ghostBlockedTaskDiagnostics.debug?.best?.taskId, 7,
+    'the ghost must select the same assigned task despite the wall');
   assert.equal(ghostBlockedTaskDiagnostics.actionCount, 1,
     'a ghost must retain the task prompt through a wall when the task is within interaction range');
   assert.equal(await ghostBlockedTaskPage.getByTestId('game-action-report').count(), 0,
@@ -779,9 +786,12 @@ try {
   await waitForRoleRevealToFinish(page);
   const sabotageButton = page.getByRole('button', { name: /Саботаж/ });
   await sabotageButton.waitFor({ state: 'visible', timeout: 10_000 });
-  const sabotageIconBox = await sabotageButton.locator('img').boundingBox();
-  assert.ok(sabotageIconBox && sabotageIconBox.width >= 64 && sabotageIconBox.height >= 64,
-    'Sabotage action must display the large original sabotage icon asset');
+  const sabotageIcon = sabotageButton.locator('svg');
+  const sabotageIconBox = await sabotageIcon.boundingBox();
+  assert.equal(await sabotageButton.locator('img').count(), 0,
+    'Sabotage uses an original in-house vector glyph, not copied game artwork');
+  assert.ok(sabotageIconBox && sabotageIconBox.width >= 32 && sabotageIconBox.height >= 32,
+    'Sabotage action must display its legible original vector icon');
   await sabotageButton.click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
   for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
