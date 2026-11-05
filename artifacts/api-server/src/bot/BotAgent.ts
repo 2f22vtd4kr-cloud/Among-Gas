@@ -209,6 +209,7 @@ export abstract class BotAgent {
     if (lobby.phase === 'MEETING') {
       const meeting = lobby.meeting;
       if (!meeting) return;
+      this.capturePublicMeetingEvidence(lobby, meeting);
       if (!meeting.votingOpen) {
         this.discuss(lobby, self, manager, meeting);
         return;
@@ -443,6 +444,7 @@ export abstract class BotAgent {
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
+          priorPublicTranscript: this.getPriorPublicMeetingTranscript(lobby),
         }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
