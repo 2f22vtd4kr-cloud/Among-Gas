@@ -170,7 +170,7 @@ export class ImpostorBot extends BotAgent {
           username: player.username,
           alive: player.alive,
         })),
-      meeting?.messages ?? [],
+      this.getPublicMeetingVoteMessages(lobby),
     );
   }
 
