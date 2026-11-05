@@ -64,7 +64,7 @@ function findSubjectSlot(text: string, roster: readonly PublicMeetingRosterEntry
   for (const player of roster) {
     const name = sanitize(player.username, 32);
     if (name.length < 2) continue;
-    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')');
+    const escaped = name.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&');
     if (new RegExp('(^|[^\\p{L}\\p{N}_])' + escaped + '(?=$|[^\\p{L}\\p{N}_])', 'iu').test(lower)) {
       matches.add(player.slot);
     }
