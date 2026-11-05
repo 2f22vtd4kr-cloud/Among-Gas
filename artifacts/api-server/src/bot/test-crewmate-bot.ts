@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
 import { isBotNavigationReachable } from './BotAgent.js';
-import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
@@ -9,7 +10,7 @@ import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
-const grid = buildPreciseCollisionGrid();
+const grid = getProductionCollisionWorld();
 const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
 assert.ok(task, 'at least one task console must be a walkable bot stand-off position');
 
