@@ -6,7 +6,9 @@ const root = path.resolve(import.meta.dirname, "..");
 const required = [
   ["artifacts/telegram-game/src/pages/GameMap.tsx", /getProductionCollisionWorld/],
   ["artifacts/api-server/src/ws/wsServer.ts", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/ws/lobby.ts", /getProductionCollisionWorld/],
   ["artifacts/api-server/src/bot/BotAgent.ts", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/sim/simulateGame.ts", /getProductionCollisionWorld/],
 ];
 for (const [relative, pattern] of required) {
   const source = await fs.readFile(path.join(root, relative), "utf8");
