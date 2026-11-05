@@ -13,7 +13,6 @@ import {
   isPlayerPositionWalkable,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
-  type Grid,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
@@ -34,7 +33,7 @@ import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteRespons
 
 export { NO_TARGET };
 
-/** Collision grid shared across all bot agents (built once at module load). */
+/** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
 const movementGrid: CollisionWorld = getProductionCollisionWorld();
 const NAV_COLS = COLS * 2;
