@@ -111,13 +111,22 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const simple=simplify(raw,TOLERANCE),loop=path[0]===path[path.length-1];
     const unique=loop?simple.slice(0,-1):simple; if(unique.length<(loop?3:2)) continue;
     const cx=unique.reduce((s,p)=>s+p[0],0)/unique.length,cy=unique.reduce((s,p)=>s+p[1],0)/unique.length;
-    const statueRing=Math.abs(cx/w-.61)<.09&&Math.abs(cy/h-.31)<.10;
+    const statueRing=Math.abs(cx/w-.54)<.09&&Math.abs(cy/h-.27)<.10;
     const closed=loop&&area(unique)>=20&&area(unique)<=8000&&!statueRing;
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:true,label:closed?"red-line solid footprint":"red-line boundary",zone:"owner-redline-reference"});
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:true,label:closed?"red-line solid footprint":"red-line boundary",zone:statueRing?"statue-garden-boundary":"owner-redline-reference"});
   }
+  // The reference traces the garden perimeter but intentionally leaves the
+  // statue base itself unoutlined. Plan 2's measured pedestal footprint is
+  // restored as its own solid while the surrounding planter remains walkable.
+  shapes.push({
+    id:"statue-pedestal",
+    points:[[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]],
+    closed:true,blocksMove:true,blocksSight:true,
+    label:"measured statue pedestal footprint",zone:"statue-pedestal",
+  });
   return shapes;
 }
 async function main():Promise<void> {
