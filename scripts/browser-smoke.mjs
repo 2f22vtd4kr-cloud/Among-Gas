@@ -814,7 +814,7 @@ try {
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /MAP/ }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('button', { name: /Clean Filters/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Discussion', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
