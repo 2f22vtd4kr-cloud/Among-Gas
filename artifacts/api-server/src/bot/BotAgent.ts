@@ -10,10 +10,7 @@
 import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
-  buildPreciseCollisionGrid,
-  isPlayerFootprintWalkableAtFeet,
   isPlayerPositionWalkable,
-  isPlayerPathWalkable,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
   type Grid,
@@ -26,6 +23,7 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
+import { getProductionCollisionWorld, type CollisionWorld } from '@workspace/shared/collision';
 import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
@@ -38,7 +36,7 @@ export { NO_TARGET };
 
 /** Collision grid shared across all bot agents (built once at module load). */
 export const grid = buildCollisionGrid();
-const movementGrid = buildPreciseCollisionGrid();
+const movementGrid: CollisionWorld = getProductionCollisionWorld();
 const NAV_COLS = COLS * 2;
 const NAV_ROWS = ROWS * 2;
 const NAV_CELL_X = CELL_X / 2;
@@ -50,31 +48,8 @@ const navigationGeometry: PathGridGeometry = {
   cellY: NAV_CELL_Y,
 };
 
-/** Same three-circle foot footprint used by client prediction and server authority. */
-function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
-  return isPlayerFootprintWalkableAtFeet(collision, feetX, feetY);
-}
-
-/**
- * Pathfinding uses grid cells, while live movement validates the character's
- * actual collision radius. Trace a clearance-aware navigation grid so A*
- * doesn't repeatedly send bots to cell-centres the real collision check
- * rejects (the old failure mode left a bot stationary forever at a task).
- */
-function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(NAV_COLS * NAV_ROWS);
-  for (let row = 0; row < NAV_ROWS; row++) {
-    for (let col = 0; col < NAV_COLS; col++) {
-      const index = row * NAV_COLS + col;
-      const x = (col + 0.5) * NAV_CELL_X;
-      const y = (row + 0.5) * NAV_CELL_Y;
-      result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
-    }
-  }
-  return result;
-}
-
-const navigationGrid = buildNavigationGrid(movementGrid);
+/** Navigation cells are rasterized from the exact same vector world as live movement. */
+const navigationGrid = movementGrid.rasterizePlayerNav(NAV_COLS, NAV_ROWS).walk;
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
@@ -129,22 +104,13 @@ function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
     navigationGrid[row * NAV_COLS + col] === 0;
 }
 
-/** Use the exact same 2px swept footprint check as human prediction and server authority. */
+/** Reject bot waypoints unless the exact vector-world feet sweep reaches them. */
 function canTraverse(from: Point, to: Point): boolean {
-  // A fine-grid-valid point can still fall inside a blocked 2× navigation cell
-  // whose centre fails the bot's clearance test. Entering such a cell strands
-  // the bot because the next A* search rejects its start cell. Keep every bot
-  // endpoint in a cell that the navigation graph itself considers walkable.
   if (!isNavigationPositionWalkable(to.x, to.y)) return false;
-  // Bot waypoints are stored in feet-space; the shared helper accepts the
-  // sprite anchor and applies the canonical feet offset internally.
-  return isPlayerPathWalkable(
-    movementGrid,
-    from.x,
-    from.y - FEET_OFFSET_Y,
-    to.x,
-    to.y - FEET_OFFSET_Y,
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
   );
+  return Math.hypot(x - to.x, y - to.y) <= 0.75;
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
