@@ -159,11 +159,11 @@ async function main():Promise<void> {
   }
   if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount);
   await mkdir(outputDir,{recursive:true}); await mkdir(path.dirname(qaPath),{recursive:true});
-  await writeFile(path.join(outputDir,"collision.v1.json"),JSON.stringify(document,null,2)+"\\n");
+  await writeFile(path.join(outputDir,"collision.v1.json"),JSON.stringify(document,null,2)+"\n");
   await writeFile(path.join(outputDir,"generatedDocument.ts"),
-    'import type { CollisionDocument } from "./vectorCollision.js";\\n'+
-    "const COLLISION_DOCUMENT_JSON = "+JSON.stringify(JSON.stringify(document))+";\\n"+
-    "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\\n");
+    'import type { CollisionDocument } from "./vectorCollision.js";\n'+
+    "const COLLISION_DOCUMENT_JSON = "+JSON.stringify(JSON.stringify(document))+";\n"+
+    "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n");
   const svgPaths=shapes.map(s=>{
     const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ");
     return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
