@@ -33,6 +33,40 @@ assert.deepEqual(user.livingRoster.map(player => player.slot), [0, 1, 2]);
 assert.equal(user.recentPublicTranscript[1].text, messages[1].text);
 assert.equal('role' in roster[0], false, 'the prompt input type contains no hidden role field');
 
+const historicalPrompt = buildPublicBotVoteMessages('Nova', roster, messages, [{
+  id: '1000:1:1001',
+  roundId: 1,
+  sourceSlot: 1,
+  sourceName: 'Mira',
+  sentAtMs: 1_001,
+  text: 'I personally saw Green vent near the reactor.',
+  kind: 'testimony',
+  subjectSlot: 2,
+  eventKey: 'vent',
+  stance: 'affirms',
+  confidence: 0.65,
+  contradicts: ['2000:2:2001'],
+}]);
+const historicalSystem = historicalPrompt.find(message => message.role === 'system')!.content;
+const historicalUser = JSON.parse(historicalPrompt.find(message => message.role === 'user')!.content) as {
+  earlierPublicEvidence: Array<{
+    speaker: string;
+    claimKind: string;
+    mentionedSubjectSlot: number | null;
+    confidenceHeuristic: number;
+    contradictsClaimIds: string[];
+  }>;
+};
+assert.match(historicalSystem, /historical player claims, not verified facts/);
+assert.match(historicalSystem, /not a truth probability/);
+assert.equal(historicalUser.earlierPublicEvidence[0].speaker, 'Mira');
+assert.equal(historicalUser.earlierPublicEvidence[0].claimKind, 'testimony');
+assert.equal(historicalUser.earlierPublicEvidence[0].mentionedSubjectSlot, 2);
+assert.equal(historicalUser.earlierPublicEvidence[0].confidenceHeuristic, 0.65);
+assert.deepEqual(historicalUser.earlierPublicEvidence[0].contradictsClaimIds, ['2000:2:2001']);
+assert.equal('roles' in historicalUser.earlierPublicEvidence[0], false,
+  'historical public memory must not include hidden roles');
+
 assert.equal(parsePublicBotVoteResponse('{"vote":2}', 0, roster), 2);
 assert.equal(parsePublicBotVoteResponse('{"vote":null}', 0, roster), NO_TARGET);
 assert.equal(parsePublicBotVoteResponse('{"vote":3}', 0, roster), null, 'dead targets are rejected');
