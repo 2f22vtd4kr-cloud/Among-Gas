@@ -1,5 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
+import { getProductionCollisionWorld } from '@workspace/shared/collision';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
@@ -274,7 +275,7 @@ const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
 export default function GameMap() {
-  const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
+  const taskInteractionGrid = useMemo(() => getProductionCollisionWorld(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -1130,8 +1131,7 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = taskInteractionGrid;
-    const fineGrid = grid;
+    const fineGrid = buildPreciseCollisionGrid();
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
@@ -1146,9 +1146,9 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
+          if (!isPlayerPositionWalkable(taskInteractionGrid, x, y)) continue;
           const hasLineOfSight = isLineOfSightToInteractionTarget(
-            fineGrid, x, y + FEET_OFFSET_Y,
+            taskInteractionGrid, x, y + FEET_OFFSET_Y,
             fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
             fixtureTask.interactionTargetRadiusPx ?? 24,
           );
@@ -1167,7 +1167,7 @@ export default function GameMap() {
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
     const narrowSegments = buildFineShadowSegments(fineGrid);
-    if (!isSpawnWalkable(fineGrid)) {
+    if (!isSpawnWalkable(taskInteractionGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
@@ -1215,7 +1215,7 @@ export default function GameMap() {
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
-        fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        taskInteractionGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       // Browser task fixtures must remain at their measured collision-grid
       // position. The first authoritative WebSocket spawn can arrive after the
