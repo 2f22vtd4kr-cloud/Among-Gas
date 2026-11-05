@@ -54,7 +54,13 @@ export function defaultControlPosition(
     case 'tasks': return { x: 14, y: 14 };
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
-    case 'killReport': return { x: joystickSide === 'left' ? 65 : 35, y: 55 };
+    case 'killReport': {
+      // At narrow widths, the default action bar and joystick share the same
+      // bottom corner. Move the bar above the joystick only when their
+      // horizontal hit-area bounds would otherwise overlap.
+      const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
+      return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 55 : 90 };
+    }
     case 'sabotage': return { x: oppositeSide, y: 74 };
   }
 }
