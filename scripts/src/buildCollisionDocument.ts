@@ -179,6 +179,6 @@ async function main():Promise<void> {
   }).join("");
   const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+info.width+'" height="'+info.height+'" viewBox="0 0 '+info.width+" "+info.height+'">'+svgPaths+"</svg>");
   await sharp(referencePath).composite([{input:svg}]).png().toFile(qaPath);
-  console.log(JSON.stringify({ok:true,source:"owner red-line reference",dimensions:{width:info.width,height:info.height},redCount,skeletonCount,tracedPaths:paths.length,shapeCounts:document.source.shapeCounts,edgeCount,blocked,outputs:["lib/shared/src/collision/collision.v1.json","lib/shared/src/collision/generatedDocument.ts","artifacts/telegram-game/collision-redline-vector-qa.png"]},null,2));
+  console.log(JSON.stringify({ok:true,source:"owner red-line reference",dimensions:{width:info.width,height:info.height},redCount,skeletonCount,tracedPaths:paths.length,shapeCounts:document.source?.shapeCounts,edgeCount,blocked,outputs:["lib/shared/src/collision/collision.v1.json","lib/shared/src/collision/generatedDocument.ts","artifacts/telegram-game/collision-redline-vector-qa.png"]},null,2));
 }
 await main();
