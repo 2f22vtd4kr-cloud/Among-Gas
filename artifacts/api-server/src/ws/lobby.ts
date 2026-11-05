@@ -15,6 +15,7 @@
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
 import { buildMovementCorrectionPacket } from './movement.js';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   MAP_W, MAP_H,
   FEET_OFFSET_Y,
@@ -28,7 +29,6 @@ import {
   NO_TARGET,
 } from '@workspace/shared/coords';
 import {
-  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   isLineOfSightClear,
@@ -56,7 +56,7 @@ import {
 } from '@workspace/shared/vents';
 
 // Reuse the canonical fine-grid geometry for every server-authoritative interaction.
-const INTERACTION_COLLISION_GRID = buildPreciseCollisionGrid();
+const INTERACTION_COLLISION_GRID = getProductionCollisionWorld();
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -79,7 +79,7 @@ export const SPAWN_X = PLAYER_SPAWN_X;
 export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
-const spawnGrid = buildPreciseCollisionGrid();
+const spawnGrid = INTERACTION_COLLISION_GRID;
 
 /**
  * Compute a spread spawn position for player `index` of `total`.
