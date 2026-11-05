@@ -29,6 +29,7 @@ import {
   NO_TARGET,
 } from '@workspace/shared/coords';
 import {
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
   isLineOfSightClear,
@@ -55,7 +56,8 @@ import {
   findVent,
 } from '@workspace/shared/vents';
 
-// Reuse the canonical fine-grid geometry for every server-authoritative interaction.
+// Red-line vectors govern feet/movement; the established sight grid remains
+// separate because the red-line drawing is not a vision-occlusion authoring pass.
 const INTERACTION_COLLISION_GRID = getProductionCollisionWorld();
 const INTERACTION_SIGHT_GRID = buildPreciseCollisionGrid();
 
