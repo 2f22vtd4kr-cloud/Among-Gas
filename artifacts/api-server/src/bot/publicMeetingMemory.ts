@@ -202,12 +202,18 @@ export class PublicMeetingEvidenceLedger {
     }
   }
 
+  reset(): void {
+    this.entries = [];
+    this.seen.clear();
+  }
+
   snapshot(): readonly PublicMeetingEvidenceEntry[] {
     return this.entries.map(entry => ({ ...entry, contradicts: [...entry.contradicts] }));
   }
 
   priorEntries(roundId: number, limit = MAX_PRIOR_PROMPT_ENTRIES): readonly PublicMeetingEvidenceEntry[] {
     const boundedLimit = Math.max(0, Math.min(MAX_PRIOR_PROMPT_ENTRIES, Math.trunc(limit)));
+    if (boundedLimit === 0) return [];
     return this.snapshot().filter(entry => entry.roundId !== roundId).slice(-boundedLimit);
   }
 
