@@ -1503,7 +1503,14 @@ try {
   await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
-  await cameraPage.waitForTimeout(350);
+  // The camera's base image is intentionally the 0.5× overview; native 2×
+  // detail is rendered from the independently loaded visible tile set above it.
+  // Wait for the tile overlay as well, so this test cannot pass on the overview alone.
+  await cameraPage.waitForFunction(() => {
+    const status = window.__AG_TILE_DEBUG;
+    return !!status && status.ready === true && status.visibleTotal > 0 &&
+      status.visibleLoaded === status.visibleTotal && status.failed === 0;
+  }, undefined, { timeout: 20_000 });
   const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
   const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
     const context = canvas.getContext('2d');
@@ -1525,10 +1532,15 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
-  assert.equal(cameraBaseline.mapImageWidth, 6608,
-    'camera diagnostics must identify the native high-resolution WebP width');
-  assert.equal(cameraBaseline.mapImageHeight, 3808,
-    'camera diagnostics must identify the native high-resolution WebP height');
+  assert.equal(cameraBaseline.mapImageWidth, 1612,
+    'camera diagnostics must identify the canonical half-resolution overview width');
+  assert.equal(cameraBaseline.mapImageHeight, 929,
+    'camera diagnostics must identify the canonical half-resolution overview height');
+  const cameraTileStatus = await cameraPage.evaluate(() => window.__AG_TILE_DEBUG ?? null);
+  assert.ok(cameraTileStatus && cameraTileStatus.visibleLoaded > 0 &&
+    cameraTileStatus.visibleLoaded === cameraTileStatus.visibleTotal &&
+    cameraTileStatus.failed === 0 && cameraTileStatus.totalDecodedBytes > cameraTileStatus.overviewDecodedBytes,
+  'camera must draw loaded 2× detail tiles over the low-resolution overview');
   const worldRect = cameraBaseline.mapWorldRect;
   const sourceRect = cameraBaseline.mapSourceRect;
   assert.ok(worldRect && sourceRect &&
