@@ -35,6 +35,19 @@ export function buildPublicBotVoteMessages(
     slot,
     text: String(text).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 220),
   }));
+  const priorPublicEvidence = priorEvidence.slice(-18).map(entry => ({
+    round: entry.roundId,
+    speakerSlot: entry.sourceSlot,
+    speaker: entry.sourceName,
+    text: entry.text,
+    claimKind: entry.kind,
+    mentionedSubjectSlot: entry.subjectSlot,
+    eventCategory: entry.eventKey,
+    stance: entry.stance,
+    confidenceHeuristic: entry.confidence,
+    contradictsClaimIds: entry.contradicts,
+  }));
+
 
   return [
     {
