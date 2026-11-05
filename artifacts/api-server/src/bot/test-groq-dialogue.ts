@@ -18,6 +18,10 @@ assert.match(promptText, /Nova/);
 assert.match(promptText, /public meeting transcript/);
 assert.match(promptText, /earlier public evidence/);
 assert.match(promptText, /not verified facts/);
+const publicPromptData = JSON.parse(
+  publicPrompt.find(message => message.role === 'user')!.content,
+) as { earlierPublicEvidence: string };
+assert.equal(publicPromptData.earlierPublicEvidence, "round 1; Mira (slot 1; testimony; confidence heuristic 0.65): subject slot 2; vent; affirms. \"I saw Green vent.\"");
 assert.doesNotMatch(promptText, /secret role is|impostor role|crewmate role/i,
   'the provider prompt must not include any hidden role, including the bot own role');
 
