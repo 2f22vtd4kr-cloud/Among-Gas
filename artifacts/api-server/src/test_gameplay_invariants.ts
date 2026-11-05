@@ -5,6 +5,7 @@
  */
 import assert from 'node:assert/strict';
 import { PathCache } from '@workspace/shared';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
@@ -73,6 +74,7 @@ import {
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
 const grid = buildPreciseCollisionGrid();
+const productionCollisionWorld = getProductionCollisionWorld();
 
 // A cached path is valid only for the exact world-space grid geometry. Two
 // grids may share row/column counts while mapping the same cells to different
@@ -308,7 +310,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.exitVent(lobby, 0), true);
   assert.equal(impostor.player.inVent, false);
   assert.equal(impostor.player.ventId, undefined);
-  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+  assert.equal(isPlayerPositionWalkable(productionCollisionWorld, impostor.player.x, impostor.player.y), true,
     'vent exit must place the impostor at a legal player footprint');
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x01));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x02));
@@ -318,7 +320,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 
   // Every authored vent anchor must release the impostor onto a valid
-  // footprint; several anchors intentionally sit on blocked fine-grid cells.
+  // footprint in the same red-line world used by live movement.
   for (const vent of VENT_DEFS) {
     const exiting = makePlayer(0, 'impostor', vent.x, vent.y);
     exiting.player.inVent = true;
@@ -328,7 +330,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     assert.equal(exitManager.exitVent(exitLobby, 0), true, `vent ${vent.id} must have a legal exit point`);
     assert.equal(exiting.player.inVent, false);
     assert.equal(exiting.player.ventId, undefined);
-    assert.equal(isPlayerPositionWalkable(grid, exiting.player.x, exiting.player.y), true,
+    assert.equal(isPlayerPositionWalkable(productionCollisionWorld, exiting.player.x, exiting.player.y), true,
       `vent ${vent.id} exit must be walkable for the complete player footprint`);
     assert.ok(exiting.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
       `vent ${vent.id} exit must send a forced local position correction`);
