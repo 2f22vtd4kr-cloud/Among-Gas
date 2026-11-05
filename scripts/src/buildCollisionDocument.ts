@@ -116,7 +116,7 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:true,label:closed?"red-line solid footprint":"red-line boundary",zone:statueRing?"statue-garden-boundary":"owner-redline-reference"});
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:statueRing?"statue-garden-boundary":"owner-redline-reference"});
   }
   // The reference traces the garden perimeter but intentionally leaves the
   // statue base itself unoutlined. Plan 2's measured pedestal footprint is
@@ -124,7 +124,7 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   shapes.push({
     id:"statue-pedestal",
     points:[[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]],
-    closed:true,blocksMove:true,blocksSight:true,
+    closed:true,blocksMove:true,blocksSight:false,
     label:"measured statue pedestal footprint",zone:"statue-pedestal",
   });
   return shapes;
