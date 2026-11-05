@@ -8,6 +8,7 @@ import { PathCache } from '@workspace/shared';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   isPlayerPositionWalkable,
+  buildPreciseCollisionGrid,
   isLineOfSightToInteractionTarget,
   isPlayerSpawnPositionClear,
   MAP_W,
@@ -74,6 +75,7 @@ import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
 const grid = getProductionCollisionWorld();
 const productionCollisionWorld = grid;
+const sightGrid = buildPreciseCollisionGrid();
 
 // A cached path is valid only for the exact world-space grid geometry. Two
 // grids may share row/column counts while mapping the same cells to different
@@ -121,7 +123,7 @@ function assertInteractionApproachWalkable(
       const y = target.y + dy;
       if (!isPlayerPositionWalkable(grid, x, y)) continue;
       if (!isLineOfSightToInteractionTarget(
-        grid, x, y + FEET_OFFSET_Y,
+        sightGrid, x, y + FEET_OFFSET_Y,
         target.x, target.y + FEET_OFFSET_Y,
         targetRadiusPx,
       )) continue;
