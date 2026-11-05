@@ -26,7 +26,7 @@ assert.equal(nav.walk[start], 1, "spawn cell must be walkable in vector-derived 
 const seen = new Uint8Array(cols * rows);
 const queue = [start];
 seen[start] = 1;
-const directions = [[0,-1,false],[0,1,false],[-1,0,false],[1,0,false],[-1,-1,true],[-1,1,true],[1,-1,true],[1,1,true]];
+const directions: readonly (readonly [number, number, boolean])[] = [[0,-1,false],[0,1,false],[-1,0,false],[1,0,false],[-1,-1,true],[-1,1,true],[1,-1,true],[1,1,true]];
 for (let head=0;head<queue.length;head++) {
   const index=queue[head], row=Math.floor(index/cols), col=index-row*cols;
   for (const [dx,dy,diagonal] of directions) {
