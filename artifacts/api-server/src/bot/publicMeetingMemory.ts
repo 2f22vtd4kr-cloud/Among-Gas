@@ -64,7 +64,7 @@ function findSubjectSlot(text: string, roster: readonly PublicMeetingRosterEntry
   for (const player of roster) {
     const name = sanitize(player.username, 32);
     if (name.length < 2) continue;
-    const escaped = name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\name.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')');
     if (new RegExp('(^|[^\\p{L}\\p{N}_])' + escaped + '(?=$|[^\\p{L}\\p{N}_])', 'iu').test(lower)) {
       matches.add(player.slot);
     }
@@ -76,18 +76,6 @@ function findSubjectSlot(text: string, roster: readonly PublicMeetingRosterEntry
   }
   // Ambiguous statements naming multiple players are not attributed to one.
   return matches.size === 1 ? Array.from(matches)[0] : null;
-}
-
-function sentenceAround(text: string, index: number): string {
-  const separators = ['.', '!', '?', ';', '\n'];
-  let start = 0;
-  let end = text.length;
-  for (const separator of separators) {
-    start = Math.max(start, text.lastIndexOf(separator, index) + 1);
-    const next = text.indexOf(separator, index);
-    if (next >= 0) end = Math.min(end, next);
-  }
-  return text.slice(start, end).trim();
 }
 
 function findEventKey(text: string): string | null {
