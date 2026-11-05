@@ -327,7 +327,7 @@ assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 150/, 'The current on
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => getProductionCollisionWorld\(\), \[\]\)/, 'GameMap must use the generated red-line vector world for collision');
 assert.match(gameMapSource, /isLineOfSightToInteractionTarget\(/, 'task actions must enforce the same line-of-sight contract as the authoritative server');
 assert.match(gameMapSource, /pad\.x,\s*pad\.y \+ FEET_OFFSET_Y/, 'sabotage repair prompts must target the visible repair pad rather than the parent system');
-assert.match(gameMapSource, /const fineGrid = buildPreciseCollisionGrid\(\)/, 'fine raster remains only for the legacy vision-shadow renderer');
+assert.match(gameMapSource, /const fineGrid = taskInteractionSightGrid/, 'fine raster remains only for the established vision-shadow renderer');
 assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
 assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
 assert.match(gameMapSource, /const narrowSegments = buildFineShadowSegments\(fineGrid\)/, 'compact props must expose exact fine-grid silhouette edges');
