@@ -12,10 +12,10 @@ import {
 
 /**
  * Framework-free vector collision and vision primitives.
- * Production documents are generated from the live fine-grid collision mask,
- * its explicit overrides, and the matching vision outline pipeline. The
- * generated source manifest and parity tests are required before changing
- * those inputs; an empty or guessed map must never replace the raster.
+ * Production documents are vectorized from the owner's red-line reference.
+ * Open polylines are exact boundary barriers; closed contours represent
+ * compact prop footprints. Client prediction, server authority and bots share
+ * this same generated document.
  */
 export type Point = readonly [number, number];
 
