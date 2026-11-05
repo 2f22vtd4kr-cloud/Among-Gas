@@ -14,6 +14,13 @@ assert.ok(document.shapes.length >= 80);
 assert.equal(world.shapes.length, document.shapes.length);
 assert.ok(world.isPlayerSpawnPositionClear(PLAYER_SPAWN_X, PLAYER_SPAWN_Y),
   "the real player spawn must be clear under the same red-line geometry used at runtime");
+const statuePedestal = document.shapes.find(shape => shape.id === "statue-pedestal");
+assert.ok(statuePedestal?.closed, "the measured statue pedestal must be a solid footprint");
+assert.equal(world.insideSolid(1745, 497), true, "the statue pedestal interior must block movement");
+assert.equal(world.isPlayerWalkableAtFeet(1745, 550), true,
+  "the decorative garden floor outside the pedestal remains walkable");
+assert.ok(document.shapes.some(shape => shape.zone === "statue-garden-boundary" && !shape.closed),
+  "the red-line garden perimeter must remain a boundary, not a filled solid");
 
 const cols = COLS * 2, rows = ROWS * 2;
 const nav = world.rasterizePlayerNav(cols, rows);
