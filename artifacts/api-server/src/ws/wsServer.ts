@@ -25,7 +25,7 @@ import { isValidGroqApiKey } from '../bot/groqDialogue.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { isSabotageSystemId, SABOTAGE_DOORS } from '@workspace/shared/sabotage';
 import { logger } from '../lib/logger.js';
-import { getProductionCollisionWorld } from '@workspace/shared/collision';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   fromWire,
   toWire,
