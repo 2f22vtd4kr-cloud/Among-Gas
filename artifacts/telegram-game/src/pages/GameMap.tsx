@@ -1,6 +1,6 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
-import { getProductionCollisionWorld } from '@workspace/shared/collision';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
