@@ -303,9 +303,8 @@ const MANUAL_NARROW_OCCLUDERS: readonly VisualOccluderCircle[] = [
     y: 8 * CELL_Y,
     radius: Math.min(CELL_X, CELL_Y) * 0.2,
   },
-  // Tall central statue: the decorative garden perimeter is walkable and
-  // does not occlude vision. Only the statue's small physical base blocks sight.
-  { x: 1735, y: 556, radius: 26 },
+  // The statue's raster shadow is already painted into the map art. Do not
+  // add the former offset circle here: it projected a second, misplaced shadow.
 ];
 
 function isNonOccludingFurniture(index: number): boolean {

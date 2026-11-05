@@ -1,9 +1,21 @@
-import { PLAYER_HALF_WIDTH, PLAYER_RADIUS } from "../coords.js";
+import {
+  FEET_OFFSET_Y,
+  PLAYER_HALF_WIDTH,
+  PLAYER_RADIUS,
+  PLAYER_SPAWN_CLEARANCE_PX,
+  PLAYER_SPAWN_MAX_FEET_Y,
+  PLAYER_SPAWN_MAX_X,
+  PLAYER_SPAWN_MIN_X,
+  PLAYER_SPRITE_HALF_HEIGHT_PX,
+  PLAYER_SPRITE_HALF_WIDTH_PX,
+} from "../coords.js";
 
 /**
  * Framework-free vector collision and vision primitives.
- * This is a foundation only: production use requires a complete reviewed
- * collision.v1.json. An empty or guessed map must never replace the raster.
+ * Production documents are generated from the live fine-grid collision mask,
+ * its explicit overrides, and the matching vision outline pipeline. The
+ * generated source manifest and parity tests are required before changing
+ * those inputs; an empty or guessed map must never replace the raster.
  */
 export type Point = readonly [number, number];
 
@@ -17,11 +29,31 @@ export interface CollisionShape {
   readonly zone?: string;
 }
 
+export interface CollisionSourceManifest {
+  readonly kind: "fine-grid-derived";
+  readonly generatorVersion: number;
+  readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
+  readonly fineGrid: {
+    readonly cols: number;
+    readonly rows: number;
+    readonly cellX: number;
+    readonly cellY: number;
+  };
+  readonly sightPipeline: {
+    readonly largeComponentGrid: string;
+    readonly mediumAndSmallOutlines: string;
+    readonly narrowOccluders: number;
+    readonly obsoleteStatueCircleExcluded: boolean;
+  };
+  readonly shapeCounts: Readonly<Record<string, number>>;
+}
+
 export interface CollisionDocument {
   readonly version: 1;
   readonly mapW: number;
   readonly mapH: number;
   readonly shapes: readonly CollisionShape[];
+  readonly source?: CollisionSourceManifest;
 }
 
 interface Segment {
@@ -169,6 +201,33 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".zone must be a string up to 64 characters");
     }
   });
+  if (doc.source !== undefined) {
+    const source = doc.source as Partial<CollisionSourceManifest>;
+    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
+    if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
+      errors.push("source.generatorVersion must be a positive integer");
+    }
+    if (!source.sourceFiles || typeof source.sourceFiles !== "object") {
+      errors.push("source.sourceFiles must be an object");
+    } else {
+      for (const [name, file] of Object.entries(source.sourceFiles)) {
+        if (!file || typeof file.path !== "string" || !/^[a-f0-9]{64}$/i.test(file.sha256)) {
+          errors.push("source.sourceFiles." + name + " must include a path and SHA-256 digest");
+        }
+      }
+    }
+    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
+        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
+        !(source.fineGrid.cellY > 0)) {
+      errors.push("source.fineGrid must describe a positive raster grid");
+    }
+    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
+      errors.push("source.sightPipeline must describe the sight derivation");
+    }
+    if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
+      errors.push("source.shapeCounts.total must be a positive integer");
+    }
+  }
   return errors;
 }
 
@@ -181,6 +240,41 @@ function pointInPolygon(x: number, y: number, points: readonly Point[]): boolean
         x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
   }
   return inside;
+}
+
+function pointInRect(point: Point, minX: number, minY: number, maxX: number, maxY: number): boolean {
+  return point[0] >= minX && point[0] <= maxX && point[1] >= minY && point[1] <= maxY;
+}
+
+function segmentIntersectsRect(
+  segment: Segment,
+  minX: number, minY: number, maxX: number, maxY: number,
+): boolean {
+  const a: Point = [segment.ax, segment.ay];
+  const b: Point = [segment.bx, segment.by];
+  if (pointInRect(a, minX, minY, maxX, maxY) || pointInRect(b, minX, minY, maxX, maxY)) return true;
+  const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+  for (let index = 0; index < 4; index++) {
+    if (segmentsIntersect(a, b, corners[index], corners[(index + 1) % 4])) return true;
+  }
+  return false;
+}
+
+function polygonIntersectsRect(
+  points: readonly Point[],
+  minX: number, minY: number, maxX: number, maxY: number,
+): boolean {
+  const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+  if (corners.some(point => pointInPolygon(point[0], point[1], points))) return true;
+  if (points.some(point => pointInRect(point, minX, minY, maxX, maxY))) return true;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index], b = points[(index + 1) % points.length];
+    if (segmentIntersectsRect(
+      { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: -1 },
+      minX, minY, maxX, maxY,
+    )) return true;
+  }
+  return false;
 }
 
 function segmentDistance(px: number, py: number, segment: Segment): number {
@@ -335,6 +429,73 @@ export class CollisionWorld {
     return this.isWalkable(feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
       this.isWalkable(feetX, feetY, PLAYER_RADIUS) &&
       this.isWalkable(feetX + PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS);
+  }
+
+  /** Full visible-sprite spawn clearance, matching the legacy raster spawn contract. */
+  isPlayerSpawnPositionClear(x: number, y: number): boolean {
+    const feetY = y + FEET_OFFSET_Y;
+    if (![x, y].every(Number.isFinite) ||
+        x < PLAYER_SPAWN_MIN_X || x > PLAYER_SPAWN_MAX_X ||
+        feetY > PLAYER_SPAWN_MAX_FEET_Y ||
+        !this.isPlayerWalkableAtFeet(x, feetY)) return false;
+
+    const minX = x - PLAYER_SPRITE_HALF_WIDTH_PX - PLAYER_SPAWN_CLEARANCE_PX;
+    const maxX = x + PLAYER_SPRITE_HALF_WIDTH_PX + PLAYER_SPAWN_CLEARANCE_PX;
+    const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX - PLAYER_SPAWN_CLEARANCE_PX;
+    const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
+    if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
+
+    for (const solid of this.moveSolids) {
+      const bounds = solid.bounds;
+      if (bounds[2] < minX || bounds[0] > maxX || bounds[3] < minY || bounds[1] > maxY) continue;
+      if (polygonIntersectsRect(solid.points, minX, minY, maxX, maxY)) return false;
+    }
+
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    for (const index of this.query(this.moveHash, centerX, centerY, radius)) {
+      if (segmentIntersectsRect(this.moveSegments[index], minX, minY, maxX, maxY)) return false;
+    }
+    return true;
+  }
+
+  /** True when the open segment between two world points is not occluded. */
+  isLineOfSightClear(ax: number, ay: number, bx: number, by: number): boolean {
+    if (![ax, ay, bx, by].every(Number.isFinite) ||
+        ax < 0 || ay < 0 || bx < 0 || by < 0 ||
+        ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
+    if (this.insideSolids(ax, ay, this.sightSolids) ||
+        this.insideSolids(bx, by, this.sightSolids)) return false;
+    const dx = bx - ax, dy = by - ay;
+    const length = magnitude(dx, dy);
+    if (length <= EPS) return true;
+    const ux = dx / length, uy = dy / length;
+    for (const index of this.query(this.sightHash, ax, ay, length)) {
+      const hit = raySegmentDistance(ax, ay, ux, uy, this.sightSegments[index]);
+      // Ignore contacts at the observer/target endpoint. A target placed on
+      // a solid is handled by the perimeter-aware interaction helper below.
+      if (hit > 0.75 && hit < length - 0.75) return false;
+    }
+    return true;
+  }
+
+  /** Interaction visibility succeeds when any point on the target perimeter is visible. */
+  isLineOfSightToInteractionTarget(
+    ax: number, ay: number, targetX: number, targetY: number, targetRadius = 24,
+  ): boolean {
+    if (![ax, ay, targetX, targetY, targetRadius].every(Number.isFinite) || targetRadius < 0) return false;
+    if (targetRadius === 0) return this.isLineOfSightClear(ax, ay, targetX, targetY);
+    const samples = Math.max(16, Math.ceil((Math.PI * 2 * targetRadius) / 8));
+    for (let index = 0; index < samples; index++) {
+      const angle = (index / samples) * Math.PI * 2;
+      if (this.isLineOfSightClear(
+        ax, ay,
+        targetX + Math.cos(angle) * targetRadius,
+        targetY + Math.sin(angle) * targetRadius,
+      )) return true;
+    }
+    return false;
   }
 
   private moveWithFootprint(

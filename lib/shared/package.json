@@ -69,6 +69,12 @@
       "workspace": "./src/collision/index.ts",
       "import": "./src/collision/index.ts",
       "default": "./src/collision/index.ts"
+    },
+    "./collision/productionWorld": {
+      "types": "./dist/collision/productionWorld.d.ts",
+      "workspace": "./src/collision/productionWorld.ts",
+      "import": "./src/collision/productionWorld.ts",
+      "default": "./src/collision/productionWorld.ts"
     }
   }
 }

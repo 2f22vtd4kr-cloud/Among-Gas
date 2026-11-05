@@ -1,25 +1,287 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import sharp from 'sharp';
+/**
+ * Build an ignored, non-production vector-analysis preview from the current
+ * fine raster movement mask and vision derivations. This is deliberately not
+ * the authored map: do not import its output into client/server gameplay.
+ * Runtime cut-over remains blocked on all-zone author tracing and review.
+ */
+import { createHash } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import path from "node:path";
+import { FINE_COLS, FINE_ROWS } from "../../lib/shared/src/collisionDataFine.js";
+import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
+import { buildPreciseCollisionGrid, FINE_CELL_X, FINE_CELL_Y } from "../../lib/shared/src/collisionMap.js";
+import { MANUAL_BLOCKED_POLYGONS } from "../../lib/shared/src/collisionOverrides.js";
+import { validateCollisionDocument } from "../../lib/shared/src/collision/vectorCollision.js";
+import type { CollisionDocument, CollisionShape } from "../../lib/shared/src/collision/vectorCollision.js";
+import {
+  buildFineShadowGrid,
+  buildFineShadowSegments,
+  buildNarrowShadowOccluders,
+} from "../../artifacts/telegram-game/src/game/visibility.js";
 
-type P=[number,number]; type S={id:string;points:P[];closed:boolean;blocksMove:boolean;blocksSight:boolean;label?:string;zone?:string};
-const root=path.resolve(import.meta.dirname,'../..');
-const source=path.join(root,'attached_assets/IMG_2907_1783632830477.jpeg');
-const outJson=path.join(root,'lib/shared/src/collision/collision.v1.json');
-const outTs=path.join(root,'lib/shared/src/collision/generatedDocument.ts');
-const W=3224,H=1858,N=[[ -1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]] as P[];
-const k=(x:number,y:number)=>y*10000+x;
-const nb=(x:number,y:number,mask:Set<number>)=>N.map(([dx,dy])=>[x+dx,y+dy] as P).filter(([a,b])=>mask.has(k(a,b)));
-function rdp(a:P[],tol:number){if(a.length<3)return a.slice();const keep=new Uint8Array(a.length);keep[0]=keep[a.length-1]=1;const st:Array<[number,number]>=[[0,a.length-1]];while(st.length){const [i,j]=st.pop()!;const [ax,ay]=a[i],[bx,by]=a[j],dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy)||1;let md=0,mi=-1;for(let n=i+1;n<j;n++){const d=Math.abs((a[n][0]-ax)*dy-(a[n][1]-ay)*dx)/L;if(d>md){md=d;mi=n;}}if(mi>=0&&md>tol){keep[mi]=1;st.push([i,mi],[mi,j]);}}return a.filter((_,i)=>keep[i]);}
-function thin(src:Uint8Array,w:number,h:number){const a=src.slice();for(let it=0;it<30;it++){let changed=false;for(let pass=0;pass<2;pass++){const del:number[]=[];for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){const i=y*w+x;if(!a[i])continue;const p=[a[(y-1)*w+x],a[(y-1)*w+x+1],a[y*w+x+1],a[(y+1)*w+x+1],a[(y+1)*w+x],a[(y+1)*w+x-1],a[y*w+x-1],a[(y-1)*w+x-1]];const c=p.reduce((s,v)=>s+v,0);if(c<2||c>6)continue;let t=0;for(let n=0;n<8;n++)if(!p[n]&&p[(n+1)%8])t++;if(t!==1)continue;if(pass===0?(p[0]*p[2]*p[4]||p[2]*p[4]*p[6]):(p[0]*p[2]*p[6]||p[0]*p[4]*p[6]))continue;del.push(i);}for(const i of del)a[i]=0;changed ||= del.length>0;}if(!changed)break;}return a;}
-function comps(mask:Uint8Array,w:number,h:number){const seen=new Uint8Array(mask.length),out:P[][]=[];for(let y=0;y<h;y++)for(let x=0;x<w;x++){const s=y*w+x;if(!mask[s]||seen[s])continue;const q:P[]=[[x,y]],c:P[]=[];seen[s]=1;for(let qi=0;qi<q.length;qi++){const [cx,cy]=q[qi];c.push([cx,cy]);for(const [dx,dy] of N){const nx=cx+dx,ny=cy+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;const ni=ny*w+nx;if(mask[ni]&&!seen[ni]){seen[ni]=1;q.push([nx,ny]);}}}if(c.length>=5)out.push(c);}return out;}
-function trace(c:P[]){const set=new Set(c.map(([x,y])=>k(x,y))),get=(p:P)=>nb(p[0],p[1],set),deg=new Map<number,number>();for(const p of c)deg.set(k(...p),get(p).length);const nodes=c.filter(p=>deg.get(k(...p))!==2),seen=new Set<string>(),edge=(a:P,b:P)=>{const x=k(...a),y=k(...b);return x<y?`${x}:${y}`:`${y}:${x}`},out:P[][]=[];
- const walk=(start:P,first:P)=>{const a:P[]=[start];let prev=start,cur=first;seen.add(edge(start,first));for(;;){a.push(cur);const next=get(cur).find(p=>p[0]!==prev[0]||p[1]!==prev[1]);if(!next)break;const e=edge(cur,next);if(seen.has(e))break;seen.add(e);prev=cur;cur=next;if(cur[0]===start[0]&&cur[1]===start[1])break;}return a;};
- for(const n of nodes)for(const f of get(n)){if(!seen.has(edge(n,f))){const a=walk(n,f);if(a.length>1)out.push(a);}}
- for(const s of c)for(const f of get(s)){if(!seen.has(edge(s,f))){const a=walk(s,f);if(a.length>2)out.push(a);}}
- return {paths:out,pureLoop:nodes.length===0};}
-async function main(){const {data,info}=await sharp(source).removeAlpha().raw().toBuffer({resolveWithObject:true});if(info.width!==1359||info.height!==784)throw new Error(`Unexpected reference size ${info.width}×${info.height}`);const mask=new Uint8Array(info.width*info.height);for(let i=0;i<mask.length;i++){const r=data[i*3],g=data[i*3+1],b=data[i*3+2];mask[i]=r>110&&r-g>28&&r-b>28&&g<170&&b<170?1:0;}const sk=thin(mask,info.width,info.height),sx=W/info.width,sy=H/info.height,shapes:S[]=[];let id=0;for(const c of comps(sk,info.width,info.height)){const {paths,pureLoop}=trace(c);const xs=c.map(p=>p[0]),ys=c.map(p=>p[1]),minX=Math.min(...xs),minY=Math.min(...ys),maxX=Math.max(...xs),maxY=Math.max(...ys);const closed=pureLoop&&Math.max(maxX-minX,maxY-minY)<=90;const lowProp=closed&&minY>620&&minX<450;for(const raw of paths){const a=rdp(raw,1.5).map(([x,y])=>[Math.round(x*sx*10)/10,Math.round(y*sy*10)/10] as P);let len=0;for(let i=1;i<a.length;i++)len+=Math.hypot(a[i][0]-a[i-1][0],a[i][1]-a[i-1][1]);if(len>=50)shapes.push({id:`reference-${closed?'prop':'wall'}-${String(id++).padStart(3,'0')}`,points:a,closed,blocksMove:true,blocksSight:!lowProp,label:closed?'source red-line ground footprint':'source red-line wall',zone:'reference'});}}
-shapes.push({id:'statue-planter-ring',points:[[1612.8,419.3],[1660.6,350.9],[1765,350.9],[1836.1,417],[1881.2,500.4],[1845.7,583.3],[1776.9,637.9],[1660.6,637.9],[1591.4,578.6],[1549,504.7],[1565.6,450.5]],closed:true,blocksMove:true,blocksSight:false,label:'low octagonal planter ring',zone:'lobby'});
-shapes.push({id:'statue-pedestal',points:[[1700,464.2],[1780,464.2],[1789.5,531],[1690,531]],closed:true,blocksMove:true,blocksSight:true,label:'statue pedestal',zone:'lobby'});
-const doc={version:1 as const,mapW:W,mapH:H,shapes};fs.mkdirSync(path.dirname(outJson),{recursive:true});fs.writeFileSync(outJson,JSON.stringify(doc,null,2)+'\n');fs.writeFileSync(outTs,`// Generated from the source red-line reference; do not edit.\nexport const COLLISION_DOCUMENT=${JSON.stringify(doc)} as const;\n`);console.log(`collision: generated ${shapes.length} vector shapes`);}
-main().catch(e=>{console.error(e);process.exitCode=1;});
+const root = path.resolve(import.meta.dirname, "../..");
+const outputDir = path.join(root, "lib/shared/src/collision");
+const outputJson = path.join(outputDir, "collision.v1.json");
+const outputTs = path.join(outputDir, "generatedDocument.ts");
+const GENERATOR_VERSION = 2;
+
+async function sha256(relativePath: string): Promise<string> {
+  const bytes = await readFile(path.join(root, relativePath));
+  return createHash("sha256").update(bytes).digest("hex");
+}
+
+interface ActiveRect {
+  colStart: number;
+  colEnd: number;
+  rowStart: number;
+  rowEnd: number;
+}
+
+function gridToRectangles(
+  grid: Uint8Array,
+  idPrefix: string,
+  blocksMove: boolean,
+  blocksSight: boolean,
+): CollisionShape[] {
+  if (grid.length !== FINE_COLS * FINE_ROWS) {
+    throw new Error(`${idPrefix}: expected ${FINE_COLS * FINE_ROWS} fine-grid cells, received ${grid.length}`);
+  }
+
+  const active = new Map<string, ActiveRect>();
+  const shapes: CollisionShape[] = [];
+  let nextId = 0;
+
+  const finish = (rect: ActiveRect) => {
+    const x0 = rect.colStart * FINE_CELL_X;
+    const x1 = rect.colEnd * FINE_CELL_X;
+    const y0 = rect.rowStart * FINE_CELL_Y;
+    const y1 = rect.rowEnd * FINE_CELL_Y;
+    shapes.push({
+      id: `${idPrefix}-${String(nextId++).padStart(5, "0")}`,
+      points: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
+      closed: true,
+      blocksMove,
+      blocksSight,
+      label: idPrefix,
+    });
+  };
+
+  for (let row = 0; row < FINE_ROWS; row++) {
+    const runs: Array<[number, number]> = [];
+    let col = 0;
+    while (col < FINE_COLS) {
+      if (grid[row * FINE_COLS + col] !== 1) {
+        col++;
+        continue;
+      }
+      const start = col;
+      while (col < FINE_COLS && grid[row * FINE_COLS + col] === 1) col++;
+      runs.push([start, col]);
+    }
+
+    const currentKeys = new Set(runs.map(([start, end]) => `${start}:${end}`));
+    for (const [key, rect] of active) {
+      if (currentKeys.has(key)) continue;
+      finish(rect);
+      active.delete(key);
+    }
+    for (const [start, end] of runs) {
+      const key = `${start}:${end}`;
+      const existing = active.get(key);
+      if (existing) existing.rowEnd = row + 1;
+      else active.set(key, { colStart: start, colEnd: end, rowStart: row, rowEnd: row + 1 });
+    }
+  }
+
+  for (const rect of active.values()) finish(rect);
+  return shapes;
+}
+
+function narrowCircleShape(
+  id: string,
+  x: number,
+  y: number,
+  radius: number,
+): CollisionShape {
+  const points: Array<[number, number]> = [];
+  const sides = 24;
+  for (let index = 0; index < sides; index++) {
+    const angle = (index / sides) * Math.PI * 2;
+    points.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);
+  }
+  return {
+    id,
+    points,
+    closed: true,
+    blocksMove: false,
+    blocksSight: true,
+    label: "narrow vision occluder",
+  };
+}
+
+async function main(): Promise<void> {
+  const movementGrid = buildPreciseCollisionGrid();
+  const shadowGrid = buildFineShadowGrid(movementGrid);
+  const shadowSegments = buildFineShadowSegments(movementGrid);
+  const narrowOccluders = buildNarrowShadowOccluders(movementGrid, true);
+
+  // Movement is derived from the exact fine grid used by the live raster
+  // collision code, including the currently approved walkable replacement zones.
+  const movementShapes = gridToRectangles(movementGrid, "movement-cell", true, false);
+
+  // Vision uses the same fine source, with the existing large-component /
+  // medium-object decomposition. Manual collision polygons are retained as
+  // explicit object outlines; the obsolete statue circle is not reintroduced.
+  const manualShapes: CollisionShape[] = MANUAL_BLOCKED_POLYGONS.map((polygon, index) => ({
+    id: `manual-blocked-${String(index).padStart(3, "0")}-${polygon.id}`,
+    points: polygon.points.map(([x, y]) => [x, y] as [number, number]),
+    closed: true,
+    blocksMove: true,
+    blocksSight: true,
+    label: polygon.id,
+  }));
+  const sightAreaShapes = gridToRectangles(shadowGrid, "sight-area", false, true);
+  const sightSegmentShapes: CollisionShape[] = shadowSegments.map((segment, index) => ({
+    id: `sight-segment-${String(index).padStart(5, "0")}`,
+    points: [[segment.ax, segment.ay], [segment.bx, segment.by]],
+    closed: false,
+    blocksMove: false,
+    blocksSight: true,
+    label: "fine-grid object outline",
+  }));
+  const narrowShapes = narrowOccluders.map((circle, index) =>
+    narrowCircleShape(`narrow-occluder-${String(index).padStart(3, "0")}`, circle.x, circle.y, circle.radius),
+  );
+
+  const sourceFiles = {
+    fineCollisionData: {
+      path: "lib/shared/src/collisionDataFine.ts",
+      sha256: await sha256("lib/shared/src/collisionDataFine.ts"),
+    },
+    collisionOverrides: {
+      path: "lib/shared/src/collisionOverrides.ts",
+      sha256: await sha256("lib/shared/src/collisionOverrides.ts"),
+    },
+    collisionMap: {
+      path: "lib/shared/src/collisionMap.ts",
+      sha256: await sha256("lib/shared/src/collisionMap.ts"),
+    },
+    visibility: {
+      path: "artifacts/telegram-game/src/game/visibility.ts",
+      sha256: await sha256("artifacts/telegram-game/src/game/visibility.ts"),
+    },
+    coordinates: {
+      path: "lib/shared/src/coords.ts",
+      sha256: await sha256("lib/shared/src/coords.ts"),
+    },
+    generator: {
+      path: "scripts/src/buildCollisionDocument.ts",
+      sha256: await sha256("scripts/src/buildCollisionDocument.ts"),
+    },
+    redlineReference: {
+      path: "attached_assets/IMG_2907_1783632830477.jpeg",
+      sha256: await sha256("attached_assets/IMG_2907_1783632830477.jpeg"),
+    },
+  };
+
+  const shapes = [
+    ...movementShapes,
+    ...manualShapes,
+    ...sightAreaShapes,
+    ...sightSegmentShapes,
+    ...narrowShapes,
+  ];
+  const document: CollisionDocument = {
+    version: 1,
+    mapW: MAP_W,
+    mapH: MAP_H,
+    shapes,
+    source: {
+      kind: "fine-grid-derived",
+      generatorVersion: GENERATOR_VERSION,
+      sourceFiles,
+      fineGrid: {
+        cols: FINE_COLS,
+        rows: FINE_ROWS,
+        cellX: FINE_CELL_X,
+        cellY: FINE_CELL_Y,
+      },
+      sightPipeline: {
+        largeComponentGrid: "buildFineShadowGrid",
+        mediumAndSmallOutlines: "buildFineShadowSegments",
+        narrowOccluders: narrowOccluders.length,
+        obsoleteStatueCircleExcluded: true,
+      },
+      shapeCounts: {
+        movementRectangles: movementShapes.length,
+        manualBlockedPolygons: manualShapes.length,
+        sightRectangles: sightAreaShapes.length,
+        sightSegments: sightSegmentShapes.length,
+        narrowOccluders: narrowShapes.length,
+        total: shapes.length,
+      },
+    },
+  };
+
+  const generatedErrors = validateCollisionDocument(document);
+  if (generatedErrors.length) {
+    throw new Error("Generated collision baseline is invalid: " + generatedErrors.join("; "));
+  }
+
+  await mkdir(outputDir, { recursive: true });
+  let activeDocument = document;
+  try {
+    const existing = JSON.parse(await readFile(outputJson, "utf8")) as CollisionDocument;
+    const existingErrors = validateCollisionDocument(existing);
+    if (existingErrors.length) {
+      throw new Error("Saved vector candidate is invalid; refusing to overwrite it: " + existingErrors.join("; "));
+    }
+    if (!existing.source?.sourceFiles) {
+      throw new Error("Saved vector candidate has no source manifest; refusing to use it in live gameplay.");
+    }
+    for (const [name, current] of Object.entries(sourceFiles)) {
+      const saved = existing.source.sourceFiles[name];
+      if (!saved || saved.sha256 !== current.sha256) {
+        throw new Error(
+          "Saved vector candidate is stale because source input '" + name +
+          "' changed. Export/review the candidate before regenerating it.",
+        );
+      }
+    }
+    activeDocument = {
+      ...existing,
+      source: {
+        ...existing.source,
+        shapeCounts: {
+          ...existing.source.shapeCounts,
+          total: existing.shapes.length,
+        },
+      },
+    };
+    await writeFile(outputJson, JSON.stringify(activeDocument, null, 2) + "\n");
+    console.log("Using saved vector candidate as the runtime collision source.");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    await writeFile(outputJson, JSON.stringify(document, null, 2) + "\n");
+    console.log("Bootstrapped the editable vector candidate from the current fine-grid and vision sources.");
+  }
+
+  const serializedDocument = JSON.stringify(activeDocument);
+  await writeFile(
+    outputTs,
+    `import type { CollisionDocument } from "./vectorCollision.js";\nconst COLLISION_DOCUMENT_JSON = ${JSON.stringify(serializedDocument)};\nexport const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n`,
+  );
+
+  console.log(JSON.stringify({
+    ok: true,
+    generatorVersion: GENERATOR_VERSION,
+    sourceKind: activeDocument.source?.kind,
+    fineGridCells: movementGrid.length,
+    shapes: activeDocument.source?.shapeCounts,
+    sourceFiles,
+    outputJson: path.relative(root, outputJson),
+    outputTs: path.relative(root, outputTs),
+  }, null, 2));
+}
+
+await main();

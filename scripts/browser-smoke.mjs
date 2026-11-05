@@ -226,16 +226,20 @@ try {
   await page.waitForTimeout(150);
 
   const mapAssetTimings = [];
+  const mapAssetRequests = [];
   const mapAssetStartedAt = new Map();
+  const isGameplayMapAsset = url =>
+    /map-overview\.webp|map-tiles(?:-sharp)?\/(?:manifest\.json|tile_r\d+_c\d+\.webp)/.test(url);
   page.on('request', request => {
-    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+    if (isGameplayMapAsset(request.url())) {
+      mapAssetRequests.push(request.url());
       mapAssetStartedAt.set(request.url(), Date.now());
     }
   });
   page.on('requestfinished', request => {
-    if (request.url().includes('map-hires.webp') || request.url().includes('map-hires.png')) {
+    if (isGameplayMapAsset(request.url())) {
       mapAssetTimings.push({
-        asset: request.url().split('/').pop(),
+        asset: request.url(),
         durationMs: Date.now() - (mapAssetStartedAt.get(request.url()) ?? Date.now()),
       });
     }
@@ -319,8 +323,12 @@ try {
   // visible for inspection. Navigate to gameplay only after capturing it.
   await page.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.ok(mapAssetTimings.some(entry => String(entry.asset).includes('map-hires.webp')),
-    'cold gameplay load should prefer the compact WebP map asset');
+  assert.ok(mapAssetRequests.some(asset => asset.includes('map-overview.webp')),
+    'cold gameplay load must fetch the canonical overview fallback');
+  assert.ok(mapAssetRequests.some(asset => asset.includes('/map-tiles/manifest.json')),
+    'cold gameplay load must fetch the canonical tile manifest');
+  assert.ok(mapAssetRequests.some(asset => /map-tiles\/(?:tile_r\d+_c\d+\.webp)/.test(asset)),
+    'cold gameplay load must fetch camera-visible high-resolution WebP tiles');
   console.log('Cold map asset request timings:', JSON.stringify(mapAssetTimings));
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const movementJoystick = page.locator('[data-joystick-side]');
@@ -417,9 +425,9 @@ try {
   const taskDiagnostics = await page.evaluate(() => ({
     taskFixturePosition: window.__AG_TASK_FIXTURE_POSITION ?? null,
     taskDebug: window.__AG_TASK_DEBUG ?? null,
-    taskActionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    taskActionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
     taskAction: (() => {
-      const element = document.querySelector('[data-testid="gameplay-task-action"]');
+      const element = document.querySelector('[data-testid="game-action-use"][data-use-action="task"]');
       if (!element) return null;
       const rect = element.getBoundingClientRect();
       const style = getComputedStyle(element);
@@ -429,11 +437,17 @@ try {
     bodyText: document.body.innerText.slice(-1200),
   }));
   console.log('Task interaction fixture diagnostics:', JSON.stringify(taskDiagnostics));
-  const taskButton = page.getByRole('button', { name: /Почистить фильтры/i });
+  const taskButton = page.getByTestId('game-action-use');
+  assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
+    'the persistent Use control must expose the nearby actionable task');
+  assert.equal(await taskButton.isEnabled(), true, 'Use must enable when a task is in range and visible');
+  const idleReportButton = page.getByTestId('game-action-report');
+  assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
+  assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
   await taskButton.waitFor({ state: 'visible', timeout: 30_000 });
   const taskPromptBox = await taskButton.boundingBox();
   const movementJoystickBox = await movementJoystick.boundingBox();
-  assert.ok(taskPromptBox && movementJoystickBox, 'task prompt and joystick must be measurable');
+  assert.ok(taskPromptBox && movementJoystickBox, 'Use action and joystick must be measurable');
   assert.ok(
     taskPromptBox.x + taskPromptBox.width <= movementJoystickBox.x ||
       movementJoystickBox.x + movementJoystickBox.width <= taskPromptBox.x ||
@@ -458,13 +472,23 @@ try {
   });
   await blockedTaskPage.goto(`${origin}/?mock=task-interaction-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await blockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await blockedTaskPage.waitForTimeout(450);
+  await blockedTaskPage.waitForFunction(() => {
+    const fixture = window.__AG_TASK_FIXTURE_POSITION;
+    const debug = window.__AG_TASK_DEBUG;
+    return fixture !== undefined && debug?.distance !== undefined && debug?.player &&
+      Math.hypot(debug.player.x - fixture.x, debug.player.y - fixture.y) <= 1;
+  }, undefined, { timeout: 15_000 });
   const blockedTaskDiagnostics = await blockedTaskPage.evaluate(() => ({
     fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
   }));
   console.log('Occluded task interaction diagnostics:', JSON.stringify(blockedTaskDiagnostics));
+  assert.ok(blockedTaskDiagnostics.fixture, 'the blocked-task fixture must position the player in the measured interaction zone');
+  assert.ok(blockedTaskDiagnostics.debug?.distance <= blockedTaskDiagnostics.debug?.range,
+    'the blocked-task fixture must be within numeric interaction range');
+  assert.equal(blockedTaskDiagnostics.debug?.best, null,
+    'the wall must be the reason the nearby task is not selected');
   assert.equal(blockedTaskDiagnostics.actionCount, 0,
     'task prompt must stay hidden when the player is in range but has no line of sight');
   await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
@@ -486,21 +510,41 @@ try {
   });
   await ghostBlockedTaskPage.goto(`${origin}/?mock=task-interaction-ghost-blocked&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await ghostBlockedTaskPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await ghostBlockedTaskPage.waitForFunction(() => {
-    const fixture = window.__AG_TASK_FIXTURE_POSITION;
-    return fixture !== undefined &&
-      document.querySelectorAll('[data-testid="gameplay-task-action"]').length === 1;
-  }, undefined, { timeout: 5_000 });
+  try {
+    await ghostBlockedTaskPage.waitForFunction(() => {
+      const fixture = window.__AG_TASK_FIXTURE_POSITION;
+      return fixture !== undefined &&
+        document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"][data-use-available="true"]').length === 1;
+    }, undefined, { timeout: 5_000 });
+  } catch (error) {
+    const diagnostics = await ghostBlockedTaskPage.evaluate(() => ({
+      fixture: window.__AG_TASK_FIXTURE_POSITION ?? null,
+      debug: window.__AG_TASK_DEBUG ?? null,
+      bodyText: document.body.innerText.slice(0, 500),
+      actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
+      pageReady: document.readyState,
+    }));
+    console.error('Ghost blocked task fixture diagnostics:', JSON.stringify(diagnostics));
+    throw error;
+  }
   const ghostBlockedTaskDiagnostics = await ghostBlockedTaskPage.evaluate(() => ({
     debug: window.__AG_TASK_DEBUG ?? null,
-    actionCount: document.querySelectorAll('[data-testid="gameplay-task-action"]').length,
+    actionCount: document.querySelectorAll('[data-testid="game-action-use"][data-use-action="task"]').length,
   }));
   assert.equal(ghostBlockedTaskDiagnostics.debug?.isGhost, true,
     'the occluded fixture must run as a server-authoritative ghost');
   assert.ok(ghostBlockedTaskDiagnostics.debug?.distance <= ghostBlockedTaskDiagnostics.debug?.range,
     'the ghost fixture must be within the task interaction range');
+  assert.equal(ghostBlockedTaskDiagnostics.debug?.best?.taskId, 7,
+    'the ghost must select the same assigned task despite the wall');
   assert.equal(ghostBlockedTaskDiagnostics.actionCount, 1,
     'a ghost must retain the task prompt through a wall when the task is within interaction range');
+  assert.equal(await ghostBlockedTaskPage.getByTestId('game-action-report').count(), 0,
+    'ghosts do not receive the living-player Report control');
+  assert.equal(await ghostBlockedTaskPage.getByTestId('game-action-kill').count(), 0,
+    'ghosts do not receive the Kill control');
+  await ghostBlockedTaskPage.getByTestId('game-action-use').click();
+  await ghostBlockedTaskPage.getByText(/Заправить двигатель|Fuel Engine/).waitFor({ state: 'visible', timeout: 5_000 });
   await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
   await ghostBlockedTaskPage.close();
 
@@ -513,11 +557,11 @@ try {
     }, undefined, { timeout: 3_000 });
     const prompt = await taskButton.boundingBox();
     const stick = await movementJoystick.boundingBox();
-    assert.ok(prompt && stick, 'task prompt and joystick must remain measurable after resize');
+    assert.ok(prompt && stick, 'Use action and joystick must remain measurable after resize');
     assert.ok(
       prompt.x + prompt.width <= stick.x || stick.x + stick.width <= prompt.x ||
         prompt.y + prompt.height <= stick.y || stick.y + stick.height <= prompt.y,
-      `task prompt must not overlap joystick at ${size.width}×${size.height}`,
+      `Use action must not overlap joystick at ${size.width}×${size.height}`,
     );
   }
   await page.setViewportSize({ width: 390, height: 844 });
@@ -619,9 +663,26 @@ try {
     button => button.getAttribute('aria-label') === 'Убить' && !button.disabled,
   ), undefined, { timeout: 5_000 });
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
-  const killIconBox = await killButton.locator('img').boundingBox();
-  assert.ok(killIconBox && killIconBox.width >= 64 && killIconBox.height >= 64,
-    'Kill action must display the large original kill icon asset');
+  assert.equal(await killButton.locator('svg').count(), 1,
+    'Kill action uses its own original vector glyph, not a copied game asset');
+  const reportAlwaysVisible = page.getByTestId('game-action-report');
+  const useAlwaysVisible = page.getByTestId('game-action-use');
+  await reportAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
+  await useAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
+  assert.equal(await reportAlwaysVisible.isEnabled(), false,
+    'Report remains visible but disabled when no body is nearby');
+  assert.equal(await useAlwaysVisible.isEnabled(), false,
+    'Use remains visible but disabled when no interaction is nearby');
+  const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
+  assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
+    'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.waitForTimeout(100);
+  const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
+  assert.ok(actionBarBox && actionBarBox.x >= 0 && actionBarBox.x + actionBarBox.width <= 320,
+    'the three-button impostor action bar must remain inside a narrow 320px phone viewport');
+  await page.screenshot({ path: join(visualQaDir, 'game-action-bar-320px.png'), fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
   await page.goto(`${origin}/?mock=impostor-opening`, { waitUntil: 'domcontentloaded' });
@@ -638,6 +699,8 @@ try {
   await page.waitForSelector('canvas', { timeout: 30_000 });
   const reportButton = page.getByRole('button', { name: /Доложить/ });
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await reportButton.isEnabled(), true, 'Report is enabled when a living player is in range of a body');
+  assert.equal(await page.getByTestId('game-action-use').isVisible(), true, 'Use remains visible beside Report');
   await page.screenshot({ path: join(visualQaDir, 'corpse-report-ready.png'), fullPage: true });
   const litMapPixel = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
@@ -728,9 +791,12 @@ try {
   await waitForRoleRevealToFinish(page);
   const sabotageButton = page.getByRole('button', { name: /Саботаж/ });
   await sabotageButton.waitFor({ state: 'visible', timeout: 10_000 });
-  const sabotageIconBox = await sabotageButton.locator('img').boundingBox();
-  assert.ok(sabotageIconBox && sabotageIconBox.width >= 64 && sabotageIconBox.height >= 64,
-    'Sabotage action must display the large original sabotage icon asset');
+  const sabotageIcon = sabotageButton.locator('svg');
+  const sabotageIconBox = await sabotageIcon.boundingBox();
+  assert.equal(await sabotageButton.locator('img').count(), 0,
+    'Sabotage uses an original in-house vector glyph, not copied game artwork');
+  assert.ok(sabotageIconBox && sabotageIconBox.width >= 32 && sabotageIconBox.height >= 32,
+    'Sabotage action must display its legible original vector icon');
   await sabotageButton.click();
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
   for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
@@ -748,7 +814,7 @@ try {
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
   await page.getByRole('button', { name: /MAP/ }).waitFor({ state: 'visible', timeout: 10_000 });
-  await page.getByRole('button', { name: /Clean Filters/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.getByText('Discussion', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
@@ -1028,9 +1094,9 @@ try {
   }, undefined, { timeout: 3_000 });
   await page.getByRole('button', { name: 'Настройки' }).click();
   const layoutSettings = page.locator('[role="dialog"]');
-  await layoutSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await layoutSettings.getByTestId('control-layout-select').selectOption('killReport');
   const preview = layoutSettings.getByTestId('control-layout-preview');
-  const dragHandle = layoutSettings.getByTestId('control-drag-taskAction');
+  const dragHandle = layoutSettings.getByTestId('control-drag-killReport');
   // The AI settings section now appears before the draggable-control editor.
   // Bring the selected preview and handle into the scrollable dialog viewport
   // before deriving touch coordinates; otherwise CDP touch events can target
@@ -1074,7 +1140,7 @@ try {
   await landscapePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await landscapePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const landscapeSettings = landscapePage.locator('[role="dialog"]');
-  await landscapeSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await landscapeSettings.getByTestId('control-layout-select').selectOption('killReport');
   const landscapePreview = landscapeSettings.getByTestId('control-layout-preview');
   const landscapePreviewBox = await landscapePreview.boundingBox();
   const landscapeFixedHud = await landscapeSettings.getByTestId('control-layout-fixed-hud').boundingBox();
@@ -1120,7 +1186,7 @@ try {
   await smallPhonePage.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
   await smallPhonePage.getByRole('button', { name: /^(Настройки|Settings)$/ }).click();
   const smallPhoneSettings = smallPhonePage.locator('[role="dialog"]');
-  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await smallPhoneSettings.getByTestId('control-layout-select').selectOption('killReport');
   const smallPhonePreview = smallPhoneSettings.getByTestId('control-layout-preview');
   const smallPhonePreviewBox = await smallPhonePreview.boundingBox();
   const smallPhoneFixedHud = await smallPhoneSettings.getByTestId('control-layout-fixed-hud').boundingBox();
@@ -1176,12 +1242,12 @@ try {
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
-  let movedSettingsBox = await page.getByTestId('gameplay-task-action').boundingBox();
-  assert.ok(movedSettingsBox, 'task action remains available at its saved custom position');
+  let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
+  assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
   assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
-    'dragged task action X position must be applied to the gameplay HUD');
+    'dragged action bar X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
-    'dragged task action Y position must be applied to the gameplay HUD');
+    'dragged action bar Y position must be applied to the gameplay HUD');
 
   // Persisted layout survives a fresh page load. Return to a stable lobby mock
   // before reloading, because the gameplay mock intentionally navigates to /game.
@@ -1191,25 +1257,25 @@ try {
   await settingsButtonAfterReload.waitFor({ state: 'visible', timeout: 15_000 });
   await settingsButtonAfterReload.click();
   const reloadedSettings = page.locator('[role="dialog"]');
-  await reloadedSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await reloadedSettings.getByTestId('control-layout-select').selectOption('killReport');
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
-  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
   assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
-    'saved task action X position must hydrate after reload');
+    'saved action bar X position must hydrate after reload');
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
-    'saved task action Y position must hydrate after reload');
+    'saved action bar Y position must hydrate after reload');
 
   // Drag directly onto the joystick: the editor should find a nearby free spot.
   const joystickHandle = reloadedSettings.getByTestId('control-drag-joystick');
   const joystickHandleBox = await joystickHandle.boundingBox();
-  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const taskHandleBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(joystickHandleBox && taskHandleBox, 'overlap regression controls are visible');
   await page.mouse.move(taskHandleBox.x + taskHandleBox.width / 2, taskHandleBox.y + taskHandleBox.height / 2);
   await page.mouse.down();
   await page.mouse.move(joystickHandleBox.x + joystickHandleBox.width / 2, joystickHandleBox.y + joystickHandleBox.height / 2, { steps: 8 });
   await page.mouse.up();
-  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const nudgedTaskBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   const currentJoystickBox = await joystickHandle.boundingBox();
   assert.ok(nudgedTaskBox && currentJoystickBox, 'dragged control and joystick remain visible');
   const previewOverlap =
@@ -1224,9 +1290,9 @@ try {
   await reloadedSettings.getByTestId('control-layout-cancel').click();
   await settingsButtonAfterReload.click();
   const cancelledSettings = page.locator('[role="dialog"]');
-  await cancelledSettings.getByTestId('control-layout-select').selectOption('taskAction');
+  await cancelledSettings.getByTestId('control-layout-select').selectOption('killReport');
   const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
-  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-taskAction').boundingBox();
+  const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
   assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
     'Cancel must preserve the previously saved X position');
@@ -1258,7 +1324,7 @@ try {
     const pendingByImage = new WeakMap();
     HTMLImageElement.prototype.decode = function () {
       const source = this.currentSrc || this.src;
-      if (!source.includes('map-hires.webp') && !source.includes('characters.png')) {
+      if (!source.includes('map-overview.webp') && !source.includes('characters.png')) {
         return originalDecode.call(this);
       }
       if (!pendingByImage.has(this)) {
@@ -1277,7 +1343,7 @@ try {
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
 
-  // If WebP loading fails, the original PNG map must still render and unlock play.
+  // If optional detail tiles fail, the canonical overview still renders and unlocks play.
   const fallbackPage = await browser.newPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
@@ -1285,42 +1351,38 @@ try {
     hasTouch: true,
   });
   fallbackPage.on('pageerror', error => failures.push(error.message));
-  let pngFallbackLoaded = false;
+  let overviewLoaded = false;
+  let tileManifestRejected = false;
   const mapAssetEvents = [];
   fallbackPage.on('request', request => {
-    if (request.url().includes('map-hires.')) mapAssetEvents.push(`request ${request.url()}`);
-  });
-  fallbackPage.on('requestfailed', request => {
-    if (request.url().includes('map-hires.')) mapAssetEvents.push(`failed ${request.url()} (${request.failure()?.errorText ?? 'unknown'})`);
+    if (request.url().includes('map-overview.webp') || request.url().includes('/map-tiles/manifest.json')) {
+      mapAssetEvents.push('request ' + request.url());
+    }
+    assert.equal(/map-hires\\.(?:png|webp)/.test(request.url()), false,
+      'gameplay must not request either divergent full-map source asset');
   });
   fallbackPage.on('response', response => {
-    if (response.url().includes('map-hires.')) {
-      mapAssetEvents.push(`response ${response.status()} ${response.url()}`);
-      if (response.url().includes('map-hires.png') && response.ok()) pngFallbackLoaded = true;
+    if (response.url().includes('map-overview.webp') && response.ok()) overviewLoaded = true;
+    if (response.url().includes('/map-tiles/manifest.json') && response.status() === 503) {
+      tileManifestRejected = true;
     }
   });
-  // Simulate a server-side WebP failure deterministically; the image's error
-  // handler must then request and decode the original PNG map.
   await fallbackPage.route('**/*', route => {
     const url = route.request().url();
-    if (url.includes('map-hires.webp')) {
-      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional WebP fallback test failure' });
+    if (url.includes('/map-tiles/manifest.json')) {
+      return route.fulfill({ status: 503, contentType: 'text/plain', body: 'intentional optional tile manifest failure' });
     }
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  const pngResponsePromise = fallbackPage.waitForResponse(
-    response => response.url().includes('map-hires.png') && response.ok(),
-    { timeout: 15_000 },
-  );
-  await fallbackPage.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
-  // A missing locator is considered "hidden" by Playwright; require the actual
-  // game canvas before judging the loading screen or fallback behavior.
+  await fallbackPage.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await fallbackPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
-  await pngResponsePromise;
   await fallbackPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
-  assert.equal(pngFallbackLoaded, true,
-    `failed WebP loading must fall back to the PNG map; observed map asset events: ${mapAssetEvents.join(' | ') || 'none'}; page errors: ${failures.join(' | ') || 'none'}`);
+  assert.equal(overviewLoaded, true,
+    `overview fallback must load when detail tiles fail; observed: ${mapAssetEvents.join(' | ')}`);
+  assert.equal(tileManifestRejected, true,
+    'the browser test must actually exercise a failed optional tile manifest');
+  await fallbackPage.screenshot({ path: join(visualQaDir, 'map-overview-tiles-fallback.png'), fullPage: true });
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
@@ -1441,7 +1503,14 @@ try {
   await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
-  await cameraPage.waitForTimeout(350);
+  // The camera's base image is intentionally the 0.5× overview; native 2×
+  // detail is rendered from the independently loaded visible tile set above it.
+  // Wait for the tile overlay as well, so this test cannot pass on the overview alone.
+  await cameraPage.waitForFunction(() => {
+    const status = window.__AG_TILE_DEBUG;
+    return !!status && status.ready === true && status.visibleTotal > 0 &&
+      status.visibleLoaded === status.visibleTotal && status.failed === 0;
+  }, undefined, { timeout: 20_000 });
   const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
   const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
     const context = canvas.getContext('2d');
@@ -1463,10 +1532,15 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
-  assert.equal(cameraBaseline.mapImageWidth, 6608,
-    'camera diagnostics must identify the native high-resolution WebP width');
-  assert.equal(cameraBaseline.mapImageHeight, 3808,
-    'camera diagnostics must identify the native high-resolution WebP height');
+  assert.equal(cameraBaseline.mapImageWidth, 1612,
+    'camera diagnostics must identify the canonical half-resolution overview width');
+  assert.equal(cameraBaseline.mapImageHeight, 929,
+    'camera diagnostics must identify the canonical half-resolution overview height');
+  const cameraTileStatus = await cameraPage.evaluate(() => window.__AG_TILE_DEBUG ?? null);
+  assert.ok(cameraTileStatus && cameraTileStatus.visibleLoaded > 0 &&
+    cameraTileStatus.visibleLoaded === cameraTileStatus.visibleTotal &&
+    cameraTileStatus.failed === 0 && cameraTileStatus.totalDecodedBytes > cameraTileStatus.overviewDecodedBytes,
+  'camera must draw loaded 2× detail tiles over the low-resolution overview');
   const worldRect = cameraBaseline.mapWorldRect;
   const sourceRect = cameraBaseline.mapSourceRect;
   assert.ok(worldRect && sourceRect &&

@@ -50,6 +50,35 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(contains([1900, 505], foliage.visibility(1500, 505, 500)), false);
 }
 
+// Direct and perimeter-aware line of sight share the same vector blockers.
+{
+  const wall = new CollisionWorld([
+    shape("los-wall", [[100, 0], [100, 200]], false, false, true),
+  ], 200, 200);
+  assert.equal(wall.isLineOfSightClear(20, 100, 80, 100), true);
+  assert.equal(wall.isLineOfSightClear(20, 100, 180, 100), false);
+  const consoleWorld = new CollisionWorld([
+    shape("console", [[140, 80], [190, 80], [190, 120], [140, 120]], true, false, true),
+  ], 240, 200);
+  assert.equal(consoleWorld.isLineOfSightClear(80, 100, 165, 100), false,
+    "a point inside a sight-blocking object is not directly visible");
+  assert.equal(consoleWorld.isLineOfSightToInteractionTarget(80, 100, 165, 100, 35), true,
+    "the visible perimeter of a console remains interactable");
+  assert.equal(consoleWorld.isLineOfSightToInteractionTarget(80, 100, 165, 100, 8), false,
+    "a target radius fully inside the solid cannot be interacted through it");
+}
+
+// A closed-looking polyline boundary must not fill the walkable garden interior.
+{
+  const ring = new CollisionWorld([
+    shape("planter-boundary", [[40, 40], [160, 40], [180, 100], [160, 160], [40, 160], [20, 100], [40, 40]], false, true, false),
+  ], 200, 200);
+  assert.equal(ring.isPlayerWalkableAtFeet(100, 100), true,
+    "the interior of a low planter boundary remains walkable");
+  assert.equal(ring.isPlayerWalkableAtFeet(100, 40), false,
+    "the authored planter boundary itself blocks the player footprint");
+}
+
 // A long sight-only wall crossing the radius must contribute exact clipped
 // endpoints even though neither authored endpoint lies inside the vision circle.
 {

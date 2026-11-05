@@ -64,24 +64,22 @@ export function SettingsButton({
   );
 }
 
-const DRAGGABLE_CONTROL_IDS = ['joystick', 'emergency', 'taskAction', 'killReport', 'sabotage', 'repair'] as const;
+const DRAGGABLE_CONTROL_IDS = ['joystick', 'emergency', 'killReport', 'sabotage'] as const;
 const DRAG_SHORT_LABELS: Record<GameplayControlId, string> = {
-  joystick: 'J', emergency: 'SOS', taskAction: 'ACT', killReport: 'K/R', sabotage: 'SAB', repair: 'FIX',
+  joystick: 'J', emergency: 'SOS', killReport: 'K/R/U', sabotage: 'SAB',
   map: 'MAP', tasks: 'TASK', settings: 'SET',
 };
 const DRAG_SAFE_HALF_WIDTH: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
-  joystick: 52, emergency: 70, taskAction: 84, killReport: 84, sabotage: 38, repair: 90,
+  joystick: 52, emergency: 70, killReport: 120, sabotage: 38,
 };
 const DRAG_SAFE_HALF_HEIGHT: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], number> = {
-  joystick: 52, emergency: 20, taskAction: 20, killReport: 38, sabotage: 38, repair: 20,
+  joystick: 52, emergency: 20, killReport: 38, sabotage: 38,
 };
 const ACTUAL_CONTROL_DIMENSIONS: Record<(typeof DRAGGABLE_CONTROL_IDS)[number], { width: number; height: number }> = {
   joystick: { width: 104, height: 104 },
   emergency: { width: 140, height: 40 },
-  taskAction: { width: 168, height: 40 },
-  killReport: { width: 168, height: 76 },
+  killReport: { width: 240, height: 76 },
   sabotage: { width: 76, height: 76 },
-  repair: { width: 180, height: 40 },
 };
 
 function constrainDragPosition(id: GameplayControlId, position: ControlPosition): ControlPosition {

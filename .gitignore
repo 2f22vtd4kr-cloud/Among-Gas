@@ -59,3 +59,11 @@ Thumbs.db
 
 # Local vector-collision editor candidate backups
 /lib/shared/src/collision/.backups/
+
+# Generated exact-scale map tiles and overview (rebuilt from the canonical WebP master)
+/artifacts/telegram-game/public/map-tiles/
+/artifacts/telegram-game/public/map-tiles-sharp/
+/artifacts/telegram-game/public/map-overview.webp
+
+# Generated production vector collision artifacts (reproducibly rebuilt before dev/build)
+/lib/shared/src/collision/generatedDocument.ts

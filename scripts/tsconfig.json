@@ -11,6 +11,7 @@
     "src"
   ],
   "exclude": [
-    "src/testVectorCollision.ts"
+    "src/testVectorCollision.ts",
+    "src/buildCollisionDocument.ts"
   ]
 }

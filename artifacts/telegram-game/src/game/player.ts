@@ -13,8 +13,10 @@ import {
   clampPlayerPositionToMapBounds,
   type Grid,
 } from './collisionMap';
+import type { CollisionWorld } from '@workspace/shared/collision';
 import {
   PLAYER_SPEED_PX_PER_SEC,
+  FEET_OFFSET_Y,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
@@ -83,7 +85,7 @@ function isKeyDown(keys: ReadonlySet<string>, aliases: string[]): boolean {
  * and always renders the single static "ghost" pose instead of walk-cycling.
  */
 export function stepPlayer(
-  grid: Grid,
+  grid: Grid | CollisionWorld,
   state: PlayerState,
   keys: ReadonlySet<string>,
   dtMs: number,
@@ -109,7 +111,15 @@ export function stepPlayer(
       // Ghosts phase through walls but their complete foot base stays inside the map.
       [x, y] = clampPlayerPositionToMapBounds(nx, ny);
     } else {
-      [x, y] = resolvePlayerMovement(grid, x, y, nx, ny);
+      if ('movePlayerAtFeet' in grid) {
+        const [feetX, feetY] = grid.movePlayerAtFeet(
+          x, y + FEET_OFFSET_Y, nx - x, ny - y,
+        );
+        x = feetX;
+        y = feetY - FEET_OFFSET_Y;
+      } else {
+        [x, y] = resolvePlayerMovement(grid, x, y, nx, ny);
+      }
     }
   }
 
@@ -131,6 +141,8 @@ export function stepPlayer(
 }
 
 /** Whether the player's current spawn/position is actually walkable — used for a startup sanity check. */
-export function isSpawnWalkable(grid: Grid): boolean {
-  return isPlayerSpawnPositionClear(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
+export function isSpawnWalkable(grid: Grid | CollisionWorld): boolean {
+  return 'isPlayerSpawnPositionClear' in grid
+    ? grid.isPlayerSpawnPositionClear(PLAYER_SPAWN.x, PLAYER_SPAWN.y)
+    : isPlayerSpawnPositionClear(grid, PLAYER_SPAWN.x, PLAYER_SPAWN.y);
 }
