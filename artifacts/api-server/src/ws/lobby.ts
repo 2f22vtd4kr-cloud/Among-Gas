@@ -1819,7 +1819,7 @@ export class LobbyManager {
         return false; // the reporter must be within the authoritative corpse interaction radius
       }
       if (!isLineOfSightClear(
-        INTERACTION_COLLISION_GRID,
+        INTERACTION_SIGHT_GRID,
         reporter.x, reporter.y + FEET_OFFSET_Y,
         body.corpseX, body.corpseY + FEET_OFFSET_Y,
       )) return false;
