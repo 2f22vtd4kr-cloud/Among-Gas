@@ -82,13 +82,59 @@ try {
   const slots = Array.from({ length: playerCount }, (_, index) => delta[2 + index * 5]);
   assert.deepEqual(slots, [0, 1, 2, 3, 4], 'authoritative delta must include the host and all four bot slots');
 
+  // Capture the server-authoritative starting positions. The packet uses one
+  // five-byte record per moving player: slot + signed 16-bit wire X/Y.
+  const initialBotPositions = new Map<number, { x: number; y: number }>();
+  for (let index = 0; index < playerCount; index++) {
+    const offset = 2 + index * 5;
+    const slot = delta[offset];
+    if (slot === 0) continue;
+    initialBotPositions.set(slot, {
+      x: delta.readInt16LE(offset + 1),
+      y: delta.readInt16LE(offset + 3),
+    });
+  }
+  assert.equal(initialBotPositions.size, 4, 'the initial authoritative snapshot must include four bot positions');
+
   assert.equal(
     packets.some(packet => packet[0] === 0x10 && packet[1] === 0x03),
     false,
     'solo room must not broadcast a joinable room-code update',
   );
 
-  console.log('PASS: CREATE_SOLO authenticates, auto-starts, assigns role/tasks, syncs four bots, and keeps the room private');
+  // Protocol setup alone is not a playable solo session: prove that the
+  // server's live 5Hz AI loop actually advances at least one bot after the
+  // host crosses the same gameplay-ready barrier as the real client.
+  const movedBotSlots = new Set<number>();
+  const movementDeadline = Date.now() + 8_000;
+  while (Date.now() < movementDeadline && movedBotSlots.size === 0) {
+    for (let index = packets.length - 1; index >= 0; index--) {
+      const packet = packets[index];
+      if (packet[0] !== 0xFF || packet.length < 7) continue;
+      packets.splice(index, 1);
+      const count = packet[1];
+      for (let record = 0; record < count; record++) {
+        const offset = 2 + record * 5;
+        const slot = packet[offset];
+        const initial = initialBotPositions.get(slot);
+        if (!initial) continue;
+        const x = packet.readInt16LE(offset + 1);
+        const y = packet.readInt16LE(offset + 3);
+        if (Math.abs(x - initial.x) + Math.abs(y - initial.y) >= 1) {
+          movedBotSlots.add(slot);
+        }
+      }
+    }
+    if (movedBotSlots.size === 0) await delay(40);
+  }
+  assert.ok(
+    movedBotSlots.size >= 1,
+    'at least one of the four server-controlled bots must move after the solo gameplay-ready barrier',
+  );
+
+  console.log(
+    'PASS: CREATE_SOLO authenticates, starts, assigns role/tasks, syncs four bots, advances live bot movement, and keeps the room private',
+  );
 } finally {
   host.close();
   await once(host, 'close').catch(() => {});
