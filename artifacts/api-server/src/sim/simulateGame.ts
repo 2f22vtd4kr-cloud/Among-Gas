@@ -25,6 +25,7 @@ import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@w
 import { TASK_DEFS } from '@workspace/shared/tasks';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import type { CollisionWorld } from '@workspace/shared/collision';
 import type { SimGameResult, SimWinner } from './types.js';
 import { createSeededRandom, withSeededRandom } from './seededRandom.js';
 
@@ -52,7 +53,7 @@ const simulationCollisionGrid = getProductionCollisionWorld();
 /** Only an actual vent occupant is exempt from ordinary walkability checks. */
 export function isSimulationCollisionViolation(
   player: { alive: boolean; inVent?: boolean; x: number; y: number },
-  collisionGrid: Uint8Array,
+  collisionGrid: Uint8Array | CollisionWorld,
 ): boolean {
   return player.alive && player.inVent !== true &&
     !isPlayerPositionWalkable(collisionGrid, player.x, player.y);
