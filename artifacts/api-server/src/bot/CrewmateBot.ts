@@ -116,7 +116,7 @@ export class CrewmateBot extends BotAgent {
         username: player.username,
         alive: player.alive,
       })),
-      lobby.meeting?.messages ?? [],
+      this.getPublicMeetingVoteMessages(lobby),
     );
   }
 
