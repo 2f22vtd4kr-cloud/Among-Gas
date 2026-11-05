@@ -354,7 +354,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(lobby.phase, 'MEETING');
   assert.equal(impostor.player.inVent, false, 'meeting must release the vent occupant');
   assert.equal(impostor.player.ventId, undefined);
-  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+  assert.equal(isPlayerPositionWalkable(productionCollisionWorld, impostor.player.x, impostor.player.y), true,
     'meeting-forced release must choose a legal player footprint');
   const forcedCorrection = impostor.packets.find(packet => packet[0] === 0x22);
   assert.ok(forcedCorrection && forcedCorrection.length === 5,
