@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
 import { isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
 import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
@@ -11,6 +12,7 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
 const grid = getProductionCollisionWorld();
+const sightGrid = buildPreciseCollisionGrid();
 const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
 assert.ok(task, 'at least one task console must be a walkable bot stand-off position');
 
@@ -103,7 +105,7 @@ try {
       if (!isPlayerPositionWalkable(grid, candidate.x, candidate.y)) continue;
       if (!isBotNavigationReachable(candidate.x, candidate.y + FEET_OFFSET_Y)) continue;
       if (!isLineOfSightToInteractionTarget(
-        grid, candidate.x, candidate.y + FEET_OFFSET_Y,
+        sightGrid, candidate.x, candidate.y + FEET_OFFSET_Y,
         fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
       )) continue;
       reachableVisibleApproach = candidate;
@@ -116,7 +118,7 @@ try {
   assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
     'Fuel Engine approach must be connected to the real spawn');
   assert.equal(isLineOfSightToInteractionTarget(
-    grid, approach.x, approach.y + FEET_OFFSET_Y,
+    sightGrid, approach.x, approach.y + FEET_OFFSET_Y,
     fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
   ), true, 'Fuel Engine bot approach must be actually visible, not the nearest non-visible fallback');
   const player: LobbyPlayer = {
