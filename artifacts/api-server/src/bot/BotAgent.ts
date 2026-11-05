@@ -49,7 +49,10 @@ const navigationGeometry: PathGridGeometry = {
 };
 
 /** Navigation cells are rasterized from the exact same vector world as live movement. */
-const navigationGrid = movementGrid.rasterizePlayerNav(NAV_COLS, NAV_ROWS).walk;
+const navigationGrid = Uint8Array.from(
+  movementGrid.rasterizePlayerNav(NAV_COLS, NAV_ROWS).walk,
+  value => value === 1 ? 0 : 1,
+);
 
 /** Precompute the walkable component connected to the real spawn point. */
 function buildSpawnReachability(): Uint8Array {
