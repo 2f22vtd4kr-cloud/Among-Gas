@@ -22,7 +22,8 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
-import { getProductionCollisionWorld, type CollisionWorld } from '@workspace/shared/collision/productionWorld';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import type { CollisionWorld } from '@workspace/shared/collision';
 import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
