@@ -7,7 +7,6 @@ import assert from 'node:assert/strict';
 import { PathCache } from '@workspace/shared';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
-  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isLineOfSightToInteractionTarget,
   isPlayerSpawnPositionClear,
@@ -73,8 +72,8 @@ import {
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
-const grid = buildPreciseCollisionGrid();
-const productionCollisionWorld = getProductionCollisionWorld();
+const grid = getProductionCollisionWorld();
+const productionCollisionWorld = grid;
 
 // A cached path is valid only for the exact world-space grid geometry. Two
 // grids may share row/column counts while mapping the same cells to different
@@ -206,17 +205,17 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   manager.disposeLobby(lobby);
 }
 
-// The garden surrounding the statue is walkable; only the statue footprint
-// itself remains blocked by its small 2×2 RLE component.
+// The garden perimeter remains a boundary; only the measured statue pedestal
+// is solid. These assertions use the same vector world as live movement.
 {
   assert.equal(isPlayerPositionWalkable(grid, 1640, 449), true,
     'the western path through the central garden must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1810, 449), true,
     'the eastern path through the central garden must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1735, 449), true,
-    'the decorative garden floor must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1735, 556 - FEET_OFFSET_Y), false,
-    'the central statue base must remain blocked at its feet-space position');
+  assert.equal(isPlayerPositionWalkable(grid, 1745, 550 - FEET_OFFSET_Y), true,
+    'the decorative garden floor outside the pedestal must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1745, 497 - FEET_OFFSET_Y), false,
+    'the measured central statue pedestal must remain blocked at its feet-space position');
   assert.equal(isPlayerPositionWalkable(grid, 1450, 449), true,
     'the open lobby floor west of the garden must remain walkable');
 }
