@@ -33,6 +33,7 @@ import { NO_TARGET } from '@workspace/shared/coords';
 import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
 import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
+import { PublicMeetingEvidenceLedger } from './publicMeetingMemory.js';
 
 export { NO_TARGET };
 
@@ -164,6 +165,12 @@ export abstract class BotAgent {
   private lastDiscussionReplyAtMs = 0;
   private voteRequestMeeting: Lobby['meeting'] = null;
   private voteRequestPending = false;
+  // One bounded ledger per bot agent. Lobby identity is checked on every meeting
+  // tick so an agent can never carry evidence from one lobby into another.
+  private evidenceLobby: Lobby | null = null;
+  private evidenceMeeting: Lobby['meeting'] = null;
+  private evidenceRoundId = 0;
+  private readonly publicEvidence = new PublicMeetingEvidenceLedger();
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -209,6 +216,52 @@ export abstract class BotAgent {
       if (meeting.votes.has(self.slot)) return; // already voted
       this.requestMeetingVote(lobby, self, manager, meeting);
     }
+  }
+
+  /**
+   * Ingest the public transcript once per message. The ledger is owned by this
+   * bot instance, reset on lobby identity changes, and never receives private
+   * roles, coordinates, or hidden server events.
+   */
+  private capturePublicMeetingEvidence(
+    lobby: Lobby,
+    meeting: NonNullable<Lobby['meeting']>,
+  ): void {
+    if (this.evidenceLobby !== lobby) {
+      this.evidenceLobby = lobby;
+      this.evidenceMeeting = null;
+      this.evidenceRoundId = 0;
+      this.publicEvidence.reset();
+    }
+    if (this.evidenceMeeting !== meeting) {
+      this.evidenceMeeting = meeting;
+      this.evidenceRoundId++;
+    }
+    const roster = Array.from(lobby.players.values()).map(player => ({
+      slot: player.slot,
+      username: player.username,
+    }));
+    this.publicEvidence.ingest(this.evidenceRoundId, meeting.messages, roster);
+  }
+
+  /** Public chat history retained for this bot only; never includes secret state. */
+  protected getPublicMeetingVoteMessages(lobby: Lobby): readonly { slot: number; text: string }[] {
+    const meeting = lobby.meeting;
+    if (meeting) this.capturePublicMeetingEvidence(lobby, meeting);
+    return this.publicEvidence.voteMessages();
+  }
+
+  /** Bounded earlier-round claims for a model prompt; each remains unverified. */
+  protected getPriorPublicMeetingTranscript(lobby: Lobby): string {
+    const meeting = lobby.meeting;
+    if (meeting) this.capturePublicMeetingEvidence(lobby, meeting);
+    return meeting ? this.publicEvidence.priorTranscript(this.evidenceRoundId) : '';
+  }
+
+  protected getPriorPublicMeetingEvidence(lobby: Lobby) {
+    const meeting = lobby.meeting;
+    if (meeting) this.capturePublicMeetingEvidence(lobby, meeting);
+    return meeting ? this.publicEvidence.priorEntries(this.evidenceRoundId) : [];
   }
 
   /** Retrieve the session-scoped Groq key without exposing it to client state. */
@@ -261,7 +314,12 @@ export abstract class BotAgent {
       slot: message.slot,
       text: message.text,
     }));
-    const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
+    const prompt = buildPublicBotVoteMessages(
+      self.username,
+      publicRoster,
+      publicTranscript,
+      this.getPriorPublicMeetingEvidence(lobby),
+    );
 
     void (async () => {
       const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs, { temperature: 0.2, jsonMode: true });
