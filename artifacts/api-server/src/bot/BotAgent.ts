@@ -11,6 +11,7 @@ import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
   isPlayerPositionWalkable,
+  buildPreciseCollisionGrid,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
 } from '@workspace/shared/collisionMap';
@@ -37,6 +38,7 @@ export { NO_TARGET };
 /** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
 const movementGrid: CollisionWorld = getProductionCollisionWorld();
+const sightGrid = buildPreciseCollisionGrid();
 const NAV_COLS = COLS * 2;
 const NAV_ROWS = ROWS * 2;
 const NAV_CELL_X = CELL_X / 2;
@@ -504,7 +506,7 @@ export abstract class BotAgent {
    */
   protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
     return isLineOfSightClear(
-      movementGrid,
+      sightGrid,
       from.x, from.y + FEET_OFFSET_Y,
       to.x, to.y + FEET_OFFSET_Y,
     );
@@ -525,7 +527,7 @@ export abstract class BotAgent {
       isBotNavigationReachable(p.x, p.y + FEET_OFFSET_Y);
     const visible = (p: Point): boolean =>
       isLineOfSightToInteractionTarget(
-        movementGrid,
+        sightGrid,
         p.x, p.y + FEET_OFFSET_Y,
         target.x, target.y + FEET_OFFSET_Y,
         targetRadiusPx,
