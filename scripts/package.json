@@ -20,7 +20,8 @@
     "test:map-tiles-browser": "node ./test-map-tiles-browser.mjs",
     "test:production-world": "pnpm run build:collision && pnpm run test:vector-runtime-isolation",
     "test:vector-runtime-integration": "node ./test-vector-runtime-isolation.mjs",
-    "test:vector-runtime-isolation": "node ./test-vector-runtime-isolation.mjs"
+    "test:vector-runtime-isolation": "node ./test-vector-runtime-isolation.mjs",
+    "test:redline-collision": "tsx ./src/testRedlineCollision.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
