@@ -17,6 +17,7 @@ import {
 import {
   FEET_OFFSET_Y,
   PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
   MAP_W,
   MAP_H,
   MEETING_DISCUSSION_MS,
@@ -107,6 +108,25 @@ function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
   const row = Math.floor(feetY / NAV_CELL_Y);
   return col >= 0 && col < NAV_COLS && row >= 0 && row < NAV_ROWS &&
     navigationGrid[row * NAV_COLS + col] === 0;
+}
+
+/** Snap goals to the same cell centres returned by PathCache's A* waypoints. */
+function snapNavigationPoint(point: Point): Point {
+  const col = Math.floor(point.x / NAV_CELL_X);
+  const row = Math.floor((point.y + FEET_OFFSET_Y) / NAV_CELL_Y);
+  return {
+    x: (col + 0.5) * NAV_CELL_X,
+    y: (row + 0.5) * NAV_CELL_Y - FEET_OFFSET_Y,
+  };
+}
+
+/** Keep approach goals out of pinched wall gaps; leave extra room for the feet collider. */
+function hasApproachClearance(point: Point): boolean {
+  const feetY = point.y + FEET_OFFSET_Y;
+  const radius = PLAYER_RADIUS + 4;
+  return movementGrid.isWalkable(point.x - PLAYER_HALF_WIDTH, feetY, radius) &&
+    movementGrid.isWalkable(point.x, feetY, radius) &&
+    movementGrid.isWalkable(point.x + PLAYER_HALF_WIDTH, feetY, radius);
 }
 
 /** Reject bot waypoints unless the exact vector-world feet sweep reaches them. */
@@ -537,7 +557,7 @@ export abstract class BotAgent {
     // player should stand inside. Always approach from outside that footprint;
     // targeting its centre can put a bot in a narrow car/console pocket that is
     // technically walkable but cannot be reached by the swept player collider.
-    const minStandOff = Math.max(8, targetRadiusPx + PLAYER_RADIUS + 4);
+    const minStandOff = Math.max(8, targetRadiusPx + PLAYER_RADIUS + 12);
     let result: Point | null = null;
     let nearestReachable: Point | null = null;
     {
@@ -547,8 +567,13 @@ export abstract class BotAgent {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
-          const candidate = { x: target.x + Math.cos(angle) * r, y: target.y + Math.sin(angle) * r };
-          if (!reachable(candidate)) continue;
+          const candidate = snapNavigationPoint({
+            x: target.x + Math.cos(angle) * r,
+            y: target.y + Math.sin(angle) * r,
+          });
+          const candidateDistance = Math.hypot(candidate.x - target.x, candidate.y - target.y);
+          if (candidateDistance < minStandOff || candidateDistance > maxRadius ||
+              !hasApproachClearance(candidate) || !reachable(candidate)) continue;
           nearestReachable ??= candidate;
           if (!visible(candidate)) continue;
           result = candidate;
