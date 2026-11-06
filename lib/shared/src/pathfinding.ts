@@ -313,23 +313,28 @@ function smooth(
   const result: Cell[] = [raw[0]];
   let anchor = 0;
 
-  for (let i = 2; i < raw.length; i++) {
-    const visible = hasLineOfSight(
-      grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row, geometry,
-    );
-    const collisionSafe = !validateStep || validateStep(
-      cellCentre(raw[anchor].col, raw[anchor].row, geometry),
-      cellCentre(raw[i].col, raw[i].row, geometry),
-    );
-    // A clear raster chord is not enough for hand-traced vector walls:
-    // validate the entire swept player footprint against the live collision
-    // world before skipping any intermediate A* cells.
-    if (!visible || !collisionSafe) {
-      result.push(raw[i - 1]);
-      anchor = i - 1;
+  // Greedy string-pulling: try the farthest remaining cell first, then walk
+  // backward only as far as needed to find a safe chord. This avoids checking
+  // every progressively longer segment in a long open corridor.
+  while (anchor < raw.length - 1) {
+    let candidate = raw.length - 1;
+    while (candidate > anchor + 1) {
+      const visible = hasLineOfSight(
+        grid, raw[anchor].col, raw[anchor].row, raw[candidate].col, raw[candidate].row, geometry,
+      );
+      const collisionSafe = visible && (!validateStep || validateStep(
+        cellCentre(raw[anchor].col, raw[anchor].row, geometry),
+        cellCentre(raw[candidate].col, raw[candidate].row, geometry),
+      ));
+      // A clear raster chord is not enough for hand-traced vector walls:
+      // validate the entire swept player footprint against the live collision
+      // world before skipping any intermediate A* cells.
+      if (visible && collisionSafe) break;
+      candidate--;
     }
+    result.push(raw[candidate]);
+    anchor = candidate;
   }
-  result.push(raw[raw.length - 1]);
   return result;
 }
 
