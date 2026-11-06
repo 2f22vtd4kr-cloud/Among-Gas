@@ -175,7 +175,6 @@ function astar(
   startCol: number, startRow: number,
   goalCol:  number, goalRow:  number,
   geometry: PathGridGeometry,
-  validateStep?: (from: Point, to: Point) => boolean,
 ): Cell[] | null {
   if (!isWalkable(grid, startCol, startRow, geometry) ||
       !isWalkable(grid, goalCol,  goalRow, geometry)) {
@@ -236,10 +235,6 @@ function astar(
       if (diagonal &&
           (!isWalkable(grid, curCol + dc, curRow, geometry) ||
            !isWalkable(grid, curCol,      curRow + dr, geometry))) continue;
-      if (validateStep && !validateStep(
-        cellCentre(curCol, curRow, geometry),
-        cellCentre(nc, nr, geometry),
-      )) continue;
       const ni = cellIndex(nc, nr, geometry);
       if (closed[ni]) continue;
 
@@ -378,7 +373,7 @@ export function findPath(
   const sc = pixelToCell(start.x, start.y, geometry);
   const gc = pixelToCell(goal.x,  goal.y, geometry);
 
-  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry, validateStep);
+  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry);
   if (!raw) return null;
 
   const routed = smoothPath ? smooth(grid, raw, geometry, validateStep) : raw;
