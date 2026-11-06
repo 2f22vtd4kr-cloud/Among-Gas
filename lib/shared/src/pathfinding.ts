@@ -346,6 +346,7 @@ export function findPath(
   start: Point,
   goal:  Point,
   geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
+  smoothPath = true,
 ): PathResult | null {
   if (!isValidPathInput(grid, start, goal, geometry)) return null;
 
@@ -355,8 +356,8 @@ export function findPath(
   const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry);
   if (!raw) return null;
 
-  const smoothed = smooth(grid, raw, geometry);
-  const waypoints = smoothed.map(cell => cellCentre(cell.col, cell.row, geometry));
+  const routed = smoothPath ? smooth(grid, raw, geometry) : raw;
+  const waypoints = routed.map(cell => cellCentre(cell.col, cell.row, geometry));
 
   // Drop the first waypoint if it's effectively the start position's cell centre
   // (bots should move *towards* the next meaningful cell, not stand still).
@@ -397,6 +398,7 @@ export class PathCache {
     goal:  Point,
     forceRefresh = false,
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
+    smoothPath = true,
   ): PathResult | null {
     if (!isValidPathInput(grid, start, goal, geometry)) return null;
     // A cache key made only from coordinates is unsafe across distinct map
@@ -408,13 +410,13 @@ export class PathCache {
 
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
-    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
+    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}:${smoothPath ? "smooth" : "raw"}`;
 
     if (!forceRefresh && this.cache.has(key)) {
       return this.cache.get(key)!;
     }
 
-    const result = findPath(grid, start, goal, geometry);
+    const result = findPath(grid, start, goal, geometry, smoothPath);
     this.cache.set(key, result);
     return result;
   }
