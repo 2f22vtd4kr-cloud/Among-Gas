@@ -129,13 +129,14 @@ function hasApproachClearance(point: Point): boolean {
     movementGrid.isWalkable(point.x + PLAYER_HALF_WIDTH, feetY, radius);
 }
 
-/** Reject bot waypoints unless the exact vector-world feet sweep reaches them. */
-function canTraverse(from: Point, to: Point): boolean {
-  if (!isNavigationPositionWalkable(to.x, to.y)) return false;
+/** Return the actual safe feet endpoint, never the requested point near a blocked edge. */
+function traverseTo(from: Point, to: Point): Point | null {
+  if (!isNavigationPositionWalkable(to.x, to.y)) return null;
   const [x, y] = movementGrid.movePlayerAtFeet(
     from.x, from.y, to.x - from.x, to.y - from.y,
   );
-  return Math.hypot(x - to.x, y - to.y) <= 0.75;
+  if (Math.hypot(x - to.x, y - to.y) > 0.75) return null;
+  return { x, y };
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
@@ -430,7 +431,7 @@ export abstract class BotAgent {
       ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
       : feetGoal;
 
-    let next: Point | null = canTraverse(feetStart, direct) ? direct : null;
+    let next: Point | null = traverseTo(feetStart, direct);
     if (next === null) {
       // A smoothed waypoint may still be unsafe near a thin wall or corner.
       // Probe short, collision-safe detours rather than caching the rejected
@@ -458,14 +459,15 @@ export abstract class BotAgent {
             x: feetStart.x + Math.cos(angle) * length,
             y: feetStart.y + Math.sin(angle) * length,
           };
-          if (!canTraverse(feetStart, candidate)) continue;
-          const remaining = Math.hypot(waypoint.x - candidate.x, waypoint.y - candidate.y);
+          const traversed = traverseTo(feetStart, candidate);
+          if (!traversed) continue;
+          const remaining = Math.hypot(waypoint.x - traversed.x, waypoint.y - traversed.y);
           const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
           // Prefer progress, with a small penalty for wide detours and tiny steps.
           const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
           if (score > bestScore) {
             bestScore = score;
-            next = candidate;
+            next = traversed;
           }
         }
         if (next !== null && bestScore > 0) break;
