@@ -384,6 +384,19 @@ export function findPath(
   const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry, validateStep);
   if (!raw) return null;
 
+  // A* validates centre-to-centre edges. Also validate the two partial edges
+  // between the caller's exact anchors and their containing cell centres;
+  // otherwise trimming the start cell can make the follower cut a blocked
+  // corner on its very first segment.
+  if (validateStep) {
+    const startCentre = cellCentre(sc.col, sc.row, geometry);
+    const goalCentre = cellCentre(gc.col, gc.row, geometry);
+    if ((Math.hypot(startCentre.x - start.x, startCentre.y - start.y) > 0.75 &&
+         !validateStep(start, startCentre)) ||
+        (Math.hypot(goalCentre.x - goal.x, goalCentre.y - goal.y) > 0.75 &&
+         !validateStep(goalCentre, goal))) return null;
+  }
+
   const routed = smoothPath ? smooth(grid, raw, geometry, validateStep) : raw;
   const waypoints = routed.map(cell => cellCentre(cell.col, cell.row, geometry));
 
@@ -392,7 +405,7 @@ export function findPath(
   const start_wp = waypoints[0];
   const distSq = (start_wp.x - start.x) ** 2 + (start_wp.y - start.y) ** 2;
   const cellDiagSq = geometry.cellX ** 2 + geometry.cellY ** 2;
-  const trimmed = distSq < cellDiagSq * 0.25 && waypoints.length > 1
+  const trimmed = !validateStep && distSq < cellDiagSq * 0.25 && waypoints.length > 1
     ? waypoints.slice(1)
     : waypoints;
 
