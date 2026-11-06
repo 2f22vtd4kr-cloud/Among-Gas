@@ -135,15 +135,14 @@ function hasApproachClearance(point: Point): boolean {
 
 /** Return the actual safe feet endpoint, never the requested point near a blocked edge. */
 function traverseTo(from: Point, to: Point): Point | null {
-  if (!isNavigationPositionWalkable(to.x, to.y)) return null;
   const [x, y] = movementGrid.movePlayerAtFeet(
     from.x, from.y, to.x - from.x, to.y - from.y,
   );
-  // Sliding may stop short of the requested waypoint while still making
-  // safe progress along a wall. Keep that actual swept endpoint; callers
-  // decide whether it advances the current route.
-  if (Math.hypot(x - from.x, y - from.y) < 0.01 ||
-      !isNavigationPositionWalkable(x, y)) return null;
+  // The vector world is authoritative. Do not reject a safe continuous
+  // position merely because the centre of its coarse A* cell is blocked.
+  // Sliding may stop short of the requested point while still making safe
+  // progress along a wall, so return the actual swept endpoint.
+  if (Math.hypot(x - from.x, y - from.y) < 0.01) return null;
   return { x, y };
 }
 
@@ -599,7 +598,12 @@ export abstract class BotAgent {
         }
       }
       if (detour) current = detour;
-      this.clearPath();
+      // A missing route is cached while the bot is stationary. Replan after
+      // a real detour advances at least one navigation cell, not on every
+      // 200ms tick; this avoids repeatedly searching the entire grid at a wall.
+      const detourProgress = Math.hypot(current.x - feetStart.x, current.y - feetStart.y);
+      if (failedWaypoint || (route && route.length > 0) ||
+          detourProgress >= Math.min(NAV_CELL_X, NAV_CELL_Y)) this.clearPath();
     }
 
     if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) > 0.01) {
