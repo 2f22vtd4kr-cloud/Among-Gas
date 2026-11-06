@@ -143,6 +143,14 @@ function traverseTo(from: Point, to: Point): Point | null {
   return { x, y };
 }
 
+/** Exact continuous swept-footprint test between adjacent A* cell centres. */
+function canTraverseNavigationEdge(from: Point, to: Point): boolean {
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
+  );
+  return Math.hypot(x - to.x, y - to.y) <= 0.75;
+}
+
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
 export const BOT_SPEED_PX = 80;
 /** Living bots tick at 5Hz and walk at roughly 200px/s, matching the human player. */
@@ -426,7 +434,7 @@ export abstract class BotAgent {
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
     // Follow raw A* cell centres: smoothed chords can graze hand-traced vector walls.
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry, false);
+    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, canTraverseNavigationEdge);
     const waypoint = result?.waypoints[0] ?? feetGoal;
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
