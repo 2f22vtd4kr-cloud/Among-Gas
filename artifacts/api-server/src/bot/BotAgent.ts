@@ -155,10 +155,6 @@ function traverseVector(from: Point, to: Point): Point | null {
   return Math.hypot(x - to.x, y - to.y) <= 0.75 ? { x, y } : null;
 }
 
-function canTraverseNavigationEdge(from: Point, to: Point): boolean {
-  return traverseVector(from, to) !== null;
-}
-
 /** Distance from a point to a finite route segment. */
 function distanceToSegment(point: Point, start: Point, end: Point): number {
   const dx = end.x - start.x;
@@ -463,7 +459,7 @@ export abstract class BotAgent {
     // re-running A* every tick or cutting a smoothed chord across a corner.
     if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
       const result = this.pathCache.find(
-        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, canTraverseNavigationEdge,
+        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false,
       );
       this.navigationGoalKey = goalKey;
       this.navigationRoute = result?.waypoints ?? [];
