@@ -226,6 +226,8 @@ jobs:
             artifacts/telegram-game/collision-redline-vector-qa.png
             artifacts/telegram-game/collision-redline-detail-atlas.png
             artifacts/telegram-game/collision-redline-detail-qa/*.png
+            lib/shared/src/collision/collision.v1.json
+            lib/shared/src/collision/generatedDocument.ts
             artifacts/telegram-game/collision-qa-overlay.png
             artifacts/telegram-game/collision-reference-overlay.png
             attached_assets/IMG_2907_1783632830477.jpeg
