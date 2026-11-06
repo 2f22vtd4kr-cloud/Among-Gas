@@ -469,7 +469,7 @@ export abstract class BotAgent {
       this.navigationRouteOrigin = feetStart;
     }
 
-    let route = this.navigationRoute;
+    let route: Point[] | null = this.navigationRoute;
     if (route && route.length > 0) {
       while (this.navigationRouteIndex < route.length &&
           Math.hypot(
