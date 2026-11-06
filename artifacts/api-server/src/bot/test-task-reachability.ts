@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
-import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
 import {
   isLineOfSightToInteractionTarget,
   isPlayerPositionWalkable,
@@ -34,7 +33,7 @@ class TaskReachabilityProbe extends BotAgent {
 }
 
 const movementGrid = getProductionCollisionWorld();
-const sightGrid = buildPreciseCollisionGrid();
+const sightGrid = movementGrid;
 const probe = new TaskReachabilityProbe();
 const results = TASK_DEFS.map(task => {
   const point = probe.approach(task);
