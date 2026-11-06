@@ -12,8 +12,22 @@ import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
 const grid = getProductionCollisionWorld();
 const sightGrid = grid;
-const task = TASK_DEFS.find(candidate => candidate.steps > 1 && isPlayerPositionWalkable(grid, candidate.x, candidate.y));
-assert.ok(task, 'at least one task console must be a walkable bot stand-off position');
+class TestableCrewmateBot extends CrewmateBot {
+  approach(target: { x: number; y: number }, radius = TASK_INTERACTION_RANGE_PX - 8, targetRadiusPx = 24) {
+    return this.nearestApproachPoint(target, radius, targetRadiusPx);
+  }
+}
+const bot = new TestableCrewmateBot();
+const task = TASK_DEFS.find(candidate => {
+  if (candidate.steps <= 1) return false;
+  const approach = bot.approach(candidate, TASK_INTERACTION_RANGE_PX - 8, candidate.interactionTargetRadiusPx ?? 24);
+  return isPlayerPositionWalkable(grid, approach.x, approach.y) &&
+    isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y);
+});
+assert.ok(task, 'at least one multi-step task must have a spawn-reachable collision-safe approach point');
+const taskApproach = bot.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
+assert.equal(isBotNavigationReachable(taskApproach.x, taskApproach.y + FEET_OFFSET_Y), true,
+  'the sabotage/corpse regression must start at a real reachable task stand-off point');
 
 const fakeSocket = {
   readyState: 3,
@@ -25,8 +39,8 @@ const botPlayer: LobbyPlayer = {
   tgUserId: -1,
   username: 'Crewmate bot',
   ws: fakeSocket,
-  x: task.x,
-  y: task.y,
+  x: taskApproach.x,
+  y: taskApproach.y,
   lastBroadcastWireX: 0,
   lastBroadcastWireY: 0,
   role: 'crewmate',
@@ -68,7 +82,6 @@ const lobby = {
 } as unknown as Lobby;
 
 const manager = new LobbyManager();
-const bot = new CrewmateBot();
 try {
   // Allow the 2.4s task dwell (12 × 200ms) plus scheduling margin.
   for (let tick = 0; tick < 15; tick++) bot.roamingTick(lobby, botPlayer, manager);
