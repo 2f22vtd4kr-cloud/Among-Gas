@@ -90,8 +90,8 @@ try {
 {
   const fuelTask = TASK_DEFS.find(candidate => candidate.id === 7)!;
   class InspectableCrewmateBot extends CrewmateBot {
-    approach(target: { x: number; y: number }, radius: number) {
-      return this.nearestApproachPoint(target, radius);
+    approach(target: { x: number; y: number }, radius: number, targetRadiusPx = 24) {
+      return this.nearestApproachPoint(target, radius, targetRadiusPx);
     }
   }
   const fuelBot = new InspectableCrewmateBot();
@@ -113,7 +113,7 @@ try {
   }
   assert.ok(reachableVisibleApproach,
     'Fuel Engine must have a bot-navigation-reachable, visible stand-off point inside the safe interaction radius');
-  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, safeRadius);
+  const approach = fuelBot.approach({ x: fuelTask.x, y: fuelTask.y }, safeRadius, fuelTask.interactionTargetRadiusPx ?? 24);
   assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
     'Fuel Engine approach must be connected to the real spawn');
   assert.equal(isLineOfSightToInteractionTarget(
