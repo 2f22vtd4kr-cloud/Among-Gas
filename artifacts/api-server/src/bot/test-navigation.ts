@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
-import { buildPreciseCollisionGrid } from '@workspace/shared/collisionMap';
 import { isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -19,7 +18,7 @@ class NavigationProbe extends BotAgent {
 }
 
 const grid = getProductionCollisionWorld();
-const sightGrid = buildPreciseCollisionGrid();
+const sightGrid = grid;
 const probe = new NavigationProbe();
 for (const task of TASK_DEFS) {
   const approach = probe.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
