@@ -534,8 +534,8 @@ export abstract class BotAgent {
 
   /**
    * Find a spawn-reachable, walkable approach point that can actually see the
-   * interaction target. This mirrors the server's fine-grid LOS contract so
-   * bots do not repeatedly submit actions from behind a wall.
+   * interaction target. Bot visibility uses the same generated vector world
+   * as server-authoritative interaction checks, never the legacy raster.
    */
   protected nearestApproachPoint(target: Point, maxRadius: number, targetRadiusPx = 24): Point {
     const key = `${target.x},${target.y},${maxRadius},${targetRadiusPx}`;
