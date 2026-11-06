@@ -3,7 +3,7 @@ import { CrewmateBot } from './CrewmateBot.js';
 import { isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
-import { FEET_OFFSET_Y } from '@workspace/shared/coords';
+import { FEET_OFFSET_Y, PLAYER_RADIUS } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { SABOTAGE_DOORS } from '@workspace/shared/sabotage';
@@ -120,6 +120,9 @@ try {
     sightGrid, approach.x, approach.y + FEET_OFFSET_Y,
     fuelTask.x, fuelTask.y + FEET_OFFSET_Y, fuelTask.interactionTargetRadiusPx ?? 24,
   ), true, 'Fuel Engine bot approach must be actually visible, not the nearest non-visible fallback');
+  assert.ok(Math.hypot(approach.x - fuelTask.x, approach.y - fuelTask.y) >
+    (fuelTask.interactionTargetRadiusPx ?? 24) + PLAYER_RADIUS,
+    'Fuel Engine approach must stand outside the solid prop footprint');
   const player: LobbyPlayer = {
     slot: 0,
     tgUserId: -11,
