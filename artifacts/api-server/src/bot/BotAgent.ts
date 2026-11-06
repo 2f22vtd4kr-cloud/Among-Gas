@@ -11,7 +11,6 @@ import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
   isPlayerPositionWalkable,
-  buildPreciseCollisionGrid,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
 } from '@workspace/shared/collisionMap';
@@ -38,7 +37,7 @@ export { NO_TARGET };
 /** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
 const movementGrid: CollisionWorld = getProductionCollisionWorld();
-const sightGrid = buildPreciseCollisionGrid();
+const sightGrid = movementGrid;
 const NAV_COLS = COLS * 2;
 const NAV_ROWS = ROWS * 2;
 const NAV_CELL_X = CELL_X / 2;
