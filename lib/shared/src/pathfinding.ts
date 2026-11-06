@@ -309,13 +309,28 @@ function hasLineOfSight(
  * Greedy path-smoothing: skip waypoints that can be reached directly
  * with line-of-sight from the current anchor.
  */
-function smooth(grid: Grid, raw: Cell[], geometry: PathGridGeometry): Cell[] {
+function smooth(
+  grid: Grid,
+  raw: Cell[],
+  geometry: PathGridGeometry,
+  validateStep?: (from: Point, to: Point) => boolean,
+): Cell[] {
   if (raw.length <= 2) return raw;
   const result: Cell[] = [raw[0]];
   let anchor = 0;
 
   for (let i = 2; i < raw.length; i++) {
-    if (!hasLineOfSight(grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row, geometry)) {
+    const visible = hasLineOfSight(
+      grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row, geometry,
+    );
+    const collisionSafe = !validateStep || validateStep(
+      cellCentre(raw[anchor].col, raw[anchor].row, geometry),
+      cellCentre(raw[i].col, raw[i].row, geometry),
+    );
+    // A clear raster chord is not enough for hand-traced vector walls:
+    // validate the entire swept player footprint against the live collision
+    // world before skipping any intermediate A* cells.
+    if (!visible || !collisionSafe) {
       result.push(raw[i - 1]);
       anchor = i - 1;
     }
@@ -362,7 +377,7 @@ export function findPath(
   const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry, validateStep);
   if (!raw) return null;
 
-  const routed = smoothPath ? smooth(grid, raw, geometry) : raw;
+  const routed = smoothPath ? smooth(grid, raw, geometry, validateStep) : raw;
   const waypoints = routed.map(cell => cellCentre(cell.col, cell.row, geometry));
 
   // Drop the first waypoint if it's effectively the start position's cell centre
