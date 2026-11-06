@@ -425,7 +425,8 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry);
+    // Follow raw A* cell centres: smoothed chords can graze hand-traced vector walls.
+    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry, false);
     const waypoint = result?.waypoints[0] ?? feetGoal;
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
