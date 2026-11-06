@@ -16,6 +16,7 @@ import {
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
+  PLAYER_RADIUS,
   MAP_W,
   MAP_H,
   MEETING_DISCUSSION_MS,
@@ -532,11 +533,17 @@ export abstract class BotAgent {
         targetRadiusPx,
       );
 
-    let result: Point | null = reachable(target) && visible(target) ? target : null;
-    let nearestReachable: Point | null = reachable(target) ? target : null;
-    if (result === null) {
+    // Task target radii describe the solid prop perimeter, not a point the
+    // player should stand inside. Always approach from outside that footprint;
+    // targeting its centre can put a bot in a narrow car/console pocket that is
+    // technically walkable but cannot be reached by the swept player collider.
+    const minStandOff = Math.max(8, targetRadiusPx + PLAYER_RADIUS + 4);
+    let result: Point | null = null;
+    let nearestReachable: Point | null = null;
+    {
       const step = 4;
-      outer: for (let r = step; r <= maxRadius; r += step) {
+      const firstRadius = Math.ceil(minStandOff / step) * step;
+      outer: for (let r = firstRadius; r <= maxRadius; r += step) {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
