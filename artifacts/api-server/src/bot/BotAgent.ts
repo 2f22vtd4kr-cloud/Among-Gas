@@ -135,7 +135,11 @@ function traverseTo(from: Point, to: Point): Point | null {
   const [x, y] = movementGrid.movePlayerAtFeet(
     from.x, from.y, to.x - from.x, to.y - from.y,
   );
-  if (Math.hypot(x - to.x, y - to.y) > 0.75) return null;
+  // Sliding may stop short of the requested waypoint while still making
+  // safe progress along a wall. Keep that actual swept endpoint; callers
+  // decide whether it advances the current route.
+  if (Math.hypot(x - from.x, y - from.y) < 0.01 ||
+      !isNavigationPositionWalkable(x, y)) return null;
   return { x, y };
 }
 
@@ -432,6 +436,11 @@ export abstract class BotAgent {
       : feetGoal;
 
     let next: Point | null = traverseTo(feetStart, direct);
+    if (next !== null &&
+        Math.hypot(waypoint.x - next.x, waypoint.y - next.y) >=
+          Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - 0.01) {
+      next = null;
+    }
     if (next === null) {
       // A smoothed waypoint may still be unsafe near a thin wall or corner.
       // Probe short, collision-safe detours rather than caching the rejected
