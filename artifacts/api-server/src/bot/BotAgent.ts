@@ -506,65 +506,61 @@ export abstract class BotAgent {
     let failedWaypoint: Point | null = null;
 
     if (route && route.length > 0) {
-      // Walk along the raw A* polyline, consuming several short, individually
-      // swept-safe edges in one bot tick. If the straight chord to the
-      // polyline point cuts a corner, fall back to its first adjacent edge.
+      // Follow the raw A* polyline edge by edge. Each adjacent segment is
+      // swept against the vector collision world, and several safe segments
+      // can be consumed in one tick without ever cutting across a corner.
       let cursor = this.navigationRouteIndex;
-      let polylinePoint = current;
       while (remaining > 0.75 && cursor < route.length) {
         const waypoint = route[cursor];
-        const dx = waypoint.x - polylinePoint.x;
-        const dy = waypoint.y - polylinePoint.y;
+        const dx = waypoint.x - current.x;
+        const dy = waypoint.y - current.y;
         const distance = Math.hypot(dx, dy);
         if (distance <= 0.75) {
           cursor++;
           continue;
         }
+
         const travel = Math.min(remaining, distance);
-        polylinePoint = {
-          x: polylinePoint.x + (dx / distance) * travel,
-          y: polylinePoint.y + (dy / distance) * travel,
+        const candidate = {
+          x: current.x + (dx / distance) * travel,
+          y: current.y + (dy / distance) * travel,
         };
-        remaining -= travel;
+        const traversed = traverseVector(current, candidate);
+        if (!traversed ||
+            Math.hypot(traversed.x - candidate.x, traversed.y - candidate.y) > 0.75) {
+          failedWaypoint = waypoint;
+          break;
+        }
+
+        const moved = Math.hypot(traversed.x - current.x, traversed.y - current.y);
+        if (moved <= 0.01) {
+          failedWaypoint = waypoint;
+          break;
+        }
+        current = traversed;
+        remaining -= moved;
         if (travel >= distance - 0.75) cursor++;
         else break;
       }
-
-      if (Math.hypot(polylinePoint.x - feetStart.x, polylinePoint.y - feetStart.y) > 0.75) {
-        const traversed = traverseVector(feetStart, polylinePoint);
-        if (traversed) {
-          current = traversed;
-          this.navigationRouteIndex = cursor;
-        }
-      }
-
-      if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) <= 0.75 &&
-          this.navigationRouteIndex < route.length) {
-        const firstWaypoint = route[this.navigationRouteIndex];
-        const traversed = traverseVector(feetStart, firstWaypoint);
-        if (traversed) {
-          current = traversed;
-          this.navigationRouteIndex++;
-        } else {
-          failedWaypoint = firstWaypoint;
-        }
-      }
+      this.navigationRouteIndex = cursor;
     }
 
-    // If there is no route, or the next raw edge is no longer traversable,
-    // probe a short collision-safe detour. The next tick replans from the
-    // resulting position; no blocked waypoint is retained.
-    if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) <= 0.75) {
+    // If a raw edge is unexpectedly blocked, or no A* route exists, probe a
+    // short collision-safe detour from the last safe position. Replan on the
+    // next tick rather than retaining a waypoint that the live world rejects.
+    const madeProgress = Math.hypot(current.x - feetStart.x, current.y - feetStart.y) > 0.01;
+    if (failedWaypoint || (!madeProgress && (!route || route.length === 0))) {
+      const from = current;
       const target = failedWaypoint ?? feetGoal;
-      const dx = target.x - feetStart.x;
-      const dy = target.y - feetStart.y;
+      const dx = target.x - from.x;
+      const dy = target.y - from.y;
       const distance = Math.hypot(dx, dy);
       const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
       const direct = distance > 0
-        ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
+        ? { x: from.x + (dx / distance) * step, y: from.y + (dy / distance) * step }
         : feetGoal;
-      let detour = traverseTo(feetStart, direct);
-      if (!detour || Math.hypot(detour.x - feetStart.x, detour.y - feetStart.y) <= 0.01) {
+      let detour = traverseTo(from, direct);
+      if (!detour || Math.hypot(detour.x - from.x, detour.y - from.y) <= 0.01) {
         const baseAngle = Math.atan2(dy, dx);
         const angleOffsets = [
           0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
@@ -582,10 +578,10 @@ export abstract class BotAgent {
           for (const offset of angleOffsets) {
             const angle = baseAngle + offset;
             const candidate = {
-              x: feetStart.x + Math.cos(angle) * length,
-              y: feetStart.y + Math.sin(angle) * length,
+              x: from.x + Math.cos(angle) * length,
+              y: from.y + Math.sin(angle) * length,
             };
-            const traversed = traverseTo(feetStart, candidate);
+            const traversed = traverseTo(from, candidate);
             if (!traversed) continue;
             const remainingDistance = Math.hypot(target.x - traversed.x, target.y - traversed.y);
             const progress = distance - remainingDistance;
