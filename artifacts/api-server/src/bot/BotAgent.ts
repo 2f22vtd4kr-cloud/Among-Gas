@@ -557,9 +557,10 @@ export abstract class BotAgent {
   }
 
   /**
-   * Find a spawn-reachable, walkable approach point that can actually see the
-   * interaction target. Bot visibility uses the same generated vector world
-   * as server-authoritative interaction checks, never the legacy raster.
+   * Find a spawn-reachable, vector-collision-safe approach point that can
+   * actually see the interaction target. Movement uses the authored red-line
+   * vector world; visibility uses the same fine-grid occlusion model as the
+   * server because the red-line reference does not author vision blockers.
    */
   protected nearestApproachPoint(target: Point, maxRadius: number, targetRadiusPx = 24): Point {
     const key = `${target.x},${target.y},${maxRadius},${targetRadiusPx}`;
