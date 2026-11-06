@@ -44,11 +44,15 @@ const assertPathFollowerRoute = (
   const self = { x: start.x, y: start.y } as LobbyPlayer;
   let arrived = false;
   let bestDistance = Math.hypot(goal.x - self.x, goal.y - self.y);
+  let bestPosition = { x: self.x, y: self.y };
   let ticks = 0;
   for (; ticks < 500; ticks++) {
     arrived = routeProbe.moveTo(self, goal, 25);
     const distance = Math.hypot(goal.x - self.x, goal.y - self.y);
-    bestDistance = Math.min(bestDistance, distance);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestPosition = { x: self.x, y: self.y };
+    }
     assert.equal(isPlayerPositionWalkable(grid, self.x, self.y), true,
       label + ' must keep the complete player footprint walkable at tick ' + (ticks + 1));
     if (arrived) {
@@ -57,7 +61,11 @@ const assertPathFollowerRoute = (
     }
   }
   assert.ok(arrived,
-    label + ' path follower failed to arrive after 500 ticks (best distance ' + bestDistance.toFixed(1) + 'px)');
+    label + ' path follower failed after 500 ticks (start=' + start.x.toFixed(0) + ',' + start.y.toFixed(0) +
+      ' goal=' + goal.x.toFixed(0) + ',' + goal.y.toFixed(0) +
+      ' end=' + self.x.toFixed(0) + ',' + self.y.toFixed(0) +
+      ' best=' + bestPosition.x.toFixed(0) + ',' + bestPosition.y.toFixed(0) +
+      ' bestDistance=' + bestDistance.toFixed(1) + 'px)');
   console.log('PASS: ' + label + ' (' + ticks + ' ticks)');
 };
 
