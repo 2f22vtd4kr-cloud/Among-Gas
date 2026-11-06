@@ -1580,7 +1580,10 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  // The default spawn is beside the statue-garden boundary on its right;
+  // move left across the open lobby floor so the camera hold tests scrolling,
+  // not an intentional collision stop against that authored red-line wall.
+  await cameraPage.mouse.move(joystickX - 42, joystickY, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
   await cameraPage.waitForTimeout(420);
