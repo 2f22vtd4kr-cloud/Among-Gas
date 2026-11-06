@@ -232,8 +232,11 @@ function astar(
       const nr = curRow + dr;
       if (!isWalkable(grid, nc, nr, geometry)) continue;
 
-      // No corner-cutting: both axis-aligned neighbours must be free
-      if (diagonal &&
+      // For the coarse grid, require both side cells to prevent corner cuts.
+      // With an exact swept-footprint validator, that geometric check is the
+      // stronger authority and may safely admit a diagonal whose side-cell
+      // centres are blocked but whose complete player footprint clears the edge.
+      if (diagonal && !validateStep &&
           (!isWalkable(grid, curCol + dc, curRow, geometry) ||
            !isWalkable(grid, curCol,      curRow + dr, geometry))) continue;
       // A walkable cell centre does not guarantee the swept player footprint
