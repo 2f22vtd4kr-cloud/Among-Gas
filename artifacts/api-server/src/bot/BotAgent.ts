@@ -156,6 +156,14 @@ function traverseVector(from: Point, to: Point): Point | null {
 }
 
 /** Distance from a point to a finite route segment. */
+/** A* may traverse a nav edge only when the exact player footprint can sweep it. */
+const validateProductionNavigationStep = (from: Point, to: Point): boolean => {
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
+  );
+  return Math.hypot(x - to.x, y - to.y) <= 0.75;
+};
+
 function distanceToSegment(point: Point, start: Point, end: Point): number {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -459,7 +467,7 @@ export abstract class BotAgent {
     // re-running A* every tick or cutting a smoothed chord across a corner.
     if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
       const result = this.pathCache.find(
-        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false,
+        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
       );
       this.navigationGoalKey = goalKey;
       this.navigationRoute = result?.waypoints ?? [];
@@ -486,7 +494,7 @@ export abstract class BotAgent {
         ) > 18) {
           this.clearPath();
           const result = this.pathCache.find(
-            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false,
+            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
           );
           this.navigationGoalKey = goalKey;
           this.navigationRoute = result?.waypoints ?? [];
