@@ -3,7 +3,7 @@ import { getProductionCollisionDocument, getProductionCollisionWorld } from "@wo
 import { COLS, ROWS } from "@workspace/shared/collisionMap";
 import { FEET_OFFSET_Y, MAP_W, MAP_H, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from "@workspace/shared/coords";
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
-import { VENT_DEFS } from "@workspace/shared/vents";
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 import { SABOTAGE_DEFS, SABOTAGE_INTERACTION_RANGE_PX } from "@workspace/shared/sabotage";
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from "@workspace/shared/adminTable";
 
@@ -57,7 +57,7 @@ function nearestDistance(point:{x:number;y:number}):number {
 }
 const anchors = [
   ...TASK_DEFS.map(task=>({kind:"task",id:task.id,name:task.name,x:task.x,y:task.y,max:TASK_INTERACTION_RANGE_PX-30})),
-  ...VENT_DEFS.map(vent=>({kind:"vent",id:vent.id,name:vent.name,x:vent.x,y:vent.y,max:Math.max(nav.cellX,nav.cellY)*1.25})),
+  ...VENT_DEFS.map(vent=>({kind:"vent",id:vent.id,name:vent.name,x:vent.x,y:vent.y,max:VENT_INTERACTION_RANGE_PX-30})),
   ...Object.values(SABOTAGE_DEFS).flatMap(def=>def.pads.map((pad,index)=>({kind:"sabotage",id:def.id,name:def.name+" "+index,x:pad.x,y:pad.y,max:SABOTAGE_INTERACTION_RANGE_PX-30}))),
   ...ADMIN_TABLE_DEFS.map(table=>({kind:"admin",id:table.id,name:table.name,x:table.x,y:table.y,max:ADMIN_TABLE_INTERACTION_RANGE_PX})),
 ];
