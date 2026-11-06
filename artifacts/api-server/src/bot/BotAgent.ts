@@ -554,6 +554,7 @@ export abstract class BotAgent {
         if (next !== null && bestScore > 0) break;
       }
       this.clearPath();
+      route = null;
     }
 
     if (next !== null) {
