@@ -175,6 +175,7 @@ function astar(
   startCol: number, startRow: number,
   goalCol:  number, goalRow:  number,
   geometry: PathGridGeometry,
+  validateStep?: (from: Point, to: Point) => boolean,
 ): Cell[] | null {
   if (!isWalkable(grid, startCol, startRow, geometry) ||
       !isWalkable(grid, goalCol,  goalRow, geometry)) {
@@ -235,6 +236,10 @@ function astar(
       if (diagonal &&
           (!isWalkable(grid, curCol + dc, curRow, geometry) ||
            !isWalkable(grid, curCol,      curRow + dr, geometry))) continue;
+      if (validateStep && !validateStep(
+        cellCentre(curCol, curRow, geometry),
+        cellCentre(nc, nr, geometry),
+      )) continue;
 
       const ni = cellIndex(nc, nr, geometry);
       if (closed[ni]) continue;
@@ -347,13 +352,14 @@ export function findPath(
   goal:  Point,
   geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
   smoothPath = true,
+  validateStep?: (from: Point, to: Point) => boolean,
 ): PathResult | null {
   if (!isValidPathInput(grid, start, goal, geometry)) return null;
 
   const sc = pixelToCell(start.x, start.y, geometry);
   const gc = pixelToCell(goal.x,  goal.y, geometry);
 
-  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry);
+  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry, validateStep);
   if (!raw) return null;
 
   const routed = smoothPath ? smooth(grid, raw, geometry) : raw;
@@ -391,6 +397,7 @@ export function findPath(
 export class PathCache {
   private cache = new Map<string, PathResult | null>();
   private cachedGrid: Grid | null = null;
+  private cachedStepValidator: ((from: Point, to: Point) => boolean) | undefined;
 
   find(
     grid: Grid,
@@ -399,13 +406,15 @@ export class PathCache {
     forceRefresh = false,
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
     smoothPath = true,
+    validateStep?: (from: Point, to: Point) => boolean,
   ): PathResult | null {
     if (!isValidPathInput(grid, start, goal, geometry)) return null;
     // A cache key made only from coordinates is unsafe across distinct map
     // grids: the same cells can be walkable in one map and blocked in another.
-    if (this.cachedGrid !== grid) {
+    if (this.cachedGrid !== grid || this.cachedStepValidator !== validateStep) {
       this.cache.clear();
       this.cachedGrid = grid;
+      this.cachedStepValidator = validateStep;
     }
 
     const sc  = pixelToCell(start.x, start.y, geometry);
@@ -416,7 +425,7 @@ export class PathCache {
       return this.cache.get(key)!;
     }
 
-    const result = findPath(grid, start, goal, geometry, smoothPath);
+    const result = findPath(grid, start, goal, geometry, smoothPath, validateStep);
     this.cache.set(key, result);
     return result;
   }
@@ -433,6 +442,7 @@ export class PathCache {
   clear(): void {
     this.cache.clear();
     this.cachedGrid = null;
+    this.cachedStepValidator = undefined;
   }
 
   get size(): number { return this.cache.size; }
