@@ -1580,13 +1580,13 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  // The default spawn is beside the statue-garden boundary on its right;
-  // move left across the open lobby floor so the camera hold tests scrolling,
-  // not an intentional collision stop against that authored red-line wall.
-  await cameraPage.mouse.move(joystickX - 42, joystickY, { steps: 6 });
+  // The default spawn is beside the statue-garden boundary on its right.
+  // Move upward through the clear lobby lane and keep the hold short enough
+  // to stay inside that unobstructed corridor under the authored red lines.
+  await cameraPage.mouse.move(joystickX, joystickY - 42, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(420);
+  await cameraPage.waitForTimeout(250);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
@@ -1634,7 +1634,7 @@ try {
     sustainedTail[sustainedTail.length - 1].playerX - sustainedTail[0].playerX,
     sustainedTail[sustainedTail.length - 1].playerY - sustainedTail[0].playerY,
   );
-  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 30,
+  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 20,
     `camera movement fixture must remain unobstructed through the final quarter of the hold (changed ${tailMovementFrames.length} frames over ${sustainedTailDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
