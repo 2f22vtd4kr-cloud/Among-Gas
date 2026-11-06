@@ -486,7 +486,7 @@ export abstract class BotAgent {
         ) > 18) {
           this.clearPath();
           const result = this.pathCache.find(
-            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, canTraverseNavigationEdge,
+            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false,
           );
           this.navigationGoalKey = goalKey;
           this.navigationRoute = result?.waypoints ?? [];
