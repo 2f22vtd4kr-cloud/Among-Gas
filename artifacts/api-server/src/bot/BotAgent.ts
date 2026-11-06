@@ -148,11 +148,15 @@ function traverseTo(from: Point, to: Point): Point | null {
 }
 
 /** Exact continuous swept-footprint test between adjacent A* cell centres. */
-function canTraverseNavigationEdge(from: Point, to: Point): boolean {
+function traverseVector(from: Point, to: Point): Point | null {
   const [x, y] = movementGrid.movePlayerAtFeet(
     from.x, from.y, to.x - from.x, to.y - from.y,
   );
-  return Math.hypot(x - to.x, y - to.y) <= 0.75;
+  return Math.hypot(x - to.x, y - to.y) <= 0.75 ? { x, y } : null;
+}
+
+function canTraverseNavigationEdge(from: Point, to: Point): boolean {
+  return traverseVector(from, to) !== null;
 }
 
 /** Distance from a point to a finite route segment. */
@@ -454,14 +458,12 @@ export abstract class BotAgent {
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
     const goalKey = `${goal.x.toFixed(2)},${goal.y.toFixed(2)}`;
 
-    // Keep one collision-validated route per destination. Re-running A* from
-    // every 200ms bot position allocates and searches the full nav grid each
-    // tick; following the cached polyline is both faster and keeps the bot at
-    // its intended movement speed. Every actual step is still swept against
-    // the live vector world below.
+    // Keep one exact, collision-validated raw A* route per destination. The
+    // bot advances along multiple adjacent cell edges each tick, rather than
+    // re-running A* every tick or cutting a smoothed chord across a corner.
     if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
       const result = this.pathCache.find(
-        navigationGrid, feetStart, feetGoal, false, navigationGeometry, true, canTraverseNavigationEdge,
+        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, canTraverseNavigationEdge,
       );
       this.navigationGoalKey = goalKey;
       this.navigationRoute = result?.waypoints ?? [];
@@ -483,14 +485,12 @@ export abstract class BotAgent {
         const segmentStart = this.navigationRouteIndex === 0
           ? this.navigationRouteOrigin ?? feetStart
           : route[this.navigationRouteIndex - 1];
-        // If an authoritative correction or other external movement moved the
-        // bot off its cached route, replan from its actual feet position.
         if (distanceToSegment(
           feetStart, segmentStart, route[this.navigationRouteIndex],
         ) > 18) {
           this.clearPath();
           const result = this.pathCache.find(
-            navigationGrid, feetStart, feetGoal, false, navigationGeometry, true, canTraverseNavigationEdge,
+            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, canTraverseNavigationEdge,
           );
           this.navigationGoalKey = goalKey;
           this.navigationRoute = result?.waypoints ?? [];
@@ -501,69 +501,110 @@ export abstract class BotAgent {
       }
     }
 
-    const waypoint = route && this.navigationRouteIndex < route.length
-      ? route[this.navigationRouteIndex]
-      : feetGoal;
-    const dx = waypoint.x - feetStart.x;
-    const dy = waypoint.y - feetStart.y;
-    const distance = Math.hypot(dx, dy);
-    const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
-    const direct = distance > 0
-      ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
-      : feetGoal;
+    let current = feetStart;
+    let remaining = BOT_MOVEMENT_STEP_PX;
+    let failedWaypoint: Point | null = null;
 
-    let next: Point | null = traverseTo(feetStart, direct);
-    if (next !== null &&
-        Math.hypot(waypoint.x - next.x, waypoint.y - next.y) >=
-          Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - 0.01) {
-      next = null;
-    }
-    if (next === null) {
-      // A route segment that no longer passes the swept-footprint check must
-      // never remain cached against the same start position. Probe short,
-      // collision-safe detours, then plan again from the resulting position.
-      const baseAngle = Math.atan2(dy, dx);
-      const angleOffsets = [
-        0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
-        3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
-        5 * Math.PI / 8, -5 * Math.PI / 8, 3 * Math.PI / 4, -3 * Math.PI / 4,
-        7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
-      ];
-      const stepLengths = [
-        Math.min(BOT_MOVEMENT_STEP_PX, Math.hypot(dxGoal, dyGoal)),
-        BOT_MOVEMENT_STEP_PX * 0.75, BOT_MOVEMENT_STEP_PX * 0.5, BOT_MOVEMENT_STEP_PX * 0.25, 8,
-      ];
-      let bestScore = -Infinity;
-      for (const length of stepLengths) {
-        for (const offset of angleOffsets) {
-          const angle = baseAngle + offset;
-          const candidate = {
-            x: feetStart.x + Math.cos(angle) * length,
-            y: feetStart.y + Math.sin(angle) * length,
-          };
-          const traversed = traverseTo(feetStart, candidate);
-          if (!traversed) continue;
-          const remaining = Math.hypot(waypoint.x - traversed.x, waypoint.y - traversed.y);
-          const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
-          const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
-          if (score > bestScore) {
-            bestScore = score;
-            next = traversed;
-          }
+    if (route && route.length > 0) {
+      // Walk along the raw A* polyline, consuming several short, individually
+      // swept-safe edges in one bot tick. If the straight chord to the
+      // polyline point cuts a corner, fall back to its first adjacent edge.
+      let cursor = this.navigationRouteIndex;
+      let polylinePoint = current;
+      while (remaining > 0.75 && cursor < route.length) {
+        const waypoint = route[cursor];
+        const dx = waypoint.x - polylinePoint.x;
+        const dy = waypoint.y - polylinePoint.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0.75) {
+          cursor++;
+          continue;
         }
-        if (next !== null && bestScore > 0) break;
+        const travel = Math.min(remaining, distance);
+        polylinePoint = {
+          x: polylinePoint.x + (dx / distance) * travel,
+          y: polylinePoint.y + (dy / distance) * travel,
+        };
+        remaining -= travel;
+        if (travel >= distance - 0.75) cursor++;
+        else break;
       }
-      this.clearPath();
-      route = null;
+
+      if (Math.hypot(polylinePoint.x - feetStart.x, polylinePoint.y - feetStart.y) > 0.75) {
+        const traversed = traverseVector(feetStart, polylinePoint);
+        if (traversed) {
+          current = traversed;
+          this.navigationRouteIndex = cursor;
+        }
+      }
+
+      if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) <= 0.75 &&
+          this.navigationRouteIndex < route.length) {
+        const firstWaypoint = route[this.navigationRouteIndex];
+        const traversed = traverseVector(feetStart, firstWaypoint);
+        if (traversed) {
+          current = traversed;
+          this.navigationRouteIndex++;
+        } else {
+          failedWaypoint = firstWaypoint;
+        }
+      }
     }
 
-    if (next !== null) {
-      self.x = next.x;
-      self.y = next.y - FEET_OFFSET_Y;
-      if (route && this.navigationRouteIndex < route.length &&
-          Math.hypot(next.x - waypoint.x, next.y - waypoint.y) <= 0.75) {
-        this.navigationRouteIndex++;
+    // If there is no route, or the next raw edge is no longer traversable,
+    // probe a short collision-safe detour. The next tick replans from the
+    // resulting position; no blocked waypoint is retained.
+    if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) <= 0.75) {
+      const target = failedWaypoint ?? feetGoal;
+      const dx = target.x - feetStart.x;
+      const dy = target.y - feetStart.y;
+      const distance = Math.hypot(dx, dy);
+      const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
+      const direct = distance > 0
+        ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
+        : feetGoal;
+      let detour = traverseTo(feetStart, direct);
+      if (!detour || Math.hypot(detour.x - feetStart.x, detour.y - feetStart.y) <= 0.01) {
+        const baseAngle = Math.atan2(dy, dx);
+        const angleOffsets = [
+          0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
+          3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
+          5 * Math.PI / 8, -5 * Math.PI / 8, 3 * Math.PI / 4, -3 * Math.PI / 4,
+          7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
+        ];
+        const stepLengths = [
+          Math.min(BOT_MOVEMENT_STEP_PX, distance),
+          BOT_MOVEMENT_STEP_PX * 0.75, BOT_MOVEMENT_STEP_PX * 0.5, BOT_MOVEMENT_STEP_PX * 0.25, 8,
+        ];
+        let bestScore = -Infinity;
+        detour = null;
+        for (const length of stepLengths) {
+          for (const offset of angleOffsets) {
+            const angle = baseAngle + offset;
+            const candidate = {
+              x: feetStart.x + Math.cos(angle) * length,
+              y: feetStart.y + Math.sin(angle) * length,
+            };
+            const traversed = traverseTo(feetStart, candidate);
+            if (!traversed) continue;
+            const remainingDistance = Math.hypot(target.x - traversed.x, target.y - traversed.y);
+            const progress = distance - remainingDistance;
+            const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
+            if (score > bestScore) {
+              bestScore = score;
+              detour = traversed;
+            }
+          }
+          if (detour !== null && bestScore > 0) break;
+        }
       }
+      if (detour) current = detour;
+      this.clearPath();
+    }
+
+    if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) > 0.01) {
+      self.x = current.x;
+      self.y = current.y - FEET_OFFSET_Y;
     }
     return false;
   }
