@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { CrewmateBot } from './CrewmateBot.js';
 import { isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
-import { isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
+import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, PLAYER_RADIUS } from '@workspace/shared/coords';
 import { LobbyManager, type Lobby, type LobbyPlayer } from '../ws/lobby.js';
 import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
@@ -11,7 +11,7 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 
 const grid = getProductionCollisionWorld();
-const sightGrid = grid;
+const sightGrid = buildPreciseCollisionGrid();
 class TestableCrewmateBot extends CrewmateBot {
   approach(target: { x: number; y: number }, radius = TASK_INTERACTION_RANGE_PX - 8, targetRadiusPx = 24) {
     return this.nearestApproachPoint(target, radius, targetRadiusPx);
