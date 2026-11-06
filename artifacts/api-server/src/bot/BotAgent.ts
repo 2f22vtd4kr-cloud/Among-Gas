@@ -155,6 +155,17 @@ function canTraverseNavigationEdge(from: Point, to: Point): boolean {
   return Math.hypot(x - to.x, y - to.y) <= 0.75;
 }
 
+/** Distance from a point to a finite route segment. */
+function distanceToSegment(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+  ));
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
+}
+
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
 export const BOT_SPEED_PX = 80;
 /** Living bots tick at 5Hz and walk at roughly 200px/s, matching the human player. */
@@ -165,6 +176,10 @@ export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
+  private navigationGoalKey: string | null = null;
+  private navigationRoute: Point[] | null = null;
+  private navigationRouteIndex = 0;
+  private navigationRouteOrigin: Point | null = null;
   private discussionMeeting: Lobby['meeting'] = null;
   private nextDiscussionChatAtMs = 0;
   private lastDiscussionMessageKey = '';
@@ -437,9 +452,58 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    // Use A* smoothing only when each full chord passes the vector swept-footprint validator.
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry, true, canTraverseNavigationEdge);
-    const waypoint = result?.waypoints[0] ?? feetGoal;
+    const goalKey = `${goal.x.toFixed(2)},${goal.y.toFixed(2)}`;
+
+    // Keep one collision-validated route per destination. Re-running A* from
+    // every 200ms bot position allocates and searches the full nav grid each
+    // tick; following the cached polyline is both faster and keeps the bot at
+    // its intended movement speed. Every actual step is still swept against
+    // the live vector world below.
+    if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
+      const result = this.pathCache.find(
+        navigationGrid, feetStart, feetGoal, false, navigationGeometry, true, canTraverseNavigationEdge,
+      );
+      this.navigationGoalKey = goalKey;
+      this.navigationRoute = result?.waypoints ?? [];
+      this.navigationRouteIndex = 0;
+      this.navigationRouteOrigin = feetStart;
+    }
+
+    let route = this.navigationRoute;
+    if (route && route.length > 0) {
+      while (this.navigationRouteIndex < route.length &&
+          Math.hypot(
+            route[this.navigationRouteIndex].x - feetStart.x,
+            route[this.navigationRouteIndex].y - feetStart.y,
+          ) <= 2) {
+        this.navigationRouteIndex++;
+      }
+
+      if (this.navigationRouteIndex < route.length) {
+        const segmentStart = this.navigationRouteIndex === 0
+          ? this.navigationRouteOrigin ?? feetStart
+          : route[this.navigationRouteIndex - 1];
+        // If an authoritative correction or other external movement moved the
+        // bot off its cached route, replan from its actual feet position.
+        if (distanceToSegment(
+          feetStart, segmentStart, route[this.navigationRouteIndex],
+        ) > 18) {
+          this.clearPath();
+          const result = this.pathCache.find(
+            navigationGrid, feetStart, feetGoal, false, navigationGeometry, true, canTraverseNavigationEdge,
+          );
+          this.navigationGoalKey = goalKey;
+          this.navigationRoute = result?.waypoints ?? [];
+          this.navigationRouteIndex = 0;
+          this.navigationRouteOrigin = feetStart;
+          route = this.navigationRoute;
+        }
+      }
+    }
+
+    const waypoint = route && this.navigationRouteIndex < route.length
+      ? route[this.navigationRouteIndex]
+      : feetGoal;
     const dx = waypoint.x - feetStart.x;
     const dy = waypoint.y - feetStart.y;
     const distance = Math.hypot(dx, dy);
@@ -455,13 +519,9 @@ export abstract class BotAgent {
       next = null;
     }
     if (next === null) {
-      // A smoothed waypoint may still be unsafe near a thin wall or corner.
-      // Probe short, collision-safe detours rather than caching the rejected
-      // waypoint forever. The next tick will run A* from the new cell.
-      // Follow the next A* waypoint, not the final destination: when a
-      // wall blocks the smoothed segment, steering directly at the final
-      // goal can keep pushing the bot into the same obstacle and create a
-      // moving-but-never-arriving loop around corners.
+      // A route segment that no longer passes the swept-footprint check must
+      // never remain cached against the same start position. Probe short,
+      // collision-safe detours, then plan again from the resulting position.
       const baseAngle = Math.atan2(dy, dx);
       const angleOffsets = [
         0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
@@ -485,7 +545,6 @@ export abstract class BotAgent {
           if (!traversed) continue;
           const remaining = Math.hypot(waypoint.x - traversed.x, waypoint.y - traversed.y);
           const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
-          // Prefer progress, with a small penalty for wide detours and tiny steps.
           const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
           if (score > bestScore) {
             bestScore = score;
@@ -494,13 +553,16 @@ export abstract class BotAgent {
         }
         if (next !== null && bestScore > 0) break;
       }
-      // A blocked path must not stay cached against the same start cell.
-      this.pathCache.clear();
+      this.clearPath();
     }
 
     if (next !== null) {
       self.x = next.x;
       self.y = next.y - FEET_OFFSET_Y;
+      if (route && this.navigationRouteIndex < route.length &&
+          Math.hypot(next.x - waypoint.x, next.y - waypoint.y) <= 0.75) {
+        this.navigationRouteIndex++;
+      }
     }
     return false;
   }
@@ -511,6 +573,10 @@ export abstract class BotAgent {
    */
   protected clearPath(): void {
     this.pathCache.clear();
+    this.navigationGoalKey = null;
+    this.navigationRoute = null;
+    this.navigationRouteIndex = 0;
+    this.navigationRouteOrigin = null;
   }
 
   /** Pick a random walkable position in the spawn-connected component. */
