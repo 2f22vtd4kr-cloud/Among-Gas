@@ -145,7 +145,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:3,
+      kind:"redline-vector",generatorVersion:4,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -174,7 +174,7 @@ async function main():Promise<void> {
     "const COLLISION_DOCUMENT_JSON = "+JSON.stringify(JSON.stringify(document))+";\n"+
     "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n");
   const svgPaths=shapes.map(s=>{
-    const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ");
+    const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ")+(s.closed?" Z":"");
     return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
   }).join("");
   const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+info.width+'" height="'+info.height+'" viewBox="0 0 '+info.width+" "+info.height+'">'+svgPaths+"</svg>");
