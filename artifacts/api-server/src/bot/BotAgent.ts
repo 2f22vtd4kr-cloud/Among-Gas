@@ -70,33 +70,47 @@ function buildSpawnReachability(): Uint8Array {
   const startIndex = startRow * NAV_COLS + startCol;
   if (navigationGrid[startIndex] !== 0) return reachable;
 
+  const centre = (col: number, row: number): Point => ({
+    x: (col + 0.5) * NAV_CELL_X,
+    y: (row + 0.5) * NAV_CELL_Y,
+  });
+  const canSweep = (from: Point, to: Point): boolean => {
+    const [x, y] = movementGrid.movePlayerAtFeet(
+      from.x, from.y, to.x - from.x, to.y - from.y,
+    );
+    return Math.hypot(x - to.x, y - to.y) <= 0.75;
+  };
+  const spawnFeet = { x: SPAWN_X, y: SPAWN_Y + FEET_OFFSET_Y };
+  if (!canSweep(spawnFeet, centre(startCol, startRow))) return reachable;
+
   const queue = [startIndex];
   reachable[startIndex] = 1;
-  const directions: readonly [number, number, boolean][] = [
-    [0, -1, false], [0, 1, false], [-1, 0, false], [1, 0, false],
-    [-1, -1, true], [-1, 1, true], [1, -1, true], [1, 1, true],
+  const directions: readonly [number, number][] = [
+    [0, -1], [0, 1], [-1, 0], [1, 0],
+    [-1, -1], [-1, 1], [1, -1], [1, 1],
   ];
   for (let head = 0; head < queue.length; head++) {
     const index = queue[head];
     const row = Math.floor(index / NAV_COLS);
     const col = index - row * NAV_COLS;
-    for (const [dc, dr, diagonal] of directions) {
+    const from = centre(col, row);
+    for (const [dc, dr] of directions) {
       const nextCol = col + dc;
       const nextRow = row + dr;
       if (nextCol < 0 || nextCol >= NAV_COLS || nextRow < 0 || nextRow >= NAV_ROWS) continue;
       const nextIndex = nextRow * NAV_COLS + nextCol;
       if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
-      if (diagonal) {
-        if (navigationGrid[row * NAV_COLS + nextCol] !== 0 ||
-            navigationGrid[nextRow * NAV_COLS + col] !== 0) continue;
-      }
+      // Use the same swept player-footprint rule as A*. The old side-cell
+      // diagonal guard could disconnect a real corridor even when the exact
+      // diagonal sweep is clear, causing task approach points to be falsely
+      // labelled spawn-reachable.
+      if (!canSweep(from, centre(nextCol, nextRow))) continue;
       reachable[nextIndex] = 1;
       queue.push(nextIndex);
     }
   }
   return reachable;
 }
-
 const spawnReachability = buildSpawnReachability();
 
 export function isBotNavigationReachable(feetX: number, feetY: number): boolean {
