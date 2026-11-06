@@ -10,6 +10,7 @@
 import {
   CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
@@ -39,7 +40,10 @@ export { NO_TARGET };
 /** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
 const movementGrid: CollisionWorld = getProductionCollisionWorld();
-const sightGrid = movementGrid;
+// The red-line reference authors movement barriers, not vision occluders.
+// Match the server's independent sight grid so bots never choose a task point
+// that the authoritative interaction-visibility check will reject.
+const sightGrid = buildPreciseCollisionGrid();
 const NAV_COLS = COLS * 2;
 const NAV_ROWS = ROWS * 2;
 const NAV_CELL_X = CELL_X / 2;
