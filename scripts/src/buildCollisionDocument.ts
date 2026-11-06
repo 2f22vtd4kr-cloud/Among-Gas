@@ -179,6 +179,46 @@ async function main():Promise<void> {
   }).join("");
   const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+info.width+'" height="'+info.height+'" viewBox="0 0 '+info.width+" "+info.height+'">'+svgPaths+"</svg>");
   await sharp(referencePath).composite([{input:svg}]).png().toFile(qaPath);
-  console.log(JSON.stringify({ok:true,source:"owner red-line reference",dimensions:{width:info.width,height:info.height},redCount,skeletonCount,tracedPaths:paths.length,shapeCounts:document.source?.shapeCounts,edgeCount,blocked,outputs:["lib/shared/src/collision/collision.v1.json","lib/shared/src/collision/generatedDocument.ts","artifacts/telegram-game/collision-redline-vector-qa.png"]},null,2));
+
+  // Produce a 4×3 close-up atlas of the entire map. Each cell is rendered at
+  // 3× source zoom so the owner can inspect every traced wall/prop boundary,
+  // not just the tiny full-map overview. The same vector paths are overlaid
+  // on the untouched red reference; no collision geometry is inferred from
+  // the presentation image.
+  const detailDir=path.join(root,"artifacts/telegram-game/collision-redline-detail-qa");
+  await mkdir(detailDir,{recursive:true});
+  const detailLabels=[
+    ["NW service bay","North-west storage","North atrium west","North atrium east"],
+    ["West pipe room","West service corridor","Central atrium","East control room"],
+    ["South-west garage","South loading bay","South utility room","East generator bay"],
+  ];
+  const detailWidth=1020,detailHeight=784,labelHeight=42,detailScale=3;
+  const detailComposites:{input:Buffer,left:number,top:number}[]=[];
+  for(let row=0;row<3;row++) for(let col=0;col<4;col++) {
+    const left=Math.floor(col*info.width/4),top=Math.floor(row*info.height/3);
+    const right=Math.floor((col+1)*info.width/4),bottom=Math.floor((row+1)*info.height/3);
+    const cropWidth=right-left,cropHeight=bottom-top;
+    const localPaths=shapes.map(shape=>{
+      const d=shape.points.map((point,index)=>(index?"L ":"M ")+
+        ((point[0]/MAP_W*info.width-left)*detailScale).toFixed(2)+" "+
+        ((point[1]/MAP_H*info.height-top)*detailScale).toFixed(2)).join(" ");
+      return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join("");
+    const overlay=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+(cropWidth*detailScale)+'" height="'+(cropHeight*detailScale)+'">'+localPaths+'</svg>');
+    const detail=await sharp(referencePath).extract({left,top,width:cropWidth,height:cropHeight})
+      .resize(cropWidth*detailScale,cropHeight*detailScale,{fit:"fill",kernel:"lanczos3"})
+      .composite([{input:overlay}]).png().toBuffer();
+    const filename="collision-redline-detail-r"+(row+1)+"-c"+(col+1)+".png";
+    await writeFile(path.join(detailDir,filename),detail);
+    const label=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+detailWidth+'" height="'+labelHeight+'"><rect width="100%" height="100%" fill="#101820"/><text x="18" y="29" fill="#ffffff" font-size="22" font-family="sans-serif" font-weight="600">'+String(row*4+col+1).padStart(2,"0")+'  '+detailLabels[row][col]+'</text></svg>');
+    const normalized=await sharp(detail).resize(detailWidth,detailHeight,{fit:"fill"}).png().toBuffer();
+    detailComposites.push({input:label,left:col*detailWidth,top:row*(detailHeight+labelHeight)});
+    detailComposites.push({input:normalized,left:col*detailWidth,top:row*(detailHeight+labelHeight)+labelHeight});
+  }
+  const detailAtlas=path.join(root,"artifacts/telegram-game/collision-redline-detail-atlas.png");
+  await sharp({create:{width:detailWidth*4,height:(detailHeight+labelHeight)*3,channels:3,background:"#101820"}})
+    .composite(detailComposites).png().toFile(detailAtlas);
+
+  console.log(JSON.stringify({ok:true,source:"owner red-line reference",dimensions:{width:info.width,height:info.height},redCount,skeletonCount,tracedPaths:paths.length,shapeCounts:document.source?.shapeCounts,edgeCount,blocked,detailZoom:detailScale,detailRegions:12,outputs:["lib/shared/src/collision/collision.v1.json","lib/shared/src/collision/generatedDocument.ts","artifacts/telegram-game/collision-redline-vector-qa.png","artifacts/telegram-game/collision-redline-detail-atlas.png","artifacts/telegram-game/collision-redline-detail-qa/*.png"]},null,2));
 }
 await main();
