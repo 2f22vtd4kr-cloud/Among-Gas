@@ -133,8 +133,8 @@ assert.ok(
   const corpseFrames = CHARACTER_COLORS.map(color => getCharacterFrameRect(color, 'dead-body'));
   assert.equal(corpseFrames.length, 18, 'all eighteen runtime palettes have a corpse pose');
   assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 18, 'each runtime palette has its own atlas column');
-  assert.equal(getCharacterFrameRect('teal', 'idle').height, 136,
-    'idle crop ends before the detached under-foot scanlines');
+  assert.equal(getCharacterFrameRect('teal', 'idle').height, 148,
+    'idle crop retains the complete feet while ending before detached under-foot scanlines');
   assert.equal(corpseFrames[0].height, 93,
     'corpse crop keeps the exposed bone and cut suit but excludes detached under-foot scanlines');
   assert.match(getCharacterClipPath('idle') ?? '', /79%/,
