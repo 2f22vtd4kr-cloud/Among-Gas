@@ -48,6 +48,7 @@ export function defaultControlPosition(
 ): ControlPosition {
   const oppositeSide = joystickSide === 'left' ? 84 : 16;
   const sameSide = joystickSide === 'left' ? 16 : 84;
+  const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
   switch (id) {
     case 'joystick': return { x: sameSide, y: 84 };
     case 'map': return { x: 12, y: 6 };
@@ -59,10 +60,12 @@ export function defaultControlPosition(
       // joystick. The 68% center leaves the 38px action-bar and 52px joystick
       // hit areas tangent at 320×568, while moving the bar clear of the
       // player's camera-centered sprite instead of covering it at mid-screen.
-      const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
       return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 66 : 90 };
     }
-    case 'sabotage': return { x: oppositeSide, y: 74 };
+    // Keep the sabotage control in the opposite lower corner from the
+    // joystick on compact phones. The action bar sits above both, avoiding
+    // overlap while leaving the camera-centered player visible.
+    case 'sabotage': return { x: oppositeSide, y: compactViewport ? 84 : 74 };
   }
 }
 
