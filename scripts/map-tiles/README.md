@@ -36,19 +36,20 @@ reference:
 
 ## Stage-2 context workflow
 
-Create overlapping input crops, each with neighbour context:
+Create overlapping input crops, each with neighbour context. Keep the inputs, manifest, and
+generated PNGs together in the same work directory:
 
-    python map_tiles.py prepare /tmp/map-stage1/master_baseline.png /tmp/map-refinement/inputs --context 64
+    python map_tiles.py prepare /tmp/map-stage1/master_baseline.png /tmp/map-refinement/work --context 64
 
 Run the selected image-to-image or SR model outside the game runtime and save exactly one PNG per
-manifest tile in /tmp/map-refinement/generated. Name each output
+manifest tile into /tmp/map-refinement/work. Name each output
 tile_r{row}_c{col}_generated.png and preserve the corresponding input dimensions. The manifest
 is the source of truth for crop rectangles and expected output sizes. Do not crop, shift, rotate,
 reframe, recolour globally, or change canvas dimensions.
 
 Stitch the context-bearing outputs with cosine feather weights:
 
-    python map_tiles.py stitch-generated /tmp/map-refinement/generated /tmp/map-refinement/candidate.png
+    python map_tiles.py stitch-generated /tmp/map-refinement/work /tmp/map-refinement/candidate.png
     python tile_qa.py /tmp/map-refinement/candidate.png /tmp/map-stage1/master_baseline.png --report /tmp/map-refinement/qa.json
 
 Alternatively, core-only 1024 px outputs are accepted and placed without blending. Mixing core-only
