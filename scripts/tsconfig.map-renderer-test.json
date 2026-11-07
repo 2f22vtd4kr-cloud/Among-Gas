@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": [
+    "src/testTiledMapRenderer.ts",
+    "../artifacts/telegram-game/src/game/TiledMap.ts"
+  ],
+  "exclude": []
+}
