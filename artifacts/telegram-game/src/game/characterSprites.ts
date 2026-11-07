@@ -103,18 +103,19 @@ export type CharacterPose = (typeof CHARACTER_POSES)[number];
  * silhouette while rendered pixels keep their native scale.
  */
 const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeight: number }> = [
-  // Crop just beyond each measured silhouette. The source sheet has stray
-  // horizontal strokes through the otherwise transparent leg gap and below the feet;
-  // the pose-specific notch removes the bridges while retaining the outer feet.
-  { top: 0, bottom: 136, displayHeight: 153 }, // idle: trim only the final detached baseline pixels while retaining the foot tips
-  { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
-  { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
-  { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
-  { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
-  { top: 795, bottom: 896, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
-  { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
-  { top: 1067, bottom: 1160, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, exclude detached underline pixels
-  { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
+  // Bounds are measured against the largest connected silhouette in each
+  // authored source column. The previous windows cut real pixels from idle,
+  // both walk cycles and the bottom of the corpse; keep the full silhouette
+  // and exclude only the detached underline bands outside these bounds.
+  { top: 0, bottom: 148, displayHeight: 153 }, // idle: retain both complete feet
+  { top: 172, bottom: 311, displayHeight: 140 }, // walk-1: retain the complete lower leg/foot edge
+  { top: 327, bottom: 461, displayHeight: 134 }, // walk-2: retain the complete lower leg/foot edge
+  { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: measured silhouette
+  { top: 636, bottom: 772, displayHeight: 139 }, // ghost: include the final float pixels
+  { top: 795, bottom: 899, displayHeight: 108 }, // mask: include the complete lower contour
+  { top: 915, bottom: 1042, displayHeight: 136 }, // hold-item: include the full hand/item contour
+  { top: 1067, bottom: 1180, displayHeight: 118 }, // dead-body: retain the complete cut suit and exposed bone
+  { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: complete silhouette, without lower-row bleed
 ];
 
 /** Returns an isolated runtime-atlas window (px) for a given color and pose. */
@@ -152,12 +153,12 @@ export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch |
   if (pose === 'idle') {
     // The original idle frame has a short black hook inside the leg gap.
     // Extend the transparent notch to the actual right-leg silhouette edge.
-    return { leftLegStart: 0.31, leftLegEnd: 0.49, rightLegStart: 0.585, rightLegEnd: 0.73, top: 0.79 };
+    return { leftLegStart: 0.30, leftLegEnd: 0.53, rightLegStart: 0.55, rightLegEnd: 0.77, top: 0.79 };
   }
   if (pose === 'dead-body') {
     // The corpse frame contains the same detached horizontal bridge; remove
     // the full gap bridge without cutting into either outer leg silhouette.
-    return { leftLegStart: 0.34, leftLegEnd: 0.49, rightLegStart: 0.67, rightLegEnd: 0.77, top: 0.66 };
+    return { leftLegStart: 0.32, leftLegEnd: 0.55, rightLegStart: 0.56, rightLegEnd: 0.82, top: 0.66 };
   }
   return undefined;
 }
