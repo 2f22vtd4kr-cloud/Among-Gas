@@ -59,7 +59,7 @@ Thumbs.db
 
 # Local vector-collision editor candidate document and its 20-version backup ring
 /artifacts/telegram-game/.vector-collision-candidate.json
-/artifacts/telegram-game/.vector-collision-candidate.json.backups/
+/artifacts/telegram-game/.backups/
 /lib/shared/src/collision/.backups/
 
 # Generated exact-scale map tiles and overview (rebuilt from the canonical WebP master)
