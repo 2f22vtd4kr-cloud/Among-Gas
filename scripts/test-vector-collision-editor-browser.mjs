@@ -14,6 +14,21 @@ try {
   await page.getByText("VECTOR GEOMETRY WORKSPACE").waitFor({ timeout: 15000 });
   const canvas = page.locator("canvas[data-editor-loaded='true']");
   await canvas.waitFor({ timeout: 15000 });
+  const touch = await page.context().newCDPSession(page);
+  let touchId = 1;
+  const touchTap = async (x, y) => {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ id: touchId, x, y, radiusX: 3, radiusY: 3, force: 1 }] });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId++;
+  };
+  const touchStroke = async points => {
+    await touch.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ id: touchId, x: points[0][0], y: points[0][1], radiusX: 3, radiusY: 3, force: 1 }] });
+    for (const [x, y] of points.slice(1)) {
+      await touch.send("Input.dispatchTouchEvent", { type: "touchMove", touchPoints: [{ id: touchId, x, y, radiusX: 3, radiusY: 3, force: 1 }] });
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId++;
+  };
   await page.waitForFunction(() => {
     const element = document.querySelector("canvas[data-editor-loaded='true']");
     return !!element && Number(element.getAttribute("width")) > 0 && Number(element.getAttribute("height")) > 0;
@@ -23,10 +38,13 @@ try {
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
-  await page.mouse.move(bounds.x + 45, bounds.y + 70);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + 165, bounds.y + 76, { steps: 5 });
-  await page.mouse.up();
+  await touchStroke([
+    [bounds.x + 45, bounds.y + 70],
+    [bounds.x + 75, bounds.y + 72],
+    [bounds.x + 105, bounds.y + 73],
+    [bounds.x + 135, bounds.y + 75],
+    [bounds.x + 165, bounds.y + 76],
+  ]);
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
 
@@ -46,10 +64,13 @@ try {
   bounds = await canvas.boundingBox();
   const chainEndX = bounds.x + bounds.width / 2;
   const chainEndY = bounds.y + bounds.height / 2;
-  await page.mouse.move(chainEndX, chainEndY);
-  await page.mouse.down();
-  await page.mouse.move(chainEndX + 45, chainEndY + 35, { steps: 5 });
-  await page.mouse.up();
+  await touchStroke([
+    [chainEndX, chainEndY],
+    [chainEndX + 12, chainEndY + 9],
+    [chainEndX + 24, chainEndY + 18],
+    [chainEndX + 35, chainEndY + 27],
+    [chainEndX + 45, chainEndY + 35],
+  ]);
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 3);
   await page.getByRole("button", { name: "Finish chain" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
@@ -61,9 +82,10 @@ try {
   // Draw and close a solid polygon with three taps.
   await page.getByRole("button", { name: "Draw solid" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 220, bounds.y + 95);
-  await page.mouse.click(bounds.x + 280, bounds.y + 95);
-  await page.mouse.click(bounds.x + 250, bounds.y + 150);
+  await page.getByLabel("Casts shadow").uncheck();
+  await touchTap(bounds.x + 220, bounds.y + 95);
+  await touchTap(bounds.x + 280, bounds.y + 95);
+  await touchTap(bounds.x + 250, bounds.y + 150);
   await page.getByRole("button", { name: "Close polygon" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
@@ -82,16 +104,14 @@ try {
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 40, bounds.y + 40);
+  await touchTap(bounds.x + 40, bounds.y + 40);
   await page.waitForFunction(
     () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
     null,
     { timeout: 10000 },
   );
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await page.mouse.move(bounds.x + 100, bounds.y + 40);
-  await page.mouse.down();
-  await page.mouse.up();
+  await touchTap(bounds.x + 100, bounds.y + 40);
   await page.waitForFunction(
     () => {
       const canvas = document.querySelector("canvas");
@@ -105,7 +125,6 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const touch = await page.context().newCDPSession(page);
   const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test"];
   for (const mode of pinchModes) {
     await page.getByRole("button", { name: mode }).click();
@@ -191,6 +210,8 @@ try {
   await vision.getByLabel("Vision observer X").fill("1200");
   await vision.getByLabel("Vision observer Y").fill("900");
   await vision.getByLabel("Vision radius").fill("500");
+  await vision.getByRole("button", { name: "Shadow" }).click();
+  await vision.getByText("Casts shadow geometry only").waitFor();
   await page.getByRole("button", { name: "Vision preview" }).click();
   await vision.waitFor({ state: "detached" });
 
