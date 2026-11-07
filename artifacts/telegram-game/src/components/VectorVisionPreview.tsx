@@ -16,7 +16,10 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
   const longPressTimer = useRef<number | null>(null);
   const longPressStart = useRef<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [viewport, setViewport] = useState({ width: 1, height: 1 });
-  const world = useMemo(() => new CollisionWorld(shapes, mapW, mapH), [shapes, mapW, mapH]);
+  const world = useMemo(() => {
+    try { return new CollisionWorld(shapes, mapW, mapH); }
+    catch { return null; }
+  }, [shapes, mapW, mapH]);
 
   useEffect(() => () => {
     if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
@@ -33,7 +36,7 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
   }, []);
 
   const polygon = useMemo(() => {
-    if (![observerX, observerY, radius].every(Number.isFinite) || radius < 1) return "";
+    if (!world || ![observerX, observerY, radius].every(Number.isFinite) || radius < 1) return "";
     const points: string[] = [];
     const samples = 180;
     for (let i = 0; i < samples; i++) {
@@ -72,7 +75,7 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>X <input aria-label="Vision observer X" type="number" min="0" max={mapW} value={observerX} onChange={event => setObserverX(Number(event.target.value))} style={fieldStyle} /></label>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>Y <input aria-label="Vision observer Y" type="number" min="0" max={mapH} value={observerY} onChange={event => setObserverY(Number(event.target.value))} style={fieldStyle} /></label>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>Radius <input aria-label="Vision radius" type="number" min="50" max="1200" step="10" value={radius} onChange={event => setRadius(Math.max(50, Math.min(1200, Number(event.target.value) || 50)))} style={fieldStyle} /></label>
-        <span style={{ color: "#9db3c1" }}>{mode === "sight" ? "Blocks sight" : "Casts shadow"} geometry only · long-press to reposition</span>
+        <span style={{ color: "#9db3c1" }}>{world ? (mode === "sight" ? "Blocks sight" : "Casts shadow") + " geometry only · long-press to reposition" : "Fix invalid geometry before previewing"}</span>
       </div>
       <svg
         width="100%" height="100%" viewBox="0 0 1000 1000" preserveAspectRatio="none"
