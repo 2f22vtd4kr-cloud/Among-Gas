@@ -102,7 +102,14 @@ export default function VectorCollisionEditor() {
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
   const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
-  const candidateWorld = useMemo(() => new CollisionWorld(document.shapes), [document.shapes]);
+  const candidateWorld = useMemo(() => {
+    try {
+      return new CollisionWorld(document.shapes);
+    } catch {
+      // Keep editing possible while a candidate polygon is temporarily invalid.
+      return null;
+    }
+  }, [document.shapes]);
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
     const editable = cloneDocument(next);
@@ -135,7 +142,7 @@ export default function VectorCollisionEditor() {
 
     // Candidate-only raycast preview. This overlay is diagnostic and is never
     // read by the live client/server collision or vision paths.
-    if (visionOrigin) {
+    if (visionOrigin && candidateWorld) {
       const visibility = candidateWorld.visibility(visionOrigin[0], visionOrigin[1], 320);
       if (visibility.length >= 3) {
         context.beginPath();
@@ -542,6 +549,10 @@ export default function VectorCollisionEditor() {
       visionPressTimerRef.current = window.setTimeout(() => {
         const activeGesture = gestureRef.current;
         if (activeGesture?.kind !== "vision") return;
+        if (!candidateWorld) {
+          setStatus("Vision preview unavailable: correct invalid candidate geometry before raycasting.");
+          return;
+        }
         setVisionOrigin(activeGesture.point);
         setStatus("Candidate vision preview active · 320px raycast · diagnostic only, not live gameplay.");
       }, 550);
