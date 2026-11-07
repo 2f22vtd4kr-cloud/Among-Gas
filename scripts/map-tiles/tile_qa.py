@@ -71,25 +71,29 @@ def chamfer_f1(candidate: np.ndarray, reference: np.ndarray, tolerance: int = 2)
     return mean_distance, f1
 
 
-def seam_signature(image: Image.Image) -> list[float]:
-    """Measure new brightness discontinuity beyond the natural reference gradient."""
+def seam_profiles(image: Image.Image) -> list[np.ndarray]:
+    """Per-pixel signed seam residuals, with natural local image slope removed."""
     gray = np.asarray(image.convert("L"), dtype=np.float32)
-    signature: list[float] = []
+    profiles: list[np.ndarray] = []
     for x in range(TILE, TEX_W, TILE):
         delta = gray[:, x] - gray[:, x - 1]
         local_slope = ((gray[:, x - 1] - gray[:, x - 2]) + (gray[:, x + 2] - gray[:, x + 1])) / 2
-        signature.append(float(np.median(delta - local_slope)))
+        profiles.append(delta - local_slope)
     for y in range(TILE, TEX_H, TILE):
         delta = gray[y, :] - gray[y - 1, :]
         local_slope = ((gray[y - 1, :] - gray[y - 2, :]) + (gray[y + 2, :] - gray[y + 1, :])) / 2
-        signature.append(float(np.median(delta - local_slope)))
-    return signature
+        profiles.append(delta - local_slope)
+    return profiles
 
 
 def seam_step(candidate: Image.Image, reference: Image.Image) -> float:
-    candidate_values = seam_signature(candidate)
-    reference_values = seam_signature(reference)
-    return max((abs(a - b) for a, b in zip(candidate_values, reference_values)), default=0.0)
+    """95th-percentile new seam discontinuity relative to the reference."""
+    candidate_values = seam_profiles(candidate)
+    reference_values = seam_profiles(reference)
+    return max(
+        (float(np.percentile(np.abs(a - b), 95)) for a, b in zip(candidate_values, reference_values)),
+        default=0.0,
+    )
 
 
 def laplacian_variance(image: Image.Image) -> float:
@@ -128,10 +132,10 @@ def run(candidate_path: str | Path, reference_path: str | Path) -> tuple[dict[st
     report["G4_worst_tile_color_drift"] = worst_drift
     report["G4_tile_results"] = tile_results
 
-    candidate_seams = seam_signature(candidate)
-    reference_seams = seam_signature(reference)
-    report["G5_candidate_seam_step_levels"] = max((abs(v) for v in candidate_seams), default=0.0)
-    report["G5_reference_seam_step_levels"] = max((abs(v) for v in reference_seams), default=0.0)
+    candidate_seams = seam_profiles(candidate)
+    reference_seams = seam_profiles(reference)
+    report["G5_candidate_seam_step_levels"] = max((float(np.percentile(np.abs(v), 95)) for v in candidate_seams), default=0.0)
+    report["G5_reference_seam_step_levels"] = max((float(np.percentile(np.abs(v), 95)) for v in reference_seams), default=0.0)
     report["G5_new_seam_step_levels"] = seam_step(candidate, reference)
     report["G6_sharpness_ratio_vs_ref"] = (
         laplacian_variance(candidate) / laplacian_variance(reference)
