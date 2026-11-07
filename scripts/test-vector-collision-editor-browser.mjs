@@ -35,6 +35,7 @@ try {
   });
 
   // Draw a freehand wall stroke. It remains an explicit active chain until Finish chain.
+  await page.getByLabel("Map zone").selectOption("A");
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
@@ -88,6 +89,10 @@ try {
   await touchTap(bounds.x + 250, bounds.y + 150);
   await page.getByRole("button", { name: "Close polygon" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
+
+  // Per-zone save is isolated and leaves the other editor draft state intact.
+  await page.getByRole("button", { name: "Save zone A" }).click();
+  await page.getByText(/Zone A saved into the candidate document/).waitFor({ timeout: 10000 });
 
   // Undo and redo must preserve the shape count and stay interactive on mobile.
   await page.getByRole("button", { name: "Undo" }).click();
