@@ -802,42 +802,57 @@ export default function VectorCollisionEditor() {
     replaceDocument(next);
   };
 
-  const save = async () => {
-    if (!docRef.current.shapes.length) {
+  const save = async (zoneOnly?: string) => {
+    const candidate: CollisionDocument = zoneOnly
+      ? { ...docRef.current, shapes: docRef.current.shapes.filter(shape => shape.zone === zoneOnly) }
+      : docRef.current;
+    if (!candidate.shapes.length) {
       setStatus("Nothing saved: author and review at least one real map contour first.");
       return;
     }
-    const errors = validateCollisionDocument(docRef.current);
+    const errors = validateCollisionDocument(candidate);
     if (errors.length) {
       setStatus("Cannot save: " + errors.slice(0, 4).join("; "));
       return;
     }
     setSaving(true);
-    setStatus("Saving candidate geometry…");
+    setStatus(zoneOnly ? "Saving zone " + zoneOnly + " candidate geometry…" : "Saving candidate geometry…");
     try {
-      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/document", {
+      const endpoint = import.meta.env.BASE_URL + "__vector-collision-api/document" +
+        (zoneOnly ? "?zone=" + encodeURIComponent(zoneOnly) : "");
+      const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
-        body: JSON.stringify(docRef.current),
+        body: JSON.stringify(candidate),
       });
       const result = await response.json().catch(() => ({})) as {
         error?: string;
         contentHash?: string;
         backupCount?: number;
+        savedZone?: string | null;
       };
       if (!response.ok) throw new Error(result.error || "Save rejected (" + response.status + ")");
       if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
         throw new Error("Save response did not include a valid SHA-256 content hash");
       }
-      historyRef.current = new History<EditableDocument>(docRef.current, cloneDocument, 200);
-      setSaved(true);
-      setDirty(false);
-      setLocalDraft(null);
-      try { window.localStorage.removeItem(LOCAL_DRAFT_KEY); } catch { /* best-effort cleanup */ }
-      setStatus(
-        "Candidate saved · SHA-256 " + result.contentHash.slice(0, 12) +
-        " · " + (result.backupCount ?? 0) + " retained backups. Live gameplay still uses the reviewed raster mask.",
-      );
+      if (zoneOnly) {
+        setStatus(
+          "Zone " + zoneOnly + " saved into the candidate document · SHA-256 " +
+          result.contentHash.slice(0, 12) + " · " + (result.backupCount ?? 0) +
+          " retained backups. Other unsaved zones remain in this editor.",
+        );
+      } else {
+        historyRef.current = new History<EditableDocument>(docRef.current, cloneDocument, 200);
+        setSaved(true);
+        setDirty(false);
+        setLocalDraft(null);
+        try { window.localStorage.removeItem(LOCAL_DRAFT_KEY); } catch { /* best-effort cleanup */ }
+        setStatus(
+          "Candidate saved · SHA-256 " + result.contentHash.slice(0, 12) +
+          " · " + (result.backupCount ?? 0) +
+          " retained backups. Production geometry is unchanged until separately reviewed and regenerated.",
+        );
+      }
     } catch (error) {
       setStatus("Save failed: " + (error instanceof Error ? error.message : String(error)));
     } finally {
@@ -959,6 +974,9 @@ export default function VectorCollisionEditor() {
         </label>
         <button type="button" style={{ ...buttonStyle(), background: "#4b432a", borderColor: "#e2bd6a" }} onClick={() => void save()} disabled={saving || !document.shapes.length || activeChain.length > 1}>
           {saving ? "Saving…" : saved ? "Saved ✓" : "Save candidate"}
+        </button>
+        <button type="button" data-testid="save-zone-candidate" style={buttonStyle()} onClick={() => void save(zone)} disabled={saving || zone === "unassigned" || !document.shapes.some(shape => shape.zone === zone) || activeChain.length > 1}>
+          Save zone {zone === "unassigned" ? "…" : zone}
         </button>
       </section>
 
