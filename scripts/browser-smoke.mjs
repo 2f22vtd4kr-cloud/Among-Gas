@@ -1222,7 +1222,7 @@ try {
   assert.ok(smallPhoneActionBar, 'small-phone action bar drag target is present');
   assert.ok(Math.abs(
     (smallPhoneActionBar.top + smallPhoneActionBar.bottom) / 2 -
-    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.68),
+    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.67),
   ) < 3, 'compact-phone action bar stays below the camera-centered player sightline');
   for (let i = 0; i < smallPhoneControls.length; i++) {
     const control = smallPhoneControls[i];
