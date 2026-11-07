@@ -1218,6 +1218,12 @@ try {
       return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
     }),
   );
+  const smallPhoneActionBar = smallPhoneControls.find(control => control.id === 'control-drag-killReport');
+  assert.ok(smallPhoneActionBar, 'small-phone action bar drag target is present');
+  assert.ok(Math.abs(
+    (smallPhoneActionBar.top + smallPhoneActionBar.bottom) / 2 -
+    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.68),
+  ) < 3, 'compact-phone action bar stays below the camera-centered player sightline');
   for (let i = 0; i < smallPhoneControls.length; i++) {
     const control = smallPhoneControls[i];
     assert.ok(control.left >= smallPhonePreviewBox.x - 1 && control.right <= smallPhonePreviewBox.x + smallPhonePreviewBox.width + 1,
