@@ -56,11 +56,10 @@ export function defaultControlPosition(
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
     case 'killReport': {
-      // On narrow phones, keep the action bar just above the right-side
-      // joystick. The 68% center leaves the 38px action-bar and 52px joystick
-      // hit areas tangent at 320×568, while moving the bar clear of the
-      // player's camera-centered sprite instead of covering it at mid-screen.
-      return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 66 : 90 };
+      // Keep the persistent action cluster in the bottom-right thumb zone,
+      // above the movement joystick. The safe-bounds clamp accounts for the
+      // 4-button cluster width on 320px phones; custom positions remain editable.
+      return { x: 84, y: compactViewport ? 66 : 74 };
     }
     // Keep the sabotage control in the opposite lower corner from the
     // joystick on compact phones. The action bar sits above both, avoiding
