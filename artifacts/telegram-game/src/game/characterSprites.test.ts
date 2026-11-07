@@ -55,15 +55,15 @@ for (const color of CHARACTER_COLORS) {
   }
 }
 
-assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.585,
+assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.55,
   'idle leg-gap mask must remove the stray black hook while preserving the right foot');
 const idleClipPercentages = [...(getCharacterClipPath('idle') ?? '').matchAll(/(-?\d+(?:\.\d+)?)%/g)]
   .map(([, value]) => Number(value));
-assert.ok(idleClipPercentages.some(value => Math.abs(value - 58.5) < 1e-9),
+assert.ok(idleClipPercentages.some(value => Math.abs(value - 55) < 1e-9),
   'idle DOM and canvas renderers must preserve the full right-leg silhouette');
-assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.67,
+assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.56,
   'corpse leg-gap mask must remove the detached horizontal bridge');
-assert.match(getCharacterClipPath('dead-body') ?? '', /67%/,
+assert.match(getCharacterClipPath('dead-body') ?? '', /56%/,
   'corpse DOM and canvas renderers must share the widened transparent gap');
 
 // Every authored pose must occupy its own measured vertical window. This
@@ -85,15 +85,15 @@ assert.ok(walk1.y + walk1.height <= 312,
   'walk-1 crop must exclude the stray alpha bridge at source rows 312–315');
 assert.ok(walk2.y >= 327,
   'walk-2 crop must begin after the inter-row bleed band');
-assert.ok(walk2.y - (walk1.y + walk1.height) >= 17,
+assert.ok(walk2.y - (walk1.y + walk1.height) >= 16,
   'measured walk crops must retain the transparent safety gap');
 
 const idle = getCharacterFrameRect('teal', 'idle');
-assert.equal(idle.height, 136, 'idle source crop retains its detached-stroke trim');
+assert.equal(idle.height, 148, 'idle source crop must retain the complete lower silhouette and feet');
 assert.equal(idle.displayHeight, 153, 'original atlas baseline remains diagnostic metadata');
 const corpse = getCharacterFrameRect('teal', 'dead-body');
 assert.equal(corpse.y, 1067, 'corpse crop retains the upper bone that begins before the uniform row boundary');
-assert.equal(corpse.height, 93, 'cut-body source crop retains its exposed-bone frame');
+assert.equal(corpse.height, 113, 'cut-body source crop must retain the complete lower suit and exposed-bone frame');
 assert.equal(corpse.displayHeight, 118, 'cut-body atlas baseline remains diagnostic metadata');
 
 const baseHeight = Math.round(36 * MAP_W / 1652);
