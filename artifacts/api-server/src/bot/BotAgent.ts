@@ -195,6 +195,45 @@ export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 
+const BOT_DISCUSSION_MIN_GAP_MS = 3_200;
+const BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING = 4;
+
+interface MeetingBotDiscussionSchedule {
+  nextMessageAtMs: number;
+  reservedMessages: number;
+}
+
+const meetingBotDiscussionSchedules = new WeakMap<object, MeetingBotDiscussionSchedule>();
+
+/**
+ * Reserve a single global speaking slot for all bots in this meeting.
+ * Per-bot cooldowns alone still let six bots take turns every 1–2 seconds;
+ * this meeting-wide gate spaces the conversation and caps total bot chatter.
+ */
+export function reserveBotDiscussionSlot(
+  meeting: object,
+  nowMs: number,
+  slot: number,
+  livingBotCount: number,
+): boolean {
+  let schedule = meetingBotDiscussionSchedules.get(meeting);
+  if (!schedule) {
+    schedule = { nextMessageAtMs: 0, reservedMessages: 0 };
+    meetingBotDiscussionSchedules.set(meeting, schedule);
+  }
+  const messageLimit = Math.min(
+    BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING,
+    Math.max(1, Math.trunc(livingBotCount)),
+  );
+  if (schedule.reservedMessages >= messageLimit || nowMs < schedule.nextMessageAtMs) return false;
+
+  schedule.reservedMessages++;
+  // Deterministic small variation avoids a metronomic cadence without
+  // allowing a burst when multiple agents tick in the same 200ms frame.
+  schedule.nextMessageAtMs = nowMs + BOT_DISCUSSION_MIN_GAP_MS + (Math.abs(slot) % 3) * 350;
+  return true;
+}
+
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
   private navigationGoalKey: string | null = null;
@@ -202,6 +241,7 @@ export abstract class BotAgent {
   private navigationRouteIndex = 0;
   private navigationRouteOrigin: Point | null = null;
   private discussionMeeting: Lobby['meeting'] = null;
+  private discussionSentInMeeting = false;
   private nextDiscussionChatAtMs = 0;
   private lastDiscussionMessageKey = '';
   private discussionRequestPending = false;
@@ -360,12 +400,13 @@ export abstract class BotAgent {
     if (this.discussionMeeting !== meeting) {
       this.discussionMeeting = meeting;
       this.lastDiscussionMessageKey = '';
+      this.discussionSentInMeeting = false;
       this.discussionRequestPending = false;
       this.lastDiscussionReplyAtMs = 0;
       this.nextDiscussionChatAtMs = Date.now() + 500 + (self.slot % 5) * 650;
     }
     const now = Date.now();
-    if (this.discussionRequestPending || meeting.votingOpen || now < this.nextDiscussionChatAtMs) return;
+    if (this.discussionSentInMeeting || this.discussionRequestPending || meeting.votingOpen || now < this.nextDiscussionChatAtMs) return;
 
     const recentMessages = meeting.messages.slice(-8);
     const latestRelevant = [...recentMessages].reverse().find(entry => {
@@ -394,6 +435,9 @@ export abstract class BotAgent {
       ? `${latestRelevant.slot}:${latestRelevant.sentAtMs}`
       : 'opening';
     if (messageKey === this.lastDiscussionMessageKey || now - this.lastDiscussionReplyAtMs < 1400) return;
+    const livingBotCount = Array.from(lobby.players.values()).filter(player => player.alive && player.isBot).length;
+    if (!reserveBotDiscussionSlot(meeting, now, self.slot, livingBotCount)) return;
+    this.discussionSentInMeeting = true;
 
     const hasBody = meeting.bodySlot !== NO_TARGET;
     const speaker = latestRelevant ? lobby.players.get(latestRelevant.slot) : undefined;
