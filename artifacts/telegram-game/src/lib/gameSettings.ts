@@ -55,11 +55,12 @@ export function defaultControlPosition(
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
     case 'killReport': {
-      // At narrow widths, the default action bar and joystick share the same
-      // bottom corner. Move the bar above the joystick only when their
-      // horizontal hit-area bounds would otherwise overlap.
+      // On narrow phones, keep the action bar just above the right-side
+      // joystick. The 68% center leaves the 38px action-bar and 52px joystick
+      // hit areas tangent at 320×568, while moving the bar clear of the
+      // player's camera-centered sprite instead of covering it at mid-screen.
       const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
-      return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 55 : 90 };
+      return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 68 : 90 };
     }
     case 'sabotage': return { x: oppositeSide, y: 74 };
   }
