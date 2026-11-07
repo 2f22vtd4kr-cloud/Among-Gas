@@ -92,6 +92,14 @@ try {
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
   await page.getByLabel("Selected shape zone").selectOption("B");
   await page.getByLabel("Selected shape zone").selectOption("A");
+  const polygonId = await canvas.getAttribute("data-selected-shape-id");
+  await page.getByRole("button", { name: "Edit" }).click();
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + 25, bounds.y + 70);
+  const touchSelectedId = await canvas.getAttribute("data-selected-shape-id");
+  assert.notEqual(touchSelectedId, polygonId,
+    "a 20px-offset finger tap must still acquire the 48px wall endpoint target");
+  await page.getByRole("button", { name: "Draw wall" }).click();
 
   // Per-zone save is isolated and leaves the other editor draft state intact.
   await page.getByRole("button", { name: "Save zone A" }).click();
