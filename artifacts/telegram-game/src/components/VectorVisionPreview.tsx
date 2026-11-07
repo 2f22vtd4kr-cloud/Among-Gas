@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { CollisionWorld, type CollisionShape } from "@workspace/shared/collision";
 
 interface VectorVisionPreviewProps {
@@ -13,6 +13,8 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
   const [observerY, setObserverY] = useState(Math.round(mapH / 2));
   const [radius, setRadius] = useState(420);
   const [mode, setMode] = useState<"sight" | "shadow">("sight");
+  const longPressTimer = useRef<number | null>(null);
+  const longPressStart = useRef<{ x: number; y: number; worldX: number; worldY: number } | null>(null);
   const [viewport, setViewport] = useState({ width: 1, height: 1 });
   const world = useMemo(() => new CollisionWorld(shapes, mapW, mapH), [shapes, mapW, mapH]);
 
@@ -66,9 +68,47 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>X <input aria-label="Vision observer X" type="number" min="0" max={mapW} value={observerX} onChange={event => setObserverX(Number(event.target.value))} style={fieldStyle} /></label>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>Y <input aria-label="Vision observer Y" type="number" min="0" max={mapH} value={observerY} onChange={event => setObserverY(Number(event.target.value))} style={fieldStyle} /></label>
         <label style={{ display: "flex", alignItems: "center", gap: 4 }}>Radius <input aria-label="Vision radius" type="number" min="50" max="1200" step="10" value={radius} onChange={event => setRadius(Math.max(50, Math.min(1200, Number(event.target.value) || 50)))} style={fieldStyle} /></label>
-        <span style={{ color: "#9db3c1" }}>{mode === "sight" ? "Blocks sight" : "Casts shadow"} geometry only</span>
+        <span style={{ color: "#9db3c1" }}>{mode === "sight" ? "Blocks sight" : "Casts shadow"} geometry only · long-press to reposition</span>
       </div>
-      <svg width="100%" height="100%" viewBox="0 0 1000 1000" preserveAspectRatio="none" style={{ overflow: "hidden" }} aria-label="Vector line-of-sight polygon">
+      <svg
+        width="100%" height="100%" viewBox="0 0 1000 1000" preserveAspectRatio="none"
+        aria-label="Vector line-of-sight polygon"
+        style={{ overflow: "hidden", pointerEvents: "auto", touchAction: "none", cursor: "crosshair" }}
+        onPointerDown={event => {
+          if (event.button !== 0) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          const worldX = camera.x + (event.clientX - rect.left) / camera.zoom;
+          const worldY = camera.y + (event.clientY - rect.top) / camera.zoom;
+          longPressStart.current = { x: event.clientX, y: event.clientY, worldX, worldY };
+          if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+          longPressTimer.current = window.setTimeout(() => {
+            const start = longPressStart.current;
+            if (!start) return;
+            setObserverX(Math.round(Math.max(0, Math.min(mapW, start.worldX))));
+            setObserverY(Math.round(Math.max(0, Math.min(mapH, start.worldY))));
+            longPressStart.current = null;
+            longPressTimer.current = null;
+          }, 500);
+        }}
+        onPointerMove={event => {
+          const start = longPressStart.current;
+          if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > 12) {
+            if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+            longPressTimer.current = null;
+            longPressStart.current = null;
+          }
+        }}
+        onPointerUp={() => {
+          if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+          longPressStart.current = null;
+        }}
+        onPointerCancel={() => {
+          if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+          longPressTimer.current = null;
+          longPressStart.current = null;
+        }}
+      >
         <polygon points={polygon} fill="rgba(255,224,121,.18)" stroke="rgba(255,224,121,.9)" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
         <circle cx={observerScreenX} cy={observerScreenY} r="5" fill="#fff1ae" stroke="#17232c" strokeWidth="2" vectorEffect="non-scaling-stroke" />
       </svg>
