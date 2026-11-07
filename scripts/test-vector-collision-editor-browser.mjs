@@ -93,7 +93,7 @@ try {
   await page.getByLabel("Selected shape zone").selectOption("B");
   await page.getByLabel("Selected shape zone").selectOption("A");
   const polygonId = await canvas.getAttribute("data-selected-shape-id");
-  await page.getByRole("button", { name: "Edit" }).click();
+  await page.getByRole("button", { name: "Edit vertices" }).click();
   bounds = await canvas.boundingBox();
   await touchTap(bounds.x + 25, bounds.y + 70);
   const touchSelectedId = await canvas.getAttribute("data-selected-shape-id");
