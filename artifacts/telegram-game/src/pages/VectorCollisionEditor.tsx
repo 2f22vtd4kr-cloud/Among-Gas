@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import CollisionAnalysisPanel from "../components/CollisionAnalysisPanel";
 import VectorVisionPreview from "../components/VectorVisionPreview";
+import VectorLoupe from "../components/VectorLoupe";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, ChangeEvent } from "react";
 import {
   History,
@@ -103,6 +104,8 @@ export default function VectorCollisionEditor() {
   const [walkStatus, setWalkStatus] = useState("");
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showVision, setShowVision] = useState(false);
+  const [showLoupe, setShowLoupe] = useState(false);
+  const [loupePoint, setLoupePoint] = useState<Point | null>(null);
   const [visionCamera, setVisionCamera] = useState({ x: 0, y: 0, zoom: 0.2 });
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
@@ -580,6 +583,7 @@ export default function VectorCollisionEditor() {
     if (pointersRef.current.has(event.pointerId)) {
       pointersRef.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
+    if (showLoupe) setLoupePoint(worldPoint(event));
     if (pinchRef.current && pointersRef.current.size >= 2) {
       const values = Array.from(pointersRef.current.values());
       const rect = event.currentTarget.getBoundingClientRect();
@@ -939,6 +943,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
         <button type="button" data-testid="toggle-geometry-analysis" aria-pressed={showAnalysis} style={buttonStyle(showAnalysis)} onClick={() => setShowAnalysis(value => !value)}>Geometry analyzer</button>
         <button type="button" data-testid="toggle-vector-vision" aria-pressed={showVision} style={buttonStyle(showVision)} onClick={() => setShowVision(value => !value)}>Vision preview</button>
+        <button type="button" data-testid="toggle-vector-loupe" aria-pressed={showLoupe} style={buttonStyle(showLoupe)} onClick={() => setShowLoupe(value => !value)}>Loupe</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
         <button type="button" style={buttonStyle(activeChain.length > 0)} onClick={jumpToChainEnd} disabled={!activeChain.length}>Jump to end</button>
         <button type="button" style={buttonStyle(activeChain.length > 1)} onClick={finishActiveChain} disabled={activeChain.length < 2}>Finish chain</button>
@@ -1000,6 +1005,7 @@ export default function VectorCollisionEditor() {
         />
         {showAnalysis && <CollisionAnalysisPanel shapes={document.shapes} mapW={MAP_W} mapH={MAP_H} />}
         {showVision && <VectorVisionPreview shapes={document.shapes} mapW={MAP_W} mapH={MAP_H} camera={visionCamera} />}
+        {showLoupe && <VectorLoupe sourceCanvas={canvasRef.current} point={loupePoint} camera={visionCamera} />}
         {!loaded && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(10,18,26,.84)", fontSize: 14 }}>Loading geometry workspace…</div>}
       </div>
 
