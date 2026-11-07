@@ -1133,17 +1133,27 @@ export default function GameMap() {
     if (!fogCtx) return;
 
     const fineGrid = taskInteractionSightGrid;
-    const cameraFixture = new URLSearchParams(window.location.search).get('cameraFixture');
-    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
+    const params = new URLSearchParams(window.location.search);
+    const cameraFixture = params.get('cameraFixture');
+    const taskMockMode = params.get('mock');
+    const cameraFixtureEnabled = import.meta.env.DEV &&
+      import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+      taskMockMode === 'task-playing' && cameraFixture === 'west-corridor';
+    if (cameraFixture !== null && !cameraFixtureEnabled) {
+      throw new Error('Camera fixture requested outside the enabled development mock');
+    }
     // Camera smoke tests use a collision-checked interior start so map-edge
     // camera clamping and nearby props cannot masquerade as follow regressions.
-    if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        taskMockMode === 'task-playing' && cameraFixture === 'west-corridor') {
+    if (cameraFixtureEnabled) {
       const fixture = { x: 510, y: 1069 };
       if (!isPlayerPositionWalkable(taskInteractionGrid, fixture.x, fixture.y)) {
         throw new Error('Camera fixture position is not walkable in the production vector collision world');
       }
       playerStateRef.current = { ...playerStateRef.current, ...fixture };
+      // The mock owns its initial position; do not let a delayed first server
+      // snapshot replace the fixture before the movement/camera trace begins.
+      correctionRef.current = null;
+      pendingSentRef.current.length = 0;
     }
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
@@ -1193,7 +1203,7 @@ export default function GameMap() {
     let lastSentWireY = -1;
     let cameraX = playerStateRef.current.x;
     let cameraY = playerStateRef.current.y;
-    let hasAuthoritativePosition = false;
+    let hasAuthoritativePosition = cameraFixtureEnabled;
 
     const frame = (ts: number) => {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
