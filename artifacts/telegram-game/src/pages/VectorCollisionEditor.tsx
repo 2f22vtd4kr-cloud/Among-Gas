@@ -545,7 +545,7 @@ export default function VectorCollisionEditor() {
     }
     if (tool === "solid") {
       const camera = cameraRef.current;
-      const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+      const snapped = snapPoint(docRef.current.shapes, point, (event.pointerType === 'touch' ? 24 : 12) / camera.zoom);
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
       const close = draftPoints.length >= 3 &&
         Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= (event.pointerType === 'touch' ? 24 : 18) / camera.zoom;
