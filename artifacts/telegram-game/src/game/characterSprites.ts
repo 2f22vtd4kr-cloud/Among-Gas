@@ -107,7 +107,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   // authored source column. The previous windows cut real pixels from idle,
   // both walk cycles and the bottom of the corpse; keep the full silhouette
   // and exclude only the detached underline bands outside these bounds.
-  { top: 0, bottom: 142, displayHeight: 153 }, // idle: retain the full feet and lower outline, exclude detached scanlines
+  { top: 0, bottom: 147, displayHeight: 153 }, // idle: retain the full feet and lower outline, exclude detached scanlines
   { top: 172, bottom: 311, displayHeight: 140 }, // walk-1: retain the complete lower leg/foot edge
   { top: 327, bottom: 461, displayHeight: 134 }, // walk-2: retain the complete lower leg/foot edge
   { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: measured silhouette
