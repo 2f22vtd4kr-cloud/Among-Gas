@@ -301,7 +301,7 @@ try {
   const roleCropRatio = roleRevealSnapshot.spriteWidth > 0
     ? roleRevealSnapshot.spriteHeight / roleRevealSnapshot.spriteWidth
     : 0;
-  const expectedRoleCropRatio = 136 / (1123 / 7);
+  const expectedRoleCropRatio = Number(roleRevealSnapshot.sourceHeight) / (1123 / 7);
   assert.ok(Math.abs(roleCropRatio - expectedRoleCropRatio) < 0.01,
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
