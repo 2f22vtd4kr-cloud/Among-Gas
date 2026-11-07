@@ -19,14 +19,24 @@ try {
     return !!element && Number(element.getAttribute("width")) > 0 && Number(element.getAttribute("height")) > 0;
   });
 
-  // Draw a freehand wall stroke. It remains an explicit active chain until Finish chain.
+  // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
+  const touch = await page.context().newCDPSession(page);
+
+  // A one-finger freehand wall stroke must create an active chain on a touch device.
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
-  await page.mouse.move(bounds.x + 45, bounds.y + 70);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + 165, bounds.y + 76, { steps: 5 });
-  await page.mouse.up();
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ id: 1, x: bounds.x + 45, y: bounds.y + 70 }],
+  });
+  for (const [x, y] of [[85, 72], [125, 74], [165, 76]]) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ id: 1, x: bounds.x + x, y: bounds.y + y }],
+    });
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
 
@@ -105,7 +115,6 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const touch = await page.context().newCDPSession(page);
   const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test"];
   for (const mode of pinchModes) {
     await page.getByRole("button", { name: mode }).click();
