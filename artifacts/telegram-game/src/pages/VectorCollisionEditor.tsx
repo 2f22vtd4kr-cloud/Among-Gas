@@ -641,7 +641,7 @@ export default function VectorCollisionEditor() {
       const current = cloneDocument(docRef.current);
       const shape = current.shapes.find(item => item.id === gesture.shapeId);
       if (!shape) return;
-      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, 10 / cameraRef.current.zoom);
+      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, (event.pointerType === 'touch' ? 24 : 10) / cameraRef.current.zoom);
       const replacementPoint = snapped.kind === "none" ? point : snapped.point;
       const next: CollisionDocument = {
         ...current,
