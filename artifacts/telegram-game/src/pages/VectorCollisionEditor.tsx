@@ -994,6 +994,7 @@ export default function VectorCollisionEditor() {
           ref={canvasRef}
           data-editor-loaded={loaded ? "true" : "false"}
           data-shape-count={document.shapes.length}
+          data-selected-shape-id={selectedId ?? ""}
           data-zoom={zoomDisplay}
           data-draft-point-count={draftPoints.length}
           data-walk-point-count={walkPoints.length}
