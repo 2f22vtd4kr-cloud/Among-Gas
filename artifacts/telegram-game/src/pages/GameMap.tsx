@@ -2701,7 +2701,7 @@ export default function GameMap() {
               }, 4000);
             }}
             style={{
-              width: 68, height: 68, padding: 5, borderRadius: '50%',
+              width: 92, height: 92, padding: 8, borderRadius: '50%',
               display: 'grid', placeItems: 'center',
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
               color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
@@ -2711,7 +2711,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
+            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 72, height: 72, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
           </button>
         </div>
       )}
