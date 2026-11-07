@@ -40,6 +40,30 @@ try {
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
 
+  // The vision preview requires a stationary long-press; a drag must not activate it.
+  await page.getByRole("button", { name: "Vision preview (hold)" }).click();
+  bounds = await canvas.boundingBox();
+  const visionX = bounds.x + bounds.width * 0.55;
+  const visionY = bounds.y + bounds.height * 0.48;
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove", touchPoints: [{ id: 1, x: visionX + 24, y: visionY }],
+  });
+  await page.waitForTimeout(650);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "moving a vision press must cancel preview");
+
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
+  });
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-vision-preview") === "true", null, { timeout: 3000 });
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  assert.match(await page.locator("footer").innerText(), /diagnostic only, not live gameplay/);
+  await page.getByRole("button", { name: "Clear vision preview" }).click();
+  assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "vision preview can be cleared");
+
   // Active chains survive reload via local autosave and have explicit endpoint navigation.
   await page.reload({ waitUntil: "domcontentloaded" });
   await canvas.waitFor({ timeout: 15000 });
@@ -115,7 +139,7 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test"];
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)"];
   for (const mode of pinchModes) {
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
