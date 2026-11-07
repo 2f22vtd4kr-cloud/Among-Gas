@@ -112,7 +112,7 @@ function ActionButton({
   const degrees = progress * 360;
   const fill = cooldown && progress > 0
     ? "conic-gradient(from -90deg, #9aa3a8 0deg " + degrees + "deg, #566168 " + degrees + "deg 360deg)"
-    : disabled && kind === "report"
+     : disabled
       ? "linear-gradient(145deg, #77838a 0%, #465158 100%)"
       : background;
   return (
