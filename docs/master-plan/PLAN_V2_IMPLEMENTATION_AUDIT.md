@@ -1,0 +1,80 @@
+# Plan v2 implementation audit
+
+**Audit date:** 2026-11-08  
+**Audited baseline:** main at 82433bc5adf65f427c113f5a9d6df6e26ecf6139  
+**Implementation branch:** work/plan-v2-map-refinement-hardening  
+**Release status:** NOT READY. This audit does not authorize Replit/Vercel access, a production deployment, or live vector-collision cut-over.
+
+## Executive result
+
+Plan v2 is partly implemented already. The most substantial completed work is the 2× tiled-map delivery path and its browser integration, the initial vector-collision engine/editor foundation, the player sprite atlas, the five existing minigames, and several server-authoritative movement/bot/gameplay improvements. The main unfinished work is not another basic tile splitter or a generic collision-grid rewrite. It is (1) genuine source-preserving tile refinement beyond sharpening, (2) author-traced and independently reviewed map geometry, followed by route- and vision-validated runtime cut-over, (3) complete editor and HUD acceptance evidence, and (4) product refactoring, multi-client gameplay and release gates.
+
+This branch implements the safe tooling and lifecycle/test gaps that can be addressed without inventing map contours or breaching the active recovery restrictions. It intentionally does not promote any generated geometry or visual candidate into live gameplay.
+
+## Requirement-by-requirement assessment
+
+| Plan v2 area | State on audited main | What already exists | Remaining work / decision |
+|---|---|---|---|
+| Single map coordinate system and exact 2× transform | DONE in source; device QA incomplete | Logical world is 3224×1858. Runtime texture path uses an exact 6448×3716 master, a 1612×929 overview and a 7×4 manifest of 28 tiles. Tile world rectangles are exact halves of their texture rectangles. Transform tests cover full-map and interior crops. | Preserve current transform and run on real target devices after recovery restrictions are lifted. |
+| Tiled renderer integrated into gameplay | DONE in source; hardening added in this branch | GameMap loads map-overview.webp, then optional map-tiles or map-tiles-sharp based on map-art=sharp; visible detail tiles are drawn over the overview. If tile loading fails, the overview remains a complete fallback. Runtime no longer selects the old full-size PNG/WebP as its display path. | Execute the browser smoke on CI and real devices, capture visual evidence at planned viewports, and assess decoded memory and first-frame timing on actual mobile hardware. |
+| Tile generation and pixel-fidelity QA | DONE for baseline and optional sharpened sets | Existing buildMapTiles.ts and mapTilePipeline.ts regenerate baseline and sharpened WebP sets, their manifests and the 1612×929 overview from map-hires.webp. Existing TypeScript QA checks geometry, source digests, pixel/edge fidelity and synthetic regressions. The supplied archive's two 28-tile sets reconstruct to complete masters. | The sharpened set is not new detail. Preserve it as an optional visual variant only; do not treat sharpness as evidence of a super-resolution result. |
+| Stage 1 faithful enhancement | PARTLY DONE | There is a faithful 2× resample baseline, exact tile geometry and an optional sharpened candidate. | A documented, reproducible comparison against the original map and visual approval are still required. No unreviewed variant should replace production art. |
+| Stage 2 context-aware image-to-image refinement | NOT DONE as artwork; TOOLING ADDED in this branch | Main had no context-crop, overlap-blend and generated-tile QA workflow. This branch adds context crop preparation, a manifest, cosine-feathered stitching, core-only stitching, validation against mixed dimensions, and separate colour/geometry/edge/seam QA. | No AI/SR model output has been generated or supplied. Run the model offline, retain prompts/model/version metadata, inspect the gallery, and require QA plus owner review. Generated candidates stay outside public runtime assets. |
+| Manifest integrity and tile runtime lifecycle | PARTLY DONE on main; HARDENED in this branch | Main validates fixed world dimensions, tile count, tile row/column, rectangles and safe filename pattern. It loads images lazily and maintains an LRU-style cache. | This branch adds strict canonical tile filenames, finite positive camera/zoom/DPR validation, restoration of caller canvas smoothing settings, deterministic one-device-pixel edge bleed, status snapshots, explicit retry of failed tiles, cancellation of pending image requests, and disposal/eviction cleanup. Regression tests are wired through the scripts package; exact-head CI is still required. |
+| Mobile vector editor foundation | PARTLY DONE | Dev-only vector editor and vector engine exist. Pointer events, pinch takeover, freehand active chains, endpoint snapping, RDP simplification, undo/redo, local draft restore, import/export, zone selection and candidate save are present. Candidate save reports its content hash and retained backup count. | Complete/verify vision preview, analyzer, loupe/magnification, magnet/vertex editing and per-zone review workflow. The browser test now exercises a one-finger wall stroke using real Chromium touchscreen events rather than mouse input; its full mobile browser run remains to be executed. |
+| Collision model and live cut-over | FOUNDATION ONLY; NOT PRODUCTION-READY | Shared vector collision document/schema/engine, validation, rasterization helpers and editor walk preview exist. Walk preview calls the vector engine's production feet movement method. Movement currently uses the established fine-grid asymmetric feet footprint; bot navigation derives a clearance-aware grid from that source. | Live client, server, bots and vision still rely on raster/fine-grid and separate vision derivations. The canonical author-traced and reviewed vector map is not complete. No cut-over or deletion of raster sources is allowed until all 12 zones are author-traced, reviewed, full-footprint route-tested, sight-tested and client/server parity proven. |
+| Statue planter and pedestal sight contour | NOT DONE as a reviewed vector contour | The former misplaced statue offset circle has already been removed from the manual narrow occluder list; the existing comment explicitly says the statue's shadow is painted into the map art and the old circle projected a second misplaced shadow. | This does not mean the statue geometry is solved. The correct visible planter ring and pedestal contour still require measurement and independent review; do not add guessed circles/polygons. |
+| Parking lines and other map connectivity defects | NOT DONE | Current collision overrides contain the existing green service van footprint and east-generator approach aisle. | Parking paint/line collision and the other identified regions still need visual classification and author review. Painted markings must remain walkable unless a visible physical obstacle supports a collider. |
+| HUD action bar | PARTLY DONE; visual states not accepted | Kill is impostor-only, disabled without target/on cooldown, shows a countdown and conic cooldown sweep. Report is persistently visible for living players and disabled without a reportable body. Use is persistently visible and disabled when no contextual action is available. Position uses the game control layout preferences. | This branch adds the requested disabled-Kill opacity of 45% and desaturation. Context-specific Use iconography, a clearly verified vent action, full original icon treatment and the six-state screenshot matrix remain outstanding. No visual acceptance is claimed without running-browser screenshots. |
+| GameMap modularization | NOT DONE | The main file retains the map rendering, camera, pointer/input, gameplay overlay and HUD responsibilities together. | Split into stable render/camera/input/HUD boundaries with no gameplay changes. This remains a large, separately testable refactor. |
+| Minigame modularization | NOT DONE | TaskMinigame.tsx contains the current five implemented minigames and their shared overlay logic. | Extract independent minigame components/shared primitives and create functional and visual regression coverage. The presence of working minigames is not completion of the refactor/gallery requirement. |
+| Sprites and animation | PARTLY DONE | Authored character source, an atlas loading path, runtime palette expansion and character geometry/animation tests already exist. | Complete the full 18-palette × 9-frame baked/golden-image review with visor/filter, suit shading, feet anchor, corpse bone and walk-pose comparisons. Existing extraction previews alone are not acceptance. |
+| Bots and strategic behaviour | PARTLY DONE | Recent merged work includes role-scoped strategic AI, seeded balance evaluation and a solo human/bot movement verification path. Server authority and shared raster movement contracts remain. | Prove bots on the final reviewed map, with grounded visibility/event reactions, path reachability and human-vs-bot balance. A solo simulation or mock does not replace full live-game acceptance. |
+| Meetings, reports, voting and multi-client networking | INCOMPLETE at release-gate level | Server-backed WebSocket protocol and UI flows exist in source. | A two-real-client server-backed emergency/report/meeting/discussion/voting/ejection proof is still a mandatory gate; issue #90 explicitly records the E2E gap. |
+| Asset provenance | INCOMPLETE | ASSETS.md records project-authored assets and identifies the legacy au-assets directory as not cleared for commercial redistribution. | Replace or license the uncleared runtime assets, record provenance/attribution and remove reliance on uncleared art before commercial release. Do not delete assets blindly where historic fixtures depend on them. |
+| Real device, Replit/Vercel and release verification | BLOCKED / NOT DONE | Repository-level and browser automation exist. | Active recovery issue #90 prohibits Replit/Vercel access and publishing. No real-phone acceptance, 20-minute soak or release dossier is claimed. Resume only when the owner explicitly clears that gate. |
+
+## Changes made on this branch
+
+1. Hardened the browser TiledMap implementation:
+   - camera and device scale validation;
+   - preserve and restore canvas image-smoothing state;
+   - one-device-pixel overlap to protect tile edges at fractional scales;
+   - status snapshot, failed-tile retry and explicit dispose;
+   - cancel pending image loads and release image references on eviction/dispose.
+2. Updated GameMap's map-image effect to dispose a loaded tile map on unmount and dispose a map whose asynchronous load completes after cancellation.
+3. Added a standalone offline map pipeline under scripts/map-tiles:
+   - exact 2× baseline and tile cutting;
+   - validated 28-entry manifests and exact re-stitching;
+   - context-crop preparation;
+   - cosine-feather blending for context outputs;
+   - strict rejection of mixed core/context output sizes;
+   - geometry, colour, edge and seam QA separate from production runtime.
+4. Corrected seam QA to compare per-pixel seam residual changes against the faithful reference using a 95th-percentile measure. This allows natural gradients already present in an unchanged map while detecting newly introduced narrow edge stripes.
+5. Added seven Python regression tests for coverage, lossless cut/stitch, context feather round-trip, mixed output rejection, missing tile detection, geometric shift rejection and localized seam rejection.
+6. Added a dedicated browser TiledMap renderer regression harness for load, edge bleed, smoothing restoration, explicit retry, disposal, invalid viewport and manifest validation; wired a separate TypeScript config and package script.
+7. Expanded the map browser-smoke matrix with mobile 390×844 at DPR 3.
+8. Changed disabled Kill styling to 45% opacity plus desaturation.
+9. Changed vector-editor mobile browser smoke to draw its first freehand wall stroke with real Chromium touchscreen input, reusing the touch session for pinch tests.
+
+## Verification and limits
+
+- The supplied baseline and sharpened tile sets each have a complete 7×4 / 28-tile manifest and reconstruct to a full 6448×3716 master.
+- Supplied-map QA: faithful baseline against itself passes. The optional sharpened candidate versus baseline measured low-frequency Lab MAD 0.4725, quarter-scale chamfer 0.145 px, edge F1 0.9879, worst per-tile Lab drift 0.6686 and no new seam step; its Laplacian-variance ratio is about 2.65. This is a sharpness change, not proof of generated detail.
+- The local offline Python test working copy passed 7/7 tests, including the localized-seam regression. The branch's exact-head Python and TypeScript/browser CI must still be run and reviewed.
+- The new TypeScript renderer test is wired as scripts package command test:map-renderer; do not mark it passed until exact-head CI executes it.
+- The browser smoke scripts have not been run against a live game in this work session. No screenshots from a running browser or a real phone are claimed.
+- No generated AI tile candidates, collision geometry, deploys, database changes or production map changes were made.
+
+## Required next acceptance sequence
+
+1. Run exact-head repository CI and fix all regressions without weakening tests.
+2. Review the baseline and any Stage-2 image-to-image gallery at mobile/desktop scale; retain only candidates that pass the QA gate and owner visual review.
+3. Establish the source-map provenance and review the 12 collision zones with independent author/reviewer dispositions.
+4. Trace statue/prop outlines and doors with explicit blocksMove/blocksSight flags; resolve parking-line and connectivity defects; run full three-circle-footprint routes for every gameplay anchor and all cross-zone paths.
+5. Add visibility/shadow tests from the required viewpoints; profile on a mid-range phone; prove that low props remain move-only where appropriate.
+6. Only after geometry review, test vector/raster parity for client, server and bots, then plan a separately reviewed production cut-over.
+7. Complete the HUD six-state screenshot matrix, touch editor acceptance, GameMap/TaskMinigame modularization, sprite golden images, asset provenance, two-client E2E, balance matrix and soak.
+8. Obtain explicit owner clearance for the recovery restriction before any Replit/Vercel or target-device integration. Issue #90 remains controlling until then.
+
+**Decision:** this branch advances the map refinement tooling and runtime resource management, but Plan v2 is not complete and the game is not release-ready.
