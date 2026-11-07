@@ -73,7 +73,7 @@ jobs:
       - name: Generate and quality-check baseline and optional sharpened 2× map tiles
         run: pnpm --filter @workspace/scripts run build:map-tiles && pnpm --filter @workspace/scripts run test:map-tiles
 
-      - name: Generate vector analysis preview and verify it remains outside gameplay runtime
+      - name: Generate production red-line vector collision document and verify live runtime cutover
         run: pnpm --filter @workspace/scripts run test:production-world
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
