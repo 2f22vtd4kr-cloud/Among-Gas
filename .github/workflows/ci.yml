@@ -187,6 +187,7 @@ jobs:
           npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
           /tmp/among-gas-playwright/node_modules/.bin/playwright install chromium
 
+      # Browser editing uses a disposable scratch document; the production seed is read-only and candidate saves stay isolated.
       - name: Start Telegram Mini App and play a mobile UI smoke test
         env:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
