@@ -206,9 +206,13 @@ export function useGameSettings(): GameSettings {
     };
     window.addEventListener(CHANGE_EVENT, sync);
     window.addEventListener('storage', syncExternalStorage);
+    // Recompute responsive default control positions after orientation changes
+    // or viewport resizing. The same in-memory settings remain authoritative.
+    window.addEventListener('resize', sync);
     return () => {
       window.removeEventListener(CHANGE_EVENT, sync);
       window.removeEventListener('storage', syncExternalStorage);
+      window.removeEventListener('resize', sync);
     };
   }, []);
 
