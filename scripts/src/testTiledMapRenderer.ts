@@ -35,6 +35,7 @@ class FakeImage {
 }
 
 const originalFetch = globalThis.fetch;
+let invalidManifest = false;
 Object.defineProperty(globalThis, "Image", { configurable: true, writable: true, value: FakeImage });
 Object.defineProperty(globalThis, "HTMLImageElement", { configurable: true, writable: true, value: FakeImage });
 Object.defineProperty(globalThis, "fetch", {
@@ -42,7 +43,8 @@ Object.defineProperty(globalThis, "fetch", {
   writable: true,
   value: async () => ({
     ok: true,
-    json: async () => ({
+    json: async () => {
+      const manifest = {
       version: 1,
       worldW: 3224,
       worldH: 1858,
@@ -68,7 +70,10 @@ Object.defineProperty(globalThis, "fetch", {
           world: [x / 2, y / 2, width / 2, height / 2],
         };
       }),
-    }),
+      };
+      if (invalidManifest) manifest.tiles[0].file = "../escape.webp";
+      return manifest;
+    },
   }),
 });
 
@@ -99,8 +104,8 @@ try {
   assert.equal(draws.length, 1);
   assert.equal(draws[0][1], 0, "tile left edge");
   assert.equal(draws[0][2], 0, "tile top edge");
-  assert.equal(draws[0][3], 257, "the device-pixel bleed closes fractional-scale hairlines");
-  assert.equal(draws[0][4], 257);
+  assert.equal(draws[0][3], 513, "the device-pixel bleed closes fractional-scale hairlines");
+  assert.equal(draws[0][4], 513);
   assert.equal(context.imageSmoothingEnabled, false, "renderer restores caller smoothing state");
   assert.equal(context.imageSmoothingQuality, "low", "renderer restores caller smoothing quality");
 
@@ -124,22 +129,23 @@ try {
   assert.equal(map.draw(context, pendingCamera, 1, 1), false);
   const pendingImage = FakeImage.instances.at(-1)!;
   assert.ok(pendingImage.src.endsWith("tile_r0_c2.webp"));
+  assert.throws(
+    () => map.draw(context, { x: 0, y: 0, w: 0, h: 10 }, 1, 1),
+    RangeError,
+    "invalid viewports must be rejected",
+  );
   map.dispose();
   assert.equal(pendingImage.src, "", "dispose cancels pending image requests");
   assert.equal(map.getStatus().cached, 0, "dispose releases all cached images");
   assert.equal(map.draw(context, camera, 1, 1), false, "disposed maps refuse later drawing");
 
+  invalidManifest = true;
   await assert.rejects(
     () => TiledMap.load("/bad-map"),
     /manifest|tile/i,
     "invalid manifests must fail closed",
   );
 
-  assert.throws(
-    () => map.draw(context, { x: 0, y: 0, w: 0, h: 10 }, 1, 1),
-    RangeError,
-    "invalid viewports must be rejected",
-  );
   console.log("TILED MAP RENDERER TESTS PASSED: load, bleed, smoothing restore, status, retry, disposal and validation");
 } finally {
   Object.defineProperty(globalThis, "fetch", { configurable: true, writable: true, value: originalFetch });
