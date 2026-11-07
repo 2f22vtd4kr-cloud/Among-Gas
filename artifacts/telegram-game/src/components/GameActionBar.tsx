@@ -170,18 +170,20 @@ export default function GameActionBar(props: GameActionBarProps) {
           onClick={props.onKill}
         />
       )}
-      <ActionButton
-        kind="report"
-        testId="game-action-report"
-        label={props.english ? "REPORT" : "ДОКЛАД"}
-        ariaLabel={reportDisabled
-          ? (props.english ? "Report unavailable" : "Доклад недоступен")
-          : (props.english ? "Report body" : "Доложить о теле")}
-        disabled={reportDisabled}
-        background="#e9a52c"
-        reportAvailable={props.reportAvailable && !props.isGhost}
-        onClick={props.onReport}
-      />
+      {!props.isGhost && (
+        <ActionButton
+          kind="report"
+          testId="game-action-report"
+          label={props.english ? "REPORT" : "ДОКЛАД"}
+          ariaLabel={reportDisabled
+            ? (props.english ? "Report unavailable" : "Доклад недоступен")
+            : (props.english ? "Report body" : "Доложить о теле")}
+          disabled={reportDisabled}
+          background="#e9a52c"
+          reportAvailable={props.reportAvailable}
+          onClick={props.onReport}
+        />
+      )}
       <ActionButton
         kind="use"
         testId="game-action-use"
