@@ -19,4 +19,19 @@ assert.equal(reserveBotDiscussionSlot(smallMeeting, 1_000, 0, 2), true);
 assert.equal(reserveBotDiscussionSlot(smallMeeting, 5_000, 1, 2), true);
 assert.equal(reserveBotDiscussionSlot(smallMeeting, 9_000, 0, 2), false, 'small lobbies cap at their living bot count');
 
+
+const questionMeeting = {};
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 1_000, 0, 6), true,
+  'the first bot may open a meeting');
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 2_599, 1, 6, '1:1000'), false,
+  'a selected answer still waits for a natural pause');
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 2_600, 1, 6, '1:1000'), true,
+  'one selected bot may answer after the shorter reply pause');
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 2_650, 2, 6, '1:1000'), false,
+  'the same open question cannot trigger a second autonomous reply');
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 6_149, 2, 6), false,
+  'the usual speaking cadence resumes after a reply');
+assert.equal(reserveBotDiscussionSlot(questionMeeting, 6_150, 2, 6), true,
+  'the next ordinary turn remains globally paced');
+
 console.log('Bot discussion cadence tests passed.');
