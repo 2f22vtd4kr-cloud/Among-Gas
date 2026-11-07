@@ -176,6 +176,15 @@ try {
   assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
   assert.equal(Number(await canvas.getAttribute("data-draft-wall-point-count")), 0);
 
+  // The analyzer is a real editor surface, not a decorative status label.
+  await page.getByRole("button", { name: "Geometry analyzer" }).click();
+  const analysis = page.getByTestId("collision-analysis");
+  await analysis.waitFor();
+  await analysis.getByText("Geometry analyzer").waitFor();
+  await analysis.getByText("Shapes / segments").waitFor();
+  await page.getByRole("button", { name: "Geometry analyzer" }).click();
+  await analysis.waitFor({ state: "detached" });
+
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
 } finally {
