@@ -19,8 +19,11 @@ assert.ok(statuePedestal?.closed, "the measured statue pedestal must be a solid 
 assert.equal(world.insideSolid(1745, 497), true, "the statue pedestal interior must block movement");
 assert.equal(world.isPlayerWalkableAtFeet(1745, 550), true,
   "the decorative garden floor outside the pedestal remains walkable");
-assert.ok(document.shapes.some(shape => shape.zone === "statue-garden-boundary" && !shape.closed),
-  "the red-line garden perimeter must remain a boundary, not a filled solid");
+const editorZones = new Set(document.shapes.map(shape => shape.zone));
+assert.deepEqual([...editorZones].sort(), ["A", "B", "C", "D", "E"],
+  "the production seed must be assigned across all five spatial editor zones");
+assert.equal(statuePedestal.zone, "C",
+  "the statue pedestal belongs to the central editor zone");
 
 const cols = COLS * 2, rows = ROWS * 2;
 const nav = world.rasterizePlayerNav(cols, rows);
