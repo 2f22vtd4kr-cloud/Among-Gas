@@ -209,8 +209,6 @@ try {
       "pinch in " + mode + " must cancel the in-progress freehand stroke",
     );
   }
-  await touch.detach();
-
   // A reload must offer an explicit restore for the unsaved local document.
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator("canvas[data-editor-loaded='true']").waitFor({ timeout: 15000 });
@@ -253,6 +251,7 @@ try {
   touchId++;
   await page.getByRole("button", { name: "Vision preview" }).click();
   await vision.waitFor({ state: "detached" });
+  await touch.detach();
 
   await page.getByRole("button", { name: "Loupe" }).click();
   bounds = await canvas.boundingBox();
