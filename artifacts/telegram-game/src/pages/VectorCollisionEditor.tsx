@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
+import CollisionAnalysisPanel from "../components/CollisionAnalysisPanel";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, ChangeEvent } from "react";
 import {
   History,
@@ -98,6 +99,7 @@ export default function VectorCollisionEditor() {
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
     const editable = cloneDocument(next);
@@ -909,6 +911,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle()} onClick={finishPolygon} disabled={draftPoints.length < 3}>Close polygon</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(0.8)}>−</button>
         <button type="button" style={buttonStyle()} onClick={() => zoomBy(1.25)}>+</button>
+        <button type="button" data-testid="toggle-geometry-analysis" aria-pressed={showAnalysis} style={buttonStyle(showAnalysis)} onClick={() => setShowAnalysis(value => !value)}>Geometry analyzer</button>
         <button type="button" style={buttonStyle()} onClick={fitMap}>Fit map</button>
         <button type="button" style={buttonStyle(activeChain.length > 0)} onClick={jumpToChainEnd} disabled={!activeChain.length}>Jump to end</button>
         <button type="button" style={buttonStyle(activeChain.length > 1)} onClick={finishActiveChain} disabled={activeChain.length < 2}>Finish chain</button>
@@ -961,6 +964,7 @@ export default function VectorCollisionEditor() {
           onPointerCancel={onPointerUp}
           style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: tool === "pan" ? "grab" : tool === "edit" ? "move" : "crosshair" }}
         />
+        {showAnalysis && <CollisionAnalysisPanel shapes={document.shapes} mapW={MAP_W} mapH={MAP_H} />}
         {!loaded && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(10,18,26,.84)", fontSize: 14 }}>Loading geometry workspace…</div>}
       </div>
 
