@@ -284,10 +284,12 @@ export default function VectorCollisionEditor() {
     image.onerror = () => { if (active) setStatus("Map artwork failed to load."); };
     image.src = import.meta.env.BASE_URL + "map-hires.webp";
 
-    fetch(import.meta.env.BASE_URL + "__vector-collision-api/document", { signal: controller.signal })
+    const scratch = new URLSearchParams(window.location.search).get("scratch") === "1";
+    const workspaceUrl = import.meta.env.BASE_URL + "__vector-collision-api/document" + (scratch ? "?scratch=1" : "");
+    fetch(workspaceUrl, { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error("Workspace load failed (" + response.status + ")");
-        return response.json() as Promise<{ document: CollisionDocument; saved: boolean }>;
+        return response.json() as Promise<{ document: CollisionDocument; saved: boolean; seeded?: boolean }>;
       })
       .then(result => {
         if (!active) return;
@@ -328,8 +330,10 @@ export default function VectorCollisionEditor() {
         }
         setLoaded(true);
         setStatus(result.saved
-          ? "Saved vector candidate loaded. It is not used by live gameplay."
-          : "Scratch workspace only. No production geometry is loaded.");
+          ? "Saved vector candidate loaded. It is separate from live production geometry."
+          : result.seeded
+            ? "Production red-line seed loaded as an unsaved candidate. Saving writes to a separate review file."
+            : "Scratch workspace only. No production geometry is loaded.");
       })
       .catch(error => {
         if (active && error.name !== "AbortError") {
