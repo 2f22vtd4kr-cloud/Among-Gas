@@ -63,7 +63,7 @@ Object.defineProperty(globalThis, "fetch", {
         const width = Math.min(1024, 6448 - x);
         const height = Math.min(1024, 3716 - y);
         return {
-          file: \`tile_r\${row}_c\${col}.webp\`,
+          file: `tile_r${row}_c${col}.webp`,
           row,
           col,
           tex: [x, y, width, height],
