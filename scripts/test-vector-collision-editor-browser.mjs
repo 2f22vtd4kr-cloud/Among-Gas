@@ -220,6 +220,13 @@ try {
   await page.getByRole("button", { name: "Vision preview" }).click();
   await vision.waitFor({ state: "detached" });
 
+  await page.getByRole("button", { name: "Loupe" }).click();
+  bounds = await canvas.boundingBox();
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.getByTestId("vector-loupe").waitFor();
+  await page.getByRole("button", { name: "Loupe" }).click();
+  await page.getByTestId("vector-loupe").waitFor({ state: "detached" });
+
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
 } finally {
