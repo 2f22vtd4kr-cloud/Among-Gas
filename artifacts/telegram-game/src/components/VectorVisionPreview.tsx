@@ -18,6 +18,10 @@ export default function VectorVisionPreview({ shapes, mapW, mapH, camera }: Vect
   const [viewport, setViewport] = useState({ width: 1, height: 1 });
   const world = useMemo(() => new CollisionWorld(shapes, mapW, mapH), [shapes, mapW, mapH]);
 
+  useEffect(() => () => {
+    if (longPressTimer.current !== null) window.clearTimeout(longPressTimer.current);
+  }, []);
+
   useEffect(() => {
     const element = document.getElementById("vector-vision-preview-layer");
     if (!element) return;
