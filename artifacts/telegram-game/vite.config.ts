@@ -74,8 +74,15 @@ function vectorCollisionEditorApiPlugin(): Plugin {
 
         // CI injects a disposable path so the dev API can be tested without
         // leaving generated candidate geometry in the production source tree.
+        // Candidate edits are deliberately isolated from the generated production seed.
         const filePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
           ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
+          : path.resolve(
+              import.meta.dirname,
+              '.vector-collision-candidate.json',
+            );
+        const seedPath = process.env.VECTOR_COLLISION_EDITOR_SEED_PATH
+          ? path.resolve(process.env.VECTOR_COLLISION_EDITOR_SEED_PATH)
           : path.resolve(
               import.meta.dirname,
               '../../lib/shared/src/collision/collision.v1.json',
@@ -83,16 +90,22 @@ function vectorCollisionEditorApiPlugin(): Plugin {
 
         if (req.method === 'GET') {
           try {
-            const exists = fs.existsSync(filePath);
-            const document = exists
-              ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
-              : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
+            const scratch = requestUrl.searchParams.get('scratch') === '1';
+            const candidateExists = !scratch && fs.existsSync(filePath);
+            const seeded = !scratch && !candidateExists && fs.existsSync(seedPath);
+            const document = scratch
+              ? { version: 1, mapW: 3224, mapH: 1858, shapes: [] }
+              : candidateExists
+                ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
+                : seeded
+                  ? JSON.parse(fs.readFileSync(seedPath, 'utf8'))
+                  : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
             const errors = validateCollisionDocument(document);
             if (errors.length) {
-              respond(500, { error: 'Saved candidate document is invalid: ' + errors.slice(0, 5).join('; ') });
+              respond(500, { error: 'Collision editor source document is invalid: ' + errors.slice(0, 5).join('; ') });
               return;
             }
-            respond(200, { document, saved: exists });
+            respond(200, { document, saved: candidateExists, seeded });
           } catch (error) {
             respond(500, { error: error instanceof Error ? error.message : String(error) });
           }
@@ -166,8 +179,9 @@ function vectorCollisionEditorApiPlugin(): Plugin {
                 respond(400, { error: 'Zone save payload may contain only shapes assigned to zone ' + zoneFilter });
                 return;
               }
-              const existing = fs.existsSync(filePath)
-                ? JSON.parse(fs.readFileSync(filePath, 'utf8')) as { version: number; mapW: number; mapH: number; shapes: Array<{ zone?: string }>; source?: unknown }
+              const existingPath = fs.existsSync(filePath) ? filePath : fs.existsSync(seedPath) ? seedPath : null;
+              const existing = existingPath
+                ? JSON.parse(fs.readFileSync(existingPath, 'utf8')) as { version: number; mapW: number; mapH: number; shapes: Array<{ zone?: string }>; source?: unknown }
                 : { version: 1, mapW: 3224, mapH: 1858, shapes: [] as Array<{ zone?: string }> };
               const existingErrors = validateCollisionDocument(existing);
               if (existingErrors.length) {
