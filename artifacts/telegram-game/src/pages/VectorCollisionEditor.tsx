@@ -166,7 +166,7 @@ export default function VectorCollisionEditor() {
         context.fillStyle = "#fff1ae";
         for (const point of shape.points) {
           context.beginPath();
-          context.arc(point[0], point[1], 7 / camera.zoom, 0, Math.PI * 2);
+          context.arc(point[0], point[1], 24 / camera.zoom, 0, Math.PI * 2);
           context.fill();
         }
       }
@@ -535,7 +535,7 @@ export default function VectorCollisionEditor() {
         }
         start = end;
       } else {
-        const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+        const snapped = snapPoint(docRef.current.shapes, point, (event.pointerType === 'touch' ? 24 : 12) / camera.zoom);
         if (snapped.kind !== "none") start = snapped.point;
       }
       gestureRef.current = { kind: "wall", points: [start] };
@@ -548,7 +548,7 @@ export default function VectorCollisionEditor() {
       const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
       const close = draftPoints.length >= 3 &&
-        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= 18 / camera.zoom;
+        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= (event.pointerType === 'touch' ? 24 : 18) / camera.zoom;
       gestureRef.current = { kind: "solid", point: nextPoint, close };
       setPreviewPoint(nextPoint);
       return;
@@ -560,7 +560,7 @@ export default function VectorCollisionEditor() {
         for (let index = 0; index < shape.points.length; index++) {
           const vertex = shape.points[index];
           const d = Math.hypot(point[0] - vertex[0], point[1] - vertex[1]);
-          if (d <= 16 / camera.zoom && (!best || d < best.distance)) {
+          if (d <= (event.pointerType === 'touch' ? 24 : 16) / camera.zoom && (!best || d < best.distance)) {
             best = { shapeId: shape.id, index, distance: d };
           }
         }
@@ -569,7 +569,7 @@ export default function VectorCollisionEditor() {
         setSelectedId(best.shapeId);
         gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
       } else {
-        const target = nearestShape(point, 18 / camera.zoom);
+        const target = nearestShape(point, (event.pointerType === 'touch' ? 24 : 18) / camera.zoom);
         setSelectedId(target?.id ?? null);
       }
       return;
@@ -678,7 +678,7 @@ export default function VectorCollisionEditor() {
       const points = [...gesture.points];
       const end = worldPoint(event);
       const camera = cameraRef.current;
-      const endSnap = snapPoint(docRef.current.shapes, end, 12 / camera.zoom);
+      const endSnap = snapPoint(docRef.current.shapes, end, (event.pointerType === 'touch' ? 24 : 12) / camera.zoom);
       const snappedEnd = endSnap.kind === "none" ? end : endSnap.point;
       const last = points[points.length - 1];
       if (last && Math.hypot(snappedEnd[0] - last[0], snappedEnd[1] - last[1]) >= 0.5 / camera.zoom) {
@@ -706,7 +706,7 @@ export default function VectorCollisionEditor() {
         setLocalDraft(null);
       }
     } else if (gesture?.kind === "erase") {
-      const target = nearestShape(gesture.point, 22 / cameraRef.current.zoom);
+      const target = nearestShape(gesture.point, (event.pointerType === 'touch' ? 24 : 22) / cameraRef.current.zoom);
       if (target) {
         const current = cloneDocument(docRef.current);
         const next: CollisionDocument = { ...current, shapes: current.shapes.filter(shape => shape.id !== target.id) };
@@ -1001,6 +1001,7 @@ export default function VectorCollisionEditor() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerLeave={() => setLoupePoint(null)}
           style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: tool === "pan" ? "grab" : tool === "edit" ? "move" : "crosshair" }}
         />
         {showAnalysis && <CollisionAnalysisPanel shapes={document.shapes} mapW={MAP_W} mapH={MAP_H} />}
