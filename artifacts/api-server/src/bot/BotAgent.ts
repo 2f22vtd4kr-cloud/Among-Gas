@@ -196,40 +196,63 @@ export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 
 const BOT_DISCUSSION_MIN_GAP_MS = 3_200;
+const BOT_DISCUSSION_REPLY_MIN_GAP_MS = 1_600;
 const BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING = 4;
 
 interface MeetingBotDiscussionSchedule {
   nextMessageAtMs: number;
+  lastMessageAtMs: number;
   reservedMessages: number;
+  answeredQuestionKeys: Set<string>;
 }
 
 const meetingBotDiscussionSchedules = new WeakMap<object, MeetingBotDiscussionSchedule>();
 
 /**
  * Reserve a single global speaking slot for all bots in this meeting.
- * Per-bot cooldowns alone still let six bots take turns every 1–2 seconds;
- * this meeting-wide gate spaces the conversation and caps total bot chatter.
+ * Ordinary turns retain the 3.2–3.9s meeting-wide cadence. A single selected
+ * responder may answer an unanswered public question after a shorter 1.6s
+ * human-like pause; the question key is then consumed so other bots cannot
+ * dog-pile the same prompt. Every turn still counts toward the meeting cap.
  */
 export function reserveBotDiscussionSlot(
   meeting: object,
   nowMs: number,
   slot: number,
   livingBotCount: number,
+  questionReplyKey?: string,
 ): boolean {
   let schedule = meetingBotDiscussionSchedules.get(meeting);
   if (!schedule) {
-    schedule = { nextMessageAtMs: 0, reservedMessages: 0 };
+    schedule = {
+      nextMessageAtMs: 0,
+      lastMessageAtMs: 0,
+      reservedMessages: 0,
+      answeredQuestionKeys: new Set<string>(),
+    };
     meetingBotDiscussionSchedules.set(meeting, schedule);
   }
   const messageLimit = Math.min(
     BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING,
     Math.max(1, Math.trunc(livingBotCount)),
   );
-  if (schedule.reservedMessages >= messageLimit || nowMs < schedule.nextMessageAtMs) return false;
+  if (schedule.reservedMessages >= messageLimit) return false;
+
+  const isQuestionReply = questionReplyKey !== undefined;
+  if (isQuestionReply) {
+    if (schedule.answeredQuestionKeys.has(questionReplyKey)) return false;
+    if (schedule.lastMessageAtMs > 0 &&
+        nowMs - schedule.lastMessageAtMs < BOT_DISCUSSION_REPLY_MIN_GAP_MS) return false;
+  } else if (nowMs < schedule.nextMessageAtMs) {
+    return false;
+  }
 
   schedule.reservedMessages++;
-  // Deterministic small variation avoids a metronomic cadence without
-  // allowing a burst when multiple agents tick in the same 200ms frame.
+  schedule.lastMessageAtMs = nowMs;
+  if (isQuestionReply) schedule.answeredQuestionKeys.add(questionReplyKey);
+  // A reply is a real turn, so the normal minimum gap applies again after it.
+  // Deterministic variation avoids a metronomic cadence without allowing
+  // multiple agents to reserve the same turn in one 200ms frame.
   schedule.nextMessageAtMs = nowMs + BOT_DISCUSSION_MIN_GAP_MS + (Math.abs(slot) % 3) * 350;
   return true;
 }
@@ -436,7 +459,8 @@ export abstract class BotAgent {
       : 'opening';
     if (messageKey === this.lastDiscussionMessageKey || now - this.lastDiscussionReplyAtMs < 1400) return;
     const livingBotCount = Array.from(lobby.players.values()).filter(player => player.alive && player.isBot).length;
-    if (!reserveBotDiscussionSlot(meeting, now, self.slot, livingBotCount)) return;
+    const questionReplyKey = latestRelevant?.text.includes('?') ? messageKey : undefined;
+    if (!reserveBotDiscussionSlot(meeting, now, self.slot, livingBotCount, questionReplyKey)) return;
     this.discussionSentInMeeting = true;
 
     const hasBody = meeting.bodySlot !== NO_TARGET;
