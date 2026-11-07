@@ -24,7 +24,7 @@ type Gesture =
   | { kind: "solid"; point: Point; close: boolean }
   | { kind: "erase"; point: Point }
   | { kind: "walk"; point: Point }
-  | { kind: "vertex"; shapeId: string; index: number };
+  | { kind: "vertex"; shapeId: string; index: number; originalPoint: Point };
 
 const MAP_W = 3224;
 const MAP_H = 1858;
@@ -496,8 +496,15 @@ export default function VectorCollisionEditor() {
       // of the selected drawing/editing tool. Cancel a wall/vertex drag rather
       // than allowing the second pointer-up to commit an accidental shape.
       if (gestureRef.current?.kind === "vertex") {
-        historyRef.current.commit(docRef.current);
-        setSaved(false);
+        const vertexGesture = gestureRef.current;
+        const currentPoint = docRef.current.shapes.find(shape => shape.id === vertexGesture.shapeId)?.points[vertexGesture.index];
+        if (currentPoint && (Math.abs(currentPoint[0] - vertexGesture.originalPoint[0]) > 0.001 ||
+            Math.abs(currentPoint[1] - vertexGesture.originalPoint[1]) > 0.001)) {
+          historyRef.current.commit(docRef.current);
+          setSaved(false);
+          setDirty(true);
+          setLocalDraft(null);
+        }
       }
       gestureRef.current = null;
       setPreviewPoint(null);
@@ -571,7 +578,7 @@ export default function VectorCollisionEditor() {
       }
       if (best) {
         setSelectedId(best.shapeId);
-        gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
+        gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index, originalPoint: [...docRef.current.shapes.find(shape => shape.id === best!.shapeId)!.points[best.index]] };
       } else {
         const target = nearestShape(point, (event.pointerType === 'touch' ? 24 : 18) / camera.zoom);
         setSelectedId(target?.id ?? null);
@@ -741,10 +748,14 @@ export default function VectorCollisionEditor() {
         }
       }
     } else if (gesture?.kind === "vertex") {
-      historyRef.current.commit(docRef.current);
-      setSaved(false);
-      setDirty(true);
-      setLocalDraft(null);
+      const currentPoint = docRef.current.shapes.find(shape => shape.id === gesture.shapeId)?.points[gesture.index];
+      if (currentPoint && (Math.abs(currentPoint[0] - gesture.originalPoint[0]) > 0.001 ||
+          Math.abs(currentPoint[1] - gesture.originalPoint[1]) > 0.001)) {
+        historyRef.current.commit(docRef.current);
+        setSaved(false);
+        setDirty(true);
+        setLocalDraft(null);
+      }
     }
     gestureRef.current = null;
     pinchRef.current = null;
