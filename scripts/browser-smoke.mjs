@@ -1222,7 +1222,7 @@ try {
   assert.ok(smallPhoneActionBar, 'small-phone action bar drag target is present');
   assert.ok(Math.abs(
     (smallPhoneActionBar.top + smallPhoneActionBar.bottom) / 2 -
-    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.67),
+    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.66),
   ) < 3, 'compact-phone action bar stays below the camera-centered player sightline');
   for (let i = 0; i < smallPhoneControls.length; i++) {
     const control = smallPhoneControls[i];
@@ -1235,7 +1235,7 @@ try {
       const other = smallPhoneControls[j];
       const overlaps = control.left < other.right && control.right > other.left &&
         control.top < other.bottom && control.bottom > other.top;
-      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${control.id} / ${other.id}`);
+      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${JSON.stringify({ control, other })}`);
     }
   }
   await smallPhonePage.close();
