@@ -480,10 +480,15 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 
   // A second bot must answer an open question from the first bot instead of
   // ignoring all bot-to-bot dialogue unless it is explicitly name-addressed.
+  // The selected reply receives a shorter 1.6s pause, not an immediate burst;
+  // after it speaks, the ordinary meeting-wide cadence resumes.
   const secondBot = new CrewmateBot();
+  secondBot.tick(lobby, secondBotPlayer.player, manager); // initialise this bot's meeting state
   (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
   secondBot.tick(lobby, secondBotPlayer.player, manager);
-  (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  const earlyBotReplyPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 4);
+  assert.equal(earlyBotReplyPacket, undefined, 'the open-question reply keeps a natural pause');
+  await new Promise(resolve => setTimeout(resolve, 1_650));
   secondBot.tick(lobby, secondBotPlayer.player, manager);
   const botReplyPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 4);
   assert.ok(botReplyPacket, 'a second living bot answers the first bot\'s open question');
