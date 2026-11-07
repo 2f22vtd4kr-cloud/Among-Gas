@@ -947,6 +947,7 @@ export default function GameMap() {
   // ── Load canonical overview and optional viewport map tiles ───────────────
   useEffect(() => {
     let cancelled = false;
+    let loadedTiledMap: TiledMap | null = null;
     const overview = new Image();
     overview.decoding = 'async';
     const overviewPromise = new Promise<HTMLImageElement>((resolve, reject) => {
@@ -978,7 +979,11 @@ export default function GameMap() {
         // The overview remains a complete playable fallback if optional tiles fail.
         if (import.meta.env.DEV) console.warn('Map detail tiles unavailable; using overview fallback', tileError);
       }
-      if (cancelled) return;
+      if (cancelled) {
+        tiledMap?.dispose();
+        return;
+      }
+      loadedTiledMap = tiledMap;
       mapImgRef.current = image;
       tiledMapRef.current = tiledMap;
       setLoaded(true);
@@ -990,6 +995,9 @@ export default function GameMap() {
       cancelled = true;
       overview.onload = null;
       overview.onerror = null;
+      loadedTiledMap?.dispose();
+      if (tiledMapRef.current === loadedTiledMap) tiledMapRef.current = null;
+      if (mapImgRef.current === overview) mapImgRef.current = null;
     };
   }, []);
 
