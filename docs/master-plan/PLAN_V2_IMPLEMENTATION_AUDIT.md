@@ -54,7 +54,7 @@ This branch implements the safe tooling and lifecycle/test gaps that can be addr
 5. Added seven Python regression tests for coverage, lossless cut/stitch, context feather round-trip, mixed output rejection, missing tile detection, geometric shift rejection and localized seam rejection.
 6. Added a dedicated browser TiledMap renderer regression harness for load, edge bleed, smoothing restoration, explicit retry, disposal, invalid viewport and manifest validation; wired a separate TypeScript config and package script.
 7. Expanded the map browser-smoke matrix with mobile 390×844 at DPR 3.
-8. Changed disabled Kill styling to 45% opacity plus desaturation, and added contextual task/repair/vent/admin icons with a localized VENT label to the persistent Use action.
+8. Changed disabled Kill styling to 45% opacity plus desaturation, added contextual task/repair/vent/admin icons with a localized VENT label to the persistent Use action, and extended browser-smoke assertions for the task icon and disabled Kill treatment.
 9. Changed vector-editor mobile browser smoke to draw its first freehand wall stroke with real Chromium touchscreen input, reusing the touch session for pinch tests.
 
 ## Verification and limits
