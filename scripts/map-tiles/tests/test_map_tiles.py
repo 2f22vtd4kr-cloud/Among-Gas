@@ -1,4 +1,3 @@
-import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -75,6 +74,22 @@ class MapTilesTests(unittest.TestCase):
             (tile_dir / "tile_r0_c0.png").unlink()
             with self.assertRaises(FileNotFoundError):
                 map_tiles.stitch(tile_dir, Path(tmp) / "missing.png")
+
+    def test_qa_detects_new_localised_tile_seam(self):
+        master = self.make_master()
+        with tempfile.TemporaryDirectory() as tmp:
+            ref = Path(tmp) / "ref.png"
+            damaged = Path(tmp) / "damaged.png"
+            master.save(ref)
+            pixels = np.asarray(master).copy()
+            pixels[:, 1024, :] = np.clip(
+                pixels[:, 1024, :].astype(np.int16) + 80, 0, 255
+            ).astype(np.uint8)
+            Image.fromarray(pixels).save(damaged)
+            report, passed = tile_qa.run(damaged, ref)
+            self.assertGreater(report["G5_new_seam_step_levels"], 1.0)
+            self.assertFalse(report["checks"]["G5"])
+            self.assertFalse(passed)
 
     def test_qa_accepts_identity_and_rejects_geometry_shift(self):
         master = self.make_master()
