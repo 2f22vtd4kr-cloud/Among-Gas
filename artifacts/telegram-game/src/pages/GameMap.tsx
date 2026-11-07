@@ -1133,7 +1133,18 @@ export default function GameMap() {
     if (!fogCtx) return;
 
     const fineGrid = taskInteractionSightGrid;
+    const cameraFixture = new URLSearchParams(window.location.search).get('cameraFixture');
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
+    // Camera smoke tests use a collision-checked interior start so map-edge
+    // camera clamping and nearby props cannot masquerade as follow regressions.
+    if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
+        taskMockMode === 'task-playing' && cameraFixture === 'west-corridor') {
+      const fixture = { x: 510, y: 1069 };
+      if (!isPlayerPositionWalkable(taskInteractionGrid, fixture.x, fixture.y)) {
+        throw new Error('Camera fixture position is not walkable in the production vector collision world');
+      }
+      playerStateRef.current = { ...playerStateRef.current, ...fixture };
+    }
     if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
         (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
       const blockedFixture = taskMockMode?.includes('blocked') === true;
