@@ -1019,6 +1019,17 @@ export default function VectorCollisionEditor() {
         {selected && (
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
             <strong>{selected.label || selected.id}</strong>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>Zone
+              <select aria-label="Selected shape zone" value={selected.zone ?? "unassigned"} onChange={event => updateSelected({ zone: event.target.value })} style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 5, padding: 4, minHeight: 36 }}>
+                {selected.zone && !["unassigned", "A", "B", "C", "D", "E"].includes(selected.zone) && <option value={selected.zone}>{selected.zone} · legacy</option>}
+                <option value="unassigned">Unassigned</option>
+                <option value="A">A · north-west</option>
+                <option value="B">B · north-east</option>
+                <option value="C">C · central</option>
+                <option value="D">D · south-west</option>
+                <option value="E">E · south-east</option>
+              </select>
+            </label>
             <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
             <label><input type="checkbox" checked={selected.castsShadow ?? selected.blocksSight} onChange={event => updateSelected({ castsShadow: event.target.checked })} /> Shadow</label>
