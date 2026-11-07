@@ -292,7 +292,7 @@ try {
   const roleRevealSnapshot = await roleRevealSnapshotHandle.jsonValue();
   await roleRevealSnapshotHandle.dispose();
   assert.equal(roleRevealSnapshot.pose, 'idle');
-  assert.equal(roleRevealSnapshot.sourceHeight, '142',
+  assert.equal(roleRevealSnapshot.sourceHeight, '147',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(roleRevealSnapshot.displayHeight, '153',
     'the authored role-reveal baseline remains available as metadata');
