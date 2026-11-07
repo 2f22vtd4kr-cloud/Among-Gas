@@ -1580,12 +1580,13 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  // The initial spawn is close to the north bench row. Move south into the
-  // open central atrium for the camera-follow fixture, away from traced props.
-  await cameraPage.mouse.move(joystickX, joystickY + 42, { steps: 6 });
+  // The real spawn has a clear north-east diagonal lane through the atrium.
+  // Keep the camera fixture in that open corridor instead of pushing straight
+  // into the nearby bench rows and mistaking a correct wall stop for a camera fault.
+  await cameraPage.mouse.move(joystickX + 42, joystickY + 24, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(300);
+  await cameraPage.waitForTimeout(400);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
