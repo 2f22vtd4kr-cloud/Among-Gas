@@ -47,7 +47,7 @@ function validateManifest(value: unknown): TileManifest {
     const y = row * manifest.tilePx;
     const width = Math.min(manifest.tilePx, manifest.texW - x);
     const height = Math.min(manifest.tilePx, manifest.texH - y);
-    if (!tile || typeof tile.file !== "string" || !/^tile_r\d+_c\d+\.webp$/.test(tile.file) ||
+    if (!tile || typeof tile.file !== "string" || tile.file !== `tile_r${row}_c${col}.webp` ||
         seen.has(tile.file) || tile.row !== row || tile.col !== col ||
         !Array.isArray(tile.tex) || tile.tex.length !== 4 ||
         !Array.isArray(tile.world) || tile.world.length !== 4 ||
