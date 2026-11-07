@@ -89,7 +89,7 @@ assert.ok(walk2.y - (walk1.y + walk1.height) >= 16,
   'measured walk crops must retain the transparent safety gap');
 
 const idle = getCharacterFrameRect('teal', 'idle');
-assert.equal(idle.height, 142, 'idle source crop must retain the complete lower silhouette and feet');
+assert.equal(idle.height, 147, 'idle source crop must retain the complete lower silhouette and feet');
 assert.equal(idle.displayHeight, 153, 'original atlas baseline remains diagnostic metadata');
 const corpse = getCharacterFrameRect('teal', 'dead-body');
 assert.equal(corpse.y, 1067, 'corpse crop retains the upper bone that begins before the uniform row boundary');
