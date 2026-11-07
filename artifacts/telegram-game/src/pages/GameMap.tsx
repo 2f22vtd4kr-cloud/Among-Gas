@@ -2533,6 +2533,7 @@ export default function GameMap() {
           reportAvailable={!amIDead && nearestBody !== null && sabotage === null && myVentId === null}
           useAvailable={useActionEnabled}
           useActionKind={useActionKind}
+          ventAvailable={!amIDead && amIImpostor && nearestVentId !== null && myVentId === null}
           english={en}
           positionStyle={customControlPositionStyle('killReport', controlLayout, joystickSide)}
           onKill={() => {
@@ -2561,6 +2562,13 @@ export default function GameMap() {
               enterVent(nearestVentId);
             } else if (useActionKind === 'admin') {
               setShowAdminTable(true);
+            }
+          }}
+          onVent={() => {
+            if (!amIDead && amIImpostor && nearestVentId !== null && myVentId === null) {
+              haptic.tap();
+              sfx('uiSelect', 0.3);
+              enterVent(nearestVentId);
             }
           }}
         />
@@ -2675,6 +2683,7 @@ export default function GameMap() {
           ...customControlPositionStyle('emergency', controlLayout, joystickSide),
         }}>
           <button
+            data-testid="emergency-meeting-button"
             aria-label={emergencyMeetingUsed
               ? (en ? 'Emergency meeting already used' : 'Экстренное собрание уже использовано')
               : (en ? 'Call emergency meeting' : 'Созвать экстренное собрание')}
@@ -2692,7 +2701,7 @@ export default function GameMap() {
               }, 4000);
             }}
             style={{
-              width: 92, height: 92, padding: 8, borderRadius: '50%',
+              width: 68, height: 68, padding: 5, borderRadius: '50%',
               display: 'grid', placeItems: 'center',
               background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
               color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
@@ -2702,7 +2711,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 70, height: 70, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
+            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 52, height: 52, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
           </button>
         </div>
       )}
