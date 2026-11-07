@@ -4,7 +4,9 @@ import path from "node:path";
 
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
+const seedPath = process.env.VECTOR_COLLISION_EDITOR_SEED_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
+assert.ok(seedPath, "VECTOR_COLLISION_EDITOR_SEED_PATH must point to a disposable seed fixture");
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const endpoint = base.replace(/\/$/, "") + "/__vector-collision-api/document";
 const origin = new URL(base).origin;
@@ -54,13 +56,25 @@ async function post(body, requestHeaders = headers) {
 
 try {
   fs.rmSync(documentPath, { force: true });
+  fs.rmSync(seedPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
 
-  const initialResponse = await fetch(endpoint, { cache: "no-store" });
+  const initialResponse = await fetch(endpoint + "?scratch=1", { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
   const initial = await jsonResponse(initialResponse);
   assert.equal(initial.saved, false);
   assert.deepEqual(initial.document.shapes, []);
+
+  fs.writeFileSync(seedPath, JSON.stringify(validDocument));
+  const seedResponse = await fetch(endpoint, { cache: "no-store" });
+  assert.equal(seedResponse.status, 200);
+  const seedResult = await jsonResponse(seedResponse);
+  assert.equal(seedResult.saved, false, "the production seed is not misreported as a saved candidate");
+  assert.equal(seedResult.seeded, true, "the editor can load the production vector seed for review");
+  assert.equal(seedResult.document.shapes.length, 2);
+  const scratchAfterSeed = await fetch(endpoint + "?scratch=1", { cache: "no-store" });
+  assert.deepEqual((await jsonResponse(scratchAfterSeed)).document.shapes, [],
+    "scratch mode remains isolated from the production seed");
 
   const missingHeader = await post(JSON.stringify(validDocument), {
     "Content-Type": "application/json",
@@ -179,5 +193,6 @@ try {
   console.log("VECTOR COLLISION EDITOR API TESTS PASSED");
 } finally {
   fs.rmSync(documentPath, { force: true });
+  fs.rmSync(seedPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
 }
