@@ -1500,7 +1500,7 @@ try {
     if (url.startsWith(origin)) return route.continue();
     return route.abort();
   });
-  await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  await cameraPage.goto(`${origin}/?mock=task-playing&cameraFixture=west-corridor&skipReveal=true`, { waitUntil: 'domcontentloaded' });
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   // The camera's base image is intentionally the 0.5× overview; native 2×
@@ -1532,6 +1532,8 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
+  assert.equal(cameraBaseline.playerX, 510, 'camera QA must start from the validated west-room fixture');
+  assert.equal(cameraBaseline.playerY, 1069, 'camera QA must stay away from the north/south map-edge clamp');
   assert.equal(cameraBaseline.mapImageWidth, 1612,
     'camera diagnostics must identify the canonical half-resolution overview width');
   assert.equal(cameraBaseline.mapImageHeight, 929,
@@ -1580,13 +1582,12 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  // The real spawn has an open eastward lane across the atrium for a short hold.
-  // Keep vertical input neutral: the camera is correctly clamped at the north
-  // map edge here, so this fixture measures horizontal follow rather than edge clamping.
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  // The west-room fixture is centered inside the map with a long clear north lane.
+  // This exercises vertical camera follow without triggering map-edge clamping.
+  await cameraPage.mouse.move(joystickX, joystickY - 42, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(300);
+  await cameraPage.waitForTimeout(400);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
