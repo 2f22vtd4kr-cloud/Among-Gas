@@ -441,6 +441,25 @@ try {
   assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
     'the persistent Use control must expose the nearby actionable task');
   assert.equal(await taskButton.isEnabled(), true, 'Use must enable when a task is in range and visible');
+  const actionLabelMetrics = await page.getByTestId('game-action-bar').locator('button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const buttonBounds = button.getBoundingClientRect();
+      const label = button.querySelector('span:last-child');
+      const labelBounds = label?.getBoundingClientRect();
+      return {
+        text: label?.textContent?.trim() ?? '',
+        buttonWidth: buttonBounds.width,
+        labelWidth: labelBounds?.width ?? 0,
+        labelLeft: labelBounds?.left ?? 0,
+        labelRight: labelBounds?.right ?? 0,
+        buttonLeft: buttonBounds.left,
+        buttonRight: buttonBounds.right,
+      };
+    }),
+  );
+  assert.ok(actionLabelMetrics.every(item =>
+    item.labelWidth > 0 && item.labelLeft >= item.buttonLeft + 2 && item.labelRight <= item.buttonRight - 2,
+  ), `localized action labels must fit inside their touch targets at mobile width: ${JSON.stringify(actionLabelMetrics)}`);
   const idleReportButton = page.getByTestId('game-action-report');
   assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
   assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
