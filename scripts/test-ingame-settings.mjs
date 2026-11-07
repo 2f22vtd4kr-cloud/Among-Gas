@@ -21,7 +21,7 @@ try {
     isMobile: true,
     hasTouch: true,
   });
-  await page.goto(`${origin}/?mock=playing`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=task-playing`, { waitUntil: 'domcontentloaded' });
 
   const actionBar = page.getByTestId('game-action-bar');
   await actionBar.waitFor({ state: 'visible', timeout: 30_000 });
