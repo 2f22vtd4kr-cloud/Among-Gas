@@ -185,6 +185,15 @@ try {
   await page.getByRole("button", { name: "Geometry analyzer" }).click();
   await analysis.waitFor({ state: "detached" });
 
+  await page.getByRole("button", { name: "Vision preview" }).click();
+  const vision = page.getByTestId("vector-vision-preview");
+  await vision.waitFor();
+  await vision.getByLabel("Vision observer X").fill("1200");
+  await vision.getByLabel("Vision observer Y").fill("900");
+  await vision.getByLabel("Vision radius").fill("500");
+  await page.getByRole("button", { name: "Vision preview" }).click();
+  await vision.waitFor({ state: "detached" });
+
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
 } finally {
