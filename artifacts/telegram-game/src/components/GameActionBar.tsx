@@ -185,7 +185,7 @@ export default function GameActionBar(props: GameActionBarProps) {
       <ActionButton
         kind="use"
         testId="game-action-use"
-        label={props.english ? "USE" : "ИСПОЛЬЗОВАТЬ"}
+        label={props.english ? "USE" : "ИСП."}
         ariaLabel={useDisabled
           ? (props.english ? "Use unavailable" : "Использование недоступно")
           : (props.english ? "Use" : "Использовать")}
