@@ -40,6 +40,7 @@ const guestPackets: Buffer[] = [];
 host.on("message", data => hostPackets.push(Buffer.from(data as Buffer)));
 guest.on("message", data => guestPackets.push(Buffer.from(data as Buffer)));
 
+let failure: unknown;
 try {
   await Promise.all([once(host, "open"), once(guest, "open")]);
   host.send(JSON.stringify({ id: 991001, username: "MeetingHost" }));
@@ -85,6 +86,8 @@ try {
   assert.equal(hostPackets.some(packet => packet[0] === 0x1B), false,
     "a second emergency request cannot start another meeting while already in a meeting");
   console.log("PASS: two authenticated clients create/join/start a room, cross the real asset-ready barrier, and receive the same server-authoritative emergency meeting");
+} catch (error) {
+  failure = error;
 } finally {
   host.close();
   guest.close();
@@ -93,5 +96,9 @@ try {
   await new Promise<void>(resolve => server.close(() => resolve()));
   // callMeeting owns real discussion/voting timers; this isolated test process
   // exits after sockets and servers are closed instead of waiting for the timer.
-  process.exit(0);
 }
+if (failure) {
+  console.error(failure);
+  process.exit(1);
+}
+process.exit(0);
