@@ -217,7 +217,20 @@ try {
   await vision.getByLabel("Vision observer Y").fill("900");
   await vision.getByLabel("Vision radius").fill("500");
   await vision.getByRole("button", { name: "Shadow" }).click();
-  await vision.getByText("Casts shadow geometry only").waitFor();
+  await vision.getByText(/Casts shadow geometry only/).waitFor();
+  const observerBefore = await vision.getByLabel("Vision observer X").inputValue();
+  const visionBounds = await canvas.boundingBox();
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ id: touchId, x: visionBounds.x + visionBounds.width / 2, y: visionBounds.y + visionBounds.height / 2, radiusX: 4, radiusY: 4, force: 1 }],
+  });
+  await page.waitForTimeout(650);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.waitForFunction(before => {
+    const input = document.querySelector('input[aria-label="Vision observer X"]');
+    return input && input.value !== before;
+  }, observerBefore, { timeout: 5000 });
+  touchId++;
   await page.getByRole("button", { name: "Vision preview" }).click();
   await vision.waitFor({ state: "detached" });
 
