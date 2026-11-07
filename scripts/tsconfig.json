@@ -12,6 +12,7 @@
   ],
   "exclude": [
     "src/testVectorCollision.ts",
-    "src/buildCollisionDocument.ts"
+    "src/buildCollisionDocument.ts",
+    "src/testTiledMapRenderer.ts"
   ]
 }
