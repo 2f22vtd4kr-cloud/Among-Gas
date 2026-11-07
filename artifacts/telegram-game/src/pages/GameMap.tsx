@@ -1134,14 +1134,11 @@ export default function GameMap() {
 
     const fineGrid = taskInteractionSightGrid;
     const params = new URLSearchParams(window.location.search);
-    const cameraFixture = params.get('cameraFixture');
     const taskMockMode = params.get('mock');
-    const cameraFixtureEnabled = import.meta.env.DEV &&
-      import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      taskMockMode === 'task-playing' && cameraFixture === 'west-corridor';
-    if (cameraFixture !== null && !cameraFixtureEnabled) {
-      throw new Error('Camera fixture requested outside the enabled development mock');
-    }
+    // The mobile camera browser test uses the existing task-playing dev mock.
+    // Keep this fixture on that route so startup redirects cannot drop a
+    // separate query flag before the canvas effect reads it.
+    const cameraFixtureEnabled = import.meta.env.DEV && taskMockMode === 'task-playing';
     // Camera smoke tests use a collision-checked interior start so map-edge
     // camera clamping and nearby props cannot masquerade as follow regressions.
     if (cameraFixtureEnabled) {
