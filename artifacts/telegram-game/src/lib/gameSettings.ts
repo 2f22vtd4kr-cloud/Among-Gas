@@ -49,6 +49,7 @@ export function defaultControlPosition(
   const oppositeSide = joystickSide === 'left' ? 84 : 16;
   const sameSide = joystickSide === 'left' ? 16 : 84;
   const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
+  const compactLandscape = typeof window !== 'undefined' && window.innerWidth > window.innerHeight && window.innerHeight < 520;
   switch (id) {
     case 'joystick': return { x: sameSide, y: 84 };
     case 'map': return { x: 12, y: 6 };
@@ -59,7 +60,7 @@ export function defaultControlPosition(
       // Keep the persistent action cluster in the bottom-right thumb zone,
       // above the movement joystick. The safe-bounds clamp accounts for the
       // 4-button cluster width on 320px phones; custom positions remain editable.
-      return { x: 84, y: compactViewport ? 66 : 74 };
+      return { x: 84, y: compactLandscape ? 56 : compactViewport ? 66 : 74 };
     }
     // Keep the sabotage control in the opposite lower corner from the
     // joystick on compact phones. The action bar sits above both, avoiding
