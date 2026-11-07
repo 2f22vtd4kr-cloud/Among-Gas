@@ -41,11 +41,11 @@ export const PLAYER_SPAWN_MIN_SEPARATION_PX = 72;
  */
 const _SPRITE_H_MAP_PX = Math.round(36 * (MAP_W / 1652));
 /**
- * The idle atlas crop is 148px high from a 1401/9px cell. The renderer uses
+ * The idle atlas crop is 142px high from a 1401/9px cell. The renderer uses
  * that complete measured silhouette without vertical stretching; the shared feet offset
  * therefore follows the full crop height, not the diagnostic atlas baseline.
  */
-const IDLE_SPRITE_VISIBLE_HEIGHT = 148;
+const IDLE_SPRITE_VISIBLE_HEIGHT = 142;
 const CHARACTER_ATLAS_ROW_HEIGHT = 1401 / 9;
 export const FEET_OFFSET_Y = Math.round(
   _SPRITE_H_MAP_PX * (IDLE_SPRITE_VISIBLE_HEIGHT / CHARACTER_ATLAS_ROW_HEIGHT) / 2,
@@ -54,10 +54,10 @@ export const FEET_OFFSET_Y = Math.round(
  * Half-extents of the rendered idle sprite used by spawn footprint checks.
  * Derived from the 1123×1401 atlas (7×9 cells) and 36px base display height
  * at the 3224px map scale. The idle crop is 148px of a 1401/9px atlas
- * row, yielding an approximately 72×67px visible sprite.
+ * row, yielding an approximately 72×64px visible sprite.
  */
 export const PLAYER_SPRITE_HALF_WIDTH_PX = 36;
-export const PLAYER_SPRITE_HALF_HEIGHT_PX = 33;
+export const PLAYER_SPRITE_HALF_HEIGHT_PX = 32;
 /** Spawn-only gap between the rendered sprite and traced wall/prop boundaries. */
 export const PLAYER_SPAWN_CLEARANCE_PX = 12;
 export const PLAYER_RADIUS = 4;
