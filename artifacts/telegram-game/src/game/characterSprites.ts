@@ -115,7 +115,7 @@ const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeig
   { top: 795, bottom: 899, displayHeight: 108 }, // mask: include the complete lower contour
   { top: 915, bottom: 1042, displayHeight: 136 }, // hold-item: include the full hand/item contour
   { top: 1067, bottom: 1180, displayHeight: 118 }, // dead-body: retain the complete cut suit and exposed bone
-  { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: complete silhouette, without lower-row bleed
+  { top: 1198, bottom: 1327, displayHeight: 136 }, // sit-crouch: complete silhouette, without lower-row bleed
 ];
 
 /** Returns an isolated runtime-atlas window (px) for a given color and pose. */
