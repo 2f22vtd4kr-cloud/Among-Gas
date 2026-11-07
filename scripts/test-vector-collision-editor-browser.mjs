@@ -106,8 +106,18 @@ try {
   await page.getByText(/Zone A saved into the candidate document/).waitFor({ timeout: 10000 });
 
   // Undo and redo must preserve the shape count and stay interactive on mobile.
-  await page.getByRole("button", { name: "Undo" }).click();
-  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  assert.equal(await undoButton.isEnabled(), true, "Undo is enabled after two committed shapes");
+  await undoButton.click();
+  await page.waitForTimeout(500);
+  const afterUndo = await page.evaluate(() => ({
+    shapeCount: document.querySelector("canvas")?.getAttribute("data-shape-count"),
+    undoDisabled: [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Undo")?.disabled,
+    redoDisabled: [...document.querySelectorAll("button")].find(button => button.textContent?.trim() === "Redo")?.disabled,
+    status: document.body.innerText.match(/Zone A saved[^\\n]*|Undo[^\\n]*/)?.[0],
+  }));
+  console.log("Vector editor history diagnostic after Undo:", JSON.stringify(afterUndo));
+  assert.equal(afterUndo.shapeCount, "1", "Undo must restore the prior one-shape document");
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
