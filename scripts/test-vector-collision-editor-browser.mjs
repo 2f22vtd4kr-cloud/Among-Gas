@@ -10,7 +10,7 @@ const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   page.on("pageerror", error => errors.push(error.message));
-  await page.goto(base + "/dev/collision", { waitUntil: "domcontentloaded" });
+  await page.goto(base + "/dev/collision?scratch=1", { waitUntil: "domcontentloaded" });
   await page.getByText("VECTOR GEOMETRY WORKSPACE").waitFor({ timeout: 15000 });
   const canvas = page.locator("canvas[data-editor-loaded='true']");
   await canvas.waitFor({ timeout: 15000 });
