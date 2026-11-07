@@ -70,6 +70,8 @@ export default function GameActionBar(props: GameActionBarProps) {
             ...buttonBase,
             fontSize: 9,
             letterSpacing: "0.06em",
+            opacity: killDisabled ? 0.45 : 1,
+            filter: killDisabled ? "saturate(0.2)" : "none",
             color: killDisabled ? "#d8dfe3" : "#fff0f0",
             background: props.killCooldownMs > 0
               ? `conic-gradient(from -90deg, rgba(190,200,206,0.9) 0deg, rgba(190,200,206,0.9) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) 360deg)`
