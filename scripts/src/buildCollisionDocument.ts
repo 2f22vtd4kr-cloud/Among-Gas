@@ -101,6 +101,22 @@ function area(p:readonly Point[]):number {
   let a=0; for(let i=0;i<p.length;i++){const q=p[i],r=p[(i+1)%p.length];a+=q[0]*r[1]-r[0]*q[1];}
   return Math.abs(a)/2;
 }
+function editorZone(points: readonly Point[]): "A" | "B" | "C" | "D" | "E" {
+  const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  const centers = [
+    { zone: "A" as const, x: MAP_W * 0.25, y: MAP_H * 0.24 },
+    { zone: "B" as const, x: MAP_W * 0.75, y: MAP_H * 0.24 },
+    { zone: "C" as const, x: MAP_W * 0.50, y: MAP_H * 0.50 },
+    { zone: "D" as const, x: MAP_W * 0.25, y: MAP_H * 0.80 },
+    { zone: "E" as const, x: MAP_W * 0.75, y: MAP_H * 0.80 },
+  ];
+  return centers.reduce((best, current) =>
+    Math.hypot(x - current.x, y - current.y) < Math.hypot(x - best.x, y - best.y)
+      ? current
+      : best,
+  ).zone;
+}
 function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   const shapes:CollisionShape[]=[];
   for(const path of paths) {
@@ -116,7 +132,7 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:statueRing?"statue-garden-boundary":"owner-redline-reference"});
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:editorZone(points)});
   }
   // The reference traces the garden perimeter but intentionally leaves the
   // statue base itself unoutlined. Plan 2's measured pedestal footprint is
@@ -125,7 +141,7 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     id:"statue-pedestal",
     points:[[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]],
     closed:true,blocksMove:true,blocksSight:false,
-    label:"measured statue pedestal footprint",zone:"statue-pedestal",
+    label:"measured statue pedestal footprint",zone:editorZone([[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]]),
   });
   return shapes;
 }
