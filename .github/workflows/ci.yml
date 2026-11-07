@@ -73,6 +73,14 @@ jobs:
       - name: Generate and quality-check baseline and optional sharpened 2× map tiles
         run: pnpm --filter @workspace/scripts run build:map-tiles && pnpm --filter @workspace/scripts run test:map-tiles
 
+      - name: Verify TiledMap renderer lifecycle, seam bleed and failure recovery
+        run: pnpm --filter @workspace/scripts run test:map-renderer
+
+      - name: Test offline context-aware map refinement and seam QA
+        run: |
+          python -m pip install -r scripts/map-tiles/requirements.txt
+          python -m unittest discover -s scripts/map-tiles/tests -v
+
       - name: Generate vector analysis preview and verify it remains outside gameplay runtime
         run: pnpm --filter @workspace/scripts run test:production-world
       - name: Verify base-game vision and wall occlusion
