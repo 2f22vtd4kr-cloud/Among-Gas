@@ -42,7 +42,7 @@ const baseButton: CSSProperties = {
   WebkitTapHighlightColor: "transparent",
 };
 
-function ActionGlyph({ kind }: { kind: "kill" | "report" | "use" | "vent" }) {
+function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use" | "vent"; actionKind?: string | null }) {
   const common = {
     width: 28,
     height: 28,
@@ -54,6 +54,15 @@ function ActionGlyph({ kind }: { kind: "kill" | "report" | "use" | "vent" }) {
     strokeLinejoin: "round" as const,
     "aria-hidden": true as const,
   };
+  if (kind === "use" && actionKind === "repair") return (
+    <svg {...common}><path d="M29 7a12 12 0 0 0-14 15L7 30a6 6 0 0 0 8 8l9-9A12 12 0 0 0 39 14l-8 8-8-8 6-7Z" /></svg>
+  );
+  if (kind === "use" && actionKind === "admin") return (
+    <svg {...common}><rect x="7" y="8" width="34" height="32" rx="3" /><path d="M7 18h34M18 18v22M30 18v22M7 29h34" /><circle cx="24" cy="13" r="2" fill="currentColor" stroke="none" /></svg>
+  );
+  if (kind === "use" && actionKind === "vent") return (
+    <svg {...common}><path d="M7 12h34M7 24h34M7 36h34" /><path d="m15 7 0 30m18-30v30" opacity=".6" /></svg>
+  );
   if (kind === "kill") return (
     <svg {...common}>
       <path d="m10 37 19-19 7 7-19 19-7-7Z" fill="currentColor" stroke="none" />
@@ -124,11 +133,14 @@ function ActionButton({
         opacity: disabled ? 0.45 : 1,
         filter: disabled ? "saturate(0.25)" : "none",
         cursor: disabled ? "default" : "pointer",
+        animation: kind === "kill" && killAvailable === true && !disabled
+          ? "agKillReadyPulse 1.15s ease-in-out infinite"
+          : "none",
       }}
     >
       {cooldown && progress > 0
         ? <span style={{ fontSize: 20, lineHeight: 1 }}>{Math.ceil(cooldown.remainingMs / 1000)}</span>
-        : <ActionGlyph kind={kind} />}
+        : <ActionGlyph kind={kind} actionKind={useActionKind} />}
       <span>{label}</span>
     </button>
   );
@@ -157,6 +169,7 @@ export default function GameActionBar(props: GameActionBarProps) {
         ...props.positionStyle,
       }}
     >
+      <style>{'@keyframes agKillReadyPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }'}</style>
       {props.isImpostor && (
         <ActionButton
           kind="kill"
