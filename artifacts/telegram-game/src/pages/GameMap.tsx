@@ -1213,7 +1213,12 @@ export default function GameMap() {
       // Later 0xFF snapshots only acknowledge a sent position. Delayed or
       // duplicate snapshots cannot overwrite newer local prediction; only an
       // explicit 0x22 rejection/correction is allowed to snap the player.
-      if (correctionRef.current) {
+      if (cameraFixtureEnabled) {
+        // The camera fixture is a local-only dev mock: server snapshots and
+        // echoes must not teleport it back to the real lobby spawn mid-trace.
+        correctionRef.current = null;
+        pendingSentRef.current.length = 0;
+      } else if (correctionRef.current) {
         const incoming = correctionRef.current;
         correctionRef.current = null;
         const pending = pendingSentRef.current;
@@ -1266,7 +1271,7 @@ export default function GameMap() {
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
-      if (gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
+      if (!cameraFixtureEnabled && gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
         const wireX = toWire(px, MAP_W);
         const wireY = toWire(py, MAP_H);
         // Only send if position has changed in wire space
