@@ -82,6 +82,7 @@ function ActionGlyph({ kind }: { kind: "kill" | "report" | "use" | "vent" }) {
 
 function ActionButton({
   kind, label, ariaLabel, disabled, background, onClick, cooldown, testId,
+  useActionKind, useAvailable, reportAvailable, killAvailable,
 }: {
   kind: "kill" | "report" | "use" | "vent";
   label: string;
@@ -91,6 +92,10 @@ function ActionButton({
   onClick: () => void;
   cooldown?: { remainingMs: number; maxMs: number };
   testId: string;
+  useActionKind?: string | null;
+  useAvailable?: boolean;
+  reportAvailable?: boolean;
+  killAvailable?: boolean;
 }) {
   const progress = cooldown
     ? Math.max(0, Math.min(1, cooldown.remainingMs / Math.max(1, cooldown.maxMs)))
@@ -103,6 +108,11 @@ function ActionButton({
     <button
       type="button"
       data-testid={testId}
+      data-use-action={kind === "use" ? useActionKind ?? "none" : undefined}
+      data-use-available={kind === "use" ? String(useAvailable === true) : undefined}
+      data-report-available={kind === "report" ? String(reportAvailable === true) : undefined}
+      data-kill-available={kind === "kill" ? String(killAvailable === true) : undefined}
+      data-cooldown-ms={kind === "kill" ? cooldown?.remainingMs : undefined}
       aria-label={ariaLabel}
       disabled={disabled}
       onClick={onClick}
@@ -156,6 +166,7 @@ export default function GameActionBar(props: GameActionBarProps) {
           disabled={killDisabled}
           background="#e34b50"
           cooldown={{ remainingMs: props.killCooldownMs, maxMs: props.killCooldownMaxMs }}
+          killAvailable={props.killAvailable}
           onClick={props.onKill}
         />
       )}
@@ -168,6 +179,7 @@ export default function GameActionBar(props: GameActionBarProps) {
           : (props.english ? "Report body" : "Доложить о теле")}
         disabled={reportDisabled}
         background="#e9a52c"
+        reportAvailable={props.reportAvailable && !props.isGhost}
         onClick={props.onReport}
       />
       <ActionButton
@@ -179,6 +191,8 @@ export default function GameActionBar(props: GameActionBarProps) {
           : (props.english ? "Use" : "Использовать")}
         disabled={useDisabled}
         background="#2aa96b"
+        useActionKind={props.useActionKind}
+        useAvailable={props.useAvailable}
         onClick={props.onUse}
       />
       {props.isImpostor && !props.isGhost && (
