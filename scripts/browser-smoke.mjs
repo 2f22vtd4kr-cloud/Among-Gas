@@ -684,6 +684,8 @@ try {
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
   assert.equal(await killButton.locator('svg').count(), 1,
     'Kill action uses its own original vector glyph, not a copied game asset');
+  assert.equal(await killButton.evaluate(element => getComputedStyle(element).animationName), 'agKillReadyPulse',
+    'an in-range Kill target pulses to signal immediate availability');
   const reportAlwaysVisible = page.getByTestId('game-action-report');
   const useAlwaysVisible = page.getByTestId('game-action-use');
   await reportAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
@@ -695,6 +697,9 @@ try {
   const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
   assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
     'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  const neutralUse = await useAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
+  assert.match(neutralUse, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
+    'disabled Use uses the same neutral grey surface');
   await page.setViewportSize({ width: 320, height: 720 });
   await page.waitForTimeout(100);
   const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
