@@ -165,8 +165,8 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
       errors.push(prefix + ".castsShadow must be boolean when provided");
     }
-    if (shape.blocksMove !== true && shape.blocksSight !== true) {
-      errors.push(prefix + " must block movement, sight, or both");
+    if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
+      errors.push(prefix + " must block movement, sight, or cast a shadow");
     }
     if (!Array.isArray(shape.points)) {
       errors.push(prefix + ".points must be an array");
