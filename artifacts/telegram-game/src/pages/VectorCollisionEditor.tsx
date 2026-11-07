@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, ChangeEvent } from "react";
 import {
@@ -12,7 +12,7 @@ import {
   type Point,
 } from "@workspace/shared/collision";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk";
+type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
@@ -21,6 +21,7 @@ type Gesture =
   | { kind: "solid"; point: Point; close: boolean }
   | { kind: "erase"; point: Point }
   | { kind: "walk"; point: Point }
+  | { kind: "vision"; point: Point; clientX: number; clientY: number }
   | { kind: "vertex"; shapeId: string; index: number };
 
 const MAP_W = 3224;
@@ -39,6 +40,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   edit: "Edit vertices",
   erase: "Delete shape",
   walk: "Walk test",
+  vision: "Vision preview (hold)",
 };
 
 function cloneDocument(document: CollisionDocument): EditableDocument {
@@ -76,6 +78,7 @@ export default function VectorCollisionEditor() {
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distance: number; zoom: number; world: Point } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const visionPressTimerRef = useRef<number | null>(null);
 
   const [document, setDocument] = useState<EditableDocument>(EMPTY_DOCUMENT);
   const [tool, setTool] = useState<Tool>("pan");
@@ -98,6 +101,8 @@ export default function VectorCollisionEditor() {
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
+  const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
+  const candidateWorld = useMemo(() => new CollisionWorld(document.shapes), [document.shapes]);
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
     const editable = cloneDocument(next);
@@ -127,6 +132,34 @@ export default function VectorCollisionEditor() {
     context.setTransform(scale, 0, 0, scale, -camera.x * scale, -camera.y * scale);
     context.imageSmoothingEnabled = true;
     context.drawImage(image, 0, 0, MAP_W, MAP_H);
+
+    // Candidate-only raycast preview. This overlay is diagnostic and is never
+    // read by the live client/server collision or vision paths.
+    if (visionOrigin) {
+      const visibility = candidateWorld.visibility(visionOrigin[0], visionOrigin[1], 320);
+      if (visibility.length >= 3) {
+        context.beginPath();
+        visibility.forEach((point, index) => {
+          if (index === 0) context.moveTo(point[0], point[1]);
+          else context.lineTo(point[0], point[1]);
+        });
+        context.closePath();
+        context.fillStyle = "rgba(255, 225, 120, 0.20)";
+        context.fill();
+        context.strokeStyle = "rgba(255, 225, 120, 0.95)";
+        context.lineWidth = 2 / camera.zoom;
+        context.setLineDash([8 / camera.zoom, 5 / camera.zoom]);
+        context.stroke();
+        context.setLineDash([]);
+      }
+      context.beginPath();
+      context.arc(visionOrigin[0], visionOrigin[1], 7 / camera.zoom, 0, Math.PI * 2);
+      context.fillStyle = "#ffe178";
+      context.fill();
+      context.strokeStyle = "#13202a";
+      context.lineWidth = 2 / camera.zoom;
+      context.stroke();
+    }
 
     for (const shape of document.shapes) {
       const isSelected = shape.id === selectedId;
@@ -246,7 +279,7 @@ export default function VectorCollisionEditor() {
       16,
       rect.height - 17,
     );
-  }, [document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
+  }, [document, candidateWorld, visionOrigin, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
 
   useEffect(() => { drawRef.current = draw; }, [draw]);
 
@@ -326,6 +359,8 @@ export default function VectorCollisionEditor() {
     return () => {
       active = false;
       controller.abort();
+      if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+      visionPressTimerRef.current = null;
       image.onload = null;
       image.onerror = null;
       if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
@@ -369,7 +404,7 @@ export default function VectorCollisionEditor() {
     }
   }, [document, draftPoints, activeChain, dirty, loaded]);
 
-  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
+  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints, visionOrigin]);
 
   const worldPointAt = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -472,6 +507,8 @@ export default function VectorCollisionEditor() {
     const position = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, position);
     if (pointersRef.current.size === 2) {
+      if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+      visionPressTimerRef.current = null;
       // A second finger always takes over as a viewport gesture, regardless
       // of the selected drawing/editing tool. Cancel a wall/vertex drag rather
       // than allowing the second pointer-up to commit an accidental shape.
@@ -500,6 +537,16 @@ export default function VectorCollisionEditor() {
     if (pointersRef.current.size > 2) return;
 
     const point = worldPoint(event);
+    if (tool === "vision") {
+      gestureRef.current = { kind: "vision", point, clientX: event.clientX, clientY: event.clientY };
+      visionPressTimerRef.current = window.setTimeout(() => {
+        const activeGesture = gestureRef.current;
+        if (activeGesture?.kind !== "vision") return;
+        setVisionOrigin(activeGesture.point);
+        setStatus("Candidate vision preview active · 320px raycast · diagnostic only, not live gameplay.");
+      }, 550);
+      return;
+    }
     if (tool === "walk") {
       gestureRef.current = { kind: "walk", point };
       return;
@@ -583,6 +630,15 @@ export default function VectorCollisionEditor() {
     }
 
     const gesture = gestureRef.current;
+    if (gesture?.kind === "vision") {
+      if (Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) > 12) {
+        if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+        visionPressTimerRef.current = null;
+        gestureRef.current = null;
+        setStatus("Vision preview cancelled because the press moved. Hold still to inspect sight lines.");
+      }
+      return;
+    }
     if (!gesture) {
       if (tool === "wall" || tool === "solid") setPreviewPoint(worldPoint(event));
       return;
@@ -656,6 +712,8 @@ export default function VectorCollisionEditor() {
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+    visionPressTimerRef.current = null;
     const gesture = gestureRef.current;
     if (gesture?.kind === "wall") {
       const points = [...gesture.points];
@@ -899,7 +957,7 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase", "walk"] as Tool[]).map(item => (
+        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision"] as Tool[]).map(item => (
           <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => setTool(item)}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
@@ -914,6 +972,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle(activeChain.length > 1)} onClick={finishActiveChain} disabled={activeChain.length < 2}>Finish chain</button>
         {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { walkPointsRef.current = []; setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
+        <button type="button" style={buttonStyle(visionOrigin !== null)} onClick={() => setVisionOrigin(null)} disabled={!visionOrigin}>Clear vision preview</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
@@ -952,6 +1011,8 @@ export default function VectorCollisionEditor() {
           data-draft-point-count={draftPoints.length}
           data-walk-point-count={walkPoints.length}
           data-walk-status={walkStatus}
+          data-vision-preview={visionOrigin ? "true" : "false"}
+          data-vision-origin={visionOrigin ? visionOrigin.join(",") : ""}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
