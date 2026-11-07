@@ -12,10 +12,10 @@ import {
 
 /**
  * Framework-free vector collision and vision primitives.
- * Production documents are generated from the live fine-grid collision mask,
- * its explicit overrides, and the matching vision outline pipeline. The
- * generated source manifest and parity tests are required before changing
- * those inputs; an empty or guessed map must never replace the raster.
+ * Production documents are vectorized from the owner's red-line reference.
+ * Open polylines are exact boundary barriers; closed contours represent
+ * compact prop footprints. Client prediction, server authority and bots share
+ * this same generated document.
  */
 export type Point = readonly [number, number];
 
@@ -30,20 +30,15 @@ export interface CollisionShape {
 }
 
 export interface CollisionSourceManifest {
-  readonly kind: "fine-grid-derived";
+  readonly kind: "redline-vector";
   readonly generatorVersion: number;
   readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
-  readonly fineGrid: {
-    readonly cols: number;
-    readonly rows: number;
-    readonly cellX: number;
-    readonly cellY: number;
-  };
-  readonly sightPipeline: {
-    readonly largeComponentGrid: string;
-    readonly mediumAndSmallOutlines: string;
-    readonly narrowOccluders: number;
-    readonly obsoleteStatueCircleExcluded: boolean;
+  readonly referenceImage: { readonly width: number; readonly height: number };
+  readonly vectorization: {
+    readonly redPixelCount: number; readonly skeletonPixelCount: number;
+    readonly tracedPathCount: number; readonly simplifiedPointCount: number;
+    readonly simplificationToleranceSourcePx: number;
+    readonly closedSolidCount: number; readonly openBoundaryCount: number;
   };
   readonly shapeCounts: Readonly<Record<string, number>>;
 }
@@ -203,7 +198,7 @@ export function validateCollisionDocument(value: unknown): string[] {
   });
   if (doc.source !== undefined) {
     const source = doc.source as Partial<CollisionSourceManifest>;
-    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
+    if (source.kind !== "redline-vector") errors.push("source.kind must be redline-vector");
     if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
       errors.push("source.generatorVersion must be a positive integer");
     }
@@ -216,13 +211,17 @@ export function validateCollisionDocument(value: unknown): string[] {
         }
       }
     }
-    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
-        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
-        !(source.fineGrid.cellY > 0)) {
-      errors.push("source.fineGrid must describe a positive raster grid");
-    }
-    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
-      errors.push("source.sightPipeline must describe the sight derivation");
+    if (!source.referenceImage || !Number.isInteger(source.referenceImage.width) ||
+        !Number.isInteger(source.referenceImage.height) || source.referenceImage.width < 100 ||
+        source.referenceImage.height < 100) errors.push("source.referenceImage must include valid dimensions");
+    if (!source.vectorization || !Number.isInteger(source.vectorization.redPixelCount) ||
+        !Number.isInteger(source.vectorization.skeletonPixelCount) ||
+        !Number.isInteger(source.vectorization.tracedPathCount) ||
+        !Number.isInteger(source.vectorization.simplifiedPointCount) ||
+        !(source.vectorization.simplificationToleranceSourcePx > 0) ||
+        !Number.isInteger(source.vectorization.closedSolidCount) ||
+        !Number.isInteger(source.vectorization.openBoundaryCount)) {
+      errors.push("source.vectorization must describe red-line extraction");
     }
     if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
       errors.push("source.shapeCounts.total must be a positive integer");

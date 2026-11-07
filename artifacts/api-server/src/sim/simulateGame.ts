@@ -23,7 +23,9 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
-import { buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import type { CollisionWorld } from '@workspace/shared/collision';
 import type { SimGameResult, SimWinner } from './types.js';
 import { createSeededRandom, withSeededRandom } from './seededRandom.js';
 
@@ -46,12 +48,12 @@ export interface SimBatchOptions {
   onGameResult?: (result: SimGameResult) => void;
 }
 
-const simulationCollisionGrid = buildPreciseCollisionGrid();
+const simulationCollisionGrid = getProductionCollisionWorld();
 
 /** Only an actual vent occupant is exempt from ordinary walkability checks. */
 export function isSimulationCollisionViolation(
   player: { alive: boolean; inVent?: boolean; x: number; y: number },
-  collisionGrid: Uint8Array,
+  collisionGrid: Uint8Array | CollisionWorld,
 ): boolean {
   return player.alive && player.inVent !== true &&
     !isPlayerPositionWalkable(collisionGrid, player.x, player.y);

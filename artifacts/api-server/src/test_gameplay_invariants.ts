@@ -5,9 +5,10 @@
  */
 import assert from 'node:assert/strict';
 import { PathCache } from '@workspace/shared';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
-  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
+  buildPreciseCollisionGrid,
   isLineOfSightToInteractionTarget,
   isPlayerSpawnPositionClear,
   MAP_W,
@@ -72,7 +73,9 @@ import {
 } from './ws/movement.js';
 import { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
-const grid = buildPreciseCollisionGrid();
+const grid = getProductionCollisionWorld();
+const productionCollisionWorld = grid;
+const sightGrid = buildPreciseCollisionGrid();
 
 // A cached path is valid only for the exact world-space grid geometry. Two
 // grids may share row/column counts while mapping the same cells to different
@@ -120,7 +123,7 @@ function assertInteractionApproachWalkable(
       const y = target.y + dy;
       if (!isPlayerPositionWalkable(grid, x, y)) continue;
       if (!isLineOfSightToInteractionTarget(
-        grid, x, y + FEET_OFFSET_Y,
+        sightGrid, x, y + FEET_OFFSET_Y,
         target.x, target.y + FEET_OFFSET_Y,
         targetRadiusPx,
       )) continue;
@@ -204,17 +207,17 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   manager.disposeLobby(lobby);
 }
 
-// The garden surrounding the statue is walkable; only the statue footprint
-// itself remains blocked by its small 2×2 RLE component.
+// The garden perimeter remains a boundary; only the measured statue pedestal
+// is solid. These assertions use the same vector world as live movement.
 {
   assert.equal(isPlayerPositionWalkable(grid, 1640, 449), true,
     'the western path through the central garden must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1810, 449), true,
     'the eastern path through the central garden must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1735, 449), true,
-    'the decorative garden floor must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1735, 556 - FEET_OFFSET_Y), false,
-    'the central statue base must remain blocked at its feet-space position');
+  assert.equal(isPlayerPositionWalkable(grid, 1745, 550 - FEET_OFFSET_Y), true,
+    'the decorative garden floor outside the pedestal must remain walkable');
+  assert.equal(isPlayerPositionWalkable(grid, 1745, 497 - FEET_OFFSET_Y), false,
+    'the measured central statue pedestal must remain blocked at its feet-space position');
   assert.equal(isPlayerPositionWalkable(grid, 1450, 449), true,
     'the open lobby floor west of the garden must remain walkable');
 }
@@ -308,7 +311,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(manager.exitVent(lobby, 0), true);
   assert.equal(impostor.player.inVent, false);
   assert.equal(impostor.player.ventId, undefined);
-  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+  assert.equal(isPlayerPositionWalkable(productionCollisionWorld, impostor.player.x, impostor.player.y), true,
     'vent exit must place the impostor at a legal player footprint');
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x01));
   assert.ok(impostor.packets.some(packet => packet[0] === 0x18 && packet[1] === 0x02));
@@ -318,7 +321,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   manager.disposeLobby(lobby);
 
   // Every authored vent anchor must release the impostor onto a valid
-  // footprint; several anchors intentionally sit on blocked fine-grid cells.
+  // footprint in the same red-line world used by live movement.
   for (const vent of VENT_DEFS) {
     const exiting = makePlayer(0, 'impostor', vent.x, vent.y);
     exiting.player.inVent = true;
@@ -328,7 +331,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
     assert.equal(exitManager.exitVent(exitLobby, 0), true, `vent ${vent.id} must have a legal exit point`);
     assert.equal(exiting.player.inVent, false);
     assert.equal(exiting.player.ventId, undefined);
-    assert.equal(isPlayerPositionWalkable(grid, exiting.player.x, exiting.player.y), true,
+    assert.equal(isPlayerPositionWalkable(productionCollisionWorld, exiting.player.x, exiting.player.y), true,
       `vent ${vent.id} exit must be walkable for the complete player footprint`);
     assert.ok(exiting.packets.some(packet => packet[0] === 0x22 && packet.length === 5),
       `vent ${vent.id} exit must send a forced local position correction`);
@@ -352,7 +355,7 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   assert.equal(lobby.phase, 'MEETING');
   assert.equal(impostor.player.inVent, false, 'meeting must release the vent occupant');
   assert.equal(impostor.player.ventId, undefined);
-  assert.equal(isPlayerPositionWalkable(grid, impostor.player.x, impostor.player.y), true,
+  assert.equal(isPlayerPositionWalkable(productionCollisionWorld, impostor.player.x, impostor.player.y), true,
     'meeting-forced release must choose a legal player footprint');
   const forcedCorrection = impostor.packets.find(packet => packet[0] === 0x22);
   assert.ok(forcedCorrection && forcedCorrection.length === 5,
@@ -477,10 +480,15 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
 
   // A second bot must answer an open question from the first bot instead of
   // ignoring all bot-to-bot dialogue unless it is explicitly name-addressed.
+  // The selected reply receives a shorter 1.6s pause, not an immediate burst;
+  // after it speaks, the ordinary meeting-wide cadence resumes.
   const secondBot = new CrewmateBot();
+  secondBot.tick(lobby, secondBotPlayer.player, manager); // initialise this bot's meeting state
   (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
   secondBot.tick(lobby, secondBotPlayer.player, manager);
-  (secondBot as unknown as { nextDiscussionChatAtMs: number }).nextDiscussionChatAtMs = 0;
+  const earlyBotReplyPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 4);
+  assert.equal(earlyBotReplyPacket, undefined, 'the open-question reply keeps a natural pause');
+  await new Promise(resolve => setTimeout(resolve, 1_650));
   secondBot.tick(lobby, secondBotPlayer.player, manager);
   const botReplyPacket = host.packets.find(packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 4);
   assert.ok(botReplyPacket, 'a second living bot answers the first bot\'s open question');

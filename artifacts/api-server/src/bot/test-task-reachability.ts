@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   buildPreciseCollisionGrid,
   isLineOfSightToInteractionTarget,
@@ -32,7 +33,8 @@ class TaskReachabilityProbe extends BotAgent {
   }
 }
 
-const movementGrid = buildPreciseCollisionGrid();
+const movementGrid = getProductionCollisionWorld();
+const sightGrid = buildPreciseCollisionGrid();
 const probe = new TaskReachabilityProbe();
 const results = TASK_DEFS.map(task => {
   const point = probe.approach(task);
@@ -40,7 +42,7 @@ const results = TASK_DEFS.map(task => {
     isPlayerPositionWalkable(movementGrid, point.x, point.y) &&
     isBotNavigationReachable(point.x, point.y + FEET_OFFSET_Y);
   const visible = isLineOfSightToInteractionTarget(
-    movementGrid,
+    sightGrid,
     point.x,
     point.y + FEET_OFFSET_Y,
     task.x,

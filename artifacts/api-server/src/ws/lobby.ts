@@ -15,6 +15,7 @@
 import type { WebSocket } from 'ws';
 import { logger } from '../lib/logger.js';
 import { buildMovementCorrectionPacket } from './movement.js';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   MAP_W, MAP_H,
   FEET_OFFSET_Y,
@@ -55,8 +56,10 @@ import {
   findVent,
 } from '@workspace/shared/vents';
 
-// Reuse the canonical fine-grid geometry for every server-authoritative interaction.
-const INTERACTION_COLLISION_GRID = buildPreciseCollisionGrid();
+// Red-line vectors govern feet/movement; the established sight grid remains
+// separate because the red-line drawing is not a vision-occlusion authoring pass.
+const INTERACTION_COLLISION_GRID = getProductionCollisionWorld();
+const INTERACTION_SIGHT_GRID = buildPreciseCollisionGrid();
 
 // ── Room code alphabet ──────────────────────────────────────────────────────
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -79,7 +82,7 @@ export const SPAWN_X = PLAYER_SPAWN_X;
 export const SPAWN_Y = PLAYER_SPAWN_Y;
 
 /** Collision grid — built once for spawn-position validation. */
-const spawnGrid = buildPreciseCollisionGrid();
+const spawnGrid = INTERACTION_COLLISION_GRID;
 
 /**
  * Compute a spread spawn position for player `index` of `total`.
@@ -880,7 +883,7 @@ export class LobbyManager {
     const dy = player.y - vent.y;
     if (dx * dx + dy * dy > VENT_INTERACTION_RANGE_PX * VENT_INTERACTION_RANGE_PX) return false;
     if (!isLineOfSightToInteractionTarget(
-      INTERACTION_COLLISION_GRID,
+      INTERACTION_SIGHT_GRID,
       player.x, player.y + FEET_OFFSET_Y,
       vent.x, vent.y + FEET_OFFSET_Y,
       20,
@@ -1479,7 +1482,7 @@ export class LobbyManager {
     const dy = attacker.y - victim.y;
     if (dx * dx + dy * dy > KILL_RANGE_PX * KILL_RANGE_PX) return false;
     if (!isLineOfSightClear(
-      INTERACTION_COLLISION_GRID,
+      INTERACTION_SIGHT_GRID,
       attacker.x, attacker.y + FEET_OFFSET_Y,
       victim.x, victim.y + FEET_OFFSET_Y,
     )) return false;
@@ -1644,7 +1647,7 @@ export class LobbyManager {
       return 'rejected';
     }
     if (!isLineOfSightToInteractionTarget(
-      INTERACTION_COLLISION_GRID,
+      INTERACTION_SIGHT_GRID,
       player.x, player.y + FEET_OFFSET_Y,
       pad.x, pad.y + FEET_OFFSET_Y,
       24,
@@ -1759,7 +1762,7 @@ export class LobbyManager {
     // Ghosts intentionally phase through walls and retain their task rights;
     // line-of-sight only constrains living crewmates interacting with consoles.
     if (player.alive && !isLineOfSightToInteractionTarget(
-      INTERACTION_COLLISION_GRID,
+      INTERACTION_SIGHT_GRID,
       player.x, player.y + FEET_OFFSET_Y,
       def.x, def.y + FEET_OFFSET_Y,
       def.interactionTargetRadiusPx ?? 24,
@@ -1818,7 +1821,7 @@ export class LobbyManager {
         return false; // the reporter must be within the authoritative corpse interaction radius
       }
       if (!isLineOfSightClear(
-        INTERACTION_COLLISION_GRID,
+        INTERACTION_SIGHT_GRID,
         reporter.x, reporter.y + FEET_OFFSET_Y,
         body.corpseX, body.corpseY + FEET_OFFSET_Y,
       )) return false;

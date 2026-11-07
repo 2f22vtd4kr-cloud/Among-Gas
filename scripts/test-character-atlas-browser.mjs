@@ -47,9 +47,9 @@ try {
       columnPixelCounts.push(opaquePixels);
       columnSignatures.push(signature >>> 0);
 
-      // The authored dead-body row starts at source y=1067 and is 93px tall.
-      // Validate the generated palette columns too, not only the seven source colors.
-      const corpsePixels = context.getImageData(column * cellWidth, 1067, cellWidth, 93).data;
+      // The complete authored dead-body silhouette spans source y=1067..1180.
+      // Validate that the recovered lower suit pixels survive in all generated palettes.
+      const corpsePixels = context.getImageData(column * cellWidth, 1067, cellWidth, 113).data;
       let corpseOpaque = 0;
       let corpseSignature = 2166136261;
       for (let offset = 0; offset < corpsePixels.length; offset++) {

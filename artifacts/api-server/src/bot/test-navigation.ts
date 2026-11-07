@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
@@ -16,7 +17,8 @@ class NavigationProbe extends BotAgent {
   }
 }
 
-const grid = buildPreciseCollisionGrid();
+const grid = getProductionCollisionWorld();
+const sightGrid = buildPreciseCollisionGrid();
 const probe = new NavigationProbe();
 for (const task of TASK_DEFS) {
   const approach = probe.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
@@ -28,7 +30,7 @@ for (const task of TASK_DEFS) {
   assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
     task.name + ' bot approach must be in the spawn-connected navigation component');
   assert.equal(isLineOfSightToInteractionTarget(
-    grid, approach.x, approach.y + FEET_OFFSET_Y,
+    sightGrid, approach.x, approach.y + FEET_OFFSET_Y,
     task.x, task.y + FEET_OFFSET_Y, task.interactionTargetRadiusPx ?? 24,
   ), true, task.name + ' bot approach must satisfy server-authoritative line of sight');
 }
@@ -42,11 +44,15 @@ const assertPathFollowerRoute = (
   const self = { x: start.x, y: start.y } as LobbyPlayer;
   let arrived = false;
   let bestDistance = Math.hypot(goal.x - self.x, goal.y - self.y);
+  let bestPosition = { x: self.x, y: self.y };
   let ticks = 0;
   for (; ticks < 500; ticks++) {
     arrived = routeProbe.moveTo(self, goal, 25);
     const distance = Math.hypot(goal.x - self.x, goal.y - self.y);
-    bestDistance = Math.min(bestDistance, distance);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestPosition = { x: self.x, y: self.y };
+    }
     assert.equal(isPlayerPositionWalkable(grid, self.x, self.y), true,
       label + ' must keep the complete player footprint walkable at tick ' + (ticks + 1));
     if (arrived) {
@@ -55,7 +61,11 @@ const assertPathFollowerRoute = (
     }
   }
   assert.ok(arrived,
-    label + ' path follower failed to arrive after 500 ticks (best distance ' + bestDistance.toFixed(1) + 'px)');
+    label + ' path follower failed after 500 ticks (start=' + start.x.toFixed(0) + ',' + start.y.toFixed(0) +
+      ' goal=' + goal.x.toFixed(0) + ',' + goal.y.toFixed(0) +
+      ' end=' + self.x.toFixed(0) + ',' + self.y.toFixed(0) +
+      ' best=' + bestPosition.x.toFixed(0) + ',' + bestPosition.y.toFixed(0) +
+      ' bestDistance=' + bestDistance.toFixed(1) + 'px)');
   console.log('PASS: ' + label + ' (' + ticks + ' ticks)');
 };
 

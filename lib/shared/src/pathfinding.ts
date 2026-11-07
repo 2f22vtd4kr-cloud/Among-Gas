@@ -175,6 +175,7 @@ function astar(
   startCol: number, startRow: number,
   goalCol:  number, goalRow:  number,
   geometry: PathGridGeometry,
+  validateStep?: (from: Point, to: Point) => boolean,
 ): Cell[] | null {
   if (!isWalkable(grid, startCol, startRow, geometry) ||
       !isWalkable(grid, goalCol,  goalRow, geometry)) {
@@ -231,11 +232,20 @@ function astar(
       const nr = curRow + dr;
       if (!isWalkable(grid, nc, nr, geometry)) continue;
 
-      // No corner-cutting: both axis-aligned neighbours must be free
-      if (diagonal &&
+      // For the coarse grid, require both side cells to prevent corner cuts.
+      // With an exact swept-footprint validator, that geometric check is the
+      // stronger authority and may safely admit a diagonal whose side-cell
+      // centres are blocked but whose complete player footprint clears the edge.
+      if (diagonal && !validateStep &&
           (!isWalkable(grid, curCol + dc, curRow, geometry) ||
            !isWalkable(grid, curCol,      curRow + dr, geometry))) continue;
-
+      // A walkable cell centre does not guarantee the swept player footprint
+      // can cross the edge to its neighbour. Let callers validate the exact
+      // continuous edge against their authoritative collision world.
+      if (validateStep && !validateStep(
+        cellCentre(curCol, curRow, geometry),
+        cellCentre(nc, nr, geometry),
+      )) continue;
       const ni = cellIndex(nc, nr, geometry);
       if (closed[ni]) continue;
 
@@ -304,18 +314,38 @@ function hasLineOfSight(
  * Greedy path-smoothing: skip waypoints that can be reached directly
  * with line-of-sight from the current anchor.
  */
-function smooth(grid: Grid, raw: Cell[], geometry: PathGridGeometry): Cell[] {
+function smooth(
+  grid: Grid,
+  raw: Cell[],
+  geometry: PathGridGeometry,
+  validateStep?: (from: Point, to: Point) => boolean,
+): Cell[] {
   if (raw.length <= 2) return raw;
   const result: Cell[] = [raw[0]];
   let anchor = 0;
 
-  for (let i = 2; i < raw.length; i++) {
-    if (!hasLineOfSight(grid, raw[anchor].col, raw[anchor].row, raw[i].col, raw[i].row, geometry)) {
-      result.push(raw[i - 1]);
-      anchor = i - 1;
+  // Greedy string-pulling: try the farthest remaining cell first, then walk
+  // backward only as far as needed to find a safe chord. This avoids checking
+  // every progressively longer segment in a long open corridor.
+  while (anchor < raw.length - 1) {
+    let candidate = raw.length - 1;
+    while (candidate > anchor + 1) {
+      const visible = hasLineOfSight(
+        grid, raw[anchor].col, raw[anchor].row, raw[candidate].col, raw[candidate].row, geometry,
+      );
+      const collisionSafe = visible && (!validateStep || validateStep(
+        cellCentre(raw[anchor].col, raw[anchor].row, geometry),
+        cellCentre(raw[candidate].col, raw[candidate].row, geometry),
+      ));
+      // A clear raster chord is not enough for hand-traced vector walls:
+      // validate the entire swept player footprint against the live collision
+      // world before skipping any intermediate A* cells.
+      if (visible && collisionSafe) break;
+      candidate--;
     }
+    result.push(raw[candidate]);
+    anchor = candidate;
   }
-  result.push(raw[raw.length - 1]);
   return result;
 }
 
@@ -346,24 +376,39 @@ export function findPath(
   start: Point,
   goal:  Point,
   geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
+  smoothPath = true,
+  validateStep?: (from: Point, to: Point) => boolean,
 ): PathResult | null {
   if (!isValidPathInput(grid, start, goal, geometry)) return null;
 
   const sc = pixelToCell(start.x, start.y, geometry);
   const gc = pixelToCell(goal.x,  goal.y, geometry);
 
-  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry);
+  const raw = astar(grid, sc.col, sc.row, gc.col, gc.row, geometry, validateStep);
   if (!raw) return null;
 
-  const smoothed = smooth(grid, raw, geometry);
-  const waypoints = smoothed.map(cell => cellCentre(cell.col, cell.row, geometry));
+  // A* validates centre-to-centre edges. Also validate the two partial edges
+  // between the caller's exact anchors and their containing cell centres;
+  // otherwise trimming the start cell can make the follower cut a blocked
+  // corner on its very first segment.
+  if (validateStep) {
+    const startCentre = cellCentre(sc.col, sc.row, geometry);
+    const goalCentre = cellCentre(gc.col, gc.row, geometry);
+    if ((Math.hypot(startCentre.x - start.x, startCentre.y - start.y) > 0.75 &&
+         !validateStep(start, startCentre)) ||
+        (Math.hypot(goalCentre.x - goal.x, goalCentre.y - goal.y) > 0.75 &&
+         !validateStep(goalCentre, goal))) return null;
+  }
+
+  const routed = smoothPath ? smooth(grid, raw, geometry, validateStep) : raw;
+  const waypoints = routed.map(cell => cellCentre(cell.col, cell.row, geometry));
 
   // Drop the first waypoint if it's effectively the start position's cell centre
   // (bots should move *towards* the next meaningful cell, not stand still).
   const start_wp = waypoints[0];
   const distSq = (start_wp.x - start.x) ** 2 + (start_wp.y - start.y) ** 2;
   const cellDiagSq = geometry.cellX ** 2 + geometry.cellY ** 2;
-  const trimmed = distSq < cellDiagSq * 0.25 && waypoints.length > 1
+  const trimmed = !validateStep && distSq < cellDiagSq * 0.25 && waypoints.length > 1
     ? waypoints.slice(1)
     : waypoints;
 
@@ -390,6 +435,7 @@ export function findPath(
 export class PathCache {
   private cache = new Map<string, PathResult | null>();
   private cachedGrid: Grid | null = null;
+  private cachedStepValidator: ((from: Point, to: Point) => boolean) | undefined;
 
   find(
     grid: Grid,
@@ -397,24 +443,27 @@ export class PathCache {
     goal:  Point,
     forceRefresh = false,
     geometry: PathGridGeometry = DEFAULT_PATH_GRID_GEOMETRY,
+    smoothPath = true,
+    validateStep?: (from: Point, to: Point) => boolean,
   ): PathResult | null {
     if (!isValidPathInput(grid, start, goal, geometry)) return null;
     // A cache key made only from coordinates is unsafe across distinct map
     // grids: the same cells can be walkable in one map and blocked in another.
-    if (this.cachedGrid !== grid) {
+    if (this.cachedGrid !== grid || this.cachedStepValidator !== validateStep) {
       this.cache.clear();
       this.cachedGrid = grid;
+      this.cachedStepValidator = validateStep;
     }
 
     const sc  = pixelToCell(start.x, start.y, geometry);
     const gc  = pixelToCell(goal.x,  goal.y, geometry);
-    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
+    const key = `${geometry.cols}x${geometry.rows}@${geometry.cellX},${geometry.cellY}:${smoothPath ? "smooth" : "raw"}:${sc.col},${sc.row}→${gc.col},${gc.row}`;
 
     if (!forceRefresh && this.cache.has(key)) {
       return this.cache.get(key)!;
     }
 
-    const result = findPath(grid, start, goal, geometry);
+    const result = findPath(grid, start, goal, geometry, smoothPath, validateStep);
     this.cache.set(key, result);
     return result;
   }
@@ -431,6 +480,7 @@ export class PathCache {
   clear(): void {
     this.cache.clear();
     this.cachedGrid = null;
+    this.cachedStepValidator = undefined;
   }
 
   get size(): number { return this.cache.size; }

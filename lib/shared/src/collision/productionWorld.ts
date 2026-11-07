@@ -6,13 +6,12 @@ import {
 import { COLLISION_DOCUMENT } from "./generatedDocument.js";
 
 /**
- * Canonical gameplay collision/vision world.
+ * Canonical gameplay collision/vision world traced from the owner's red-line reference.
  *
- * build:collision bootstraps collision.v1.json from the current fine-grid
- * movement and vision sources only when no candidate exists. The vector
- * editor then saves to that same collision.v1.json file. Every build validates
- * the saved candidate and regenerates this module from it; editor saves also
- * refresh this module so client HMR sees the new geometry.
+ * build:collision extracts the red-line centre paths from the owner's reference
+ * image, validates the resulting vector document, and regenerates this module
+ * before either client or server starts. The old raster remains available only
+ * for legacy diagnostic overlays, never as movement authority.
  */
 let activeDocument: CollisionDocument = COLLISION_DOCUMENT;
 let activeWorld = new CollisionWorld(

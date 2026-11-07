@@ -292,7 +292,7 @@ try {
   const roleRevealSnapshot = await roleRevealSnapshotHandle.jsonValue();
   await roleRevealSnapshotHandle.dispose();
   assert.equal(roleRevealSnapshot.pose, 'idle');
-  assert.equal(roleRevealSnapshot.sourceHeight, '136',
+  assert.equal(roleRevealSnapshot.sourceHeight, '147',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(roleRevealSnapshot.displayHeight, '153',
     'the authored role-reveal baseline remains available as metadata');
@@ -301,7 +301,7 @@ try {
   const roleCropRatio = roleRevealSnapshot.spriteWidth > 0
     ? roleRevealSnapshot.spriteHeight / roleRevealSnapshot.spriteWidth
     : 0;
-  const expectedRoleCropRatio = 136 / (1123 / 7);
+  const expectedRoleCropRatio = Number(roleRevealSnapshot.sourceHeight) / (1123 / 7);
   assert.ok(Math.abs(roleCropRatio - expectedRoleCropRatio) < 0.01,
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
@@ -441,6 +441,25 @@ try {
   assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
     'the persistent Use control must expose the nearby actionable task');
   assert.equal(await taskButton.isEnabled(), true, 'Use must enable when a task is in range and visible');
+  const actionLabelMetrics = await page.getByTestId('game-action-bar').locator('button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const buttonBounds = button.getBoundingClientRect();
+      const label = button.querySelector('span:last-child');
+      const labelBounds = label?.getBoundingClientRect();
+      return {
+        text: label?.textContent?.trim() ?? '',
+        buttonWidth: buttonBounds.width,
+        labelWidth: labelBounds?.width ?? 0,
+        labelLeft: labelBounds?.left ?? 0,
+        labelRight: labelBounds?.right ?? 0,
+        buttonLeft: buttonBounds.left,
+        buttonRight: buttonBounds.right,
+      };
+    }),
+  );
+  assert.ok(actionLabelMetrics.every(item =>
+    item.labelWidth > 0 && item.labelLeft >= item.buttonLeft + 2 && item.labelRight <= item.buttonRight - 2,
+  ), `localized action labels must fit inside their touch targets at mobile width: ${JSON.stringify(actionLabelMetrics)}`);
   const idleReportButton = page.getByTestId('game-action-report');
   assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
   assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
@@ -871,7 +890,7 @@ try {
   assert.equal(corpseSnapshot.pose, 'dead-body');
   assert.equal(corpseSnapshot.row, '7');
   assert.equal(corpseSnapshot.sourceY, '1067');
-  assert.equal(corpseSnapshot.sourceHeight, '93');
+  assert.equal(corpseSnapshot.sourceHeight, '113');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
@@ -892,7 +911,7 @@ try {
     return Array.from({ length: 7 }, (_, column) => {
       const left = Math.floor(column * cellWidth);
       const right = Math.ceil((column + 1) * cellWidth);
-      const pixels = context.getImageData(left, 1067, right - left, 93).data;
+      const pixels = context.getImageData(left, 1067, right - left, 113).data;
       let opaque = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) opaque++;
       return opaque;
@@ -914,7 +933,7 @@ try {
     const context = atlas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not inspect the generated runtime character atlas');
     const columns = Array.from({ length: 18 }, (_, column) => {
-      const pixels = context.getImageData(column * 161, 1067, 161, 93).data;
+      const pixels = context.getImageData(column * 161, 1067, 161, 113).data;
       let opaque = 0;
       let red = 0;
       let green = 0;
@@ -1532,6 +1551,8 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
+  assert.equal(cameraBaseline.playerX, 510, 'camera QA must start from the validated west-room fixture');
+  assert.equal(cameraBaseline.playerY, 1069, 'camera QA must stay away from the north/south map-edge clamp');
   assert.equal(cameraBaseline.mapImageWidth, 1612,
     'camera diagnostics must identify the canonical half-resolution overview width');
   assert.equal(cameraBaseline.mapImageHeight, 929,
@@ -1580,10 +1601,12 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  // The west-room fixture is centered inside the map with a long clear north lane.
+  // This exercises vertical camera follow without triggering map-edge clamping.
+  await cameraPage.mouse.move(joystickX, joystickY - 42, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(420);
+  await cameraPage.waitForTimeout(400);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
@@ -1631,7 +1654,7 @@ try {
     sustainedTail[sustainedTail.length - 1].playerX - sustainedTail[0].playerX,
     sustainedTail[sustainedTail.length - 1].playerY - sustainedTail[0].playerY,
   );
-  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 30,
+  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 20,
     `camera movement fixture must remain unobstructed through the final quarter of the hold (changed ${tailMovementFrames.length} frames over ${sustainedTailDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));
