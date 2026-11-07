@@ -90,6 +90,8 @@ try {
   await touchTap(bounds.x + 250, bounds.y + 150);
   await page.getByRole("button", { name: "Close polygon" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
+  await page.getByLabel("Selected shape zone").selectOption("B");
+  await page.getByLabel("Selected shape zone").selectOption("A");
 
   // Per-zone save is isolated and leaves the other editor draft state intact.
   await page.getByRole("button", { name: "Save zone A" }).click();
