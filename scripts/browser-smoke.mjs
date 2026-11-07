@@ -1580,13 +1580,12 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  // The default spawn is beside the statue-garden boundary on its right.
-  // Move upward through the clear lobby lane and keep the hold short enough
-  // to stay inside that unobstructed corridor under the authored red lines.
-  await cameraPage.mouse.move(joystickX, joystickY - 42, { steps: 6 });
+  // The initial spawn is close to the north bench row. Move south into the
+  // open central atrium for the camera-follow fixture, away from traced props.
+  await cameraPage.mouse.move(joystickX, joystickY + 42, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(250);
+  await cameraPage.waitForTimeout(300);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
