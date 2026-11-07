@@ -700,6 +700,8 @@ try {
   const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(actionBarBox && actionBarBox.x >= 0 && actionBarBox.x + actionBarBox.width <= 320,
     'the three-button impostor action bar must remain inside a narrow 320px phone viewport');
+  assert.ok(Math.abs(actionBarBox.y + actionBarBox.height / 2 - 720 * 0.66) < 3,
+    'resizing to a compact viewport must move the action bar above the lower controls');
   await page.screenshot({ path: join(visualQaDir, 'game-action-bar-320px.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
 
