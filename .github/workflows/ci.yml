@@ -193,7 +193,7 @@ jobs:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
           VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
           VECTOR_COLLISION_DOCUMENT_PATH: ${{ runner.temp }}/vector-collision-editor-test.json
-      VECTOR_COLLISION_EDITOR_SEED_PATH: ${{ runner.temp }}/vector-collision-editor-seed.json
+          VECTOR_COLLISION_EDITOR_SEED_PATH: ${{ runner.temp }}/vector-collision-editor-seed.json
           VECTOR_COLLISION_EDITOR_BASE_URL: http://127.0.0.1:5173
         run: |
           rm -f "${RUNNER_TEMP}/vector-collision-editor-test.json" "${RUNNER_TEMP}/vector-collision-editor-test.json.bak"
