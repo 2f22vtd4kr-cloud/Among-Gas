@@ -166,10 +166,13 @@ export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch |
 export function getCharacterClipPath(pose: CharacterPose): string | undefined {
   const notch = getCharacterClipNotch(pose);
   if (!notch) return undefined;
-  const leftStart = notch.leftLegStart * 100;
-  const leftEnd = notch.leftLegEnd * 100;
-  const rightStart = notch.rightLegStart * 100;
-  const rightEnd = notch.rightLegEnd * 100;
-  const top = notch.top * 100;
+  // Normalize percentage strings so simple measured fractions (e.g. 0.56)
+  // remain stable and testable instead of exposing binary floating-point tails.
+  const percent = (value: number) => Number((value * 100).toFixed(2));
+  const leftStart = percent(notch.leftLegStart);
+  const leftEnd = percent(notch.leftLegEnd);
+  const rightStart = percent(notch.rightLegStart);
+  const rightEnd = percent(notch.rightLegEnd);
+  const top = percent(notch.top);
   return `polygon(0 0, 100% 0, 100% ${top}%, ${rightEnd}% ${top}%, ${rightEnd}% 100%, ${rightStart}% 100%, ${rightStart}% ${top}%, ${leftEnd}% ${top}%, ${leftEnd}% 100%, ${leftStart}% 100%, ${leftStart}% ${top}%, 0 ${top}%)`;
 }
