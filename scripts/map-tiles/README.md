@@ -13,12 +13,16 @@ They do not change the live map, generate AI artwork, or write into the public g
 
 ## Install and test
 
-Use Python 3.11 or newer in an isolated virtual environment:
+Use Python 3.11 or newer in an isolated virtual environment from this directory
+(`scripts/map-tiles`):
 
     python3 -m venv .venv
     . .venv/bin/activate
     python -m pip install -r requirements.txt
     python -m unittest discover -s tests -v
+
+The test module also adds its utility parent to `sys.path`, so CI may run discovery
+from the repository root without a manual `PYTHONPATH` setting.
 
 Tests use a synthetic image. They verify exact 28-tile coverage, lossless PNG cut/stitch,
 context-crop preparation, overlap feathering, rejection of mixed output sizes, missing-tile
