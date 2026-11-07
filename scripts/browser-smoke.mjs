@@ -1261,10 +1261,16 @@ try {
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
-  let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
+  const movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
-    'dragged action bar X position must be applied to the gameplay HUD');
+  // The action bar has a 132px reserved half-width. A requested 68% center
+  // on a 390px viewport would overflow the right edge, so the runtime clamps
+  // it to 390 - 132 rather than applying an unsafe off-screen coordinate.
+  const expectedActionBarCenterX = Math.min(390 * 0.68, 390 - 132);
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - expectedActionBarCenterX) < 3,
+    'dragged action bar X position must be applied subject to its safe viewport bounds');
+  assert.ok(movedSettingsBox.x >= 0 && movedSettingsBox.x + movedSettingsBox.width <= 390,
+    'dragged action bar must remain fully inside the gameplay viewport');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
     'dragged action bar Y position must be applied to the gameplay HUD');
 
