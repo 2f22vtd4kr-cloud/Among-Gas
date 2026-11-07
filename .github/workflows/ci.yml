@@ -192,10 +192,11 @@ jobs:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
           VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
           VECTOR_COLLISION_DOCUMENT_PATH: ${{ runner.temp }}/vector-collision-editor-test.json
+      VECTOR_COLLISION_EDITOR_SEED_PATH: ${{ runner.temp }}/vector-collision-editor-seed.json
           VECTOR_COLLISION_EDITOR_BASE_URL: http://127.0.0.1:5173
         run: |
           rm -f "${RUNNER_TEMP}/vector-collision-editor-test.json" "${RUNNER_TEMP}/vector-collision-editor-test.json.bak"
-          nohup env VITE_ENABLE_GAME_MOCKS=true VECTOR_COLLISION_DOCUMENT_PATH="${VECTOR_COLLISION_DOCUMENT_PATH}" pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          nohup env VITE_ENABLE_GAME_MOCKS=true VECTOR_COLLISION_DOCUMENT_PATH="${VECTOR_COLLISION_DOCUMENT_PATH}" VECTOR_COLLISION_EDITOR_SEED_PATH="${VECTOR_COLLISION_EDITOR_SEED_PATH}" pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
             sleep 1
