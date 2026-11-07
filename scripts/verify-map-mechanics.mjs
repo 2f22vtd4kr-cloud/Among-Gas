@@ -61,7 +61,7 @@ assert.match(coords, /PLAYER_SPAWN_MIN_X\s*=\s*Math\.round\(280 \*/);
 assert.match(coords, /PLAYER_SPAWN_MAX_X\s*=\s*Math\.round\(710 \*/);
 assert.match(coords, /PLAYER_SPAWN_MAX_FEET_Y\s*=\s*Math\.round\(200 \*/);
 assert.equal(spawnClearance,12,'spawn clearance remains 12px');
-assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*142/);
+assert.match(coords, /IDLE_SPRITE_VISIBLE_HEIGHT\s*=\s*147/);
 assert.match(coords, /PLAYER_SPAWN_X\s*=\s*Math\.round\(450 \*/);
 assert.match(coords, /PLAYER_SPAWN_Y\s*=\s*Math\.round\(150 \*/);
 assert.match(uiLobbySource, /gameQuery\.set\('mock', mock\)/,
