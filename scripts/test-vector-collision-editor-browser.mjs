@@ -125,6 +125,14 @@ try {
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
+  // Candidate analyzer uses the shared task/vent targets and production player footprint.
+  await page.getByRole("button", { name: "Analyze candidate" }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-analysis-task-count") === "11");
+  assert.equal(await canvas.getAttribute("data-analysis-vent-count"), "6");
+  await page.locator("[data-candidate-analysis='complete']").waitFor();
+  assert.match(await page.locator("[data-candidate-analysis='complete']").innerText(), /Tasks reachable from spawn with interaction LOS:/);
+  assert.match(await page.locator("[data-candidate-analysis='complete']").innerText(), /Diagnostic only/);
+
   // Export remains available offline; no save is performed by this UI smoke.
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export JSON" }).click();
