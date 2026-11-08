@@ -119,7 +119,6 @@ try {
       poseWindows,
       frames,
       matrixDataUrl: matrix.toDataURL('image/png'),
-      alphaHashesByPose,
     };
   }, { poseWindows, sourceAssetGitBlobSha });
 
