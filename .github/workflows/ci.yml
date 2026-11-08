@@ -51,6 +51,15 @@ jobs:
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform
 
+      - name: Test extracted GameMap camera smoothing and viewport bounds
+        run: pnpm --filter @workspace/scripts run test:map-camera
+
+      - name: Test extracted contextual HUD action selection and disable rules
+        run: pnpm --filter @workspace/scripts run test:game-action-state
+
+      - name: Test shared keyboard and joystick movement input contracts
+        run: pnpm --filter @workspace/scripts run test:game-input
+
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
 
@@ -91,6 +100,9 @@ jobs:
 
       - name: Typecheck and build API/frontend
         run: pnpm run build
+
+      - name: Verify the eleven task minigames render through independent modules
+        run: pnpm --filter @workspace/scripts run test:minigame-registry
 
       - name: Archive reproducible raster-derived vector seed for human review
         uses: actions/upload-artifact@v7
@@ -241,6 +253,9 @@ jobs:
           name: among-gas-visual-qa
           path: |
             ${{ runner.temp }}/among-gas-visual-qa/*.png
+            ${{ runner.temp }}/among-gas-visual-qa/hud-state-matrix.json
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-golden-matrix.png
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-frame-metrics.json
             artifacts/telegram-game/collision-qa-overlay.png
             artifacts/telegram-game/collision-reference-overlay.png
             attached_assets/IMG_2907_1783632830477.jpeg
