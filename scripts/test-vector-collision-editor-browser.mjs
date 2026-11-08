@@ -180,6 +180,9 @@ try {
   const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
     console.log("PINCH TAKEOVER TEST:", mode);
+    // Each independent pinch starts from a known zoom. Without this reset, the
+    // first few cases increase zoom to the 8x cap and make later increases impossible.
+    await page.getByRole("button", { name: "Fit map" }).click();
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
     const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
