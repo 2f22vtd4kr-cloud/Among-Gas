@@ -131,7 +131,7 @@ try {
   // This is a regression fingerprint, not a claim that the art has received new design approval.
   const goldenMaterial = metrics.frames.map(frame =>
     `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
-  ).join("\\n");
+  ).join("\n");
   let goldenFingerprint = 14695981039346656037n;
   for (let index = 0; index < goldenMaterial.length; index++) {
     goldenFingerprint ^= BigInt(goldenMaterial.charCodeAt(index));
