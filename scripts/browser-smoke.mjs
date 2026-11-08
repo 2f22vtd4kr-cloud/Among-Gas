@@ -656,6 +656,153 @@ try {
   const secondStepDirty = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
   await page.getByRole('button', { name: 'Закрыть' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  // Open every canonical task through the real proximity-gated Use action. This is a browser
+  // gallery, not an SSR-only registry assertion: every module must mount inside the gameplay
+  // overlay at a phone viewport, expose its dialog semantics, and remain within the safe viewport.
+  // Plan v2 six-state action-bar acceptance matrix. Each capture uses a
+  // deterministic fixture and asserts the action state before the screenshot.
+  const hudStateMatrix = [];
+  const captureHudState = async (name, fixture, verify) => {
+    await page.goto(`${origin}/?mock=${fixture}&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
+    // Canvas creation precedes map-asset readiness; wait for GameMap's loaded
+    // state to mount the living-player action bar before asserting its controls.
+    await page.getByTestId('game-action-bar').waitFor({ state: 'visible', timeout: 20_000 });
+    const details = await verify(page);
+    await page.screenshot({ path: join(visualQaDir, `hud-matrix-${name}.png`), fullPage: true });
+    hudStateMatrix.push({ state: name, fixture, viewport: { width: 390, height: 844 }, ...details });
+  };
+
+  await captureHudState('crew-idle', 'crew-idle', async current => {
+    const use = current.getByTestId('game-action-use');
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await use.isVisible(), true, 'crew idle: Use remains visible');
+    assert.equal(await use.isEnabled(), false, 'crew idle: no nearby task is actionable');
+    assert.equal(await report.isVisible(), true, 'crew idle: Report remains visible');
+    assert.equal(await report.isEnabled(), false, 'crew idle: no body means Report is disabled');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew idle: no Kill action');
+    return { use: 'disabled-no-nearby-task', report: 'disabled-no-body', kill: 'absent' };
+  });
+
+  await captureHudState('crew-near-task', 'task-interaction', async current => {
+    await current.waitForFunction(() =>
+      document.querySelector('[data-testid="game-action-use"]')?.getAttribute('data-use-action') === 'task',
+      null,
+      { timeout: 10_000 },
+    );
+    const use = current.getByTestId('game-action-use');
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await use.getAttribute('data-use-action'), 'task');
+    assert.equal(await use.isEnabled(), true, 'crew near task: Use is enabled');
+    assert.equal(await report.isEnabled(), false, 'crew near task: Report remains disabled');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew near task: no Kill action');
+    return { use: 'enabled-task', report: 'disabled-no-body', kill: 'absent' };
+  });
+
+  await captureHudState('crew-near-body', 'report-ready', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-report"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, null, { timeout: 10_000 });
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await report.isVisible(), true);
+    assert.equal(await report.isEnabled(), true, 'crew near body: Report is enabled');
+    assert.equal(await current.getByTestId('game-action-use').isVisible(), true, 'crew near body: Use remains visible');
+    assert.equal(await current.getByTestId('game-action-use').isEnabled(), false, 'crew near body: no nearby task');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew near body: no Kill action');
+    return { use: 'disabled-no-interaction', report: 'enabled-body', kill: 'absent' };
+  });
+
+  await captureHudState('impostor-ready', 'kill-ready', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-kill"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, null, { timeout: 10_000 });
+    const kill = current.getByTestId('game-action-kill');
+    assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
+    assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
+    assert.equal(await current.getByTestId('game-action-report').isEnabled(), false);
+    assert.equal(await current.getByTestId('game-action-use').isEnabled(), false);
+    return { kill: 'enabled-target', report: 'disabled-no-body', use: 'disabled-no-interaction' };
+  });
+
+  await captureHudState('impostor-cooldown', 'impostor-opening', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-kill"]');
+      return button instanceof HTMLButtonElement && button.disabled;
+    }, null, { timeout: 10_000 });
+    const kill = current.getByTestId('game-action-kill');
+    assert.equal(await kill.isVisible(), true, 'impostor cooldown: Kill remains visible');
+    assert.equal(await kill.isEnabled(), false, 'impostor cooldown: Kill is disabled');
+    const opacity = Number(await kill.evaluate(element => getComputedStyle(element).opacity));
+    assert.equal(opacity, 0.45, 'impostor cooldown: disabled Kill uses 45% opacity');
+    assert.match(await kill.evaluate(element => getComputedStyle(element).filter), /saturate\(0\.2\)/);
+    return { kill: 'disabled-cooldown', opacity, report: 'disabled', use: 'disabled' };
+  });
+
+  await captureHudState('dead-ghost', 'ghost', async current => {
+    await current.getByText(/Вы мертвы — режим призрака/).waitFor({ state: 'visible', timeout: 10_000 });
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'dead ghost: Kill is absent');
+    assert.equal(await current.getByTestId('game-action-report').count(), 0, 'dead ghost: Report is absent');
+    return { kill: 'absent', report: 'absent', ghost: 'visible' };
+  });
+
+  writeFileSync(join(visualQaDir, 'hud-state-matrix.json'), JSON.stringify(hudStateMatrix, null, 2) + '\n');
+
+  const minigameGallery = [
+    [0, 'Fix Wiring', 'Починить проводку'],
+    [1, 'Download Data', 'Скачать данные'],
+    [2, 'Calibrate Distributor', 'Настроить распределитель'],
+    [3, 'Empty Garbage', 'Вынести мусор'],
+    [4, 'Clean Filters', 'Почистить фильтры'],
+    [5, 'Stabilize Navigation', 'Стабилизировать навигацию'],
+    [6, 'Reboot WiFi', 'Перезапустить связь'],
+    [7, 'Fuel Engine', 'Заправить двигатель'],
+    [8, 'Start Reactor', 'Запустить реактор'],
+    [9, 'Align Engine', 'Выровнять двигатель'],
+    [10, 'Clear Asteroids', 'Уничтожить астероиды'],
+  ];
+  for (const [taskId, englishName, russianName] of minigameGallery) {
+    await page.goto(`${origin}/?mock=task-interaction-gallery&taskId=${taskId}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
+    await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+    // Role reveal art is transient and must not be required on subsequent fixture reloads.
+    await waitForRoleRevealToFinish(page);
+    const galleryUse = page.getByTestId('game-action-use');
+    await galleryUse.waitFor({ state: 'visible', timeout: 10_000 });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-use"]');
+      return button instanceof HTMLButtonElement &&
+        !button.disabled && button.dataset.useAction === 'task';
+    }, undefined, { timeout: 10_000 });
+    await galleryUse.click();
+
+    const minigameDialog = page.getByTestId('minigame-shell');
+    await minigameDialog.waitFor({ state: 'visible', timeout: 5_000 });
+    const dialogText = await minigameDialog.innerText();
+    assert.ok(
+      dialogText.includes(englishName) || dialogText.includes(russianName),
+      `task ${taskId} must open its own ${englishName} panel; got: ${dialogText}`,
+    );
+    const dialogBox = await minigameDialog.boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(dialogBox && viewport, `task ${taskId} dialog must be measurable`);
+    assert.ok(
+      dialogBox.x >= 0 && dialogBox.y >= 0 &&
+        dialogBox.x + dialogBox.width <= viewport.width + 0.5 &&
+        dialogBox.y + dialogBox.height <= viewport.height + 0.5,
+      `task ${taskId} dialog must stay inside the ${viewport.width}×${viewport.height} phone viewport; got ${JSON.stringify(dialogBox)}`,
+    );
+    await page.screenshot({
+      path: join(visualQaDir, `minigame-gallery-${String(taskId).padStart(2, '0')}.png`),
+      fullPage: true,
+    });
+    await minigameDialog.getByRole('button', { name: /^(Close|Закрыть)$/ }).click();
+    await minigameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
+  }
+
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
   await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
