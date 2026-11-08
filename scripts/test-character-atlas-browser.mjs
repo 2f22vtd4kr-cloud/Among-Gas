@@ -110,10 +110,6 @@ try {
         matrixContext.drawImage(atlas, x, pose.top, cellWidth, height, dx, dy, drawWidth, drawHeight);
       }
     }
-    const alphaHashesByPose = poseWindows.map(pose => {
-      const source = frames.find(frame => frame.color === 'teal' && frame.pose === pose.pose);
-      return { pose: pose.pose, hash: source?.alphaBounds ? source.hash : null };
-    });
     return {
       width: atlas.width,
       height: atlas.height,
@@ -169,7 +165,7 @@ try {
         color, pose, hash, opaquePixels, alphaBounds,
       })),
     };
-    writeFileSync(join(visualQaDir, 'character-atlas-frame-metrics.json'), JSON.stringify(manifest, null, 2) + '\\n');
+    writeFileSync(join(visualQaDir, 'character-atlas-frame-metrics.json'), JSON.stringify(manifest, null, 2) + '\n');
   }
 
   console.log('Runtime character atlas frame matrix passed:', JSON.stringify({
