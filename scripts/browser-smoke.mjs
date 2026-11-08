@@ -1049,6 +1049,9 @@ try {
   const captureHudState = async (name, fixture, verify) => {
     await page.goto(`${origin}/?mock=${fixture}&skipReveal=true`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
+    // Canvas creation precedes map-asset readiness; wait for GameMap's loaded
+    // state to mount the living-player action bar before asserting its controls.
+    await page.getByTestId('game-action-bar').waitFor({ state: 'visible', timeout: 20_000 });
     const details = await verify(page);
     await page.screenshot({ path: join(visualQaDir, `hud-matrix-${name}.png`), fullPage: true });
     hudStateMatrix.push({ state: name, fixture, viewport: { width: 390, height: 844 }, ...details });
