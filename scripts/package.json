@@ -23,7 +23,8 @@
     "test:vector-runtime-isolation": "node ./test-vector-runtime-isolation.mjs",
     "test:map-renderer": "tsc -p tsconfig.map-renderer-test.json --noEmit && tsx src/testTiledMapRenderer.ts",
     "test:map-camera": "tsx ../artifacts/telegram-game/src/game/mapCamera.test.ts",
-    "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts"
+    "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts",
+    "test:asset-provenance": "node ./test-asset-provenance.mjs"
   },
   "devDependencies": {
     "@types/node": "catalog:",
