@@ -12,7 +12,7 @@ import {
   type Point,
 } from "@workspace/shared/collision";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision";
+type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision" | "loupe";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
@@ -41,6 +41,7 @@ const TOOL_LABELS: Record<Tool, string> = {
   erase: "Delete shape",
   walk: "Walk test",
   vision: "Vision preview (hold)",
+  loupe: "Loupe (4×)",
 };
 
 function cloneDocument(document: CollisionDocument): EditableDocument {
@@ -102,6 +103,7 @@ export default function VectorCollisionEditor() {
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
   const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
+  const [loupe, setLoupe] = useState<{ world: Point; screenX: number; screenY: number } | null>(null);
   const candidateWorld = useMemo(() => {
     try {
       return new CollisionWorld(document.shapes);
@@ -277,6 +279,67 @@ export default function VectorCollisionEditor() {
       });
     }
 
+    if (loupe) {
+      const lensRadius = 78;
+      const magnification = camera.zoom * 4;
+      context.save();
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.beginPath();
+      context.arc(loupe.screenX, loupe.screenY, lensRadius, 0, Math.PI * 2);
+      context.clip();
+      context.setTransform(
+        magnification * dpr, 0, 0, magnification * dpr,
+        (loupe.screenX - loupe.world[0] * magnification) * dpr,
+        (loupe.screenY - loupe.world[1] * magnification) * dpr,
+      );
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, 0, 0, MAP_W, MAP_H);
+      for (const shape of document.shapes) {
+        context.beginPath();
+        shape.points.forEach((point, index) => {
+          if (index === 0) context.moveTo(point[0], point[1]);
+          else context.lineTo(point[0], point[1]);
+        });
+        if (shape.closed) context.closePath();
+        if (shape.closed) {
+          context.fillStyle = shape.blocksMove ? "rgba(255,75,85,0.20)" : "rgba(60,220,190,0.13)";
+          context.fill();
+        }
+        context.strokeStyle = shape.blocksMove && shape.blocksSight ? "#ff5c68" : shape.blocksMove ? "#e79a45" : "#55d9cd";
+        context.lineWidth = 2 / magnification;
+        context.lineJoin = "round";
+        context.lineCap = "round";
+        context.stroke();
+      }
+      context.restore();
+      context.save();
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.beginPath();
+      context.arc(loupe.screenX, loupe.screenY, lensRadius, 0, Math.PI * 2);
+      context.strokeStyle = "#ffe079";
+      context.lineWidth = 3;
+      context.shadowColor = "rgba(0,0,0,0.75)";
+      context.shadowBlur = 8;
+      context.stroke();
+      context.shadowBlur = 0;
+      context.beginPath();
+      context.moveTo(loupe.screenX - 13, loupe.screenY);
+      context.lineTo(loupe.screenX + 13, loupe.screenY);
+      context.moveTo(loupe.screenX, loupe.screenY - 13);
+      context.lineTo(loupe.screenX, loupe.screenY + 13);
+      context.strokeStyle = "rgba(255,255,255,0.85)";
+      context.lineWidth = 1;
+      context.stroke();
+      context.fillStyle = "rgba(5,12,18,0.88)";
+      context.fillRect(loupe.screenX - 39, loupe.screenY + lensRadius + 5, 78, 21);
+      context.fillStyle = "#ffe079";
+      context.font = "11px system-ui, sans-serif";
+      context.textAlign = "center";
+      context.fillText("4× LOUPE", loupe.screenX, loupe.screenY + lensRadius + 20);
+      context.restore();
+    }
+
     context.fillStyle = "rgba(5,12,18,0.82)";
     context.fillRect(8, rect.height - 34, Math.min(560, rect.width - 16), 26);
     context.fillStyle = "#e4eef4";
@@ -286,7 +349,7 @@ export default function VectorCollisionEditor() {
       16,
       rect.height - 17,
     );
-  }, [document, candidateWorld, visionOrigin, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
+  }, [document, candidateWorld, visionOrigin, loupe, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
 
   useEffect(() => { drawRef.current = draw; }, [draw]);
 
@@ -514,6 +577,7 @@ export default function VectorCollisionEditor() {
     const position = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, position);
     if (pointersRef.current.size === 2) {
+      setLoupe(null);
       if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
       visionPressTimerRef.current = null;
       // A second finger always takes over as a viewport gesture, regardless
@@ -544,6 +608,11 @@ export default function VectorCollisionEditor() {
     if (pointersRef.current.size > 2) return;
 
     const point = worldPoint(event);
+    if (tool === "loupe") {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setLoupe({ world: point, screenX: event.clientX - rect.left, screenY: event.clientY - rect.top });
+      return;
+    }
     if (tool === "vision") {
       gestureRef.current = { kind: "vision", point, clientX: event.clientX, clientY: event.clientY };
       visionPressTimerRef.current = window.setTimeout(() => {
@@ -640,6 +709,12 @@ export default function VectorCollisionEditor() {
       return;
     }
 
+    if (tool === "loupe" && pointersRef.current.size <= 1) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setLoupe({ world: worldPoint(event), screenX: event.clientX - rect.left, screenY: event.clientY - rect.top });
+      scheduleDraw();
+      return;
+    }
     const gesture = gestureRef.current;
     if (gesture?.kind === "vision") {
       if (Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) > 12) {
@@ -968,8 +1043,8 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision"] as Tool[]).map(item => (
-          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => setTool(item)}>{TOOL_LABELS[item]}</button>
+        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
+          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
@@ -984,6 +1059,7 @@ export default function VectorCollisionEditor() {
         {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { walkPointsRef.current = []; setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
         <button type="button" style={buttonStyle(visionOrigin !== null)} onClick={() => setVisionOrigin(null)} disabled={!visionOrigin}>Clear vision preview</button>
+        <button type="button" style={buttonStyle(loupe !== null)} onClick={() => setLoupe(null)} disabled={!loupe}>Clear loupe</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
@@ -1024,6 +1100,8 @@ export default function VectorCollisionEditor() {
           data-walk-status={walkStatus}
           data-vision-preview={visionOrigin ? "true" : "false"}
           data-vision-origin={visionOrigin ? visionOrigin.join(",") : ""}
+          data-loupe-active={loupe ? "true" : "false"}
+          data-loupe-origin={loupe ? loupe.world.join(",") : ""}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
@@ -1031,6 +1109,7 @@ export default function VectorCollisionEditor() {
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
           onPointerCancel={onPointerUp}
+          onPointerLeave={() => { if (pointersRef.current.size === 0) setLoupe(null); }}
           style={{ width: "100%", height: "100%", display: "block", touchAction: "none", cursor: tool === "pan" ? "grab" : tool === "edit" ? "move" : "crosshair" }}
         />
         {!loaded && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(10,18,26,.84)", fontSize: 14 }}>Loading geometry workspace…</div>}
