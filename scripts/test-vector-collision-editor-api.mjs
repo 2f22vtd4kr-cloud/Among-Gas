@@ -160,7 +160,15 @@ try {
   assert.equal(reloaded.saved, true);
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20");
 
-  // Each A–E zone has a separate versioned file and independent 20-backup rotation.
+  // All twelve 4×3 regions must have a separately addressable candidate endpoint.
+  for (const zoneId of "ABCDEFGHIJKL") {
+    const response = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/" + zoneId, {
+      cache: "no-store",
+    });
+    assert.equal(response.status, 200, "map zone " + zoneId + " must have a registered candidate endpoint");
+  }
+
+  // Each zone has a separate versioned file and independent 20-backup rotation.
   const initialZoneResponse = await fetch(zoneEndpoint, { cache: "no-store" });
   assert.equal(initialZoneResponse.status, 200);
   const initialZone = await jsonResponse(initialZoneResponse);
