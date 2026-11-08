@@ -2,11 +2,11 @@ import { useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { useLanguage } from '../lib/language';
+import { applyJoystickDirection, clearMovementInput } from '../game/gameInput';
 
 const BASE_RADIUS = 52;
 const KNOB_RADIUS = 22;
 const DEAD_ZONE = 0.18;
-const MOVEMENT_KEYS = ['w', 'a', 's', 'd'] as const;
 
 interface JoystickProps {
   keysRef: React.MutableRefObject<Set<string>>;
@@ -21,24 +21,13 @@ export default function Joystick({ keysRef }: JoystickProps) {
   const centerRef = useRef({ x: 0, y: 0 });
 
   function applyDirection(dx: number, dy: number) {
-    const dist = Math.hypot(dx, dy);
-    const keys = keysRef.current;
-    if (dist < BASE_RADIUS * DEAD_ZONE) {
-      for (const key of MOVEMENT_KEYS) keys.delete(key);
-      return;
-    }
-    const nx = dx / dist;
-    const ny = dy / dist;
-    if (ny < -0.4) keys.add('w'); else keys.delete('w');
-    if (ny > 0.4) keys.add('s'); else keys.delete('s');
-    if (nx < -0.4) keys.add('a'); else keys.delete('a');
-    if (nx > 0.4) keys.add('d'); else keys.delete('d');
+    applyJoystickDirection(keysRef.current, dx, dy, BASE_RADIUS, DEAD_ZONE);
   }
 
   function resetJoystick() {
     activePointer.current = null;
     if (knobRef.current) knobRef.current.style.transform = 'translate(-50%, -50%)';
-    for (const key of MOVEMENT_KEYS) keysRef.current.delete(key);
+    clearMovementInput(keysRef.current);
   }
 
   function updatePointer(clientX: number, clientY: number) {
