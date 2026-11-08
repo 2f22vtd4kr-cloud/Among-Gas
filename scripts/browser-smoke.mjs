@@ -1054,7 +1054,7 @@ try {
     hudStateMatrix.push({ state: name, fixture, viewport: { width: 390, height: 844 }, ...details });
   };
 
-  await captureHudState('crew-idle', 'task-interaction-blocked', async current => {
+  await captureHudState('crew-idle', 'crew-idle', async current => {
     const use = current.getByTestId('game-action-use');
     const report = current.getByTestId('game-action-report');
     assert.equal(await use.isVisible(), true, 'crew idle: Use remains visible');
@@ -1111,7 +1111,7 @@ try {
     return { kill: 'absent', report: 'absent', ghost: 'visible' };
   });
 
-  writeFileSync(join(visualQaDir, 'hud-state-matrix.json'), JSON.stringify(hudStateMatrix, null, 2) + '\\n');
+  writeFileSync(join(visualQaDir, 'hud-state-matrix.json'), JSON.stringify(hudStateMatrix, null, 2) + '\n');
 
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
