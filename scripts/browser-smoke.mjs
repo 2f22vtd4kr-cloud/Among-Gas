@@ -677,11 +677,11 @@ try {
     const use = current.getByTestId('game-action-use');
     const report = current.getByTestId('game-action-report');
     assert.equal(await use.isVisible(), true, 'crew idle: Use remains visible');
-    assert.equal(await use.isEnabled(), false, 'crew idle: occluded task is not actionable');
+    assert.equal(await use.isEnabled(), false, 'crew idle: no nearby task is actionable');
     assert.equal(await report.isVisible(), true, 'crew idle: Report remains visible');
     assert.equal(await report.isEnabled(), false, 'crew idle: no body means Report is disabled');
     assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew idle: no Kill action');
-    return { use: 'disabled-occluded', report: 'disabled-no-body', kill: 'absent' };
+    return { use: 'disabled-no-nearby-task', report: 'disabled-no-body', kill: 'absent' };
   });
 
   await captureHudState('crew-near-task', 'task-interaction', async current => {
