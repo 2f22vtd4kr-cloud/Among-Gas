@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { TASK_DEFS } from "../lib/shared/src/tasks";
-import TaskMinigame, { MINIGAME_COMPONENTS } from "../artifacts/telegram-game/src/components/TaskMinigame";
+import { TASK_DEFS } from "../../lib/shared/src/tasks";
+import TaskMinigame, { MINIGAME_COMPONENTS } from "../../artifacts/telegram-game/src/components/TaskMinigame";
 
 assert.equal(TASK_DEFS.length, 11, "the canonical shared task registry must contain eleven tasks");
 assert.equal(MINIGAME_COMPONENTS.length, TASK_DEFS.length,
