@@ -37,12 +37,11 @@ export function replaceProductionCollisionDocument(document: CollisionDocument):
   if (errors.length) {
     throw new Error("Refusing invalid production collision candidate: " + errors.join("; "));
   }
+  // Build first, then swap the document and world together. A failed
+  // constructor must not leave the public document pointing at the old world.
+  const nextWorld = new CollisionWorld(document.shapes, document.mapW, document.mapH);
   activeDocument = document;
-  activeWorld = new CollisionWorld(
-    activeDocument.shapes,
-    activeDocument.mapW,
-    activeDocument.mapH,
-  );
+  activeWorld = nextWorld;
   // ESM imports are live bindings, but exported `const` aliases would retain
   // the initial world forever. Refresh every public alias with the new world.
   PRODUCTION_COLLISION_DOCUMENT = activeDocument;
