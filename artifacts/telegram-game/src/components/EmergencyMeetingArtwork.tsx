@@ -11,8 +11,7 @@ export function EmergencyMeetingIcon({ style }: ArtworkProps) {
       viewBox="0 0 96 96"
       width="70"
       height="70"
-      role="img"
-      aria-label="Emergency alarm"
+      aria-hidden="true"
       style={{ display: "block", ...style }}
       focusable="false"
     >
@@ -48,8 +47,7 @@ export function EmergencyMeetingSplash({ style }: ArtworkProps) {
       viewBox="0 0 560 340"
       width="340"
       height="206"
-      role="img"
-      aria-label="Industrial emergency alarm"
+      aria-hidden="true"
       style={{ display: "block", ...style }}
       focusable="false"
     >
@@ -78,7 +76,7 @@ export function EmergencyMeetingSplash({ style }: ArtworkProps) {
       </g>
       <path d="M178 225v-61c0-58 42-104 102-104s102 46 102 104v61Z" fill="url(#ag-emergency-dome)" stroke="#ffd2b8" strokeWidth="8" />
       <path d="M224 145c10-32 30-52 55-58" fill="none" stroke="#fff0e7" strokeWidth="13" strokeLinecap="round" opacity="0.78" />
-      <path d="M146 222h268v44H146z" rx="12" fill="url(#ag-emergency-base)" stroke="#d9e4e7" strokeWidth="7" />
+      <rect x="146" y="222" width="268" height="44" rx="12" fill="url(#ag-emergency-base)" stroke="#d9e4e7" strokeWidth="7" />
       <path d="M164 266h232l25 31H139z" fill="#26363e" stroke="#82969e" strokeWidth="6" />
       <path d="M205 278h150" stroke="#f5c56d" strokeWidth="9" strokeLinecap="round" />
       <path d="M118 314h324" stroke="#ff6a4d" strokeWidth="6" strokeLinecap="round" opacity="0.72" />
