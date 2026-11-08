@@ -656,6 +656,62 @@ try {
   const secondStepDirty = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await secondStepDirty.first().click();
   await page.getByRole('button', { name: 'Закрыть' }).waitFor({ state: 'hidden', timeout: 5_000 });
+  // Open every canonical task through the real proximity-gated Use action. This is a browser
+  // gallery, not an SSR-only registry assertion: every module must mount inside the gameplay
+  // overlay at a phone viewport, expose its dialog semantics, and remain within the safe viewport.
+  const minigameGallery = [
+    [0, 'Fix Wiring', 'Починить проводку'],
+    [1, 'Download Data', 'Скачать данные'],
+    [2, 'Calibrate Distributor', 'Настроить распределитель'],
+    [3, 'Empty Garbage', 'Вынести мусор'],
+    [4, 'Clean Filters', 'Почистить фильтры'],
+    [5, 'Stabilize Navigation', 'Стабилизировать навигацию'],
+    [6, 'Reboot WiFi', 'Перезапустить связь'],
+    [7, 'Fuel Engine', 'Заправить двигатель'],
+    [8, 'Start Reactor', 'Запустить реактор'],
+    [9, 'Align Engine', 'Выровнять двигатель'],
+    [10, 'Clear Asteroids', 'Уничтожить астероиды'],
+  ];
+  for (const [taskId, englishName, russianName] of minigameGallery) {
+    await page.goto(`${origin}/?mock=task-interaction-gallery&taskId=${taskId}`, {
+      waitUntil: 'domcontentloaded',
+    });
+    await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
+    await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+    await waitForRoleRevealToFinish(page);
+    const galleryUse = page.getByTestId('game-action-use');
+    await galleryUse.waitFor({ state: 'visible', timeout: 10_000 });
+    await page.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-use"]');
+      return button instanceof HTMLButtonElement &&
+        !button.disabled && button.dataset.useAction === 'task';
+    }, undefined, { timeout: 10_000 });
+    await galleryUse.click();
+
+    const minigameDialog = page.getByTestId('minigame-shell');
+    await minigameDialog.waitFor({ state: 'visible', timeout: 5_000 });
+    const dialogText = await minigameDialog.innerText();
+    assert.ok(
+      dialogText.includes(englishName) || dialogText.includes(russianName),
+      `task ${taskId} must open its own ${englishName} panel; got: ${dialogText}`,
+    );
+    const dialogBox = await minigameDialog.boundingBox();
+    const viewport = page.viewportSize();
+    assert.ok(dialogBox && viewport, `task ${taskId} dialog must be measurable`);
+    assert.ok(
+      dialogBox.x >= 0 && dialogBox.y >= 0 &&
+        dialogBox.x + dialogBox.width <= viewport.width + 0.5 &&
+        dialogBox.y + dialogBox.height <= viewport.height + 0.5,
+      `task ${taskId} dialog must stay inside the ${viewport.width}×${viewport.height} phone viewport; got ${JSON.stringify(dialogBox)}`,
+    );
+    await page.screenshot({
+      path: join(visualQaDir, `minigame-gallery-${String(taskId).padStart(2, '0')}.png`),
+      fullPage: true,
+    });
+    await minigameDialog.getByRole('button', { name: /^(Close|Закрыть)$/ }).click();
+    await minigameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
+  }
+
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
   await page.goto(`${origin}/?mock=kill-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
