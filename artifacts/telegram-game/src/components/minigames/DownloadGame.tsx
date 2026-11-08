@@ -42,6 +42,7 @@ export function DownloadGame({ onComplete }: MinigameProps) {
       </div>
       {!started && (
         <button
+          aria-label={en ? "Start data download" : "Начать загрузку данных"}
           onClick={() => setStarted(true)}
           style={{
             padding: '12px 32px', borderRadius: 10,
