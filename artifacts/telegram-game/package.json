@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "predev": "pnpm --filter @workspace/scripts run build:collision && pnpm --filter @workspace/scripts run build:map-tiles",
     "prebuild": "pnpm --filter @workspace/scripts run build:collision && pnpm --filter @workspace/scripts run build:map-tiles",
-    "test:minigame-registry": "tsx ../scripts/src/testMinigameRegistry.ts"
+    "test:minigame-registry": "tsx src/components/minigames/testMinigameRegistry.tsx"
   },
   "dependencies": {
     "@workspace/shared": "workspace:*"
