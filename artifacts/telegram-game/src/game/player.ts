@@ -21,6 +21,7 @@ import {
   PLAYER_SPAWN_Y,
 } from '@workspace/shared/coords';
 import type { CharacterPose } from './characterSprites';
+import { getMovementAxes } from './gameInput';
 
 export { PLAYER_SPEED_PX_PER_SEC } from '@workspace/shared/coords';
 
@@ -64,17 +65,6 @@ export function createInitialPlayerState(): PlayerState {
   };
 }
 
-const MOVE_KEYS = {
-  up: ['w', 'arrowup'],
-  down: ['s', 'arrowdown'],
-  left: ['a', 'arrowleft'],
-  right: ['d', 'arrowright'],
-};
-
-function isKeyDown(keys: ReadonlySet<string>, aliases: string[]): boolean {
-  return aliases.some((k) => keys.has(k));
-}
-
 /**
  * Advance the player one frame: reads currently-held keys, resolves the
  * intended move against the collision grid (with wall-sliding), and updates
@@ -91,13 +81,7 @@ export function stepPlayer(
   dtMs: number,
   ghost = false,
 ): PlayerState {
-  let dx = 0;
-  let dy = 0;
-  if (isKeyDown(keys, MOVE_KEYS.up)) dy -= 1;
-  if (isKeyDown(keys, MOVE_KEYS.down)) dy += 1;
-  if (isKeyDown(keys, MOVE_KEYS.left)) dx -= 1;
-  if (isKeyDown(keys, MOVE_KEYS.right)) dx += 1;
-
+  const { dx, dy } = getMovementAxes(keys);
   const moving = dx !== 0 || dy !== 0;
 
   let { x, y } = state;
