@@ -54,6 +54,9 @@ jobs:
       - name: Test extracted GameMap camera smoothing and viewport bounds
         run: pnpm --filter @workspace/scripts run test:map-camera
 
+      - name: Test extracted contextual HUD action selection and disable rules
+        run: pnpm --filter @workspace/scripts run test:game-action-state
+
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
 
