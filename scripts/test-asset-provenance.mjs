@@ -29,4 +29,17 @@ assert.deepEqual(
   [],
   "application source must not load uncleared legacy au-assets files",
 );
-console.log("ASSET PROVENANCE TESTS PASSED: no application-source references to uncleared au-assets files");
+
+const publicLegacyDirectory = path.join(gameRoot, "public", "au-assets");
+assert.equal(
+  fs.existsSync(publicLegacyDirectory),
+  false,
+  "uncleared legacy art must not remain in Vite's production public directory",
+);
+const archivedLegacyDirectory = path.resolve(import.meta.dirname, "../attached_assets/legacy-au-assets");
+assert.equal(
+  fs.readdirSync(archivedLegacyDirectory).length,
+  17,
+  "all 17 legacy files must remain preserved outside the production public directory",
+);
+console.log("ASSET PROVENANCE TESTS PASSED: no runtime references; all 17 legacy files archived outside the public build");
