@@ -10,6 +10,25 @@ assert.equal(MINIGAME_COMPONENTS.length, TASK_DEFS.length,
 assert.equal(new Set(MINIGAME_COMPONENTS).size, TASK_DEFS.length,
   "task IDs must not accidentally reuse the same component");
 
+const expectedRegistryOrder = [
+  "WiringGame",
+  "DownloadGame",
+  "CalibrateGame",
+  "GarbageGame",
+  "FiltersGame",
+  "StabilizeNavigationGame",
+  "RebootWifiGame",
+  "FuelGame",
+  "ReactorGame",
+  "AlignEngineGame",
+  "AsteroidsGame",
+];
+assert.deepEqual(
+  MINIGAME_COMPONENTS.map(component => component.name),
+  expectedRegistryOrder,
+  "task IDs must preserve their canonical minigame-to-component mapping",
+);
+
 for (let taskId = 0; taskId < TASK_DEFS.length; taskId++) {
   const html = renderToStaticMarkup(createElement(TaskMinigame, {
     taskId,
