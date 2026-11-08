@@ -43,6 +43,11 @@ export function clearMovementInput(keys: Set<string>): void {
   keys.clear();
 }
 
+/** Release only joystick-owned WASD directions; preserve independent arrow-key holds. */
+export function clearJoystickMovementInput(keys: Set<string>): void {
+  for (const key of JOYSTICK_MOVEMENT_KEYS) keys.delete(key);
+}
+
 /** Read WASD and arrow aliases as raw signed axes; diagonal normalization stays in stepPlayer. */
 export function getMovementAxes(keys: ReadonlySet<string>): MovementAxes {
   const hasAny = (aliases: readonly string[]) => aliases.some(key => keys.has(key));
