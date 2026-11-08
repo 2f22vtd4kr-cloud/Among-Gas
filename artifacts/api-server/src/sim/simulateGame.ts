@@ -150,6 +150,16 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         perGameHandlers.delete(lobby.code);
         const timeoutState = winner === 'timeout' ? {
           phase: lobby.phase,
+          meeting: lobby.meeting ? {
+            reporterSlot: lobby.meeting.reporterSlot,
+            bodySlot: lobby.meeting.bodySlot,
+            startedAtMs: lobby.meeting.startedAtMs ?? null,
+            elapsedMs: Math.max(0, Date.now() - (lobby.meeting.startedAtMs ?? Date.now())),
+            votingOpen: lobby.meeting.votingOpen,
+            votes: Array.from(lobby.meeting.votes.entries()),
+            discussionTimerPending: lobby.meeting.discussionTimer !== null,
+            votingTimerPending: lobby.meeting.votingTimer !== null,
+          } : null,
           sabotage: lobby.sabotage ? {
             systemId: lobby.sabotage.systemId,
             lockedTaskIds: [...lobby.sabotage.lockedTaskIds],
