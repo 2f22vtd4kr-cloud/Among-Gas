@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useLanguage } from "../../lib/language";
 import type { MinigameProps } from "./shared";
 
