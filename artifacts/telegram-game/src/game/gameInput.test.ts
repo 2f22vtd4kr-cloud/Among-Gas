@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {
   applyJoystickDirection,
   clearMovementInput,
+  clearJoystickMovementInput,
   getMovementAxes,
   setMovementInputKey,
   shouldCaptureMovementKey,
@@ -38,4 +39,11 @@ assert.deepEqual(getMovementAxes(keys), { dx: 0, dy: 0 }, 'dead-zone displacemen
 applyJoystickDirection(keys, 52, 52, 52, 0.18, 0.8);
 assert.deepEqual(getMovementAxes(keys), { dx: 0, dy: 0 }, 'axis threshold suppresses diagonal noise');
 assert.throws(() => applyJoystickDirection(keys, 1, 1, 0), RangeError);
+
+// Releasing the touch joystick must not discard independently-held arrow keys.
+setMovementInputKey(keys, 'ArrowRight', true);
+setMovementInputKey(keys, 'w', true);
+clearJoystickMovementInput(keys);
+assert.deepEqual(getMovementAxes(keys), { dx: 1, dy: 0 },
+  'joystick release clears only its WASD directions and preserves arrow-key input');
 console.log('Shared keyboard and joystick movement input contracts passed.');
