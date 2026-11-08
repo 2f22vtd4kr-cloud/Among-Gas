@@ -24,16 +24,11 @@ assert.ok(document.shapes.every(shape => !shape.blocksSight),
   "movement-only red-line traces must not silently become vision occluders");
 assert.ok(world.isPlayerSpawnPositionClear(PLAYER_SPAWN_X, PLAYER_SPAWN_Y),
   "the real player spawn must be clear under the same red-line geometry used at runtime");
-const statuePedestal = document.shapes.find(shape => shape.id === "statue-pedestal");
-assert.ok(statuePedestal?.closed, "the measured statue pedestal must be a solid footprint");
-assert.equal(world.insideSolid(1745, 497), true, "the statue pedestal interior must block movement");
-assert.equal(world.isPlayerWalkableAtFeet(1745, 550), true,
-  "the decorative garden floor outside the pedestal remains walkable");
+assert.equal(document.shapes.some(shape => shape.id === "statue-pedestal"), false,
+  "the red-line source does not define a reviewed statue-pedestal contour; never promote the old estimated rectangle");
 const editorZones = new Set(document.shapes.map(shape => shape.zone));
 assert.deepEqual([...editorZones].sort(), ["A", "B", "C", "D", "E"],
   "the production seed must be assigned across all five spatial editor zones");
-assert.equal(statuePedestal.zone, "C",
-  "the statue pedestal belongs to the central editor zone");
 
 const cols = COLS * 2, rows = ROWS * 2;
 const nav = world.rasterizePlayerNav(cols, rows);
