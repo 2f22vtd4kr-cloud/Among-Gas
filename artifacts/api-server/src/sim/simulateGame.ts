@@ -278,6 +278,12 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       // Independently audit every living bot position throughout the real
       // simulation loop. This catches collision/pathfinding regressions that
       // outcome-only tests miss (e.g. a bot slowly walking through a wall).
+      // Bot positions are only advanced by the shared 5Hz bot loop. Sampling
+      // at 10Hz still checks every movement tick (with one extra midpoint
+      // sample), while avoiding a per-lobby 50Hz × all-players × vector-shape
+      // scan. At 25 concurrent lobbies the old 20ms monitor dominated the
+      // event loop and starved meeting timers, producing false gameplay
+      // timeouts in otherwise progressing matches.
       collisionMonitor = setInterval(() => {
         if (settled) return;
         for (const player of lobby.players.values()) {
@@ -290,7 +296,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           finish('timeout');
           return;
         }
-      }, 20);
+      }, 100);
     }
 
     const initialBatch = Math.min(concurrency, games);
