@@ -93,7 +93,7 @@ jobs:
         run: pnpm run build
 
       - name: Verify the eleven task minigames render through independent modules
-        run: pnpm --filter @workspace/telegram-game run test:minigame-registry
+        run: pnpm --filter @workspace/scripts run test:minigame-registry
 
       - name: Archive reproducible raster-derived vector seed for human review
         uses: actions/upload-artifact@v7
