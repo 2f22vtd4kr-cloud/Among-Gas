@@ -8,6 +8,9 @@ const panelStyle: CSSProperties = {
   borderRadius: 16,
   padding: "20px 20px 28px",
   width: "min(360px, 94vw)",
+  maxHeight: "calc(100dvh - 32px)",
+  overflowY: "auto",
+  overscrollBehavior: "contain",
   boxShadow: "0 8px 40px rgba(0,0,0,0.55)",
 };
 
@@ -43,7 +46,13 @@ export default function MinigameShell({
         padding: 16,
       }}
     >
-      <div style={panelStyle}>
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={taskName}
+        data-testid="minigame-shell"
+        style={panelStyle}
+      >
         <div style={{
           display: "flex",
           alignItems: "flex-start",
