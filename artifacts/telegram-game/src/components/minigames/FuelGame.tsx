@@ -33,6 +33,7 @@ export function FuelGame({ onComplete }: MinigameProps) {
       </div>
       <div style={{ color: '#e8f0ff', fontFamily: 'monospace', fontSize: 13 }}>{Math.round(progress)}%</div>
       <button
+        aria-label={en ? "Hold to refuel engine" : "Удерживайте для заправки двигателя"}
         onPointerDown={e => { e.preventDefault(); setHolding(true); }}
         onPointerUp={() => setHolding(false)}
         onPointerCancel={() => setHolding(false)}
