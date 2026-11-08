@@ -64,6 +64,24 @@ try {
   await page.getByRole("button", { name: "Clear vision preview" }).click();
   assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "vision preview can be cleared");
 
+  // The 4x loupe follows real touchscreen pointer movement and can be dismissed.
+  await page.getByRole("button", { name: "Loupe (4×)" }).click();
+  bounds = await canvas.boundingBox();
+  const loupeX = bounds.x + bounds.width * 0.42;
+  const loupeY = bounds.y + bounds.height * 0.52;
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: loupeX, y: loupeY }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove", touchPoints: [{ id: 1, x: loupeX + 12, y: loupeY + 8 }],
+  });
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-loupe-active") === "true", null, { timeout: 3000 });
+  assert.match(await canvas.getAttribute("data-loupe-origin") ?? "", /^\d+(\.\d+)?,\d+(\.\d+)?$/,
+    "loupe exposes its world-space focus for visual QA");
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.getByRole("button", { name: "Clear loupe" }).click();
+  assert.equal(await canvas.getAttribute("data-loupe-active"), "false", "loupe overlay can be dismissed");
+
   // Active chains survive reload via local autosave and have explicit endpoint navigation.
   await page.reload({ waitUntil: "domcontentloaded" });
   await canvas.waitFor({ timeout: 15000 });
@@ -139,7 +157,7 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)"];
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
