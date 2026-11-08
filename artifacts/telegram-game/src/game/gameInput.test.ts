@@ -27,8 +27,8 @@ assert.deepEqual(getMovementAxes(keys), { dx: 0, dy: 0 }, 'opposing vertical key
 clearMovementInput(keys);
 assert.deepEqual(getMovementAxes(keys), { dx: 0, dy: 0 }, 'focus-loss cleanup releases held movement');
 
-applyJoystickDirection(keys, 1, 1);
-assert.deepEqual(getMovementAxes(keys), { dx: 1, dy: 1 }, 'diagonal joystick displacement activates both axes');
+applyJoystickDirection(keys, 20, 20);
+assert.deepEqual(getMovementAxes(keys), { dx: 1, dy: 1 }, 'diagonal joystick displacement outside the dead zone activates both axes');
 applyJoystickDirection(keys, 52, 0);
 assert.deepEqual(getMovementAxes(keys), { dx: 1, dy: 0 }, 'horizontal joystick displacement is cardinal');
 applyJoystickDirection(keys, 0, -52);
