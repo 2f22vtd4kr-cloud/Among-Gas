@@ -30,7 +30,7 @@ try {
   const sourceAssetPath = 'artifacts/telegram-game/public/sprites/characters.png';
   const sourceAsset = readFileSync(sourceAssetPath);
   const sourceAssetGitBlobSha = createHash('sha1')
-    .update(`blob ${sourceAsset.length}\\0`)
+    .update(`blob ${sourceAsset.length}\0`)
     .update(sourceAsset)
     .digest('hex');
   assert.equal(sourceAssetGitBlobSha, '5e2562defd86b956d6a75dc1136c8298443f93c4',
