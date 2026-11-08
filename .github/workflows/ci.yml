@@ -57,6 +57,9 @@ jobs:
       - name: Test extracted contextual HUD action selection and disable rules
         run: pnpm --filter @workspace/scripts run test:game-action-state
 
+      - name: Test shared keyboard and joystick movement input contracts
+        run: pnpm --filter @workspace/scripts run test:game-input
+
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
 
