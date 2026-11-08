@@ -358,8 +358,20 @@ assert.match(gameContext, /killCooldownMs: myRole === 'impostor' \? KILL_COOLDOW
 assert.match(gameplayInvariantSource, /starts with the full authoritative kill cooldown/, 'Initial impostor cooldown must have a gameplay regression test');
 assert.match(gameMapSource, /if \(!isLocalGhost && \(localRole === 'crewmate' \|\| localRole === 'impostor'\)\)/, 'Only living players use the limited visibility mask');
 assert.match(visibilitySource, /const VISION_RAY_COUNT = 720/, 'Sight rays must be smooth without quadratic wall-segment intersections');
-const minigameIds = [...minigameSource.matchAll(/taskId === (\d+) &&/g)].map(m => Number(m[1])).sort((a,b) => a-b);
-assert.deepEqual(minigameIds, [...Array(tasks.length).keys()], 'Every assigned task needs a playable minigame');
+const registryBlock = minigameSource.match(/MINIGAME_COMPONENTS[^=]*=\s*\[([\s\S]*?)\]/)?.[1];
+assert.ok(registryBlock, 'Task minigames must be registered through the typed component registry');
+const minigameComponents = [...registryBlock.matchAll(/\b([A-Z][A-Za-z0-9]*Game)\b/g)].map(match => match[1]);
+assert.equal(minigameComponents.length, tasks.length,
+  'Every assigned task needs exactly one registered minigame component');
+assert.equal(new Set(minigameComponents).size, tasks.length,
+  'Each task must map to a unique minigame component');
+const minigameDirectory = path.join(root, 'artifacts/telegram-game/src/components/minigames');
+for (const component of minigameComponents) {
+  const modulePath = path.join(minigameDirectory, component + '.tsx');
+  assert.ok(fs.existsSync(modulePath), component + ' must exist as an independently testable module');
+  assert.match(read('artifacts/telegram-game/src/components/minigames/index.ts'),
+    new RegExp('export \\{ ' + component + ' \\} from'), component + ' must be exported by the registry barrel');
+}
 assert.match(indexHtml, /telegram-web-app\.js/, 'Telegram WebApp SDK must load before React bootstraps');
 assert.match(indexHtml, /viewport-fit=cover/, 'Viewport must account for mobile safe areas');
 assert.match(gameContext, /if \(import\.meta\.env\.PROD\) return ''/, 'Production must not fabricate Telegram identities');
