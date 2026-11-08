@@ -663,7 +663,7 @@ export default function VectorCollisionEditor() {
     }
   }, [document, draftPoints, activeChain, dirty, loaded]);
 
-  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints, visionOrigin]);
+  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints, visionOrigin, loupe]);
   useEffect(() => { setAnalysis(null); }, [document]);
 
   const worldPointAt = (clientX: number, clientY: number): Point => {
