@@ -134,8 +134,8 @@ try {
   await selectedZone.waitFor();
   await selectedZone.selectOption("B");
   assert.equal(await selectedZone.inputValue(), "B");
-  assert.equal(await page.locator('select[aria-label="Active zone"]').count(), 0,
-    "zone assignment is available from the selected-shape inspector");
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
+    "the active zone selector follows the selected shape's zone");
 
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
   await page.getByRole("button", { name: "Analyze candidate" }).click();
