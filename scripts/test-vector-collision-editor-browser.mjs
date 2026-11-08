@@ -18,6 +18,11 @@ try {
     const element = document.querySelector("canvas[data-editor-loaded='true']");
     return !!element && Number(element.getAttribute("width")) > 0 && Number(element.getAttribute("height")) > 0;
   });
+  const zoneOptions = page.locator('select[aria-label="Map zone"] option');
+  assert.equal(await zoneOptions.count(), 13,
+    "the editor must expose unassigned plus all twelve A–L map zones");
+  assert.equal(await zoneOptions.last().getAttribute("value"), "L",
+    "the final region in the 4×3 map grid must be selectable");
 
   // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
   const touch = await page.context().newCDPSession(page);
