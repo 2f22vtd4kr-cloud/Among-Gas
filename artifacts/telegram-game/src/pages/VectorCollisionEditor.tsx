@@ -1447,6 +1447,18 @@ export default function VectorCollisionEditor() {
             <strong>{selected.label || selected.id}</strong>
             <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Zone
+              <select
+                aria-label="Selected shape zone"
+                value={selected.zone ?? "unassigned"}
+                onChange={event => updateSelected({ zone: event.target.value === "unassigned" ? undefined : event.target.value })}
+                style={{ minHeight: 40, maxWidth: 100, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}
+              >
+                <option value="unassigned">Unassigned</option>
+                {["A", "B", "C", "D", "E"].map(value => <option key={value} value={value}>Zone {value}</option>)}
+              </select>
+            </label>
           </span>
         )}
       </footer>
