@@ -1100,7 +1100,7 @@ try {
     assert.equal(await kill.isEnabled(), false, 'impostor cooldown: Kill is disabled');
     const opacity = Number(await kill.evaluate(element => getComputedStyle(element).opacity));
     assert.equal(opacity, 0.45, 'impostor cooldown: disabled Kill uses 45% opacity');
-    assert.match(await kill.evaluate(element => getComputedStyle(element).filter), /saturate\\(0\\.2\\)/);
+    assert.match(await kill.evaluate(element => getComputedStyle(element).filter), /saturate\(0\.2\)/);
     return { kill: 'disabled-cooldown', opacity, report: 'disabled', use: 'disabled' };
   });
 
