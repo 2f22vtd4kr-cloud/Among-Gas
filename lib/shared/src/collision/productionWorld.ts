@@ -20,8 +20,8 @@ let activeWorld = new CollisionWorld(
   activeDocument.mapH,
 );
 
-export const PRODUCTION_COLLISION_DOCUMENT = activeDocument;
-export const PRODUCTION_COLLISION_WORLD = activeWorld;
+export let PRODUCTION_COLLISION_DOCUMENT = activeDocument;
+export let PRODUCTION_COLLISION_WORLD = activeWorld;
 
 export function getProductionCollisionDocument(): CollisionDocument {
   return activeDocument;
@@ -43,8 +43,14 @@ export function replaceProductionCollisionDocument(document: CollisionDocument):
     activeDocument.mapW,
     activeDocument.mapH,
   );
+  // ESM imports are live bindings, but exported `const` aliases would retain
+  // the initial world forever. Refresh every public alias with the new world.
+  PRODUCTION_COLLISION_DOCUMENT = activeDocument;
+  PRODUCTION_COLLISION_WORLD = activeWorld;
+  GENERATED_COLLISION_PREVIEW_DOCUMENT = activeDocument;
+  GENERATED_COLLISION_PREVIEW_WORLD = activeWorld;
 }
 
 // Retain these names for the editor's existing preview/test integrations.
-export const GENERATED_COLLISION_PREVIEW_WORLD = PRODUCTION_COLLISION_WORLD;
-export const GENERATED_COLLISION_PREVIEW_DOCUMENT = PRODUCTION_COLLISION_DOCUMENT;
+export let GENERATED_COLLISION_PREVIEW_WORLD = PRODUCTION_COLLISION_WORLD;
+export let GENERATED_COLLISION_PREVIEW_DOCUMENT = PRODUCTION_COLLISION_DOCUMENT;
