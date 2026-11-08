@@ -118,11 +118,10 @@ try {
           if (offset % 4 === 3 && value > 0) opaque++;
           signature = Math.imul(signature ^ value, 16777619);
         }
-        assert.ok(opaque > 100, colorNames[column] + '/' + pose.name + ' must contain a visible sprite');
+        if (opaque <= 100) throw new Error(colorNames[column] + '/' + pose.name + ' must contain a visible sprite');
         signatures.push(signature >>> 0);
       }
-      assert.equal(new Set(signatures).size, 18,
-        pose.name + ': all 18 palette frames must remain visually distinct');
+      if (new Set(signatures).size !== 18) throw new Error(pose.name + ': all 18 palette frames must remain visually distinct');
       result.push({ pose: pose.name, colors: signatures.length, nonEmpty: signatures.length });
     }
     return result;
