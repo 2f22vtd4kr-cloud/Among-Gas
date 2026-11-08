@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { getProductionCollisionDocument, getProductionCollisionWorld } from "@workspace/shared/collision/productionWorld";
+import {
+  GENERATED_COLLISION_PREVIEW_DOCUMENT,
+  GENERATED_COLLISION_PREVIEW_WORLD,
+  getProductionCollisionDocument,
+  getProductionCollisionWorld,
+  PRODUCTION_COLLISION_DOCUMENT,
+  PRODUCTION_COLLISION_WORLD,
+  replaceProductionCollisionDocument,
+} from "@workspace/shared/collision/productionWorld";
 import { COLS, ROWS } from "@workspace/shared/collisionMap";
 import { FEET_OFFSET_Y, MAP_W, MAP_H, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from "@workspace/shared/coords";
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
@@ -73,6 +81,22 @@ for(const [index,shape] of document.shapes.entries()) {
   const edgeCount=shape.closed?shape.points.length:shape.points.length-1;
   assert.ok(edgeCount>=1,"shape "+index+" has no boundary edges");
 }
+// Replacing a validated candidate must update every exported singleton alias.
+// This catches stale ESM `const` exports that otherwise keep consumers on the old world.
+const replacement = {
+  ...document,
+  shapes: document.shapes.map(shape => ({ ...shape, points: shape.points.map(point => [point[0], point[1]] as const) })),
+};
+replaceProductionCollisionDocument(replacement);
+assert.strictEqual(getProductionCollisionDocument(), replacement);
+assert.strictEqual(PRODUCTION_COLLISION_DOCUMENT, replacement);
+assert.strictEqual(GENERATED_COLLISION_PREVIEW_DOCUMENT, replacement);
+assert.strictEqual(PRODUCTION_COLLISION_WORLD, getProductionCollisionWorld());
+assert.strictEqual(GENERATED_COLLISION_PREVIEW_WORLD, getProductionCollisionWorld());
+assert.throws(() => replaceProductionCollisionDocument({ ...replacement, mapW: 0 }), /invalid collision candidate/i);
+assert.strictEqual(getProductionCollisionDocument(), replacement,
+  "a rejected replacement must leave the current production world intact");
+
 console.log(JSON.stringify({
   ok:true,
   source:document.source?.sourceFiles.redlineReference.path,
