@@ -27,6 +27,7 @@ import {
   type CharacterPose,
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
+import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
 import {
   CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
   CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
@@ -75,6 +76,8 @@ import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings
 import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
+import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
+import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -273,6 +276,22 @@ const REMOTE_MOVING_WINDOW_MS = 260;
 const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
+function getTaskInteractionMockTaskId(mode: string | null): number | null {
+  if (mode === 'task-interaction') return 4;
+  if (mode === 'task-interaction-blocked' || mode === 'task-interaction-ghost-blocked') return 7;
+  if (mode !== 'task-interaction-gallery') return null;
+
+  const rawTaskId = new URLSearchParams(window.location.search).get('taskId');
+  if (rawTaskId === null || !/^[0-9]+$/.test(rawTaskId)) {
+    throw new Error('Minigame gallery requires a numeric taskId query parameter');
+  }
+  const taskId = Number(rawTaskId);
+  if (!Number.isSafeInteger(taskId) || !TASK_DEFS.some(task => task.id === taskId)) {
+    throw new Error(`Minigame gallery taskId ${rawTaskId} is not in the canonical TASK_DEFS registry`);
+  }
+  return taskId;
+}
+
 export default function GameMap() {
   const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
@@ -465,7 +484,7 @@ export default function GameMap() {
   useEffect(() => {
     miniMapOpenRef.current = showMiniMap;
     // Prevent the keyboard and joystick from moving the player behind the modal.
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [showMiniMap]);
 
@@ -695,8 +714,10 @@ export default function GameMap() {
 
   useEffect(() => {
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
-    const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked');
+    const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      ? getTaskInteractionMockTaskId(taskMockMode)
+      : null;
+    const taskMockActive = taskMockTaskId !== null;
     if (taskMockActive) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
@@ -743,7 +764,7 @@ export default function GameMap() {
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
       if (taskMockActive) {
-        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode?.includes('blocked') ? 7 : 4));
+        const fixtureTask = TASK_DEFS.find(task => task.id === taskMockTaskId);
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
           isGhost: amIDead,
@@ -768,7 +789,7 @@ export default function GameMap() {
   const adminTableOpenRef = useRef(false);
   useEffect(() => {
     adminTableOpenRef.current = showAdminTable;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [showAdminTable]);
 
@@ -1037,34 +1058,36 @@ export default function GameMap() {
   useEffect(() => {
     gameplayReadyRef.current = gameplayReady;
     if (!gameplayReady) {
-      keysRef.current.clear();
+      clearMovementInput(keysRef.current);
       pendingSentRef.current.length = 0;
     }
   }, [gameplayReady]);
   useEffect(() => {
     if (!settingsOpen) return;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [settingsOpen]);
   useEffect(() => {
     if (!leaveConfirmOpen) return;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [leaveConfirmOpen]);
   useEffect(() => {
-    const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
-    const onDown  = (e: KeyboardEvent) => {
+    const onDown = (e: KeyboardEvent) => {
       unlockSfx();
       const target = e.target instanceof HTMLElement ? e.target : null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]')) return;
-      if (settingsOpenRef.current || leaveConfirmOpenRef.current) return;
-      const k = e.key.toLowerCase();
-      if (!tracked.has(k)) return;
+      const isEditableTarget = Boolean(target?.closest(
+        'input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]',
+      ));
+      const modalOpen = settingsOpenRef.current || leaveConfirmOpenRef.current;
+      if (!shouldCaptureMovementKey(e.key, isEditableTarget, modalOpen)) return;
       e.preventDefault();
-      keysRef.current.add(k);
+      setMovementInputKey(keysRef.current, e.key, true);
     };
-    const onUp   = (e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()); };
-    const clear  = () => keysRef.current.clear();
+    const onUp = (e: KeyboardEvent) => {
+      setMovementInputKey(keysRef.current, e.key, false);
+    };
+    const clear = () => clearMovementInput(keysRef.current);
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
     window.addEventListener('blur',    clear);
@@ -1118,7 +1141,7 @@ export default function GameMap() {
       const vent = findVent(myVentId);
       if (vent) playerStateRef.current = { ...playerStateRef.current, x: vent.x, y: vent.y };
     }
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [myVentId]);
 
@@ -1141,11 +1164,14 @@ export default function GameMap() {
     const grid = taskInteractionGrid;
     const fineGrid = grid;
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
-    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
-      const blockedFixture = taskMockMode?.includes('blocked') === true;
-      const fixtureTask = TASK_DEFS.find(task => task.id === (blockedFixture ? 7 : 4));
-      if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
+    const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      ? getTaskInteractionMockTaskId(taskMockMode)
+      : null;
+    if (taskMockTaskId !== null) {
+      const blockedFixture = taskMockMode === 'task-interaction-blocked' ||
+        taskMockMode === 'task-interaction-ghost-blocked';
+      const fixtureTask = TASK_DEFS.find(task => task.id === taskMockTaskId);
+      if (!fixtureTask) throw new Error(`Task interaction fixture is missing task ${taskMockTaskId}`);
       let nearest: { x: number; y: number; distanceSq: number } | null = null;
       const range = TASK_INTERACTION_RANGE_PX - 8;
       for (let y = fixtureTask.y - range; y <= fixtureTask.y + range; y += 4) {
@@ -1229,10 +1255,7 @@ export default function GameMap() {
       // position. The first authoritative WebSocket spawn can arrive after the
       // fixture setup and otherwise overwrite it before the LOS assertion.
       // This branch is enabled only by the explicit development mock modes.
-      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-          (taskMockMode === 'task-interaction' ||
-           taskMockMode === 'task-interaction-blocked' ||
-           taskMockMode === 'task-interaction-ghost-blocked')) {
+      if (taskMockTaskId !== null) {
         const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
         if (fixture) {
           playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
@@ -1273,18 +1296,26 @@ export default function GameMap() {
       const ch  = canvas.height;
       const dpr = getRenderDpr();
 
-      const srcW = (cw / dpr) / ZOOM;
-      const srcH = (ch / dpr) / ZOOM;
-
-      // Keep camera lag below one character-footprint at full run speed.
-      // A 72ms time constant left the player visibly drifting ~30 map-pixels
-      // behind the viewport centre during sustained joystick movement.
-      // 16ms preserves sub-frame smoothing without making the camera feel detached.
-      const cameraBlend = 1 - Math.exp(-dtMs / 16);
-      cameraX += (px - cameraX) * cameraBlend;
-      cameraY += (py - cameraY) * cameraBlend;
-      const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
-      const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
+      // Camera smoothing and viewport math live in pure helpers so their
+      // frame-rate and world-boundary contracts can be tested independently.
+      const cameraCenter = stepCameraCenter(
+        { x: cameraX, y: cameraY },
+        { x: px, y: py },
+        dtMs,
+      );
+      cameraX = cameraCenter.x;
+      cameraY = cameraCenter.y;
+      const viewport = getCameraViewport({
+        canvasWidth: cw,
+        canvasHeight: ch,
+        dpr,
+        zoom: ZOOM,
+        centerX: cameraX,
+        centerY: cameraY,
+        mapWidth: MAP_W,
+        mapHeight: MAP_H,
+      });
+      const { srcX, srcY, srcW, srcH, scale } = viewport;
       // Camera/collision coordinates use canonical world pixels. The loaded
       // PNG and higher-resolution WebP do not share the same source-pixel scale.
       const mapSourceRect = mapWorldRectToImagePixels(
@@ -1293,7 +1324,7 @@ export default function GameMap() {
         { width: mapImg.naturalWidth, height: mapImg.naturalHeight },
       );
 
-      const scale = ZOOM * dpr;
+      // scale is supplied by getCameraViewport above.
       if (cameraDebugEnabled) {
         (window as Window & { __AG_CAMERA_DEBUG?: unknown }).__AG_CAMERA_DEBUG = {
           playerX: px,
@@ -1844,17 +1875,20 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  const useActionKind = nearestTask !== null && myRole === 'crewmate'
-    ? 'task'
-    : nearestRepairPad !== null
-      ? 'repair'
-      : amIImpostor && nearestVentId !== null && myVentId === null
-        ? 'vent'
-        : nearestAdminTableId !== null
-          ? 'admin'
-          : null;
-  const useActionEnabled = useActionKind !== null && activeTaskId === null &&
-    myVentId === null && !showAdminTable && !showMiniMap;
+  const useActionState = {
+    hasNearbyTask: nearestTask !== null,
+    isCrewmate: myRole === 'crewmate',
+    hasNearbyRepairPad: nearestRepairPad !== null,
+    isImpostor: amIImpostor,
+    hasNearbyVent: nearestVentId !== null,
+    isInVent: myVentId !== null,
+    hasNearbyAdminTable: nearestAdminTableId !== null,
+    hasActiveTask: activeTaskId !== null,
+    showAdminTable,
+    showMiniMap,
+  };
+  const useActionKind = getUseActionKind(useActionState);
+  const useActionEnabled = isUseActionEnabled(useActionKind, useActionState);
 
   return (
     <div

@@ -1,0 +1,7 @@
+{
+  "extends": "../artifacts/telegram-game/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "noEmit": true
+  }
+}
