@@ -659,6 +659,79 @@ try {
   // Open every canonical task through the real proximity-gated Use action. This is a browser
   // gallery, not an SSR-only registry assertion: every module must mount inside the gameplay
   // overlay at a phone viewport, expose its dialog semantics, and remain within the safe viewport.
+  // Plan v2 six-state action-bar acceptance matrix. Each capture uses a
+  // deterministic fixture and asserts the action state before the screenshot.
+  const hudStateMatrix = [];
+  const captureHudState = async (name, fixture, verify) => {
+    await page.goto(`${origin}/?mock=${fixture}&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
+    // Canvas creation precedes map-asset readiness; wait for GameMap's loaded
+    // state to mount the living-player action bar before asserting its controls.
+    await page.getByTestId('game-action-bar').waitFor({ state: 'visible', timeout: 20_000 });
+    const details = await verify(page);
+    await page.screenshot({ path: join(visualQaDir, `hud-matrix-${name}.png`), fullPage: true });
+    hudStateMatrix.push({ state: name, fixture, viewport: { width: 390, height: 844 }, ...details });
+  };
+
+  await captureHudState('crew-idle', 'crew-idle', async current => {
+    const use = current.getByTestId('game-action-use');
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await use.isVisible(), true, 'crew idle: Use remains visible');
+    assert.equal(await use.isEnabled(), false, 'crew idle: occluded task is not actionable');
+    assert.equal(await report.isVisible(), true, 'crew idle: Report remains visible');
+    assert.equal(await report.isEnabled(), false, 'crew idle: no body means Report is disabled');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew idle: no Kill action');
+    return { use: 'disabled-occluded', report: 'disabled-no-body', kill: 'absent' };
+  });
+
+  await captureHudState('crew-near-task', 'task-interaction', async current => {
+    const use = current.getByTestId('game-action-use');
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await use.getAttribute('data-use-action'), 'task');
+    assert.equal(await use.isEnabled(), true, 'crew near task: Use is enabled');
+    assert.equal(await report.isEnabled(), false, 'crew near task: Report remains disabled');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew near task: no Kill action');
+    return { use: 'enabled-task', report: 'disabled-no-body', kill: 'absent' };
+  });
+
+  await captureHudState('crew-near-body', 'report-ready', async current => {
+    const report = current.getByTestId('game-action-report');
+    assert.equal(await report.isVisible(), true);
+    assert.equal(await report.isEnabled(), true, 'crew near body: Report is enabled');
+    assert.equal(await current.getByTestId('game-action-use').isVisible(), true, 'crew near body: Use remains visible');
+    assert.equal(await current.getByTestId('game-action-use').isEnabled(), false, 'crew near body: no nearby task');
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew near body: no Kill action');
+    return { use: 'disabled-no-interaction', report: 'enabled-body', kill: 'absent' };
+  });
+
+  await captureHudState('impostor-ready', 'kill-ready', async current => {
+    const kill = current.getByTestId('game-action-kill');
+    assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
+    assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
+    assert.equal(await current.getByTestId('game-action-report').isEnabled(), false);
+    assert.equal(await current.getByTestId('game-action-use').isEnabled(), false);
+    return { kill: 'enabled-target', report: 'disabled-no-body', use: 'disabled-no-interaction' };
+  });
+
+  await captureHudState('impostor-cooldown', 'impostor-opening', async current => {
+    const kill = current.getByTestId('game-action-kill');
+    assert.equal(await kill.isVisible(), true, 'impostor cooldown: Kill remains visible');
+    assert.equal(await kill.isEnabled(), false, 'impostor cooldown: Kill is disabled');
+    const opacity = Number(await kill.evaluate(element => getComputedStyle(element).opacity));
+    assert.equal(opacity, 0.45, 'impostor cooldown: disabled Kill uses 45% opacity');
+    assert.match(await kill.evaluate(element => getComputedStyle(element).filter), /saturate\(0\.2\)/);
+    return { kill: 'disabled-cooldown', opacity, report: 'disabled', use: 'disabled' };
+  });
+
+  await captureHudState('dead-ghost', 'ghost', async current => {
+    await current.getByText(/Вы мертвы — режим призрака/).waitFor({ state: 'visible', timeout: 10_000 });
+    assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'dead ghost: Kill is absent');
+    assert.equal(await current.getByTestId('game-action-report').count(), 0, 'dead ghost: Report is absent');
+    return { kill: 'absent', report: 'absent', ghost: 'visible' };
+  });
+
+  writeFileSync(join(visualQaDir, 'hud-state-matrix.json'), JSON.stringify(hudStateMatrix, null, 2) + '\n');
+
   const minigameGallery = [
     [0, 'Fix Wiring', 'Починить проводку'],
     [1, 'Download Data', 'Скачать данные'],
