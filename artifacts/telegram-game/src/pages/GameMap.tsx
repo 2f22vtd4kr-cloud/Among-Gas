@@ -76,6 +76,7 @@ import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
 import GameActionBar from '../components/GameActionBar';
+import { EmergencyMeetingIcon, EmergencyMeetingSplash } from '../components/EmergencyMeetingArtwork';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 
@@ -2690,7 +2691,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 70, height: 70, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
+            {emergencyMeetingUsed ? '✓' : <EmergencyMeetingIcon style={{ opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
           </button>
         </div>
       )}
@@ -2708,10 +2709,7 @@ export default function GameMap() {
             color: '#fff4df', fontFamily: "'Fredoka One', sans-serif",
           }}
         >
-          <img
-            src={`${import.meta.env.BASE_URL}au-assets/emergency_meeting.png`}
-            alt=""
-            aria-hidden="true"
+          <EmergencyMeetingSplash
             style={{ width: 'min(76vw, 340px)', maxHeight: '42dvh', objectFit: 'contain' }}
           />
           <div
