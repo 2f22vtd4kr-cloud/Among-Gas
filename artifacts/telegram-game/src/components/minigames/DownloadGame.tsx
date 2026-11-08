@@ -1,3 +1,4 @@
+import * as React from "react";
 import { useState, useEffect, useRef } from "react";
 import { useLanguage } from "../../lib/language";
 import type { MinigameProps } from "./shared";
