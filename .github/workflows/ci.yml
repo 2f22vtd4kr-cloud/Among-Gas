@@ -52,7 +52,7 @@ jobs:
         run: pnpm --filter @workspace/scripts run test:map-image-transform
 
       - name: Test extracted GameMap camera smoothing and viewport bounds
-        run: pnpm --filter @workspace/telegram-game run test:map-camera
+        run: pnpm --filter @workspace/scripts run test:map-camera
 
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
