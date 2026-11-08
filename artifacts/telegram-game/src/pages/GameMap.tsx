@@ -279,7 +279,7 @@ function getTaskInteractionMockTaskId(mode: string | null): number | null {
   if (mode !== 'task-interaction-gallery') return null;
 
   const rawTaskId = new URLSearchParams(window.location.search).get('taskId');
-  if (rawTaskId === null || !/^\\d+$/.test(rawTaskId)) {
+  if (rawTaskId === null || !/^[0-9]+$/.test(rawTaskId)) {
     throw new Error('Minigame gallery requires a numeric taskId query parameter');
   }
   const taskId = Number(rawTaskId);
