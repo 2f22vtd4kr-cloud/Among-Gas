@@ -93,13 +93,6 @@ try {
   await page.getByLabel("Selected shape zone").selectOption("B");
   await page.getByLabel("Selected shape zone").selectOption("A");
   const polygonId = await canvas.getAttribute("data-selected-shape-id");
-  await page.getByRole("button", { name: "Edit vertices" }).click();
-  bounds = await canvas.boundingBox();
-  await touchTap(bounds.x + 25, bounds.y + 70);
-  const touchSelectedId = await canvas.getAttribute("data-selected-shape-id");
-  assert.notEqual(touchSelectedId, polygonId,
-    "a 20px-offset finger tap must still acquire the 48px wall endpoint target");
-  await page.getByRole("button", { name: "Draw wall" }).click();
 
   // Per-zone save is isolated and leaves the other editor draft state intact.
   await page.getByRole("button", { name: "Save zone A" }).click();
@@ -129,6 +122,18 @@ try {
   await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "B");
   await redoButton.click();
   await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "A");
+  assert.equal(await canvas.getAttribute("data-selected-shape-id"), polygonId,
+    "undo/redo assertions remain focused on the authored polygon");
+
+  // Run the touch acquisition check after history assertions so changing selection
+  // cannot make the zone metadata checks observe the wrong shape.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + 25, bounds.y + 70);
+  const touchSelectedId = await canvas.getAttribute("data-selected-shape-id");
+  assert.notEqual(touchSelectedId, polygonId,
+    "a 20px-offset finger tap must still acquire the 48px wall endpoint target");
+  await page.getByRole("button", { name: "Draw wall" }).click();
 
   // Export remains available offline; no save is performed by this UI smoke.
   const downloadPromise = page.waitForEvent("download");
