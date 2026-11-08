@@ -70,6 +70,8 @@ export default function GameActionBar(props: GameActionBarProps) {
             ...buttonBase,
             fontSize: 9,
             letterSpacing: "0.06em",
+            opacity: killDisabled ? 0.45 : 1,
+            filter: killDisabled ? "saturate(0.2)" : "none",
             color: killDisabled ? "#d8dfe3" : "#fff0f0",
             background: props.killCooldownMs > 0
               ? `conic-gradient(from -90deg, rgba(190,200,206,0.9) 0deg, rgba(190,200,206,0.9) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) 360deg)`
@@ -132,10 +134,35 @@ export default function GameActionBar(props: GameActionBarProps) {
           cursor: useDisabled ? "default" : "pointer",
         }}
       >
-        <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
-          <path d="M11 25V15a3 3 0 0 1 6 0v8-12a3 3 0 0 1 6 0v12-9a3 3 0 0 1 6 0v11-6a3 3 0 0 1 6 0v11c0 8-5 13-13 13h-2c-5 0-8-2-11-7l-5-8a3 3 0 0 1 5-3l4 5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span>{props.english ? "USE" : "ИСПОЛЬЗОВАТЬ"}</span>
+        {props.useActionKind === "task" ? (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <path d="M16 9h-4a3 3 0 0 0-3 3v27h30V12a3 3 0 0 0-3-3h-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+            <rect x="17" y="5" width="14" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M16 22h16M16 29h10M16 36h13" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+        ) : props.useActionKind === "repair" ? (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <path d="M28 8a12 12 0 0 0-13 16L6 33a5 5 0 0 0 7 7l9-9A12 12 0 0 0 38 18l-8 8-8-8 6-10Z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+        ) : props.useActionKind === "vent" ? (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <rect x="7" y="10" width="34" height="28" rx="4" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M14 17h20M14 23h20M14 29h20M14 35h20" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+            <path d="m19 6 5-4 5 4" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        ) : props.useActionKind === "admin" ? (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <rect x="5" y="7" width="38" height="27" rx="3" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M15 41h18M24 34v7M12 16h7v7h-7zM24 16h12M24 23h12M12 28h24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <path d="M11 25V15a3 3 0 0 1 6 0v8-12a3 3 0 0 1 6 0v12-9a3 3 0 0 1 6 0v11-6a3 3 0 0 1 6 0v11c0 8-5 13-13 13h-2c-5 0-8-2-11-7l-5-8a3 3 0 0 1 5-3l4 5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+        <span>{props.useActionKind === "vent"
+          ? (props.english ? "VENT" : "ЛЮК")
+          : props.english ? "USE" : "ИСПОЛЬЗОВАТЬ"}</span>
       </button>
     </div>
   );

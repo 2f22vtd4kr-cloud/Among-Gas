@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "wouter";
 import type { PointerEvent as ReactPointerEvent, WheelEvent as ReactWheelEvent, ChangeEvent } from "react";
 import {
@@ -11,8 +11,17 @@ import {
   type CollisionShape,
   type Point,
 } from "@workspace/shared/collision";
+import {
+  FEET_OFFSET_Y,
+  MAP_H,
+  MAP_W,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
+} from "@workspace/shared/coords";
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk";
+type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision" | "loupe";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
@@ -21,10 +30,19 @@ type Gesture =
   | { kind: "solid"; point: Point; close: boolean }
   | { kind: "erase"; point: Point }
   | { kind: "walk"; point: Point }
+  | { kind: "vision"; point: Point; clientX: number; clientY: number }
   | { kind: "vertex"; shapeId: string; index: number };
 
-const MAP_W = 3224;
-const MAP_H = 1858;
+// Plan v2 requires 48 CSS-pixel touch targets. Touch hit/snap radii are
+// converted to world units so zoom never shrinks the target. Mouse editing
+// retains its smaller precision radius.
+const EDITOR_TOUCH_TARGET_CSS_PX = 48;
+const EDITOR_HIT_RADIUS_WORLD = (
+  pointerType: string,
+  zoom: number,
+  mouseRadiusCssPx: number,
+) => (pointerType === "touch" ? EDITOR_TOUCH_TARGET_CSS_PX / 2 : mouseRadiusCssPx) / zoom;
+
 const LOCAL_DRAFT_KEY = "among-gas:vector-collision-editor:v1";
 const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
@@ -39,6 +57,8 @@ const TOOL_LABELS: Record<Tool, string> = {
   edit: "Edit vertices",
   erase: "Delete shape",
   walk: "Walk test",
+  vision: "Vision preview (hold)",
+  loupe: "Loupe (4×)",
 };
 
 function cloneDocument(document: CollisionDocument): EditableDocument {
@@ -48,6 +68,191 @@ function cloneDocument(document: CollisionDocument): EditableDocument {
       ...shape,
       points: shape.points.map(point => [point[0], point[1]] as Point),
     })),
+  };
+}
+
+
+interface AnalysisTarget {
+  id: string;
+  name: string;
+  reachable: boolean;
+  approach: Point | null;
+}
+
+interface CandidateAnalysis {
+  validationErrors: string[];
+  walkableCells: number;
+  spawnReachableCells: number;
+  componentCount: number;
+  disconnectedComponents: Array<{ cells: number; center: Point }>;
+  narrowCells: number;
+  tasks: AnalysisTarget[];
+  vents: AnalysisTarget[];
+  unassignedShapes: number;
+}
+
+function analyzeCandidate(document: EditableDocument): CandidateAnalysis {
+  const validationErrors = validateCollisionDocument(document);
+  const world = new CollisionWorld(document.shapes);
+  const cols = 208;
+  const rows = 116;
+  const nav = world.rasterizePlayerNav(cols, rows);
+  const cellCount = nav.walk.length;
+  const queue = new Int32Array(cellCount);
+  const colOf = (index: number) => index % cols;
+  const rowOf = (index: number) => Math.floor(index / cols);
+  const centerOf = (index: number): Point => [
+    (colOf(index) + 0.5) * nav.cellX,
+    (rowOf(index) + 0.5) * nav.cellY,
+  ];
+  const spawnFeet: Point = [PLAYER_SPAWN_X, PLAYER_SPAWN_Y + FEET_OFFSET_Y];
+  const spawnCol = Math.max(0, Math.min(cols - 1, Math.floor(spawnFeet[0] / nav.cellX)));
+  const spawnRow = Math.max(0, Math.min(rows - 1, Math.floor(spawnFeet[1] / nav.cellY)));
+  let start = spawnRow * cols + spawnCol;
+
+  if (nav.walk[start] !== 1) {
+    let nearest = -1;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (let radius = 1; radius <= 8; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const col = spawnCol + dx, row = spawnRow + dy;
+          if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+          const index = row * cols + col;
+          if (nav.walk[index] !== 1) continue;
+          const [x, y] = centerOf(index);
+          const distance = Math.hypot(x - spawnFeet[0], y - spawnFeet[1]);
+          if (distance < nearestDistance) { nearest = index; nearestDistance = distance; }
+        }
+      }
+      if (nearest >= 0) break;
+    }
+    if (nearest < 0) throw new Error("No walkable player-footprint cell exists near the production spawn.");
+    start = nearest;
+  }
+
+  const flood = (seed: number, marks: Uint8Array): { count: number; sumX: number; sumY: number } => {
+    let head = 0, tail = 0, sumX = 0, sumY = 0;
+    queue[tail++] = seed;
+    marks[seed] = 1;
+    while (head < tail) {
+      const index = queue[head++];
+      const col = colOf(index), row = rowOf(index);
+      const [x, y] = centerOf(index);
+      sumX += x; sumY += y;
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        const nextCol = col + dx, nextRow = row + dy;
+        if (nextCol < 0 || nextRow < 0 || nextCol >= cols || nextRow >= rows) continue;
+        const next = nextRow * cols + nextCol;
+        if (nav.walk[next] === 1 && marks[next] === 0) {
+          marks[next] = 1;
+          queue[tail++] = next;
+        }
+      }
+      // Do not allow diagonal corner cutting through two blocked orthogonal cells.
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        const nextCol = col + dx, nextRow = row + dy;
+        if (nextCol < 0 || nextRow < 0 || nextCol >= cols || nextRow >= rows) continue;
+        const sideA = row * cols + nextCol;
+        const sideB = nextRow * cols + col;
+        const next = nextRow * cols + nextCol;
+        if (nav.walk[next] === 1 && nav.walk[sideA] === 1 && nav.walk[sideB] === 1 && marks[next] === 0) {
+          marks[next] = 1;
+          queue[tail++] = next;
+        }
+      }
+    }
+    return { count: tail, sumX, sumY };
+  };
+
+  const reachable = new Uint8Array(cellCount);
+  const spawnFlood = flood(start, reachable);
+  let walkableCells = 0;
+  let narrowCells = 0;
+  for (let index = 0; index < cellCount; index++) {
+    const [x, y] = centerOf(index);
+    const footprintWalkable = nav.walk[index] === 1;
+    if (footprintWalkable) walkableCells++;
+    // Count cells that a point could enter but the full production three-circle
+    // footprint cannot. This loop deliberately includes blocked nav cells.
+    if (!footprintWalkable && world.isWalkable(x, y, 0)) narrowCells++;
+  }
+
+  const components = new Uint8Array(cellCount);
+  const summaries: Array<{ cells: number; center: Point }> = [];
+  let componentCount = 0;
+  for (let index = 0; index < cellCount; index++) {
+    if (nav.walk[index] !== 1 || components[index] !== 0) continue;
+    const containsSpawn = reachable[index] === 1;
+    const component = flood(index, components);
+    componentCount++;
+    if (!containsSpawn) {
+      summaries.push({
+        cells: component.count,
+        center: [component.sumX / component.count, component.sumY / component.count],
+      });
+    }
+  }
+  summaries.sort((a, b) => b.cells - a.cells);
+
+  const findApproach = (
+    targetX: number,
+    targetY: number,
+    range: number,
+    targetRadius: number,
+  ): Point | null => {
+    // Match GameMap's live target selection exactly: player/target anchor
+    // distance must be within the interaction range. targetRadius affects LOS
+    // only; it must not expand the gameplay interaction radius.
+    const maxDistance = range;
+    const colMin = Math.max(0, Math.floor((targetX - maxDistance) / nav.cellX));
+    const colMax = Math.min(cols - 1, Math.ceil((targetX + maxDistance) / nav.cellX));
+    const rowMin = Math.max(0, Math.floor((targetY - maxDistance) / nav.cellY));
+    const rowMax = Math.min(rows - 1, Math.ceil((targetY + maxDistance) / nav.cellY));
+    const candidates: Array<{ point: Point; distance: number }> = [];
+    for (let row = rowMin; row <= rowMax; row++) {
+      for (let col = colMin; col <= colMax; col++) {
+        const index = row * cols + col;
+        if (reachable[index] !== 1) continue;
+        const point = centerOf(index);
+        const distance = Math.hypot(point[0] - targetX, point[1] - targetY);
+        if (distance <= maxDistance) candidates.push({ point, distance });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance);
+    for (const candidate of candidates.slice(0, 16)) {
+      if (world.isLineOfSightToInteractionTarget(
+        candidate.point[0], candidate.point[1], targetX, targetY, targetRadius,
+      )) return candidate.point;
+    }
+    return null;
+  };
+
+  const tasks: AnalysisTarget[] = TASK_DEFS.map(task => {
+    const approach = findApproach(
+      task.x, task.y + FEET_OFFSET_Y, TASK_INTERACTION_RANGE_PX,
+      task.interactionTargetRadiusPx ?? 24,
+    );
+    return { id: String(task.id), name: task.name, reachable: approach !== null, approach };
+  });
+  const vents: AnalysisTarget[] = VENT_DEFS.map(vent => {
+    const approach = findApproach(
+      vent.x, vent.y + FEET_OFFSET_Y, VENT_INTERACTION_RANGE_PX, 20,
+    );
+    return { id: String(vent.id), name: vent.name, reachable: approach !== null, approach };
+  });
+
+  return {
+    validationErrors,
+    walkableCells,
+    spawnReachableCells: spawnFlood.count,
+    componentCount,
+    disconnectedComponents: summaries.slice(0, 8),
+    narrowCells,
+    tasks,
+    vents,
+    unassignedShapes: document.shapes.filter(shape => !("zone" in shape) || !shape.zone || shape.zone === "unassigned").length,
   };
 }
 
@@ -76,6 +281,7 @@ export default function VectorCollisionEditor() {
   const pointersRef = useRef(new Map<number, { x: number; y: number }>());
   const pinchRef = useRef<{ distance: number; zoom: number; world: Point } | null>(null);
   const rafRef = useRef<number | null>(null);
+  const visionPressTimerRef = useRef<number | null>(null);
 
   const [document, setDocument] = useState<EditableDocument>(EMPTY_DOCUMENT);
   const [tool, setTool] = useState<Tool>("pan");
@@ -90,6 +296,7 @@ export default function VectorCollisionEditor() {
   const [dirty, setDirty] = useState(false);
   const [localDraft, setLocalDraft] = useState<{ document: EditableDocument; draftPoints: Point[]; activeChain: Point[] } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [zoneBusy, setZoneBusy] = useState(false);
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
   const [blocksSight, setBlocksSight] = useState(true);
@@ -98,6 +305,17 @@ export default function VectorCollisionEditor() {
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
+  const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
+  const [loupe, setLoupe] = useState<{ world: Point; screenX: number; screenY: number } | null>(null);
+  const [analysis, setAnalysis] = useState<CandidateAnalysis | null>(null);
+  const candidateWorld = useMemo(() => {
+    try {
+      return new CollisionWorld(document.shapes);
+    } catch {
+      // Keep editing possible while a candidate polygon is temporarily invalid.
+      return null;
+    }
+  }, [document.shapes]);
 
   const replaceDocument = useCallback((next: CollisionDocument, record = true) => {
     const editable = cloneDocument(next);
@@ -127,6 +345,34 @@ export default function VectorCollisionEditor() {
     context.setTransform(scale, 0, 0, scale, -camera.x * scale, -camera.y * scale);
     context.imageSmoothingEnabled = true;
     context.drawImage(image, 0, 0, MAP_W, MAP_H);
+
+    // Candidate-only raycast preview. This overlay is diagnostic and is never
+    // read by the live client/server collision or vision paths.
+    if (visionOrigin && candidateWorld) {
+      const visibility = candidateWorld.visibility(visionOrigin[0], visionOrigin[1], 320);
+      if (visibility.length >= 3) {
+        context.beginPath();
+        visibility.forEach((point, index) => {
+          if (index === 0) context.moveTo(point[0], point[1]);
+          else context.lineTo(point[0], point[1]);
+        });
+        context.closePath();
+        context.fillStyle = "rgba(255, 225, 120, 0.20)";
+        context.fill();
+        context.strokeStyle = "rgba(255, 225, 120, 0.95)";
+        context.lineWidth = 2 / camera.zoom;
+        context.setLineDash([8 / camera.zoom, 5 / camera.zoom]);
+        context.stroke();
+        context.setLineDash([]);
+      }
+      context.beginPath();
+      context.arc(visionOrigin[0], visionOrigin[1], 7 / camera.zoom, 0, Math.PI * 2);
+      context.fillStyle = "#ffe178";
+      context.fill();
+      context.strokeStyle = "#13202a";
+      context.lineWidth = 2 / camera.zoom;
+      context.stroke();
+    }
 
     for (const shape of document.shapes) {
       const isSelected = shape.id === selectedId;
@@ -237,6 +483,67 @@ export default function VectorCollisionEditor() {
       });
     }
 
+    if (loupe) {
+      const lensRadius = 78;
+      const magnification = camera.zoom * 4;
+      context.save();
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.beginPath();
+      context.arc(loupe.screenX, loupe.screenY, lensRadius, 0, Math.PI * 2);
+      context.clip();
+      context.setTransform(
+        magnification * dpr, 0, 0, magnification * dpr,
+        (loupe.screenX - loupe.world[0] * magnification) * dpr,
+        (loupe.screenY - loupe.world[1] * magnification) * dpr,
+      );
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, 0, 0, MAP_W, MAP_H);
+      for (const shape of document.shapes) {
+        context.beginPath();
+        shape.points.forEach((point, index) => {
+          if (index === 0) context.moveTo(point[0], point[1]);
+          else context.lineTo(point[0], point[1]);
+        });
+        if (shape.closed) context.closePath();
+        if (shape.closed) {
+          context.fillStyle = shape.blocksMove ? "rgba(255,75,85,0.20)" : "rgba(60,220,190,0.13)";
+          context.fill();
+        }
+        context.strokeStyle = shape.blocksMove && shape.blocksSight ? "#ff5c68" : shape.blocksMove ? "#e79a45" : "#55d9cd";
+        context.lineWidth = 2 / magnification;
+        context.lineJoin = "round";
+        context.lineCap = "round";
+        context.stroke();
+      }
+      context.restore();
+      context.save();
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.beginPath();
+      context.arc(loupe.screenX, loupe.screenY, lensRadius, 0, Math.PI * 2);
+      context.strokeStyle = "#ffe079";
+      context.lineWidth = 3;
+      context.shadowColor = "rgba(0,0,0,0.75)";
+      context.shadowBlur = 8;
+      context.stroke();
+      context.shadowBlur = 0;
+      context.beginPath();
+      context.moveTo(loupe.screenX - 13, loupe.screenY);
+      context.lineTo(loupe.screenX + 13, loupe.screenY);
+      context.moveTo(loupe.screenX, loupe.screenY - 13);
+      context.lineTo(loupe.screenX, loupe.screenY + 13);
+      context.strokeStyle = "rgba(255,255,255,0.85)";
+      context.lineWidth = 1;
+      context.stroke();
+      context.fillStyle = "rgba(5,12,18,0.88)";
+      context.fillRect(loupe.screenX - 39, loupe.screenY + lensRadius + 5, 78, 21);
+      context.fillStyle = "#ffe079";
+      context.font = "11px system-ui, sans-serif";
+      context.textAlign = "center";
+      context.fillText("4× LOUPE", loupe.screenX, loupe.screenY + lensRadius + 20);
+      context.restore();
+    }
+
     context.fillStyle = "rgba(5,12,18,0.82)";
     context.fillRect(8, rect.height - 34, Math.min(560, rect.width - 16), 26);
     context.fillStyle = "#e4eef4";
@@ -246,7 +553,7 @@ export default function VectorCollisionEditor() {
       16,
       rect.height - 17,
     );
-  }, [document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
+  }, [document, candidateWorld, visionOrigin, loupe, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
 
   useEffect(() => { drawRef.current = draw; }, [draw]);
 
@@ -326,6 +633,8 @@ export default function VectorCollisionEditor() {
     return () => {
       active = false;
       controller.abort();
+      if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+      visionPressTimerRef.current = null;
       image.onload = null;
       image.onerror = null;
       if (rafRef.current !== null) window.cancelAnimationFrame(rafRef.current);
@@ -369,7 +678,8 @@ export default function VectorCollisionEditor() {
     }
   }, [document, draftPoints, activeChain, dirty, loaded]);
 
-  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints]);
+  useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints, visionOrigin, loupe]);
+  useEffect(() => { setAnalysis(null); }, [document]);
 
   const worldPointAt = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -472,6 +782,9 @@ export default function VectorCollisionEditor() {
     const position = { x: event.clientX, y: event.clientY };
     pointersRef.current.set(event.pointerId, position);
     if (pointersRef.current.size === 2) {
+      setLoupe(null);
+      if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+      visionPressTimerRef.current = null;
       // A second finger always takes over as a viewport gesture, regardless
       // of the selected drawing/editing tool. Cancel a wall/vertex drag rather
       // than allowing the second pointer-up to commit an accidental shape.
@@ -500,6 +813,25 @@ export default function VectorCollisionEditor() {
     if (pointersRef.current.size > 2) return;
 
     const point = worldPoint(event);
+    if (tool === "loupe") {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setLoupe({ world: point, screenX: event.clientX - rect.left, screenY: event.clientY - rect.top });
+      return;
+    }
+    if (tool === "vision") {
+      gestureRef.current = { kind: "vision", point, clientX: event.clientX, clientY: event.clientY };
+      visionPressTimerRef.current = window.setTimeout(() => {
+        const activeGesture = gestureRef.current;
+        if (activeGesture?.kind !== "vision") return;
+        if (!candidateWorld) {
+          setStatus("Vision preview unavailable: correct invalid candidate geometry before raycasting.");
+          return;
+        }
+        setVisionOrigin(activeGesture.point);
+        setStatus("Candidate vision preview active · 320px raycast · diagnostic only, not live gameplay.");
+      }, 550);
+      return;
+    }
     if (tool === "walk") {
       gestureRef.current = { kind: "walk", point };
       return;
@@ -519,7 +851,7 @@ export default function VectorCollisionEditor() {
         }
         start = end;
       } else {
-        const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+        const snapped = snapPoint(docRef.current.shapes, point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 12));
         if (snapped.kind !== "none") start = snapped.point;
       }
       gestureRef.current = { kind: "wall", points: [start] };
@@ -529,10 +861,10 @@ export default function VectorCollisionEditor() {
     }
     if (tool === "solid") {
       const camera = cameraRef.current;
-      const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+      const snapped = snapPoint(docRef.current.shapes, point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 12));
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
       const close = draftPoints.length >= 3 &&
-        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= 18 / camera.zoom;
+        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 18);
       gestureRef.current = { kind: "solid", point: nextPoint, close };
       setPreviewPoint(nextPoint);
       return;
@@ -544,7 +876,7 @@ export default function VectorCollisionEditor() {
         for (let index = 0; index < shape.points.length; index++) {
           const vertex = shape.points[index];
           const d = Math.hypot(point[0] - vertex[0], point[1] - vertex[1]);
-          if (d <= 16 / camera.zoom && (!best || d < best.distance)) {
+          if (d <= EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 16) && (!best || d < best.distance)) {
             best = { shapeId: shape.id, index, distance: d };
           }
         }
@@ -553,7 +885,7 @@ export default function VectorCollisionEditor() {
         setSelectedId(best.shapeId);
         gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
       } else {
-        const target = nearestShape(point, 18 / camera.zoom);
+        const target = nearestShape(point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 18));
         setSelectedId(target?.id ?? null);
       }
       return;
@@ -582,7 +914,22 @@ export default function VectorCollisionEditor() {
       return;
     }
 
+    if (tool === "loupe" && pointersRef.current.size <= 1) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      setLoupe({ world: worldPoint(event), screenX: event.clientX - rect.left, screenY: event.clientY - rect.top });
+      scheduleDraw();
+      return;
+    }
     const gesture = gestureRef.current;
+    if (gesture?.kind === "vision") {
+      if (Math.hypot(event.clientX - gesture.clientX, event.clientY - gesture.clientY) > 12) {
+        if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+        visionPressTimerRef.current = null;
+        gestureRef.current = null;
+        setStatus("Vision preview cancelled because the press moved. Hold still to inspect sight lines.");
+      }
+      return;
+    }
     if (!gesture) {
       if (tool === "wall" || tool === "solid") setPreviewPoint(worldPoint(event));
       return;
@@ -624,7 +971,7 @@ export default function VectorCollisionEditor() {
       const current = cloneDocument(docRef.current);
       const shape = current.shapes.find(item => item.id === gesture.shapeId);
       if (!shape) return;
-      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, 10 / cameraRef.current.zoom);
+      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, cameraRef.current.zoom, 10));
       const replacementPoint = snapped.kind === "none" ? point : snapped.point;
       const next: CollisionDocument = {
         ...current,
@@ -656,12 +1003,14 @@ export default function VectorCollisionEditor() {
   };
 
   const onPointerUp = (event: ReactPointerEvent<HTMLCanvasElement>) => {
+    if (visionPressTimerRef.current !== null) window.clearTimeout(visionPressTimerRef.current);
+    visionPressTimerRef.current = null;
     const gesture = gestureRef.current;
     if (gesture?.kind === "wall") {
       const points = [...gesture.points];
       const end = worldPoint(event);
       const camera = cameraRef.current;
-      const endSnap = snapPoint(docRef.current.shapes, end, 12 / camera.zoom);
+      const endSnap = snapPoint(docRef.current.shapes, end, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 12));
       const snappedEnd = endSnap.kind === "none" ? end : endSnap.point;
       const last = points[points.length - 1];
       if (last && Math.hypot(snappedEnd[0] - last[0], snappedEnd[1] - last[1]) >= 0.5 / camera.zoom) {
@@ -689,7 +1038,7 @@ export default function VectorCollisionEditor() {
         setLocalDraft(null);
       }
     } else if (gesture?.kind === "erase") {
-      const target = nearestShape(gesture.point, 22 / cameraRef.current.zoom);
+      const target = nearestShape(gesture.point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, cameraRef.current.zoom, 22));
       if (target) {
         const current = cloneDocument(docRef.current);
         const next: CollisionDocument = { ...current, shapes: current.shapes.filter(shape => shape.id !== target.id) };
@@ -832,6 +1181,96 @@ export default function VectorCollisionEditor() {
     }
   };
 
+  const saveZone = async () => {
+    if (!["A", "B", "C", "D", "E"].includes(zone)) {
+      setStatus("Select a reviewed map zone A–E before saving a zone candidate.");
+      return;
+    }
+    const zoneShapes = docRef.current.shapes.filter(shape => shape.zone === zone);
+    if (!zoneShapes.length) {
+      setStatus("Zone " + zone + " has no shapes to save. Assign each authored shape to the selected zone.");
+      return;
+    }
+    const zoneDocument: EditableDocument = { ...docRef.current, shapes: zoneShapes };
+    const errors = validateCollisionDocument(zoneDocument);
+    if (errors.length) {
+      setStatus("Zone " + zone + " cannot be saved: " + errors.slice(0, 4).join("; "));
+      return;
+    }
+    setZoneBusy(true);
+    setStatus("Saving zone " + zone + " candidate…");
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
+        body: JSON.stringify(zoneDocument),
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        contentHash?: string;
+        backupCount?: number;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone save rejected (" + response.status + ")");
+      if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
+        throw new Error("Zone save response did not include a valid SHA-256 content hash");
+      }
+      setStatus(
+        "Zone " + zone + " saved · " + zoneShapes.length + " shapes · SHA-256 " +
+        result.contentHash.slice(0, 12) + " · " + (result.backupCount ?? 0) +
+        " retained zone backups. Full candidate and live gameplay are unchanged.",
+      );
+    } catch (error) {
+      setStatus("Zone " + zone + " save failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
+  const loadZone = async () => {
+    if (!["A", "B", "C", "D", "E"].includes(zone)) {
+      setStatus("Select a saved zone A–E to load.");
+      return;
+    }
+    setZoneBusy(true);
+    setStatus("Loading zone " + zone + " candidate…");
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone, {
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        saved?: boolean;
+        document?: EditableDocument;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone load rejected (" + response.status + ")");
+      if (!result.saved || !result.document?.shapes?.length) {
+        setStatus("No saved candidate exists for zone " + zone + ".");
+        return;
+      }
+      if (result.document.shapes.some(shape => shape.zone !== zone)) {
+        throw new Error("Saved zone file contains a shape assigned to another zone");
+      }
+      const current = cloneDocument(docRef.current);
+      const merged: EditableDocument = {
+        ...current,
+        shapes: [
+          ...current.shapes.filter(shape => shape.zone !== zone),
+          ...result.document.shapes,
+        ],
+      };
+      const errors = validateCollisionDocument(merged);
+      if (errors.length) {
+        throw new Error("Zone merge rejected: " + errors.slice(0, 4).join("; "));
+      }
+      replaceDocument(merged);
+      setStatus("Loaded " + result.document.shapes.length + " saved shapes for zone " + zone + " into the unsaved working document.");
+    } catch (error) {
+      setStatus("Zone " + zone + " load failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
   const restoreLocalDraft = () => {
     if (!localDraft) return;
     replaceDocument(localDraft.document);
@@ -877,6 +1316,22 @@ export default function VectorCollisionEditor() {
 
   if (!import.meta.env.DEV) return null;
 
+  const runAnalysis = () => {
+    try {
+      const result = analyzeCandidate(document);
+      setAnalysis(result);
+      const unreachable = result.tasks.filter(target => !target.reachable).length +
+        result.vents.filter(target => !target.reachable).length;
+      setStatus(
+        "Candidate analysis complete · " + result.spawnReachableCells + "/" + result.walkableCells +
+        " player-walkable cells spawn-reachable · " + unreachable + " unreachable task/vent targets.",
+      );
+    } catch (error) {
+      setAnalysis(null);
+      setStatus("Candidate analysis failed: " + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const buttonStyle = (active = false): React.CSSProperties => ({
     flex: "0 0 auto",
     minHeight: 48,
@@ -899,8 +1354,8 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase", "walk"] as Tool[]).map(item => (
-          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => setTool(item)}>{TOOL_LABELS[item]}</button>
+        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
+          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
@@ -914,6 +1369,9 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle(activeChain.length > 1)} onClick={finishActiveChain} disabled={activeChain.length < 2}>Finish chain</button>
         {localDraft && <button type="button" style={buttonStyle(true)} onClick={restoreLocalDraft}>Restore local draft</button>}
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { walkPointsRef.current = []; setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
+        <button type="button" style={buttonStyle(visionOrigin !== null)} onClick={() => setVisionOrigin(null)} disabled={!visionOrigin}>Clear vision preview</button>
+        <button type="button" style={buttonStyle(loupe !== null)} onClick={() => setLoupe(null)} disabled={!loupe}>Clear loupe</button>
+        <button type="button" style={buttonStyle(analysis !== null)} onClick={runAnalysis}>Analyze candidate</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
@@ -934,6 +1392,8 @@ export default function VectorCollisionEditor() {
           <option value="D">D · south-west</option>
           <option value="E">E · south-east</option>
         </select>
+        <button type="button" style={buttonStyle()} onClick={() => void loadZone()} disabled={zoneBusy || saving || zone === "unassigned"}>Load zone</button>
+        <button type="button" style={buttonStyle()} onClick={() => void saveZone()} disabled={zoneBusy || saving || zone === "unassigned" || !document.shapes.some(shape => shape.zone === zone)}>Save zone</button>
         <button type="button" style={buttonStyle()} onClick={exportDocument}>Export JSON</button>
         <label style={{ ...buttonStyle(), display: "inline-flex", alignItems: "center" }}>
           Import JSON<input type="file" accept="application/json,.json" onChange={importDocument} style={{ display: "none" }} />
@@ -952,6 +1412,15 @@ export default function VectorCollisionEditor() {
           data-draft-point-count={draftPoints.length}
           data-walk-point-count={walkPoints.length}
           data-walk-status={walkStatus}
+          data-vision-preview={visionOrigin ? "true" : "false"}
+          data-vision-origin={visionOrigin ? visionOrigin.join(",") : ""}
+          data-loupe-active={loupe ? "true" : "false"}
+          data-loupe-origin={loupe ? loupe.world.join(",") : ""}
+          data-analysis-task-count={analysis?.tasks.length ?? ""}
+          data-analysis-vent-count={analysis?.vents.length ?? ""}
+          data-analysis-unreachable-count={analysis ? analysis.tasks.filter(t => !t.reachable).length + analysis.vents.filter(v => !v.reachable).length : ""}
+          data-zone={zone}
+          data-zone-busy={zoneBusy ? "true" : "false"}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
@@ -964,6 +1433,25 @@ export default function VectorCollisionEditor() {
         {!loaded && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(10,18,26,.84)", fontSize: 14 }}>Loading geometry workspace…</div>}
       </div>
 
+      {analysis && (
+        <section
+          data-candidate-analysis="complete"
+          style={{ padding: "8px 12px", background: "#1b2a36", borderTop: "1px solid #445b6b", fontSize: 11, lineHeight: 1.5, maxHeight: 150, overflow: "auto" }}
+        >
+          <strong>Candidate-only geometry analysis</strong>
+          <span> · {analysis.validationErrors.length} validation errors · {analysis.componentCount} walkable components · {analysis.narrowCells} narrow-footprint cells · {analysis.unassignedShapes} unassigned shapes</span>
+          <div>Tasks reachable from spawn with interaction LOS: {analysis.tasks.filter(target => target.reachable).length}/{analysis.tasks.length}. Vents: {analysis.vents.filter(target => target.reachable).length}/{analysis.vents.length}.</div>
+          {analysis.validationErrors.slice(0, 3).map((error, index) => <div key={"validation-" + index} style={{ color: "#ff999f" }}>Geometry: {error}</div>)}
+          {[...analysis.tasks, ...analysis.vents].filter(target => !target.reachable).map(target => (
+            <div key={target.id + target.name} style={{ color: "#ffd17c" }}>Unreachable: {target.name} ({analysis.tasks.includes(target) ? "task" : "vent"})</div>
+          ))}
+          {analysis.disconnectedComponents.slice(0, 3).map((component, index) => (
+            <div key={"island-" + index}>Disconnected island {index + 1}: {component.cells} player cells near {Math.round(component.center[0])},{Math.round(component.center[1])}</div>
+          ))}
+          <div style={{ color: "#91aebe" }}>Diagnostic only. Narrow cells and disconnected areas require author review; no geometry is changed or automatically accepted.</div>
+        </section>
+      )}
+
       <footer style={{ padding: "8px 10px", background: "#182633", borderTop: "1px solid #334c5e", fontSize: 11, color: "#b8cbd6", display: "flex", gap: 10, flexWrap: "wrap" }}>
         <span>{status}{walkStatus ? " · " + walkStatus : ""}</span>
         {selected && (
@@ -971,6 +1459,22 @@ export default function VectorCollisionEditor() {
             <strong>{selected.label || selected.id}</strong>
             <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Zone
+              <select
+                aria-label="Selected shape zone"
+                value={selected.zone ?? "unassigned"}
+                onChange={event => {
+                  const value = event.target.value;
+                  setZone(value);
+                  updateSelected({ zone: value === "unassigned" ? undefined : value });
+                }}
+                style={{ minHeight: 40, maxWidth: 100, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}
+              >
+                <option value="unassigned">Unassigned</option>
+                {["A", "B", "C", "D", "E"].map(value => <option key={value} value={value}>Zone {value}</option>)}
+              </select>
+            </label>
           </span>
         )}
       </footer>

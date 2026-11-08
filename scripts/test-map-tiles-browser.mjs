@@ -20,6 +20,7 @@ const browser = await chromium.launch({
 try {
   const cases = [
     { name: "mobile-baseline", viewport: { width: 390, height: 844 }, dpr: 2, mobile: true, variant: "baseline", query: "" },
+    { name: "mobile-3x-baseline", viewport: { width: 390, height: 844 }, dpr: 3, mobile: true, variant: "baseline", query: "" },
     { name: "desktop-sharpened", viewport: { width: 1280, height: 720 }, dpr: 1, mobile: false, variant: "sharpened", query: "&map-art=sharp" },
   ];
 

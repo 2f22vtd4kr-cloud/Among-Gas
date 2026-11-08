@@ -19,16 +19,68 @@ try {
     return !!element && Number(element.getAttribute("width")) > 0 && Number(element.getAttribute("height")) > 0;
   });
 
-  // Draw a freehand wall stroke. It remains an explicit active chain until Finish chain.
+  // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
+  const touch = await page.context().newCDPSession(page);
+
+  // A one-finger freehand wall stroke must create an active chain on a touch device.
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
-  await page.mouse.move(bounds.x + 45, bounds.y + 70);
-  await page.mouse.down();
-  await page.mouse.move(bounds.x + 165, bounds.y + 76, { steps: 5 });
-  await page.mouse.up();
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ id: 1, x: bounds.x + 45, y: bounds.y + 70 }],
+  });
+  for (const [x, y] of [[85, 72], [125, 74], [165, 76]]) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ id: 1, x: bounds.x + x, y: bounds.y + y }],
+    });
+  }
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
+
+  // The vision preview requires a stationary long-press; a drag must not activate it.
+  await page.getByRole("button", { name: "Vision preview (hold)" }).click();
+  bounds = await canvas.boundingBox();
+  const visionX = bounds.x + bounds.width * 0.55;
+  const visionY = bounds.y + bounds.height * 0.48;
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove", touchPoints: [{ id: 1, x: visionX + 24, y: visionY }],
+  });
+  await page.waitForTimeout(650);
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "moving a vision press must cancel preview");
+
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
+  });
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-vision-preview") === "true", null, { timeout: 3000 });
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  assert.match(await page.locator("footer").innerText(), /diagnostic only, not live gameplay/);
+  await page.getByRole("button", { name: "Clear vision preview" }).click();
+  assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "vision preview can be cleared");
+
+  // The 4x loupe follows real touchscreen pointer movement and can be dismissed.
+  await page.getByRole("button", { name: "Loupe (4×)" }).click();
+  bounds = await canvas.boundingBox();
+  const loupeX = bounds.x + bounds.width * 0.42;
+  const loupeY = bounds.y + bounds.height * 0.52;
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: loupeX, y: loupeY }],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove", touchPoints: [{ id: 1, x: loupeX + 12, y: loupeY + 8 }],
+  });
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-loupe-active") === "true", null, { timeout: 3000 });
+  assert.match(await canvas.getAttribute("data-loupe-origin") ?? "", /^\d+(\.\d+)?,\d+(\.\d+)?$/,
+    "loupe exposes its world-space focus for visual QA");
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.getByRole("button", { name: "Clear loupe" }).click();
+  assert.equal(await canvas.getAttribute("data-loupe-active"), "false", "loupe overlay can be dismissed");
 
   // Active chains survive reload via local autosave and have explicit endpoint navigation.
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -73,6 +125,26 @@ try {
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
+  // Select an existing vertex, assign its shape to a review zone, and keep the
+  // active zone selector aligned with that assignment for saving.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await page.mouse.click(bounds.x + 220, bounds.y + 95);
+  const selectedZone = page.getByLabel("Selected shape zone");
+  await selectedZone.waitFor();
+  await selectedZone.selectOption("B");
+  assert.equal(await selectedZone.inputValue(), "B");
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
+    "the active zone selector follows the selected shape's zone");
+
+  // Candidate analyzer uses the shared task/vent targets and production player footprint.
+  await page.getByRole("button", { name: "Analyze candidate" }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-analysis-task-count") === "11");
+  assert.equal(await canvas.getAttribute("data-analysis-vent-count"), "6");
+  await page.locator("[data-candidate-analysis='complete']").waitFor();
+  assert.match(await page.locator("[data-candidate-analysis='complete']").innerText(), /Tasks reachable from spawn with interaction LOS:/);
+  assert.match(await page.locator("[data-candidate-analysis='complete']").innerText(), /Diagnostic only/);
+
   // Export remains available offline; no save is performed by this UI smoke.
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export JSON" }).click();
@@ -105,9 +177,12 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const touch = await page.context().newCDPSession(page);
-  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test"];
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
+    console.log("PINCH TAKEOVER TEST:", mode);
+    // Each independent pinch starts from a known zoom. Without this reset, the
+    // first few cases increase zoom to the 8x cap and make later increases impossible.
+    await page.getByRole("button", { name: "Fit map" }).click();
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
     const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
@@ -133,11 +208,16 @@ try {
       ],
     });
     await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForFunction(
-      before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,
-      beforeZoom,
-      { timeout: 5000 },
-    );
+    try {
+      await page.waitForFunction(
+        before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,
+        beforeZoom,
+        { timeout: 5000 },
+      );
+    } catch (error) {
+      const observedZoom = Number(await canvas.getAttribute("data-zoom"));
+      throw new Error("Pinch takeover failed in " + mode + ": zoom " + beforeZoom + " -> " + observedZoom, { cause: error });
+    }
     assert.equal(
       Number(await canvas.getAttribute("data-shape-count")),
       beforeShapes,

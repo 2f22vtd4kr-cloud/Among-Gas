@@ -441,6 +441,9 @@ try {
   assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
     'the persistent Use control must expose the nearby actionable task');
   assert.equal(await taskButton.isEnabled(), true, 'Use must enable when a task is in range and visible');
+  const taskIconPath = await taskButton.locator('svg path').first().getAttribute('d');
+  assert.match(taskIconPath ?? '', /M16 9/,
+    'Use must show the contextual clipboard icon when a task is actionable');
   const idleReportButton = page.getByTestId('game-action-report');
   assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
   assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
@@ -692,6 +695,14 @@ try {
   await openingKillButton.waitFor({ state: 'visible', timeout: 10_000 });
   assert.equal(await openingKillButton.isEnabled(), false,
     'the opening kill cooldown must disable the Kill action even when a target is in range');
+  const cooldownStyle = await openingKillButton.evaluate(element => ({
+    opacity: getComputedStyle(element).opacity,
+    filter: getComputedStyle(element).filter,
+  }));
+  assert.equal(Number(cooldownStyle.opacity), 0.45,
+    'disabled Kill must be visibly reduced to 45 percent opacity');
+  assert.match(cooldownStyle.filter, /saturate\(0\.2\)/,
+    'disabled Kill must use a desaturated grey state');
 
   // Dropped bodies are distinct from the ghost's moving sprite and remain reportable.
   await page.goto(`${origin}/?mock=report-ready`, { waitUntil: 'domcontentloaded' });

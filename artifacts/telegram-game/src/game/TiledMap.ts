@@ -47,7 +47,7 @@ function validateManifest(value: unknown): TileManifest {
     const y = row * manifest.tilePx;
     const width = Math.min(manifest.tilePx, manifest.texW - x);
     const height = Math.min(manifest.tilePx, manifest.texH - y);
-    if (!tile || typeof tile.file !== "string" || !/^tile_r\d+_c\d+\.webp$/.test(tile.file) ||
+    if (!tile || typeof tile.file !== "string" || tile.file !== `tile_r${row}_c${col}.webp` ||
         seen.has(tile.file) || tile.row !== row || tile.col !== col ||
         !Array.isArray(tile.tex) || tile.tex.length !== 4 ||
         !Array.isArray(tile.world) || tile.world.length !== 4 ||
@@ -63,6 +63,8 @@ function validateManifest(value: unknown): TileManifest {
 
 export class TiledMap {
   private readonly cache = new Map<string, CacheEntry>();
+  private readonly pending = new Map<string, HTMLImageElement>();
+  private disposed = false;
   private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0, decodedBytes: 0 };
 
   private constructor(
@@ -86,63 +88,80 @@ export class TiledMap {
     zoom: number,
     dpr: number,
   ): boolean {
+    if (this.disposed) return false;
+    if (![camera.x, camera.y, camera.w, camera.h, zoom, dpr].every(Number.isFinite) ||
+        camera.w <= 0 || camera.h <= 0 || zoom <= 0 || dpr <= 0) {
+      throw new RangeError("Map camera, zoom and DPR must be finite and positive");
+    }
     let visibleTotal = 0;
     let visibleLoaded = 0;
     let loading = 0;
     let failed = 0;
     const visible = new Set<string>();
     const deviceScale = zoom * dpr;
+    const previousSmoothing = ctx.imageSmoothingEnabled;
+    const previousQuality = ctx.imageSmoothingQuality;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-
-    for (const tile of this.manifest.tiles) {
-      const [wx, wy, ww, wh] = tile.world;
-      if (wx + ww <= camera.x || wy + wh <= camera.y ||
-          wx >= camera.x + camera.w || wy >= camera.y + camera.h) continue;
-      visibleTotal++;
-      visible.add(tile.file);
-      const image = this.get(tile);
-      if (image === "loading") {
-        loading++;
-        continue;
+    try {
+      for (const tile of this.manifest.tiles) {
+        const [wx, wy, ww, wh] = tile.world;
+        if (wx + ww <= camera.x || wy + wh <= camera.y ||
+            wx >= camera.x + camera.w || wy >= camera.y + camera.h) continue;
+        visibleTotal++;
+        visible.add(tile.file);
+        const image = this.get(tile);
+        if (image === "loading") { loading++; continue; }
+        if (image === "failed") { failed++; continue; }
+        const left = Math.round((wx - camera.x) * deviceScale);
+        const top = Math.round((wy - camera.y) * deviceScale);
+        const right = Math.round((wx + ww - camera.x) * deviceScale);
+        const bottom = Math.round((wy + wh - camera.y) * deviceScale);
+        if (right <= left || bottom <= top) continue;
+        // One-device-pixel bleed closes compositor hairlines at fractional zoom.
+        // Tiles draw row-major, so the next tile covers the overlap deterministically.
+        ctx.drawImage(image, left, top, right - left + 1, bottom - top + 1);
+        visibleLoaded++;
       }
-      if (image === "failed") {
-        failed++;
-        continue;
-      }
-
-      // Both sides of a shared edge calculate the same rounded device pixel.
-      const left = Math.round((wx - camera.x) * deviceScale);
-      const top = Math.round((wy - camera.y) * deviceScale);
-      const right = Math.round((wx + ww - camera.x) * deviceScale);
-      const bottom = Math.round((wy + wh - camera.y) * deviceScale);
-      if (right <= left || bottom <= top) continue;
-      ctx.drawImage(
-        image,
-        0, 0, image.naturalWidth, image.naturalHeight,
-        left, top, right - left, bottom - top,
-      );
-      visibleLoaded++;
+    } finally {
+      ctx.imageSmoothingEnabled = previousSmoothing;
+      ctx.imageSmoothingQuality = previousQuality;
     }
-
     this.evict(visible);
     const decodedBytes = [...this.cache.values()].reduce((total, entry) =>
-      entry instanceof HTMLImageElement
-        ? total + entry.naturalWidth * entry.naturalHeight * 4
-        : total, 0);
-    this.status = {
-      visibleTotal,
-      visibleLoaded,
-      loading,
-      failed,
-      cached: this.cache.size,
-      decodedBytes,
-    };
+      typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement
+        ? total + entry.naturalWidth * entry.naturalHeight * 4 : total, 0);
+    this.status = { visibleTotal, visibleLoaded, loading, failed, cached: this.cache.size, decodedBytes };
     return visibleTotal > 0 && visibleLoaded === visibleTotal;
   }
 
   getStatus(): Readonly<typeof this.status> {
-    return this.status;
+    return { ...this.status };
+  }
+
+  retryFailed(): number {
+    let count = 0;
+    for (const [file, entry] of this.cache) {
+      if (entry === "failed") { this.cache.delete(file); count++; }
+    }
+    return count;
+  }
+
+  /** Cancel pending requests and release decoded image references on unmount. */
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    for (const image of this.pending.values()) {
+      image.onload = null; image.onerror = null; image.src = "";
+    }
+    this.pending.clear();
+    for (const entry of this.cache.values()) {
+      if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
+        entry.onload = null; entry.onerror = null; entry.src = "";
+      }
+    }
+    this.cache.clear();
+    this.status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0, decodedBytes: 0 };
   }
 
   private get(tile: TileMeta): CacheEntry {
@@ -155,11 +174,14 @@ export class TiledMap {
     const image = new Image();
     image.decoding = "async";
     this.cache.set(tile.file, "loading");
+    this.pending.set(tile.file, image);
     image.onload = () => {
-      if (this.cache.get(tile.file) === "loading") this.touch(tile.file, image);
+      this.pending.delete(tile.file);
+      if (!this.disposed && this.cache.get(tile.file) === "loading") this.touch(tile.file, image);
     };
     image.onerror = () => {
-      if (this.cache.get(tile.file) === "loading") this.touch(tile.file, "failed");
+      this.pending.delete(tile.file);
+      if (!this.disposed && this.cache.get(tile.file) === "loading") this.touch(tile.file, "failed");
     };
     image.src = this.baseUrl + tile.file;
     return "loading";
@@ -174,7 +196,18 @@ export class TiledMap {
     if (this.cache.size <= this.maxResident) return;
     for (const file of this.cache.keys()) {
       if (this.cache.size <= this.maxResident) break;
-      if (!visible.has(file)) this.cache.delete(file);
+      if (!visible.has(file)) {
+        const pending = this.pending.get(file);
+        if (pending) {
+          pending.onload = null; pending.onerror = null; pending.src = "";
+          this.pending.delete(file);
+        }
+        const entry = this.cache.get(file);
+        if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
+          entry.onload = null; entry.onerror = null; entry.src = "";
+        }
+        this.cache.delete(file);
+      }
     }
   }
 }

@@ -58,7 +58,9 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
         const route = (req.url || '/').split('?')[0];
-        if (route !== '/document') {
+        const zoneMatch = route.match(/^\/zones\/([A-E])$/);
+        const zone = zoneMatch?.[1] ?? null;
+        if (route !== '/document' && zone === null) {
           next();
           return;
         }
@@ -72,12 +74,19 @@ function vectorCollisionEditorApiPlugin(): Plugin {
 
         // CI injects a disposable path so the dev API can be tested without
         // leaving generated candidate geometry in the production source tree.
-        const filePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
+        const baseFilePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
           ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
           : path.resolve(
               import.meta.dirname,
               '../../lib/shared/src/collision/collision.v1.json',
             );
+        const filePath = zone
+          ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
+          : baseFilePath;
+        const backupDirectory = zone
+          ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone)
+          : path.join(path.dirname(baseFilePath), '.backups');
+        const backupPrefix = zone ? 'collision.zone-' + zone + '.v1.' : 'collision.v1.';
 
         if (req.method === 'GET') {
           try {
@@ -155,6 +164,10 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               respond(400, { error: 'Refusing to save an empty document; author and review real map contours first' });
               return;
             }
+            if (zone && (document.shapes as Array<{ zone?: string }>).some(shape => shape.zone !== zone)) {
+              respond(400, { error: 'Zone ' + zone + ' saves may contain only shapes explicitly assigned to that zone' });
+              return;
+            }
             if (document.shapes.length > 1000) {
               respond(400, { error: 'Candidate document may contain at most 1000 shapes' });
               return;
@@ -162,17 +175,16 @@ function vectorCollisionEditorApiPlugin(): Plugin {
 
             fs.mkdirSync(path.dirname(filePath), { recursive: true });
             const temporaryPath = filePath + '.' + process.pid + '.' + randomUUID() + '.tmp';
-            const backupDirectory = path.join(path.dirname(filePath), '.backups');
             const serialized = JSON.stringify(document, null, 2) + '\n';
             const contentHash = createHash('sha256').update(serialized).digest('hex');
             try {
               if (fs.existsSync(filePath)) {
                 fs.mkdirSync(backupDirectory, { recursive: true });
                 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-                const backupName = 'collision.v1.' + stamp + '.' + process.pid + '.' + randomUUID() + '.json';
+                const backupName = backupPrefix + stamp + '.' + process.pid + '.' + randomUUID() + '.json';
                 fs.copyFileSync(filePath, path.join(backupDirectory, backupName));
                 const backups = fs.readdirSync(backupDirectory)
-                  .filter(name => name.startsWith('collision.v1.') && name.endsWith('.json'))
+                  .filter(name => name.startsWith(backupPrefix) && name.endsWith('.json'))
                   .sort();
                 for (const stale of backups.slice(0, Math.max(0, backups.length - 20))) {
                   fs.unlinkSync(path.join(backupDirectory, stale));
@@ -185,7 +197,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               throw error;
             }
             const backupCount = fs.existsSync(backupDirectory)
-              ? fs.readdirSync(backupDirectory).filter(name => name.startsWith('collision.v1.') && name.endsWith('.json')).length
+              ? fs.readdirSync(backupDirectory).filter(name => name.startsWith(backupPrefix) && name.endsWith('.json')).length
               : 0;
             respond(200, { ok: true, saved: true, shapeCount: document.shapes.length, contentHash, backupCount });
           } catch (error) {
