@@ -31,6 +31,7 @@ export default function MinigameShell({
 }: Props) {
   return (
     <div
+      data-testid="minigame-shell"
       style={{
         position: "fixed",
         inset: 0,
@@ -43,7 +44,7 @@ export default function MinigameShell({
         padding: 16,
       }}
     >
-      <div style={panelStyle}>
+      <div data-testid="minigame-panel" style={panelStyle}>
         <div style={{
           display: "flex",
           alignItems: "flex-start",
@@ -89,7 +90,7 @@ export default function MinigameShell({
             ✕
           </button>
         </div>
-        {children}
+        <div data-testid="minigame-content">{children}</div>
       </div>
     </div>
   );
