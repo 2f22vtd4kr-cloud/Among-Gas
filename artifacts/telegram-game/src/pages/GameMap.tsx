@@ -77,6 +77,7 @@ import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
 import GameActionBar from '../components/GameActionBar';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
+import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -1848,17 +1849,20 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  const useActionKind = nearestTask !== null && myRole === 'crewmate'
-    ? 'task'
-    : nearestRepairPad !== null
-      ? 'repair'
-      : amIImpostor && nearestVentId !== null && myVentId === null
-        ? 'vent'
-        : nearestAdminTableId !== null
-          ? 'admin'
-          : null;
-  const useActionEnabled = useActionKind !== null && activeTaskId === null &&
-    myVentId === null && !showAdminTable && !showMiniMap;
+  const useActionState = {
+    hasNearbyTask: nearestTask !== null,
+    isCrewmate: myRole === 'crewmate',
+    hasNearbyRepairPad: nearestRepairPad !== null,
+    isImpostor: amIImpostor,
+    hasNearbyVent: nearestVentId !== null,
+    isInVent: myVentId !== null,
+    hasNearbyAdminTable: nearestAdminTableId !== null,
+    hasActiveTask: activeTaskId !== null,
+    showAdminTable,
+    showMiniMap,
+  };
+  const useActionKind = getUseActionKind(useActionState);
+  const useActionEnabled = isUseActionEnabled(useActionKind, useActionState);
 
   return (
     <div
