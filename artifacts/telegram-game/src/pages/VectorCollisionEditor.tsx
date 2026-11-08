@@ -161,10 +161,12 @@ function analyzeCandidate(document: EditableDocument): CandidateAnalysis {
   let walkableCells = 0;
   let narrowCells = 0;
   for (let index = 0; index < cellCount; index++) {
-    if (nav.walk[index] !== 1) continue;
-    walkableCells++;
     const [x, y] = centerOf(index);
-    if (world.isWalkable(x, y, 0) && !world.isPlayerWalkableAtFeet(x, y)) narrowCells++;
+    const footprintWalkable = nav.walk[index] === 1;
+    if (footprintWalkable) walkableCells++;
+    // Count cells that a point could enter but the full production three-circle
+    // footprint cannot. This loop deliberately includes blocked nav cells.
+    if (!footprintWalkable && world.isWalkable(x, y, 0)) narrowCells++;
   }
 
   const components = new Uint8Array(cellCount);
