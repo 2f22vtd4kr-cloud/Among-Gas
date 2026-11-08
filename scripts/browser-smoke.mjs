@@ -685,6 +685,11 @@ try {
   });
 
   await captureHudState('crew-near-task', 'task-interaction', async current => {
+    await current.waitForFunction(() =>
+      document.querySelector('[data-testid="game-action-use"]')?.getAttribute('data-use-action') === 'task',
+      null,
+      { timeout: 10_000 },
+    );
     const use = current.getByTestId('game-action-use');
     const report = current.getByTestId('game-action-report');
     assert.equal(await use.getAttribute('data-use-action'), 'task');
@@ -695,6 +700,10 @@ try {
   });
 
   await captureHudState('crew-near-body', 'report-ready', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-report"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, null, { timeout: 10_000 });
     const report = current.getByTestId('game-action-report');
     assert.equal(await report.isVisible(), true);
     assert.equal(await report.isEnabled(), true, 'crew near body: Report is enabled');
@@ -705,6 +714,10 @@ try {
   });
 
   await captureHudState('impostor-ready', 'kill-ready', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-kill"]');
+      return button instanceof HTMLButtonElement && !button.disabled;
+    }, null, { timeout: 10_000 });
     const kill = current.getByTestId('game-action-kill');
     assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
     assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
@@ -714,6 +727,10 @@ try {
   });
 
   await captureHudState('impostor-cooldown', 'impostor-opening', async current => {
+    await current.waitForFunction(() => {
+      const button = document.querySelector('[data-testid="game-action-kill"]');
+      return button instanceof HTMLButtonElement && button.disabled;
+    }, null, { timeout: 10_000 });
     const kill = current.getByTestId('game-action-kill');
     assert.equal(await kill.isVisible(), true, 'impostor cooldown: Kill remains visible');
     assert.equal(await kill.isEnabled(), false, 'impostor cooldown: Kill is disabled');
