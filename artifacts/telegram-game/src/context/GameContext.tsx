@@ -21,6 +21,7 @@ import {
   SABOTAGE_LIGHTS, SABOTAGE_COOLDOWN_MS,
 } from '@workspace/shared/sabotage';
 import { findVent } from '@workspace/shared/vents';
+import { TASK_DEFS } from '@workspace/shared/tasks';
 import { applyDeltaPacket } from '@workspace/shared/remotePlayerDelta';
 import { PLAYER_SPAWN } from '../game/player';
 import { haptic } from '../lib/haptics';
@@ -410,6 +411,15 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
+  // HUD acceptance: a living crewmate without nearby tasks, bodies or impostor targets.
+  // Persistent Use and Report remain visible but disabled in this idle state.
+  'crew-idle': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], myTasks: [],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 7 — crewmate with tasks assigned; task progress bar visible.
   'task-playing': {
     state: {
@@ -429,6 +439,17 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
       phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
       myRole: 'crewmate', impostorSlots: [],
       myTasks: [{ taskId: 4, completedSteps: 0 }],
+      globalTaskProgress: 0,
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
+  // Browser visual QA: taskId in the URL selects one of all canonical minigames.
+  // The mock remains inaccessible unless VITE_ENABLE_GAME_MOCKS is explicitly enabled.
+  'task-interaction-gallery': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [],
+      myTasks: TASK_DEFS.map(task => ({ taskId: task.id, completedSteps: 0 })),
       globalTaskProgress: 0,
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
