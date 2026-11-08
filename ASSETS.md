@@ -6,7 +6,7 @@ This file is the release inventory for visual/audio assets. No third-party asset
 
 ### High-risk legacy directory
 
-`artifacts/telegram-game/public/au-assets/` was introduced from an external Among Us clone/reference pack and is therefore **not cleared for commercial redistribution**. It must be replaced or removed before release.
+`artifacts/telegram-game/public/au-assets/` was introduced from an external Among Us clone/reference pack and is therefore **not cleared for commercial redistribution**. Its 17 files are now quarantined under `attached_assets/legacy-au-assets/` and excluded from the production public build.
 
 A source-code reference audit on 2026-11-08 found two actual runtime dependencies:
 - `emergency_icon.png` — the in-game emergency-call button.
@@ -30,7 +30,7 @@ All 17 files have been moved to `attached_assets/legacy-au-assets/` in this bran
 | `artifacts/telegram-game/public/sprites/` | Project-authored/generated | Character atlas is validated by runtime/golden tests. |
 | Map artwork | Project-provided | Keep transform calibration at logical 3224×1858. |
 | Procedural footsteps | Project-generated | Synthesized in `sfx.ts`; no external sample required. |
-| UI CSS / SVG primitives | Project-authored | Prefer these for action icons after legacy `au-assets` replacement. |
+| UI CSS / SVG primitives | Project-authored | Original emergency alarm button and splash artwork now use the in-source `EmergencyMeetingArtwork.tsx` SVG components. |
 
 ## Release gate
 
