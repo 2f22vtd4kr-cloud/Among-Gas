@@ -1321,7 +1321,7 @@ export default function GameMap() {
         { width: mapImg.naturalWidth, height: mapImg.naturalHeight },
       );
 
-      const scale = ZOOM * dpr;
+      // scale is supplied by getCameraViewport above.
       if (cameraDebugEnabled) {
         (window as Window & { __AG_CAMERA_DEBUG?: unknown }).__AG_CAMERA_DEBUG = {
           playerX: px,
