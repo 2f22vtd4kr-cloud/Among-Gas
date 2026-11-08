@@ -1453,7 +1453,7 @@ Every simulated game finished with `tasksCompleted: 0`. Root cause confirmed in 
 **Goal:** Pixel-perfect Among Us main-menu style adapted for portrait mobile.
 
 ### What was done
-- Downloaded reference assets from `github.com/AI0702/Among-Us-clone` into `artifacts/telegram-game/public/au-assets/` (title.png, freeplay.png, kill_icon.png, etc. — available for future use)
+- Historical note: reference assets originally downloaded from `github.com/AI0702/Among-Us-clone` were quarantined from Vite's public build into `attached_assets/legacy-au-assets/` on 2026-11-08. They are not cleared for redistribution and must not be restored as runtime artwork.
 - Full rewrite of `src/pages/lobby.css`:
   - `.lobby-bg`: dark teal `#1A3330` + subtle diagonal texture
   - `.au-btn`: flexbox button with `.au-btn-icon` (darker teal, 74px left zone) + `.au-btn-label` (bright teal #3FCFC0, repeating-linear-gradient -55° diagonal stripes, Fredoka One) + thick 3D bottom shadow `0 7px 0 #17857A`
