@@ -43,6 +43,8 @@ const EDITOR_HIT_RADIUS_WORLD = (
   mouseRadiusCssPx: number,
 ) => (pointerType === "touch" ? EDITOR_TOUCH_TARGET_CSS_PX / 2 : mouseRadiusCssPx) / zoom;
 
+const MAP_ZONES = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"] as const;
+
 const LOCAL_DRAFT_KEY = "among-gas:vector-collision-editor:v1";
 const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
@@ -1182,8 +1184,8 @@ export default function VectorCollisionEditor() {
   };
 
   const saveZone = async () => {
-    if (!["A", "B", "C", "D", "E"].includes(zone)) {
-      setStatus("Select a reviewed map zone A–E before saving a zone candidate.");
+    if (!MAP_ZONES.includes(zone as typeof MAP_ZONES[number])) {
+      setStatus("Select one of the twelve map zones A–L before saving a zone candidate.");
       return;
     }
     const zoneShapes = docRef.current.shapes.filter(shape => shape.zone === zone);
@@ -1227,8 +1229,8 @@ export default function VectorCollisionEditor() {
   };
 
   const loadZone = async () => {
-    if (!["A", "B", "C", "D", "E"].includes(zone)) {
-      setStatus("Select a saved zone A–E to load.");
+    if (!MAP_ZONES.includes(zone as typeof MAP_ZONES[number])) {
+      setStatus("Select a saved map zone A–L to load.");
       return;
     }
     setZoneBusy(true);
@@ -1386,11 +1388,9 @@ export default function VectorCollisionEditor() {
         <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", minHeight: 48, fontSize: 12 }} />
         <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, minHeight: 48, fontSize: 12 }}>
           <option value="unassigned">Zone: unassigned</option>
-          <option value="A">A · north-west</option>
-          <option value="B">B · north-east</option>
-          <option value="C">C · central</option>
-          <option value="D">D · south-west</option>
-          <option value="E">E · south-east</option>
+          {MAP_ZONES.map((zoneId, index) => (
+            <option key={zoneId} value={zoneId}>{zoneId} · region {index + 1}/12</option>
+          ))}
         </select>
         <button type="button" style={buttonStyle()} onClick={() => void loadZone()} disabled={zoneBusy || saving || zone === "unassigned"}>Load zone</button>
         <button type="button" style={buttonStyle()} onClick={() => void saveZone()} disabled={zoneBusy || saving || zone === "unassigned" || !document.shapes.some(shape => shape.zone === zone)}>Save zone</button>
