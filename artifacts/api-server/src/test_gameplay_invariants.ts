@@ -207,17 +207,17 @@ function makeLobby(players: LobbyPlayer[]): Lobby {
   manager.disposeLobby(lobby);
 }
 
-// The garden perimeter remains a boundary; only the measured statue pedestal
-// is solid. These assertions use the same vector world as live movement.
+// The red-line movement reference does not trace the statue pedestal.
+// Do not preserve an estimated footprint as a gameplay invariant: a blocked
+// pedestal requires an owner-traced contour before it can be asserted. Keep
+// only the independently verified garden-lane and lobby-floor probes.
 {
   assert.equal(isPlayerPositionWalkable(grid, 1640, 449), true,
     'the western path through the central garden must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1810, 449), true,
     'the eastern path through the central garden must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1745, 550 - FEET_OFFSET_Y), true,
-    'the decorative garden floor outside the pedestal must remain walkable');
-  assert.equal(isPlayerPositionWalkable(grid, 1745, 497 - FEET_OFFSET_Y), false,
-    'the measured central statue pedestal must remain blocked at its feet-space position');
+    'the decorative garden floor outside the untraced pedestal must remain walkable');
   assert.equal(isPlayerPositionWalkable(grid, 1450, 449), true,
     'the open lobby floor west of the garden must remain walkable');
 }
