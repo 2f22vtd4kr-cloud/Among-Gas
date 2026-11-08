@@ -125,6 +125,18 @@ try {
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
+  // Select an existing vertex, assign its shape to a review zone, and keep the
+  // active zone selector aligned with that assignment for saving.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await page.mouse.click(bounds.x + 220, bounds.y + 95);
+  const selectedZone = page.getByLabel("Selected shape zone");
+  await selectedZone.waitFor();
+  await selectedZone.selectOption("B");
+  assert.equal(await selectedZone.inputValue(), "B");
+  assert.equal(await page.locator('select[aria-label="Active zone"]').count(), 0,
+    "zone assignment is available from the selected-shape inspector");
+
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
   await page.getByRole("button", { name: "Analyze candidate" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-analysis-task-count") === "11");
