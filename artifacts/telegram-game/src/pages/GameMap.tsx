@@ -273,6 +273,22 @@ const REMOTE_MOVING_WINDOW_MS = 260;
 const REMOTE_INTERPOLATION_MIN_MS = 40;
 const REMOTE_INTERPOLATION_MAX_MS = 220;
 
+function getTaskInteractionMockTaskId(mode: string | null): number | null {
+  if (mode === 'task-interaction') return 4;
+  if (mode === 'task-interaction-blocked' || mode === 'task-interaction-ghost-blocked') return 7;
+  if (mode !== 'task-interaction-gallery') return null;
+
+  const rawTaskId = new URLSearchParams(window.location.search).get('taskId');
+  if (rawTaskId === null || !/^\\d+$/.test(rawTaskId)) {
+    throw new Error('Minigame gallery requires a numeric taskId query parameter');
+  }
+  const taskId = Number(rawTaskId);
+  if (!Number.isSafeInteger(taskId) || !TASK_DEFS.some(task => task.id === taskId)) {
+    throw new Error(`Minigame gallery taskId ${rawTaskId} is not in the canonical TASK_DEFS registry`);
+  }
+  return taskId;
+}
+
 export default function GameMap() {
   const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
@@ -695,8 +711,10 @@ export default function GameMap() {
 
   useEffect(() => {
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
-    const taskMockActive = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-      (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked');
+    const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      ? getTaskInteractionMockTaskId(taskMockMode)
+      : null;
+    const taskMockActive = taskMockTaskId !== null;
     if (taskMockActive) {
       (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
         stage: 'proximity-effect-start',
@@ -743,7 +761,7 @@ export default function GameMap() {
       nearestTaskRef.current = best?.taskId ?? null;
       setNearestTask(best);
       if (taskMockActive) {
-        const fixtureTask = TASK_DEFS.find(task => task.id === (taskMockMode?.includes('blocked') ? 7 : 4));
+        const fixtureTask = TASK_DEFS.find(task => task.id === taskMockTaskId);
         (window as Window & { __AG_TASK_DEBUG?: unknown }).__AG_TASK_DEBUG = {
           role: myRole,
           isGhost: amIDead,
@@ -1141,11 +1159,14 @@ export default function GameMap() {
     const grid = taskInteractionGrid;
     const fineGrid = grid;
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
-    if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-        (taskMockMode === 'task-interaction' || taskMockMode === 'task-interaction-blocked' || taskMockMode === 'task-interaction-ghost-blocked')) {
-      const blockedFixture = taskMockMode?.includes('blocked') === true;
-      const fixtureTask = TASK_DEFS.find(task => task.id === (blockedFixture ? 7 : 4));
-      if (!fixtureTask) throw new Error('Task interaction fixture is missing task 4');
+    const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
+      ? getTaskInteractionMockTaskId(taskMockMode)
+      : null;
+    if (taskMockTaskId !== null) {
+      const blockedFixture = taskMockMode === 'task-interaction-blocked' ||
+        taskMockMode === 'task-interaction-ghost-blocked';
+      const fixtureTask = TASK_DEFS.find(task => task.id === taskMockTaskId);
+      if (!fixtureTask) throw new Error(`Task interaction fixture is missing task ${taskMockTaskId}`);
       let nearest: { x: number; y: number; distanceSq: number } | null = null;
       const range = TASK_INTERACTION_RANGE_PX - 8;
       for (let y = fixtureTask.y - range; y <= fixtureTask.y + range; y += 4) {
@@ -1229,10 +1250,7 @@ export default function GameMap() {
       // position. The first authoritative WebSocket spawn can arrive after the
       // fixture setup and otherwise overwrite it before the LOS assertion.
       // This branch is enabled only by the explicit development mock modes.
-      if (import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true' &&
-          (taskMockMode === 'task-interaction' ||
-           taskMockMode === 'task-interaction-blocked' ||
-           taskMockMode === 'task-interaction-ghost-blocked')) {
+      if (taskMockTaskId !== null) {
         const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
         if (fixture) {
           playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
