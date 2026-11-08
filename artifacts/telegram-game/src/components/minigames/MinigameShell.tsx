@@ -52,7 +52,7 @@ export default function MinigameShell({
         }}>
           <div>
             <div style={labelStyle}>
-              {english ? \`Step \${stepIndex + 1} of \${stepCount}\` : \`Шаг \${stepIndex + 1} из \${stepCount}\`}
+              {english ? `Step ${stepIndex + 1} of ${stepCount}` : `Шаг ${stepIndex + 1} из ${stepCount}`}
             </div>
             <div style={{
               fontSize: 16,
