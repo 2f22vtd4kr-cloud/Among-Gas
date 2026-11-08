@@ -8,11 +8,13 @@ This file is the release inventory for visual/audio assets. No third-party asset
 
 `artifacts/telegram-game/public/au-assets/` was introduced from an external Among Us clone/reference pack and is therefore **not cleared for commercial redistribution**. It must be replaced or removed before release.
 
-Known runtime references are currently limited to:
-- `kill_icon.png`
-- `sabotage_icon.png`
+A source-code reference audit on 2026-11-08 found two actual runtime dependencies:
+- `emergency_icon.png` — the in-game emergency-call button.
+- `emergency_meeting.png` — the emergency-call waiting/confirmation splash.
 
-The remaining files in the directory are retained only until their production-screen usage is audited; deleting the directory blindly would break historical QA/replay fixtures.
+This branch replaces both with original, in-source SVG components in `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx`. The app source should therefore have no runtime references to `public/au-assets/`; a CI source-scan regression is added. The previously listed `kill_icon.png` and `sabotage_icon.png` have no current application-source references in the repository search and are not runtime dependencies.
+
+The directory remains uncleared for redistribution. Keep its files as historical/QA material until a complete repository and fixture usage audit authorizes archival or removal; do not ship the directory as runtime artwork.
 
 ### Required release action
 
