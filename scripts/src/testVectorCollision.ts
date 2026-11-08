@@ -152,6 +152,16 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(snapPoint([shape("edge", [[100, 100], [300, 100]])], [200, 104], 12).kind, "segment");
   assert.equal(snapPoint([shape("edge-end", [[100, 100], [300, 100]])], [104, 100], 12).kind, "endpoint",
     "open-wall endpoints take magnet priority over nearby segment projections");
+  const prioritySnap = snapPoint([
+    shape("vertex-priority", [[100, 100], [100, 200]]),
+    shape("nearby-segment", [[80, 104], [120, 104]]),
+  ], [104, 104], 24);
+  assert.equal(prioritySnap.kind, "endpoint",
+    "a vertex magnet must win when its 48px touch target contains the pointer, even if another segment is geometrically closer");
+  assert.equal(prioritySnap.distance, 4,
+    "snap hit radius is expressed as a 24px radius (48px diameter) at 1x zoom");
+  assert.equal(snapPoint([shape("touch-target", [[100, 100], [300, 100]])], [124, 100], 24).kind, "endpoint",
+    "48px touch target includes its 24px boundary");
   assert.equal(shouldCloseLoop([[0, 0], [100, 0], [100, 100], [4, 3]], 10), true);
   const history = new History<number[]>([], value => value.slice(), 3);
   history.commit([1]); history.commit([1, 2]); assert.equal(history.undo(), true);
