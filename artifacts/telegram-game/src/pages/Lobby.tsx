@@ -230,6 +230,12 @@ export default function Lobby() {
     if (mockEnabled) {
       const mock = incomingQuery.get('mock');
       if (mock) gameQuery.set('mock', mock);
+      if (mock === 'task-interaction-gallery') {
+        // Carry only the gallery's task selector across the lobby→game route.
+        // GameMap validates the value against canonical TASK_DEFS before use.
+        const taskId = incomingQuery.get('taskId');
+        if (taskId !== null) gameQuery.set('taskId', taskId);
+      }
       if (incomingQuery.get('skipReveal') === 'true') gameQuery.set('skipReveal', 'true');
     }
     const suffix = gameQuery.toString();
