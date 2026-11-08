@@ -583,10 +583,10 @@ try {
   assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
   assert.ok(emergencyBox.width >= 92 && emergencyBox.height >= 92,
     `Emergency icon action must be at least 92×92 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
-  const emergencyIcon = emergencyButton.locator('img');
+  const emergencyIcon = emergencyButton.locator('svg[data-emergency-icon]');
   const emergencyIconBox = await emergencyIcon.boundingBox();
   assert.ok(emergencyIconBox && emergencyIconBox.width >= 68 && emergencyIconBox.height >= 68,
-    'Emergency control must display the large original emergency icon asset');
+    'Emergency control must display the large original in-source vector icon');
   await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
@@ -601,6 +601,11 @@ try {
   await emergencyButton.click();
   const emergencySplash = page.getByTestId('emergency-call-splash');
   await emergencySplash.waitFor({ state: 'visible' });
+  const emergencySplashArtwork = emergencySplash.locator('svg[data-emergency-splash-art]');
+  await emergencySplashArtwork.waitFor({ state: 'visible' });
+  const emergencySplashBox = await emergencySplashArtwork.boundingBox();
+  assert.ok(emergencySplashBox && emergencySplashBox.width >= 250 && emergencySplashBox.height >= 140,
+    'Emergency splash must render the original vector alarm illustration at a readable size');
   assert.match(await emergencySplash.getByTestId('emergency-call-status').innerText(),
     /Waiting for server confirmation|Ожидаем подтверждение сервера/i);
   assert.equal(await emergencySplash.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(4, 10, 17)',
