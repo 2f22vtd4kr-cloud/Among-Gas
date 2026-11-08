@@ -33,6 +33,11 @@ type Gesture =
   | { kind: "vision"; point: Point; clientX: number; clientY: number }
   | { kind: "vertex"; shapeId: string; index: number };
 
+// Plan v2 requires 48 CSS-pixel touch targets. Hit/snap radii are half that
+// diameter and converted to world units so zoom never shrinks the touch target.
+const EDITOR_TOUCH_TARGET_CSS_PX = 48;
+const EDITOR_TOUCH_RADIUS_WORLD = (zoom: number) => (EDITOR_TOUCH_TARGET_CSS_PX / 2) / zoom;
+
 const LOCAL_DRAFT_KEY = "among-gas:vector-collision-editor:v1";
 const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
@@ -841,7 +846,7 @@ export default function VectorCollisionEditor() {
         }
         start = end;
       } else {
-        const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+        const snapped = snapPoint(docRef.current.shapes, point, EDITOR_TOUCH_RADIUS_WORLD(camera.zoom));
         if (snapped.kind !== "none") start = snapped.point;
       }
       gestureRef.current = { kind: "wall", points: [start] };
@@ -851,10 +856,10 @@ export default function VectorCollisionEditor() {
     }
     if (tool === "solid") {
       const camera = cameraRef.current;
-      const snapped = snapPoint(docRef.current.shapes, point, 12 / camera.zoom);
+      const snapped = snapPoint(docRef.current.shapes, point, EDITOR_TOUCH_RADIUS_WORLD(camera.zoom));
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
       const close = draftPoints.length >= 3 &&
-        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= 18 / camera.zoom;
+        Math.hypot(nextPoint[0] - draftPoints[0][0], nextPoint[1] - draftPoints[0][1]) <= EDITOR_TOUCH_RADIUS_WORLD(camera.zoom);
       gestureRef.current = { kind: "solid", point: nextPoint, close };
       setPreviewPoint(nextPoint);
       return;
@@ -866,7 +871,7 @@ export default function VectorCollisionEditor() {
         for (let index = 0; index < shape.points.length; index++) {
           const vertex = shape.points[index];
           const d = Math.hypot(point[0] - vertex[0], point[1] - vertex[1]);
-          if (d <= 16 / camera.zoom && (!best || d < best.distance)) {
+          if (d <= EDITOR_TOUCH_RADIUS_WORLD(camera.zoom) && (!best || d < best.distance)) {
             best = { shapeId: shape.id, index, distance: d };
           }
         }
@@ -875,7 +880,7 @@ export default function VectorCollisionEditor() {
         setSelectedId(best.shapeId);
         gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
       } else {
-        const target = nearestShape(point, 18 / camera.zoom);
+        const target = nearestShape(point, EDITOR_TOUCH_RADIUS_WORLD(camera.zoom));
         setSelectedId(target?.id ?? null);
       }
       return;
@@ -961,7 +966,7 @@ export default function VectorCollisionEditor() {
       const current = cloneDocument(docRef.current);
       const shape = current.shapes.find(item => item.id === gesture.shapeId);
       if (!shape) return;
-      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, 10 / cameraRef.current.zoom);
+      const snapped = snapPoint(current.shapes.filter(item => item.id !== shape.id), point, EDITOR_TOUCH_RADIUS_WORLD(cameraRef.current.zoom));
       const replacementPoint = snapped.kind === "none" ? point : snapped.point;
       const next: CollisionDocument = {
         ...current,
@@ -1000,7 +1005,7 @@ export default function VectorCollisionEditor() {
       const points = [...gesture.points];
       const end = worldPoint(event);
       const camera = cameraRef.current;
-      const endSnap = snapPoint(docRef.current.shapes, end, 12 / camera.zoom);
+      const endSnap = snapPoint(docRef.current.shapes, end, EDITOR_TOUCH_RADIUS_WORLD(camera.zoom));
       const snappedEnd = endSnap.kind === "none" ? end : endSnap.point;
       const last = points[points.length - 1];
       if (last && Math.hypot(snappedEnd[0] - last[0], snappedEnd[1] - last[1]) >= 0.5 / camera.zoom) {
