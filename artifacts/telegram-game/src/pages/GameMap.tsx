@@ -75,6 +75,8 @@ import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings
 import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
+import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
+import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
@@ -1291,18 +1293,26 @@ export default function GameMap() {
       const ch  = canvas.height;
       const dpr = getRenderDpr();
 
-      const srcW = (cw / dpr) / ZOOM;
-      const srcH = (ch / dpr) / ZOOM;
-
-      // Keep camera lag below one character-footprint at full run speed.
-      // A 72ms time constant left the player visibly drifting ~30 map-pixels
-      // behind the viewport centre during sustained joystick movement.
-      // 16ms preserves sub-frame smoothing without making the camera feel detached.
-      const cameraBlend = 1 - Math.exp(-dtMs / 16);
-      cameraX += (px - cameraX) * cameraBlend;
-      cameraY += (py - cameraY) * cameraBlend;
-      const srcX = Math.max(0, Math.min(MAP_W - srcW, cameraX - srcW / 2));
-      const srcY = Math.max(0, Math.min(MAP_H - srcH, cameraY - srcH / 2));
+      // Camera smoothing and viewport math live in pure helpers so their
+      // frame-rate and world-boundary contracts can be tested independently.
+      const cameraCenter = stepCameraCenter(
+        { x: cameraX, y: cameraY },
+        { x: px, y: py },
+        dtMs,
+      );
+      cameraX = cameraCenter.x;
+      cameraY = cameraCenter.y;
+      const viewport = getCameraViewport({
+        canvasWidth: cw,
+        canvasHeight: ch,
+        dpr,
+        zoom: ZOOM,
+        centerX: cameraX,
+        centerY: cameraY,
+        mapWidth: MAP_W,
+        mapHeight: MAP_H,
+      });
+      const { srcX, srcY, srcW, srcH, scale } = viewport;
       // Camera/collision coordinates use canonical world pixels. The loaded
       // PNG and higher-resolution WebP do not share the same source-pixel scale.
       const mapSourceRect = mapWorldRectToImagePixels(
@@ -1862,17 +1872,20 @@ export default function GameMap() {
     return () => cancelAnimationFrame(rafId);
   }, [loaded, spriteLoaded, sendMove, remotePlayersRef]);
 
-  const useActionKind = nearestTask !== null && myRole === 'crewmate'
-    ? 'task'
-    : nearestRepairPad !== null
-      ? 'repair'
-      : amIImpostor && nearestVentId !== null && myVentId === null
-        ? 'vent'
-        : nearestAdminTableId !== null
-          ? 'admin'
-          : null;
-  const useActionEnabled = useActionKind !== null && activeTaskId === null &&
-    myVentId === null && !showAdminTable && !showMiniMap;
+  const useActionState = {
+    hasNearbyTask: nearestTask !== null,
+    isCrewmate: myRole === 'crewmate',
+    hasNearbyRepairPad: nearestRepairPad !== null,
+    isImpostor: amIImpostor,
+    hasNearbyVent: nearestVentId !== null,
+    isInVent: myVentId !== null,
+    hasNearbyAdminTable: nearestAdminTableId !== null,
+    hasActiveTask: activeTaskId !== null,
+    showAdminTable,
+    showMiniMap,
+  };
+  const useActionKind = getUseActionKind(useActionState);
+  const useActionEnabled = isUseActionEnabled(useActionKind, useActionState);
 
   return (
     <div
