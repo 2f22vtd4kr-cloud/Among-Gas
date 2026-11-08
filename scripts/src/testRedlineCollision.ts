@@ -95,7 +95,7 @@ assert.strictEqual(PRODUCTION_COLLISION_DOCUMENT, replacement);
 assert.strictEqual(GENERATED_COLLISION_PREVIEW_DOCUMENT, replacement);
 assert.strictEqual(PRODUCTION_COLLISION_WORLD, getProductionCollisionWorld());
 assert.strictEqual(GENERATED_COLLISION_PREVIEW_WORLD, getProductionCollisionWorld());
-assert.throws(() => replaceProductionCollisionDocument({ ...replacement, mapW: 0 }), /invalid collision candidate/i);
+assert.throws(() => replaceProductionCollisionDocument({ ...replacement, mapW: 0 }), /Refusing invalid production collision candidate/i);
 assert.strictEqual(getProductionCollisionDocument(), replacement,
   "a rejected replacement must leave the current production world intact");
 
