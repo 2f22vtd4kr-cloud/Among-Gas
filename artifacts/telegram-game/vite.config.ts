@@ -58,7 +58,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
         const route = (req.url || '/').split('?')[0];
-        const zoneMatch = route.match(/^\/zones\/([A-E])$/);
+        const zoneMatch = route.match(/^\/zones\/([A-L])$/);
         const zone = zoneMatch?.[1] ?? null;
         if (route !== '/document' && zone === null) {
           next();
