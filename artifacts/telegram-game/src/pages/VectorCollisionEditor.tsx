@@ -1452,7 +1452,11 @@ export default function VectorCollisionEditor() {
               <select
                 aria-label="Selected shape zone"
                 value={selected.zone ?? "unassigned"}
-                onChange={event => updateSelected({ zone: event.target.value === "unassigned" ? undefined : event.target.value })}
+                onChange={event => {
+                  const value = event.target.value;
+                  setZone(value);
+                  updateSelected({ zone: value === "unassigned" ? undefined : value });
+                }}
                 style={{ minHeight: 40, maxWidth: 100, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}
               >
                 <option value="unassigned">Unassigned</option>
