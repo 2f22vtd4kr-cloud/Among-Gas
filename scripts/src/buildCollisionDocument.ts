@@ -134,15 +134,9 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     if(closed&&area(points)<1) continue;
     shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:editorZone(points)});
   }
-  // The reference traces the garden perimeter but intentionally leaves the
-  // statue base itself unoutlined. Plan 2's measured pedestal footprint is
-  // restored as its own solid while the surrounding planter remains walkable.
-  shapes.push({
-    id:"statue-pedestal",
-    points:[[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]],
-    closed:true,blocksMove:true,blocksSight:false,
-    label:"measured statue pedestal footprint",zone:editorZone([[1700,480],[1710,464],[1780,464],[1790,480],[1790,515],[1780,531],[1710,531],[1700,515]]),
-  });
+  // The red-line reference does not author a statue-pedestal contour.
+  // Do not promote the old estimated rectangle as production movement geometry;
+  // keep the area unclassified until an owner-traced outline is reviewed.
   return shapes;
 }
 async function main():Promise<void> {
