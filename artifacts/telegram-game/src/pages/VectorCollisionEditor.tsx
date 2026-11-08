@@ -192,7 +192,10 @@ function analyzeCandidate(document: EditableDocument): CandidateAnalysis {
     range: number,
     targetRadius: number,
   ): Point | null => {
-    const maxDistance = Math.max(0, range - 8 + targetRadius);
+    // Match GameMap's live target selection exactly: player/target anchor
+    // distance must be within the interaction range. targetRadius affects LOS
+    // only; it must not expand the gameplay interaction radius.
+    const maxDistance = range;
     const colMin = Math.max(0, Math.floor((targetX - maxDistance) / nav.cellX));
     const colMax = Math.min(cols - 1, Math.ceil((targetX + maxDistance) / nav.cellX));
     const rowMin = Math.max(0, Math.floor((targetY - maxDistance) / nav.cellY));
