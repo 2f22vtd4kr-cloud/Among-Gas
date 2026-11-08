@@ -281,6 +281,7 @@ export default function VectorCollisionEditor() {
   const [dirty, setDirty] = useState(false);
   const [localDraft, setLocalDraft] = useState<{ document: EditableDocument; draftPoints: Point[]; activeChain: Point[] } | null>(null);
   const [saving, setSaving] = useState(false);
+  const [zoneBusy, setZoneBusy] = useState(false);
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
   const [blocksSight, setBlocksSight] = useState(true);
@@ -1165,6 +1166,96 @@ export default function VectorCollisionEditor() {
     }
   };
 
+  const saveZone = async () => {
+    if (!["A", "B", "C", "D", "E"].includes(zone)) {
+      setStatus("Select a reviewed map zone A–E before saving a zone candidate.");
+      return;
+    }
+    const zoneShapes = docRef.current.shapes.filter(shape => shape.zone === zone);
+    if (!zoneShapes.length) {
+      setStatus("Zone " + zone + " has no shapes to save. Assign each authored shape to the selected zone.");
+      return;
+    }
+    const zoneDocument: EditableDocument = { ...docRef.current, shapes: zoneShapes };
+    const errors = validateCollisionDocument(zoneDocument);
+    if (errors.length) {
+      setStatus("Zone " + zone + " cannot be saved: " + errors.slice(0, 4).join("; "));
+      return;
+    }
+    setZoneBusy(true);
+    setStatus("Saving zone " + zone + " candidate…");
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
+        body: JSON.stringify(zoneDocument),
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        contentHash?: string;
+        backupCount?: number;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone save rejected (" + response.status + ")");
+      if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
+        throw new Error("Zone save response did not include a valid SHA-256 content hash");
+      }
+      setStatus(
+        "Zone " + zone + " saved · " + zoneShapes.length + " shapes · SHA-256 " +
+        result.contentHash.slice(0, 12) + " · " + (result.backupCount ?? 0) +
+        " retained zone backups. Full candidate and live gameplay are unchanged.",
+      );
+    } catch (error) {
+      setStatus("Zone " + zone + " save failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
+  const loadZone = async () => {
+    if (!["A", "B", "C", "D", "E"].includes(zone)) {
+      setStatus("Select a saved zone A–E to load.");
+      return;
+    }
+    setZoneBusy(true);
+    setStatus("Loading zone " + zone + " candidate…");
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone, {
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        saved?: boolean;
+        document?: EditableDocument;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone load rejected (" + response.status + ")");
+      if (!result.saved || !result.document?.shapes?.length) {
+        setStatus("No saved candidate exists for zone " + zone + ".");
+        return;
+      }
+      if (result.document.shapes.some(shape => shape.zone !== zone)) {
+        throw new Error("Saved zone file contains a shape assigned to another zone");
+      }
+      const current = cloneDocument(docRef.current);
+      const merged: EditableDocument = {
+        ...current,
+        shapes: [
+          ...current.shapes.filter(shape => shape.zone !== zone),
+          ...result.document.shapes,
+        ],
+      };
+      const errors = validateCollisionDocument(merged);
+      if (errors.length) {
+        throw new Error("Zone merge rejected: " + errors.slice(0, 4).join("; "));
+      }
+      replaceDocument(merged);
+      setStatus("Loaded " + result.document.shapes.length + " saved shapes for zone " + zone + " into the unsaved working document.");
+    } catch (error) {
+      setStatus("Zone " + zone + " load failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
   const restoreLocalDraft = () => {
     if (!localDraft) return;
     replaceDocument(localDraft.document);
@@ -1286,6 +1377,8 @@ export default function VectorCollisionEditor() {
           <option value="D">D · south-west</option>
           <option value="E">E · south-east</option>
         </select>
+        <button type="button" style={buttonStyle()} onClick={() => void loadZone()} disabled={zoneBusy || saving || zone === "unassigned"}>Load zone</button>
+        <button type="button" style={buttonStyle()} onClick={() => void saveZone()} disabled={zoneBusy || saving || zone === "unassigned" || !document.shapes.some(shape => shape.zone === zone)}>Save zone</button>
         <button type="button" style={buttonStyle()} onClick={exportDocument}>Export JSON</button>
         <label style={{ ...buttonStyle(), display: "inline-flex", alignItems: "center" }}>
           Import JSON<input type="file" accept="application/json,.json" onChange={importDocument} style={{ display: "none" }} />
@@ -1311,6 +1404,8 @@ export default function VectorCollisionEditor() {
           data-analysis-task-count={analysis?.tasks.length ?? ""}
           data-analysis-vent-count={analysis?.vents.length ?? ""}
           data-analysis-unreachable-count={analysis ? analysis.tasks.filter(t => !t.reachable).length + analysis.vents.filter(v => !v.reachable).length : ""}
+          data-zone={zone}
+          data-zone-busy={zoneBusy ? "true" : "false"}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
