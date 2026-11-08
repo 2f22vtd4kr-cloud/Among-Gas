@@ -20,6 +20,8 @@ const world = getProductionCollisionWorld();
 assert.equal(document.source?.kind, "redline-vector");
 assert.ok(document.shapes.length >= 80);
 assert.equal(world.shapes.length, document.shapes.length);
+assert.ok(document.shapes.every(shape => !shape.blocksSight),
+  "movement-only red-line traces must not silently become vision occluders");
 assert.ok(world.isPlayerSpawnPositionClear(PLAYER_SPAWN_X, PLAYER_SPAWN_Y),
   "the real player spawn must be clear under the same red-line geometry used at runtime");
 const statuePedestal = document.shapes.find(shape => shape.id === "statue-pedestal");
