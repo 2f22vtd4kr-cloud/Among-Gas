@@ -126,6 +126,19 @@ try {
   assert.equal(metrics.height, 1401, 'runtime atlas must preserve the authored source height');
   assert.equal(metrics.columns, 18, 'runtime canvas must contain eighteen palette columns');
   assert.equal(metrics.frames.length, 18 * poseWindows.length, 'all 162 palette/pose cells must be sampled');
+
+  // Pin the complete pixel/alpha matrix to the reviewed source-atlas baseline.
+  // This is a regression fingerprint, not a claim that the art has received new design approval.
+  const goldenMaterial = metrics.frames.map(frame =>
+    `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
+  ).join("\\n");
+  let goldenFingerprint = 14695981039346656037n;
+  for (let index = 0; index < goldenMaterial.length; index++) {
+    goldenFingerprint ^= BigInt(goldenMaterial.charCodeAt(index));
+    goldenFingerprint = BigInt.asUintN(64, goldenFingerprint * 1099511628211n);
+  }
+  assert.equal(goldenFingerprint.toString(16).padStart(16, "0"), "5988b3d64df78b5e",
+    "all 162 runtime palette/pose pixel and alpha-bound cells must match the pinned golden matrix");
   for (const pose of poseWindows) {
     const poseFrames = metrics.frames.filter(frame => frame.pose === pose.pose);
     assert.equal(poseFrames.length, 18, `${pose.pose}: all eighteen colors must be captured`);
