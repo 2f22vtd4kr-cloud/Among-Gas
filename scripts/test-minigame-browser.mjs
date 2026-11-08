@@ -20,7 +20,7 @@ try {
   page.on("pageerror", error => errors.push(error.message));
 
   for (let taskId = 0; taskId < 11; taskId++) {
-    await page.goto(base + "/dev/minigame-test?task=" + taskId, { waitUntil: "domcontentloaded" });
+    await page.goto(base + "/dev/minigame-test?task=" + taskId + "&mock=task-interaction", { waitUntil: "domcontentloaded" });
     const pageRoot = page.getByTestId("minigame-test-page");
     await pageRoot.waitFor({ state: "visible", timeout: 10_000 });
     assert.equal(await pageRoot.getAttribute("data-task-id"), String(taskId),
@@ -67,7 +67,7 @@ try {
     completed.push(taskId);
   }
 
-  await page.goto(base + "/dev/minigame-test?task=99", { waitUntil: "domcontentloaded" });
+  await page.goto(base + "/dev/minigame-test?task=99&mock=task-interaction", { waitUntil: "domcontentloaded" });
   await page.getByTestId("minigame-invalid").waitFor({ state: "visible" });
   assert.deepEqual(errors, [], "all eleven minigame modules must remain free of browser runtime errors");
   assert.deepEqual(completed, Array.from({ length: 11 }, (_, index) => index));
