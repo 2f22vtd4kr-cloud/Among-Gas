@@ -27,6 +27,7 @@ import {
   type CharacterPose,
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
+import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
 import {
   CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
   CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
@@ -483,7 +484,7 @@ export default function GameMap() {
   useEffect(() => {
     miniMapOpenRef.current = showMiniMap;
     // Prevent the keyboard and joystick from moving the player behind the modal.
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [showMiniMap]);
 
@@ -788,7 +789,7 @@ export default function GameMap() {
   const adminTableOpenRef = useRef(false);
   useEffect(() => {
     adminTableOpenRef.current = showAdminTable;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [showAdminTable]);
 
@@ -1057,34 +1058,36 @@ export default function GameMap() {
   useEffect(() => {
     gameplayReadyRef.current = gameplayReady;
     if (!gameplayReady) {
-      keysRef.current.clear();
+      clearMovementInput(keysRef.current);
       pendingSentRef.current.length = 0;
     }
   }, [gameplayReady]);
   useEffect(() => {
     if (!settingsOpen) return;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [settingsOpen]);
   useEffect(() => {
     if (!leaveConfirmOpen) return;
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [leaveConfirmOpen]);
   useEffect(() => {
-    const tracked = new Set(['w','a','s','d','arrowup','arrowdown','arrowleft','arrowright']);
-    const onDown  = (e: KeyboardEvent) => {
+    const onDown = (e: KeyboardEvent) => {
       unlockSfx();
       const target = e.target instanceof HTMLElement ? e.target : null;
-      if (target?.closest('input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]')) return;
-      if (settingsOpenRef.current || leaveConfirmOpenRef.current) return;
-      const k = e.key.toLowerCase();
-      if (!tracked.has(k)) return;
+      const isEditableTarget = Boolean(target?.closest(
+        'input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]',
+      ));
+      const modalOpen = settingsOpenRef.current || leaveConfirmOpenRef.current;
+      if (!shouldCaptureMovementKey(e.key, isEditableTarget, modalOpen)) return;
       e.preventDefault();
-      keysRef.current.add(k);
+      setMovementInputKey(keysRef.current, e.key, true);
     };
-    const onUp   = (e: KeyboardEvent) => { keysRef.current.delete(e.key.toLowerCase()); };
-    const clear  = () => keysRef.current.clear();
+    const onUp = (e: KeyboardEvent) => {
+      setMovementInputKey(keysRef.current, e.key, false);
+    };
+    const clear = () => clearMovementInput(keysRef.current);
     window.addEventListener('keydown', onDown);
     window.addEventListener('keyup',   onUp);
     window.addEventListener('blur',    clear);
@@ -1138,7 +1141,7 @@ export default function GameMap() {
       const vent = findVent(myVentId);
       if (vent) playerStateRef.current = { ...playerStateRef.current, x: vent.x, y: vent.y };
     }
-    keysRef.current.clear();
+    clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [myVentId]);
 
