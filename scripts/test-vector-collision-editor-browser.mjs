@@ -179,6 +179,7 @@ try {
   // drag rather than accidentally committing a stray segment.
   const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
+    console.log("PINCH TAKEOVER TEST:", mode);
     await page.getByRole("button", { name: mode }).click();
     const beforeZoom = Number(await canvas.getAttribute("data-zoom"));
     const beforeShapes = Number(await canvas.getAttribute("data-shape-count"));
@@ -204,11 +205,16 @@ try {
       ],
     });
     await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForFunction(
-      before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,
-      beforeZoom,
-      { timeout: 5000 },
-    );
+    try {
+      await page.waitForFunction(
+        before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,
+        beforeZoom,
+        { timeout: 5000 },
+      );
+    } catch (error) {
+      const observedZoom = Number(await canvas.getAttribute("data-zoom"));
+      throw new Error("Pinch takeover failed in " + mode + ": zoom " + beforeZoom + " -> " + observedZoom, { cause: error });
+    }
     assert.equal(
       Number(await canvas.getAttribute("data-shape-count")),
       beforeShapes,
