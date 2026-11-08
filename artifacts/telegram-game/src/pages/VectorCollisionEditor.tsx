@@ -11,6 +11,15 @@ import {
   type CollisionShape,
   type Point,
 } from "@workspace/shared/collision";
+import {
+  FEET_OFFSET_Y,
+  MAP_H,
+  MAP_W,
+  PLAYER_SPAWN_X,
+  PLAYER_SPAWN_Y,
+} from "@workspace/shared/coords";
+import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
+import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 
 type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision" | "loupe";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
@@ -24,8 +33,6 @@ type Gesture =
   | { kind: "vision"; point: Point; clientX: number; clientY: number }
   | { kind: "vertex"; shapeId: string; index: number };
 
-const MAP_W = 3224;
-const MAP_H = 1858;
 const LOCAL_DRAFT_KEY = "among-gas:vector-collision-editor:v1";
 const EMPTY_DOCUMENT: EditableDocument = {
   version: 1,
@@ -51,6 +58,186 @@ function cloneDocument(document: CollisionDocument): EditableDocument {
       ...shape,
       points: shape.points.map(point => [point[0], point[1]] as Point),
     })),
+  };
+}
+
+
+interface AnalysisTarget {
+  id: string;
+  name: string;
+  reachable: boolean;
+  approach: Point | null;
+}
+
+interface CandidateAnalysis {
+  validationErrors: string[];
+  walkableCells: number;
+  spawnReachableCells: number;
+  componentCount: number;
+  disconnectedComponents: Array<{ cells: number; center: Point }>;
+  narrowCells: number;
+  tasks: AnalysisTarget[];
+  vents: AnalysisTarget[];
+  unassignedShapes: number;
+}
+
+function analyzeCandidate(document: EditableDocument): CandidateAnalysis {
+  const validationErrors = validateCollisionDocument(document);
+  const world = new CollisionWorld(document.shapes);
+  const cols = 208;
+  const rows = 116;
+  const nav = world.rasterizePlayerNav(cols, rows);
+  const cellCount = nav.walk.length;
+  const queue = new Int32Array(cellCount);
+  const colOf = (index: number) => index % cols;
+  const rowOf = (index: number) => Math.floor(index / cols);
+  const centerOf = (index: number): Point => [
+    (colOf(index) + 0.5) * nav.cellX,
+    (rowOf(index) + 0.5) * nav.cellY,
+  ];
+  const spawnFeet: Point = [PLAYER_SPAWN_X, PLAYER_SPAWN_Y + FEET_OFFSET_Y];
+  const spawnCol = Math.max(0, Math.min(cols - 1, Math.floor(spawnFeet[0] / nav.cellX)));
+  const spawnRow = Math.max(0, Math.min(rows - 1, Math.floor(spawnFeet[1] / nav.cellY)));
+  let start = spawnRow * cols + spawnCol;
+
+  if (nav.walk[start] !== 1) {
+    let nearest = -1;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    for (let radius = 1; radius <= 8; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue;
+          const col = spawnCol + dx, row = spawnRow + dy;
+          if (col < 0 || row < 0 || col >= cols || row >= rows) continue;
+          const index = row * cols + col;
+          if (nav.walk[index] !== 1) continue;
+          const [x, y] = centerOf(index);
+          const distance = Math.hypot(x - spawnFeet[0], y - spawnFeet[1]);
+          if (distance < nearestDistance) { nearest = index; nearestDistance = distance; }
+        }
+      }
+      if (nearest >= 0) break;
+    }
+    if (nearest < 0) throw new Error("No walkable player-footprint cell exists near the production spawn.");
+    start = nearest;
+  }
+
+  const flood = (seed: number, marks: Uint8Array): { count: number; sumX: number; sumY: number } => {
+    let head = 0, tail = 0, sumX = 0, sumY = 0;
+    queue[tail++] = seed;
+    marks[seed] = 1;
+    while (head < tail) {
+      const index = queue[head++];
+      const col = colOf(index), row = rowOf(index);
+      const [x, y] = centerOf(index);
+      sumX += x; sumY += y;
+      for (const [dx, dy] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
+        const nextCol = col + dx, nextRow = row + dy;
+        if (nextCol < 0 || nextRow < 0 || nextCol >= cols || nextRow >= rows) continue;
+        const next = nextRow * cols + nextCol;
+        if (nav.walk[next] === 1 && marks[next] === 0) {
+          marks[next] = 1;
+          queue[tail++] = next;
+        }
+      }
+      // Do not allow diagonal corner cutting through two blocked orthogonal cells.
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
+        const nextCol = col + dx, nextRow = row + dy;
+        if (nextCol < 0 || nextRow < 0 || nextCol >= cols || nextRow >= rows) continue;
+        const sideA = row * cols + nextCol;
+        const sideB = nextRow * cols + col;
+        const next = nextRow * cols + nextCol;
+        if (nav.walk[next] === 1 && nav.walk[sideA] === 1 && nav.walk[sideB] === 1 && marks[next] === 0) {
+          marks[next] = 1;
+          queue[tail++] = next;
+        }
+      }
+    }
+    return { count: tail, sumX, sumY };
+  };
+
+  const reachable = new Uint8Array(cellCount);
+  const spawnFlood = flood(start, reachable);
+  let walkableCells = 0;
+  let narrowCells = 0;
+  for (let index = 0; index < cellCount; index++) {
+    if (nav.walk[index] !== 1) continue;
+    walkableCells++;
+    const [x, y] = centerOf(index);
+    if (world.isWalkable(x, y, 0) && !world.isPlayerWalkableAtFeet(x, y)) narrowCells++;
+  }
+
+  const components = new Uint8Array(cellCount);
+  const summaries: Array<{ cells: number; center: Point }> = [];
+  let componentCount = 0;
+  for (let index = 0; index < cellCount; index++) {
+    if (nav.walk[index] !== 1 || components[index] !== 0) continue;
+    const containsSpawn = reachable[index] === 1;
+    const component = flood(index, components);
+    componentCount++;
+    if (!containsSpawn) {
+      summaries.push({
+        cells: component.count,
+        center: [component.sumX / component.count, component.sumY / component.count],
+      });
+    }
+  }
+  summaries.sort((a, b) => b.cells - a.cells);
+
+  const findApproach = (
+    targetX: number,
+    targetY: number,
+    range: number,
+    targetRadius: number,
+  ): Point | null => {
+    const maxDistance = Math.max(0, range - 8 + targetRadius);
+    const colMin = Math.max(0, Math.floor((targetX - maxDistance) / nav.cellX));
+    const colMax = Math.min(cols - 1, Math.ceil((targetX + maxDistance) / nav.cellX));
+    const rowMin = Math.max(0, Math.floor((targetY - maxDistance) / nav.cellY));
+    const rowMax = Math.min(rows - 1, Math.ceil((targetY + maxDistance) / nav.cellY));
+    const candidates: Array<{ point: Point; distance: number }> = [];
+    for (let row = rowMin; row <= rowMax; row++) {
+      for (let col = colMin; col <= colMax; col++) {
+        const index = row * cols + col;
+        if (reachable[index] !== 1) continue;
+        const point = centerOf(index);
+        const distance = Math.hypot(point[0] - targetX, point[1] - targetY);
+        if (distance <= maxDistance) candidates.push({ point, distance });
+      }
+    }
+    candidates.sort((a, b) => a.distance - b.distance);
+    for (const candidate of candidates.slice(0, 16)) {
+      if (world.isLineOfSightToInteractionTarget(
+        candidate.point[0], candidate.point[1], targetX, targetY, targetRadius,
+      )) return candidate.point;
+    }
+    return null;
+  };
+
+  const tasks: AnalysisTarget[] = TASK_DEFS.map(task => {
+    const approach = findApproach(
+      task.x, task.y + FEET_OFFSET_Y, TASK_INTERACTION_RANGE_PX,
+      task.interactionTargetRadiusPx ?? 24,
+    );
+    return { id: String(task.id), name: task.name, reachable: approach !== null, approach };
+  });
+  const vents: AnalysisTarget[] = VENT_DEFS.map(vent => {
+    const approach = findApproach(
+      vent.x, vent.y + FEET_OFFSET_Y, VENT_INTERACTION_RANGE_PX, 20,
+    );
+    return { id: String(vent.id), name: vent.name, reachable: approach !== null, approach };
+  });
+
+  return {
+    validationErrors,
+    walkableCells,
+    spawnReachableCells: spawnFlood.count,
+    componentCount,
+    disconnectedComponents: summaries.slice(0, 8),
+    narrowCells,
+    tasks,
+    vents,
+    unassignedShapes: document.shapes.filter(shape => !("zone" in shape) || !shape.zone || shape.zone === "unassigned").length,
   };
 }
 
@@ -104,6 +291,7 @@ export default function VectorCollisionEditor() {
   const [walkStatus, setWalkStatus] = useState("");
   const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
   const [loupe, setLoupe] = useState<{ world: Point; screenX: number; screenY: number } | null>(null);
+  const [analysis, setAnalysis] = useState<CandidateAnalysis | null>(null);
   const candidateWorld = useMemo(() => {
     try {
       return new CollisionWorld(document.shapes);
@@ -475,6 +663,7 @@ export default function VectorCollisionEditor() {
   }, [document, draftPoints, activeChain, dirty, loaded]);
 
   useEffect(() => { scheduleDraw(); }, [scheduleDraw, document, selectedId, draftPoints, previewPoint, walkPoints, activeChain, draftWallPoints, visionOrigin]);
+  useEffect(() => { setAnalysis(null); }, [document]);
 
   const worldPointAt = (clientX: number, clientY: number): Point => {
     const canvas = canvasRef.current;
@@ -1021,6 +1210,22 @@ export default function VectorCollisionEditor() {
 
   if (!import.meta.env.DEV) return null;
 
+  const runAnalysis = () => {
+    try {
+      const result = analyzeCandidate(document);
+      setAnalysis(result);
+      const unreachable = result.tasks.filter(target => !target.reachable).length +
+        result.vents.filter(target => !target.reachable).length;
+      setStatus(
+        "Candidate analysis complete · " + result.spawnReachableCells + "/" + result.walkableCells +
+        " player-walkable cells spawn-reachable · " + unreachable + " unreachable task/vent targets.",
+      );
+    } catch (error) {
+      setAnalysis(null);
+      setStatus("Candidate analysis failed: " + (error instanceof Error ? error.message : String(error)));
+    }
+  };
+
   const buttonStyle = (active = false): React.CSSProperties => ({
     flex: "0 0 auto",
     minHeight: 48,
@@ -1060,6 +1265,7 @@ export default function VectorCollisionEditor() {
         <button type="button" style={buttonStyle(walkPoints.length > 0)} onClick={() => { walkPointsRef.current = []; setWalkPoints([]); setWalkStatus(""); }}>Clear route test</button>
         <button type="button" style={buttonStyle(visionOrigin !== null)} onClick={() => setVisionOrigin(null)} disabled={!visionOrigin}>Clear vision preview</button>
         <button type="button" style={buttonStyle(loupe !== null)} onClick={() => setLoupe(null)} disabled={!loupe}>Clear loupe</button>
+        <button type="button" style={buttonStyle(analysis !== null)} onClick={runAnalysis}>Analyze candidate</button>
       </nav>
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
@@ -1102,6 +1308,9 @@ export default function VectorCollisionEditor() {
           data-vision-origin={visionOrigin ? visionOrigin.join(",") : ""}
           data-loupe-active={loupe ? "true" : "false"}
           data-loupe-origin={loupe ? loupe.world.join(",") : ""}
+          data-analysis-task-count={analysis?.tasks.length ?? ""}
+          data-analysis-vent-count={analysis?.vents.length ?? ""}
+          data-analysis-unreachable-count={analysis ? analysis.tasks.filter(t => !t.reachable).length + analysis.vents.filter(v => !v.reachable).length : ""}
           data-active-chain-point-count={activeChain.length}
           data-draft-wall-point-count={draftWallPoints.length}
           onWheel={onWheel}
@@ -1114,6 +1323,25 @@ export default function VectorCollisionEditor() {
         />
         {!loaded && <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", background: "rgba(10,18,26,.84)", fontSize: 14 }}>Loading geometry workspace…</div>}
       </div>
+
+      {analysis && (
+        <section
+          data-candidate-analysis="complete"
+          style={{ padding: "8px 12px", background: "#1b2a36", borderTop: "1px solid #445b6b", fontSize: 11, lineHeight: 1.5, maxHeight: 150, overflow: "auto" }}
+        >
+          <strong>Candidate-only geometry analysis</strong>
+          <span> · {analysis.validationErrors.length} validation errors · {analysis.componentCount} walkable components · {analysis.narrowCells} narrow-footprint cells · {analysis.unassignedShapes} unassigned shapes</span>
+          <div>Tasks reachable from spawn with interaction LOS: {analysis.tasks.filter(target => target.reachable).length}/{analysis.tasks.length}. Vents: {analysis.vents.filter(target => target.reachable).length}/{analysis.vents.length}.</div>
+          {analysis.validationErrors.slice(0, 3).map((error, index) => <div key={"validation-" + index} style={{ color: "#ff999f" }}>Geometry: {error}</div>)}
+          {[...analysis.tasks, ...analysis.vents].filter(target => !target.reachable).map(target => (
+            <div key={target.id + target.name} style={{ color: "#ffd17c" }}>Unreachable: {target.name} ({analysis.tasks.includes(target) ? "task" : "vent"})</div>
+          ))}
+          {analysis.disconnectedComponents.slice(0, 3).map((component, index) => (
+            <div key={"island-" + index}>Disconnected island {index + 1}: {component.cells} player cells near {Math.round(component.center[0])},{Math.round(component.center[1])}</div>
+          ))}
+          <div style={{ color: "#91aebe" }}>Diagnostic only. Narrow cells and disconnected areas require author review; no geometry is changed or automatically accepted.</div>
+        </section>
+      )}
 
       <footer style={{ padding: "8px 10px", background: "#182633", borderTop: "1px solid #334c5e", fontSize: 11, color: "#b8cbd6", display: "flex", gap: 10, flexWrap: "wrap" }}>
         <span>{status}{walkStatus ? " · " + walkStatus : ""}</span>
