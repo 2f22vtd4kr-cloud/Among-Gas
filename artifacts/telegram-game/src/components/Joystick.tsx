@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { useLanguage } from '../lib/language';
-import { applyJoystickDirection, clearMovementInput } from '../game/gameInput';
+import { applyJoystickDirection, clearJoystickMovementInput } from '../game/gameInput';
 
 const BASE_RADIUS = 52;
 const KNOB_RADIUS = 22;
@@ -27,7 +27,7 @@ export default function Joystick({ keysRef }: JoystickProps) {
   function resetJoystick() {
     activePointer.current = null;
     if (knobRef.current) knobRef.current.style.transform = 'translate(-50%, -50%)';
-    clearMovementInput(keysRef.current);
+    clearJoystickMovementInput(keysRef.current);
   }
 
   function updatePointer(clientX: number, clientY: number) {
