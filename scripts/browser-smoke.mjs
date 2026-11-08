@@ -676,8 +676,9 @@ try {
     await page.goto(`${origin}/?mock=task-interaction-gallery&taskId=${taskId}`, {
       waitUntil: 'domcontentloaded',
     });
-    await page.waitForSelector('.ag-character-sprite[data-pose]', { timeout: 30_000 });
+    await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
     await page.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 30_000 });
+    // Role reveal art is transient and must not be required on subsequent fixture reloads.
     await waitForRoleRevealToFinish(page);
     const galleryUse = page.getByTestId('game-action-use');
     await galleryUse.waitFor({ state: 'visible', timeout: 10_000 });
