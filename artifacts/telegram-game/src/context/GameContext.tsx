@@ -410,6 +410,15 @@ const MOCK_PRESETS: Record<string, MockPreset> = {
     },
     remotePlayers: MOCK_REMOTE_POSITIONS,
   },
+  // HUD acceptance: living crewmate with no nearby task, body, or impostor target.
+  // The persistent Use and Report controls must remain visible but disabled.
+  'crew-idle': {
+    state: {
+      phase: 'playing', mySlot: 0, hostSlot: 0, players: MOCK_PLAYERS_GAME,
+      myRole: 'crewmate', impostorSlots: [], myTasks: [],
+    },
+    remotePlayers: MOCK_REMOTE_POSITIONS,
+  },
   // Phase 7 — crewmate with tasks assigned; task progress bar visible.
   'task-playing': {
     state: {
