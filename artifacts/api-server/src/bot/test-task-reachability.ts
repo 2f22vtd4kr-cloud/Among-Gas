@@ -80,7 +80,13 @@ function assertRoute(start: Point, goal: Point, label: string): void {
     stalledTicks = moved < 0.01 ? stalledTicks + 1 : 0;
     if (stalledTicks >= 20) break;
   }
-  console.log(`taskRoute ${JSON.stringify({ label, start, goal, end: { x: player.x, y: player.y }, arrived, stalledTicks })}`);
+  const startWalkable = isPlayerPositionWalkable(movementGrid, start.x, start.y);
+  const startGraphReachable = isBotNavigationReachable(start.x, start.y + FEET_OFFSET_Y);
+  console.log(`taskRoute ${JSON.stringify({
+    label, start, startWalkable, startGraphReachable, goal,
+    end: { x: player.x, y: player.y }, arrived, stalledTicks,
+    remainingDistancePx: Math.round(Math.hypot(goal.x - player.x, goal.y - player.y)),
+  })}`);
   assert.ok(arrived, `production bot path follower must reach ${label} from the observed start point`);
 }
 
