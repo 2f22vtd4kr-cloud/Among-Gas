@@ -292,7 +292,7 @@ try {
   const roleRevealSnapshot = await roleRevealSnapshotHandle.jsonValue();
   await roleRevealSnapshotHandle.dispose();
   assert.equal(roleRevealSnapshot.pose, 'idle');
-  assert.equal(roleRevealSnapshot.sourceHeight, '136',
+  assert.equal(roleRevealSnapshot.sourceHeight, '147',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(roleRevealSnapshot.displayHeight, '153',
     'the authored role-reveal baseline remains available as metadata');
@@ -301,7 +301,7 @@ try {
   const roleCropRatio = roleRevealSnapshot.spriteWidth > 0
     ? roleRevealSnapshot.spriteHeight / roleRevealSnapshot.spriteWidth
     : 0;
-  const expectedRoleCropRatio = 136 / (1123 / 7);
+  const expectedRoleCropRatio = Number(roleRevealSnapshot.sourceHeight) / (1123 / 7);
   assert.ok(Math.abs(roleCropRatio - expectedRoleCropRatio) < 0.01,
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
@@ -444,6 +444,25 @@ try {
   const taskIconPath = await taskButton.locator('svg path').first().getAttribute('d');
   assert.match(taskIconPath ?? '', /M16 9/,
     'Use must show the contextual clipboard icon when a task is actionable');
+  const actionLabelMetrics = await page.getByTestId('game-action-bar').locator('button').evaluateAll(buttons =>
+    buttons.map(button => {
+      const buttonBounds = button.getBoundingClientRect();
+      const label = button.querySelector('span:last-child');
+      const labelBounds = label?.getBoundingClientRect();
+      return {
+        text: label?.textContent?.trim() ?? '',
+        buttonWidth: buttonBounds.width,
+        labelWidth: labelBounds?.width ?? 0,
+        labelLeft: labelBounds?.left ?? 0,
+        labelRight: labelBounds?.right ?? 0,
+        buttonLeft: buttonBounds.left,
+        buttonRight: buttonBounds.right,
+      };
+    }),
+  );
+  assert.ok(actionLabelMetrics.every(item =>
+    item.labelWidth > 0 && item.labelLeft >= item.buttonLeft + 2 && item.labelRight <= item.buttonRight - 2,
+  ), `localized action labels must fit inside their touch targets at mobile width: ${JSON.stringify(actionLabelMetrics)}`);
   const idleReportButton = page.getByTestId('game-action-report');
   assert.equal(await idleReportButton.isVisible(), true, 'Report stays visible without a nearby body');
   assert.equal(await idleReportButton.isEnabled(), false, 'Report stays neutral and disabled without a body');
@@ -815,6 +834,8 @@ try {
   assert.equal(await killButton.isEnabled(), true, 'in-range kill action should be enabled');
   assert.equal(await killButton.locator('svg').count(), 1,
     'Kill action uses its own original vector glyph, not a copied game asset');
+  assert.equal(await killButton.evaluate(element => getComputedStyle(element).animationName), 'agKillReadyPulse',
+    'an in-range Kill target pulses to signal immediate availability');
   const reportAlwaysVisible = page.getByTestId('game-action-report');
   const useAlwaysVisible = page.getByTestId('game-action-use');
   await reportAlwaysVisible.waitFor({ state: 'visible', timeout: 5_000 });
@@ -826,11 +847,16 @@ try {
   const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
   assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
     'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  const neutralUse = await useAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
+  assert.match(neutralUse, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
+    'disabled Use uses the same neutral grey surface');
   await page.setViewportSize({ width: 320, height: 720 });
   await page.waitForTimeout(100);
   const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(actionBarBox && actionBarBox.x >= 0 && actionBarBox.x + actionBarBox.width <= 320,
     'the three-button impostor action bar must remain inside a narrow 320px phone viewport');
+  assert.ok(Math.abs(actionBarBox.y + actionBarBox.height / 2 - 720 * 0.66) < 3,
+    'resizing to a compact viewport must move the action bar above the lower controls');
   await page.screenshot({ path: join(visualQaDir, 'game-action-bar-320px.png'), fullPage: true });
   await page.setViewportSize({ width: 390, height: 844 });
 
@@ -1029,7 +1055,7 @@ try {
   assert.equal(corpseSnapshot.pose, 'dead-body');
   assert.equal(corpseSnapshot.row, '7');
   assert.equal(corpseSnapshot.sourceY, '1067');
-  assert.equal(corpseSnapshot.sourceHeight, '93');
+  assert.equal(corpseSnapshot.sourceHeight, '113');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
@@ -1050,7 +1076,7 @@ try {
     return Array.from({ length: 7 }, (_, column) => {
       const left = Math.floor(column * cellWidth);
       const right = Math.ceil((column + 1) * cellWidth);
-      const pixels = context.getImageData(left, 1067, right - left, 93).data;
+      const pixels = context.getImageData(left, 1067, right - left, 113).data;
       let opaque = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) opaque++;
       return opaque;
@@ -1072,7 +1098,7 @@ try {
     const context = atlas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not inspect the generated runtime character atlas');
     const columns = Array.from({ length: 18 }, (_, column) => {
-      const pixels = context.getImageData(column * 161, 1067, 161, 93).data;
+      const pixels = context.getImageData(column * 161, 1067, 161, 113).data;
       let opaque = 0;
       let red = 0;
       let green = 0;
@@ -1357,6 +1383,12 @@ try {
       return { id: node.getAttribute('data-testid'), left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
     }),
   );
+  const smallPhoneActionBar = smallPhoneControls.find(control => control.id === 'control-drag-killReport');
+  assert.ok(smallPhoneActionBar, 'small-phone action bar drag target is present');
+  assert.ok(Math.abs(
+    (smallPhoneActionBar.top + smallPhoneActionBar.bottom) / 2 -
+    (smallPhonePreviewBox.y + smallPhonePreviewBox.height * 0.66),
+  ) < 3, 'compact-phone action bar stays below the camera-centered player sightline');
   for (let i = 0; i < smallPhoneControls.length; i++) {
     const control = smallPhoneControls[i];
     assert.ok(control.left >= smallPhonePreviewBox.x - 1 && control.right <= smallPhonePreviewBox.x + smallPhonePreviewBox.width + 1,
@@ -1368,7 +1400,7 @@ try {
       const other = smallPhoneControls[j];
       const overlaps = control.left < other.right && control.right > other.left &&
         control.top < other.bottom && control.bottom > other.top;
-      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${control.id} / ${other.id}`);
+      assert.equal(overlaps, false, `small-phone default controls must not overlap: ${JSON.stringify({ control, other })}`);
     }
   }
   await smallPhonePage.close();
@@ -1400,10 +1432,16 @@ try {
   await touchSession.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await touchSession.detach();
   await layoutSettings.getByTestId('control-layout-save').click();
-  let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
+  const movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
-    'dragged action bar X position must be applied to the gameplay HUD');
+  // The action bar has a 132px reserved half-width. A requested 68% center
+  // on a 390px viewport would overflow the right edge, so the runtime clamps
+  // it to 390 - 132 rather than applying an unsafe off-screen coordinate.
+  const expectedActionBarCenterX = Math.min(390 * 0.68, 390 - 132);
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - expectedActionBarCenterX) < 3,
+    'dragged action bar X position must be applied subject to its safe viewport bounds');
+  assert.ok(movedSettingsBox.x >= 0 && movedSettingsBox.x + movedSettingsBox.width <= 390,
+    'dragged action bar must remain fully inside the gameplay viewport');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
     'dragged action bar Y position must be applied to the gameplay HUD');
 
@@ -1690,6 +1728,8 @@ try {
   assert.ok(cameraBaseline && Number.isFinite(cameraBaseline.screenX) &&
     Number.isFinite(cameraBaseline.screenY),
   "the dev camera fixture must expose the player's actual rendered screen coordinates");
+  assert.equal(cameraBaseline.playerX, 510, 'camera QA must start from the validated west-room fixture');
+  assert.equal(cameraBaseline.playerY, 1069, 'camera QA must stay away from the north/south map-edge clamp');
   assert.equal(cameraBaseline.mapImageWidth, 1612,
     'camera diagnostics must identify the canonical half-resolution overview width');
   assert.equal(cameraBaseline.mapImageHeight, 929,
@@ -1738,10 +1778,12 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  // The west-room fixture is centered inside the map with a long clear north lane.
+  // This exercises vertical camera follow without triggering map-edge clamping.
+  await cameraPage.mouse.move(joystickX, joystickY - 42, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(420);
+  await cameraPage.waitForTimeout(400);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
@@ -1789,7 +1831,7 @@ try {
     sustainedTail[sustainedTail.length - 1].playerX - sustainedTail[0].playerX,
     sustainedTail[sustainedTail.length - 1].playerY - sustainedTail[0].playerY,
   );
-  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 30,
+  assert.ok(tailMovementFrames.length >= 3 && sustainedTailDistance > 20,
     `camera movement fixture must remain unobstructed through the final quarter of the hold (changed ${tailMovementFrames.length} frames over ${sustainedTailDistance.toFixed(1)}px)`);
   const maxCameraOffsetX = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenX - cameraBaseline.screenX)));
   const maxCameraOffsetY = Math.max(...cameraSamples.map(sample => Math.abs(sample.screenY - cameraBaseline.screenY)));

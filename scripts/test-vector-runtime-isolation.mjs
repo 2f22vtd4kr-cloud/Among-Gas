@@ -3,35 +3,26 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 const root = path.resolve(import.meta.dirname, "..");
-const runtimeRoots = [
-  path.join(root, "artifacts/telegram-game/src"),
-  path.join(root, "artifacts/api-server/src"),
+const required = [
+  ["artifacts/telegram-game/src/pages/GameMap.tsx", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/ws/wsServer.ts", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/ws/lobby.ts", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/bot/BotAgent.ts", /getProductionCollisionWorld/],
+  ["artifacts/api-server/src/sim/simulateGame.ts", /getProductionCollisionWorld/],
 ];
-const forbidden = [
-  /@workspace\/shared\/collision\/productionWorld/,
-  /from\s+['"][^'"]*productionWorld(?:\.js)?['"]/,
-  /\b(?:PRODUCTION_COLLISION_WORLD|getProductionCollisionWorld)\b/,
-];
-
-async function collect(directory) {
-  const files = [];
-  for (const entry of await fs.readdir(directory, { withFileTypes: true })) {
-    const fullPath = path.join(directory, entry.name);
-    if (entry.isDirectory()) files.push(...await collect(fullPath));
-    else if (/\.(?:ts|tsx|js|mjs)$/.test(entry.name)) files.push(fullPath);
-  }
-  return files;
+for (const [relative, pattern] of required) {
+  const source = await fs.readFile(path.join(root, relative), "utf8");
+  assert.match(source, pattern, relative + " must use the authored red-line collision world");
 }
-
-const violations = [];
-for (const runtimeRoot of runtimeRoots) {
-  for (const file of await collect(runtimeRoot)) {
-    const source = await fs.readFile(file, "utf8");
-    for (const pattern of forbidden) {
-      if (pattern.test(source)) violations.push(path.relative(root, file) + ": " + pattern);
-    }
-  }
-}
-assert.deepEqual(violations, [],
-  "The automatically raster-derived vector preview must remain isolated from live gameplay until all zones are authored and reviewed.");
-console.log("Vector runtime isolation passed: client, websocket server, and bots retain the reviewed raster authority.");
+const generator = await fs.readFile(path.join(root, "scripts/src/buildCollisionDocument.ts"), "utf8");
+assert.match(generator, /owner red-line reference|red-line reference/i);
+assert.match(generator, /skeletonize|function thin/);
+assert.doesNotMatch(generator, /buildPreciseCollisionGrid|FINE_RLE_BASE64|MANUAL_BLOCKED_POLYGONS/);
+const document = JSON.parse(await fs.readFile(path.join(root, "lib/shared/src/collision/collision.v1.json"), "utf8"));
+assert.equal(document.source.kind, "redline-vector");
+assert.ok(document.shapes.length >= 80, "generated vector document must contain traced red-line geometry");
+assert.ok(document.source.vectorization.skeletonPixelCount >= 1000);
+const { createHash } = await import("node:crypto");
+const reference = await fs.readFile(path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg"));
+assert.equal(document.source.sourceFiles.redlineReference.sha256, createHash("sha256").update(reference).digest("hex"));
+console.log("Red-line runtime cut-over passed: source hash, vector geometry, client prediction, server authority, and bot navigation share the authored world.");

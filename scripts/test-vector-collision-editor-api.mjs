@@ -4,7 +4,9 @@ import path from "node:path";
 
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
+const seedPath = process.env.VECTOR_COLLISION_EDITOR_SEED_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
+assert.ok(seedPath, "VECTOR_COLLISION_EDITOR_SEED_PATH must point to a disposable seed fixture");
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-A.v1.json");
 const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-A");
@@ -65,15 +67,27 @@ async function postZone(body, requestHeaders = headers) {
 
 try {
   fs.rmSync(documentPath, { force: true });
+  fs.rmSync(seedPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
 
-  const initialResponse = await fetch(endpoint, { cache: "no-store" });
+  const initialResponse = await fetch(endpoint + "?scratch=1", { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
   const initial = await jsonResponse(initialResponse);
   assert.equal(initial.saved, false);
   assert.deepEqual(initial.document.shapes, []);
+
+  fs.writeFileSync(seedPath, JSON.stringify(validDocument));
+  const seedResponse = await fetch(endpoint, { cache: "no-store" });
+  assert.equal(seedResponse.status, 200);
+  const seedResult = await jsonResponse(seedResponse);
+  assert.equal(seedResult.saved, false, "the production seed is not misreported as a saved candidate");
+  assert.equal(seedResult.seeded, true, "the editor can load the production vector seed for review");
+  assert.equal(seedResult.document.shapes.length, 2);
+  const scratchAfterSeed = await fetch(endpoint + "?scratch=1", { cache: "no-store" });
+  assert.deepEqual((await jsonResponse(scratchAfterSeed)).document.shapes, [],
+    "scratch mode remains isolated from the production seed");
 
   const missingHeader = await post(JSON.stringify(validDocument), {
     "Content-Type": "application/json",
@@ -140,6 +154,41 @@ try {
   const backup = JSON.parse(fs.readFileSync(path.join(backupDirectory, backupFiles[0]), "utf8"));
   assert.equal(backup.shapes[0].label, "API test wall", "backup contains the prior saved version");
 
+  // Zone-scoped saves replace only that zone and preserve all other authored regions.
+  const withZoneB = structuredClone(modified);
+  withZoneB.shapes.push({
+    id: "api-test-zone-b",
+    points: [[900, 100], [1000, 100]],
+    closed: false,
+    blocksMove: true,
+    blocksSight: false,
+    castsShadow: false,
+    label: "Zone B boundary",
+    zone: "B",
+  });
+  const addZoneB = await post(JSON.stringify(withZoneB), headers);
+  assert.equal(addZoneB.status, 200);
+  const wrongZonePayload = await fetch(endpoint + "?zone=A", {
+    method: "POST", headers, body: JSON.stringify(withZoneB),
+  });
+  assert.equal(wrongZonePayload.status, 400, "zone save rejects shapes assigned to another zone");
+  const zoneAUpdate = structuredClone(withZoneB);
+  zoneAUpdate.shapes = zoneAUpdate.shapes.filter(shape => shape.zone === "A");
+  zoneAUpdate.shapes[0].label = "Zone A saved independently";
+  const zoneSave = await fetch(endpoint + "?zone=A", {
+    method: "POST", headers, body: JSON.stringify(zoneAUpdate),
+  });
+  assert.equal(zoneSave.status, 200, "a valid per-zone candidate save succeeds");
+  const zoneResult = await jsonResponse(zoneSave);
+  assert.equal(zoneResult.savedZone, "A");
+  assert.equal(zoneResult.shapeCount, 3, "zone save merges with the previously saved zones");
+  const zoneReloadResponse = await fetch(endpoint, { cache: "no-store" });
+  const zoneReload = await jsonResponse(zoneReloadResponse);
+  assert.equal(zoneReload.document.shapes.find(shape => shape.id === "api-test-zone-b").label, "Zone B boundary",
+    "saving zone A must preserve zone B unchanged");
+  assert.equal(zoneReload.document.shapes.find(shape => shape.id === "api-test-wall").label, "Zone A saved independently",
+    "saving zone A must replace that zone's prior geometry");
+
   // Exercise retention: only the newest 20 timestamped versions may remain.
   for (let index = 0; index < 21; index++) {
     const rotating = structuredClone(modified);
@@ -202,6 +251,7 @@ try {
   console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global and per-zone candidate versioning");
 } finally {
   fs.rmSync(documentPath, { force: true });
+  fs.rmSync(seedPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });

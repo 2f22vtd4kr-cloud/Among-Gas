@@ -10,7 +10,7 @@ const errors = [];
 try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   page.on("pageerror", error => errors.push(error.message));
-  await page.goto(base + "/dev/collision", { waitUntil: "domcontentloaded" });
+  await page.goto(base + "/dev/collision?scratch=1", { waitUntil: "domcontentloaded" });
   await page.getByText("VECTOR GEOMETRY WORKSPACE").waitFor({ timeout: 15000 });
   const canvas = page.locator("canvas[data-editor-loaded='true']");
   await canvas.waitFor({ timeout: 15000 });
@@ -21,22 +21,49 @@ try {
 
   // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
   const touch = await page.context().newCDPSession(page);
+  let touchId = 1;
+  const touchTap = async (x, y) => {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ id: touchId, x, y, radiusX: 3, radiusY: 3, force: 1 }],
+    });
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId++;
+  };
+  const touchStroke = async points => {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ id: touchId, x: points[0][0], y: points[0][1], radiusX: 3, radiusY: 3, force: 1 }],
+    });
+    for (const [x, y] of points.slice(1)) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ id: touchId, x, y, radiusX: 3, radiusY: 3, force: 1 }],
+      });
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId++;
+  };
+  const touchLongPress = async (x, y, durationMs = 650) => {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ id: touchId, x, y, radiusX: 3, radiusY: 3, force: 1 }],
+    });
+    await page.waitForTimeout(durationMs);
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId++;
+  };
 
   // A one-finger freehand wall stroke must create an active chain on a touch device.
   await page.getByRole("button", { name: "Draw wall" }).click();
   let bounds = await canvas.boundingBox();
   assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas occupies a usable viewport");
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: [{ id: 1, x: bounds.x + 45, y: bounds.y + 70 }],
-  });
-  for (const [x, y] of [[85, 72], [125, 74], [165, 76]]) {
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: [{ id: 1, x: bounds.x + x, y: bounds.y + y }],
-    });
-  }
-  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await touchStroke([
+    [bounds.x + 45, bounds.y + 70],
+    [bounds.x + 85, bounds.y + 72],
+    [bounds.x + 125, bounds.y + 74],
+    [bounds.x + 165, bounds.y + 76],
+  ]);
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2);
   assert.equal(Number(await canvas.getAttribute("data-shape-count")), 0, "unfinished chain is not yet part of the saved document");
 
@@ -45,21 +72,11 @@ try {
   bounds = await canvas.boundingBox();
   const visionX = bounds.x + bounds.width * 0.55;
   const visionY = bounds.y + bounds.height * 0.48;
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
-  });
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchMove", touchPoints: [{ id: 1, x: visionX + 24, y: visionY }],
-  });
-  await page.waitForTimeout(650);
-  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await touchStroke([[visionX, visionY], [visionX + 24, visionY]]);
   assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "moving a vision press must cancel preview");
 
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchStart", touchPoints: [{ id: 1, x: visionX, y: visionY }],
-  });
+  await touchLongPress(visionX, visionY, 650);
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-vision-preview") === "true", null, { timeout: 3000 });
-  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   assert.match(await page.locator("footer").innerText(), /diagnostic only, not live gameplay/);
   await page.getByRole("button", { name: "Clear vision preview" }).click();
   assert.equal(await canvas.getAttribute("data-vision-preview"), "false", "vision preview can be cleared");
@@ -69,16 +86,10 @@ try {
   bounds = await canvas.boundingBox();
   const loupeX = bounds.x + bounds.width * 0.42;
   const loupeY = bounds.y + bounds.height * 0.52;
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchStart", touchPoints: [{ id: 1, x: loupeX, y: loupeY }],
-  });
-  await touch.send("Input.dispatchTouchEvent", {
-    type: "touchMove", touchPoints: [{ id: 1, x: loupeX + 12, y: loupeY + 8 }],
-  });
+  await touchStroke([[loupeX, loupeY], [loupeX + 12, loupeY + 8]]);
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-loupe-active") === "true", null, { timeout: 3000 });
   assert.match(await canvas.getAttribute("data-loupe-origin") ?? "", /^\d+(\.\d+)?,\d+(\.\d+)?$/,
     "loupe exposes its world-space focus for visual QA");
-  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
   await page.getByRole("button", { name: "Clear loupe" }).click();
   assert.equal(await canvas.getAttribute("data-loupe-active"), "false", "loupe overlay can be dismissed");
 
@@ -113,29 +124,72 @@ try {
   // Draw and close a solid polygon with three taps.
   await page.getByRole("button", { name: "Draw solid" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 220, bounds.y + 95);
-  await page.mouse.click(bounds.x + 280, bounds.y + 95);
-  await page.mouse.click(bounds.x + 250, bounds.y + 150);
+  await page.getByLabel("Casts shadow").uncheck();
+  await touchTap(bounds.x + 220, bounds.y + 95);
+  await touchTap(bounds.x + 280, bounds.y + 95);
+  await touchTap(bounds.x + 250, bounds.y + 150);
   await page.getByRole("button", { name: "Close polygon" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
+  // Newly authored geometry must preserve independent movement, sight and shadow flags.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + 220, bounds.y + 95);
+  const selectedShadow = page.getByLabel("Shadow");
+  await selectedShadow.waitFor();
+  assert.equal(await selectedShadow.isChecked(), false, "Casts shadow defaults must preserve the author-selected value");
   // Undo and redo must preserve the shape count and stay interactive on mobile.
   await page.getByRole("button", { name: "Undo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
-  // Select an existing vertex, assign its shape to a review zone, and keep the
-  // active zone selector aligned with that assignment for saving.
-  await page.getByRole("button", { name: "Edit vertices" }).click();
-  bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 220, bounds.y + 95);
+  // Select an existing vertex, assign its shape to a review zone, then save that
+  // zone without replacing the other candidate document contents.
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
   await selectedZone.selectOption("B");
   assert.equal(await selectedZone.inputValue(), "B");
   assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
     "the active zone selector follows the selected shape's zone");
+  await selectedZone.selectOption("A");
+  assert.equal(await selectedZone.inputValue(), "A");
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "A");
+  const polygonId = await canvas.getAttribute("data-selected-shape-id");
+  await page.getByRole("button", { name: "Save zone", exact: true }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-zone-busy") === "false");
+  await page.getByText(/Zone A saved · 1 shapes · SHA-256/).waitFor({ timeout: 10000 });
+
+  // Undo/redo must restore zone assignments without dropping the authored polygon.
+  const undoButton = page.getByRole("button", { name: "Undo" });
+  const redoButton = page.getByRole("button", { name: "Redo" });
+  await undoButton.click();
+  await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "B");
+  assert.equal(await canvas.getAttribute("data-shape-count"), "2");
+  await undoButton.click();
+  await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "unassigned");
+  assert.equal(await canvas.getAttribute("data-shape-count"), "2");
+  await undoButton.click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
+  await redoButton.click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
+  await redoButton.click();
+  await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "B");
+  await redoButton.click();
+  await page.waitForFunction(() => document.querySelector('select[aria-label="Selected shape zone"]')?.value === "A");
+  assert.equal(await canvas.getAttribute("data-selected-shape-id"), polygonId,
+    "undo/redo keeps the candidate polygon selected");
+  await selectedShadow.check();
+  assert.equal(await selectedShadow.isChecked(), true, "shadow casting can be enabled independently");
+  await selectedShadow.uncheck();
+  assert.equal(await selectedShadow.isChecked(), false, "shadow casting can be disabled independently");
+
+  // A 20px touch offset must still acquire the wall endpoint within its 48px target.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + 25, bounds.y + 70);
+  assert.notEqual(await canvas.getAttribute("data-selected-shape-id"), polygonId,
+    "a 20px-offset finger tap must acquire the wall endpoint");
 
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
   await page.getByRole("button", { name: "Analyze candidate" }).click();
@@ -154,16 +208,14 @@ try {
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 40, bounds.y + 40);
+  await touchTap(bounds.x + 40, bounds.y + 40);
   await page.waitForFunction(
     () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
     null,
     { timeout: 10000 },
   );
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await page.mouse.move(bounds.x + 100, bounds.y + 40);
-  await page.mouse.down();
-  await page.mouse.up();
+  await touchTap(bounds.x + 100, bounds.y + 40);
   await page.waitForFunction(
     () => {
       const canvas = document.querySelector("canvas");
@@ -193,21 +245,23 @@ try {
     bounds = await canvas.boundingBox();
     const centerX = bounds.x + bounds.width * 0.52;
     const centerY = bounds.y + bounds.height * 0.52;
+    const pinchIds = [touchId, touchId + 1];
     await touch.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [
-        { id: 1, x: centerX - 18, y: centerY },
-        { id: 2, x: centerX + 18, y: centerY },
+        { id: pinchIds[0], x: centerX - 18, y: centerY },
+        { id: pinchIds[1], x: centerX + 18, y: centerY },
       ],
     });
     await touch.send("Input.dispatchTouchEvent", {
       type: "touchMove",
       touchPoints: [
-        { id: 1, x: centerX - 34, y: centerY },
-        { id: 2, x: centerX + 34, y: centerY },
+        { id: pinchIds[0], x: centerX - 34, y: centerY },
+        { id: pinchIds[1], x: centerX + 34, y: centerY },
       ],
     });
     await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    touchId += 2;
     try {
       await page.waitForFunction(
         before => Number(document.querySelector("canvas")?.getAttribute("data-zoom")) > before,

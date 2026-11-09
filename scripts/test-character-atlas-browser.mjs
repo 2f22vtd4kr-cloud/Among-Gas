@@ -110,6 +110,15 @@ try {
         matrixContext.drawImage(atlas, x, pose.top, cellWidth, height, dx, dy, drawWidth, drawHeight);
       }
     }
+    const corpseExtensionPixelCounts = [];
+    for (let column = 0; column < colors.length; column++) {
+      const extra = context.getImageData(column * cellWidth, 1160, cellWidth, 20).data;
+      let opaque = 0;
+      for (let offset = 3; offset < extra.length; offset += 4) {
+        if (extra[offset] > 0) opaque++;
+      }
+      corpseExtensionPixelCounts.push(opaque);
+    }
     return {
       width: atlas.width,
       height: atlas.height,
@@ -118,6 +127,7 @@ try {
       sourceAssetGitBlobSha,
       poseWindows,
       frames,
+      corpseExtensionPixelCounts,
       matrixDataUrl: matrix.toDataURL('image/png'),
     };
   }, { poseWindows, sourceAssetGitBlobSha });
@@ -157,6 +167,9 @@ try {
   assert.equal(corpseFrames.length, 18);
   assert.ok(corpseFrames.every(frame => frame.opaquePixels > 100),
     'all eighteen generated colors must retain the authored corpse and exposed-bone row');
+  assert.equal(metrics.corpseExtensionPixelCounts.length, 18);
+  assert.ok(metrics.corpseExtensionPixelCounts.every(count => count > 0),
+    'the recovered lower corpse pixels below the old crop must survive in all eighteen generated palettes');
 
   const visualQaDir = process.env.VISUAL_QA_DIR;
   if (visualQaDir) {

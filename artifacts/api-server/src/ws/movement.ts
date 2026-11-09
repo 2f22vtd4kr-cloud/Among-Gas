@@ -32,8 +32,8 @@ export interface MovementDecision {
   movementPacketTokens: number; movementPacketTokensUpdatedAtMs: number;
 }
 
-export function isWalkableMovementPoint(grid: Grid, x: number, y: number): boolean { return isPlayerPositionWalkable(grid, x, y); }
-export function isMovementPathWalkable(grid: Grid, fromX: number, fromY: number, toX: number, toY: number): boolean { return isPlayerPathWalkable(grid, fromX, fromY, toX, toY); }
+export function isWalkableMovementPoint(grid: MovementCollision, x: number, y: number): boolean { return isPlayerPositionWalkable(grid, x, y); }
+export function isMovementPathWalkable(grid: MovementCollision, fromX: number, fromY: number, toX: number, toY: number): boolean { return isPlayerPathWalkable(grid, fromX, fromY, toX, toY); }
 function correctionDue(state: MovementBudgetState, nowMs: number): boolean { return state.lastMovementCorrectionAtMs === undefined || nowMs - state.lastMovementCorrectionAtMs >= CORRECTION_MIN_INTERVAL_MS; }
 
 function vectorMove(world: CollisionWorld, state: MovementBudgetState, targetX: number, targetY: number): [number, number] {

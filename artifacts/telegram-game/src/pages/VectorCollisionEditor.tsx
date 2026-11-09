@@ -300,6 +300,7 @@ export default function VectorCollisionEditor() {
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
   const [blocksSight, setBlocksSight] = useState(true);
+  const [castsShadow, setCastsShadow] = useState(true);
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
@@ -577,7 +578,9 @@ export default function VectorCollisionEditor() {
     image.onerror = () => { if (active) setStatus("Map artwork failed to load."); };
     image.src = import.meta.env.BASE_URL + "map-hires.webp";
 
-    fetch(import.meta.env.BASE_URL + "__vector-collision-api/document", { signal: controller.signal })
+    const scratch = new URLSearchParams(window.location.search).get("scratch") === "1";
+    const workspaceUrl = import.meta.env.BASE_URL + "__vector-collision-api/document" + (scratch ? "?scratch=1" : "");
+    fetch(workspaceUrl, { signal: controller.signal })
       .then(async response => {
         if (!response.ok) throw new Error("Workspace load failed (" + response.status + ")");
         return response.json() as Promise<{ document: CollisionDocument; saved: boolean }>;
@@ -742,6 +745,7 @@ export default function VectorCollisionEditor() {
       closed: true,
       blocksMove,
       blocksSight,
+      castsShadow,
       label: shapeLabel.trim() || "Solid obstacle",
       zone,
     });
@@ -757,6 +761,7 @@ export default function VectorCollisionEditor() {
       closed: false,
       blocksMove,
       blocksSight,
+      castsShadow,
       label: shapeLabel.trim() || "Wall chain",
       zone,
     });
@@ -1383,6 +1388,10 @@ export default function VectorCollisionEditor() {
           <input type="checkbox" checked={blocksSight} onChange={event => setBlocksSight(event.target.checked)} />
           Blocks sight
         </label>
+        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+          <input type="checkbox" checked={castsShadow} onChange={event => setCastsShadow(event.target.checked)} />
+          Casts shadow
+        </label>
         <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", minHeight: 48, fontSize: 12 }} />
         <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, minHeight: 48, fontSize: 12 }}>
           <option value="unassigned">Zone: unassigned</option>
@@ -1459,6 +1468,7 @@ export default function VectorCollisionEditor() {
             <strong>{selected.label || selected.id}</strong>
             <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label><input type="checkbox" checked={selected.castsShadow ?? selected.blocksSight} onChange={event => updateSelected({ castsShadow: event.target.checked })} /> Shadow</label>
             <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               Zone
               <select

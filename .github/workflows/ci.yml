@@ -17,6 +17,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
       PORT: 5173
@@ -90,7 +91,7 @@ jobs:
           python -m pip install -r scripts/map-tiles/requirements.txt
           python -m unittest discover -s scripts/map-tiles/tests -v
 
-      - name: Generate vector analysis preview and verify it remains outside gameplay runtime
+      - name: Generate production red-line vector collision document and verify live runtime cutover
         run: pnpm --filter @workspace/scripts run test:production-world
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
@@ -217,15 +218,17 @@ jobs:
           npm install --prefix /tmp/among-gas-playwright --no-save playwright@1.56.1
           /tmp/among-gas-playwright/node_modules/.bin/playwright install chromium
 
+      # Browser editing uses a disposable scratch document; the production seed is read-only and candidate saves stay isolated.
       - name: Start Telegram Mini App and play a mobile UI smoke test
         env:
           PLAYWRIGHT_MODULE: /tmp/among-gas-playwright/node_modules/playwright/index.mjs
           VISUAL_QA_DIR: ${{ runner.temp }}/among-gas-visual-qa
           VECTOR_COLLISION_DOCUMENT_PATH: ${{ runner.temp }}/vector-collision-editor-test.json
+          VECTOR_COLLISION_EDITOR_SEED_PATH: ${{ runner.temp }}/vector-collision-editor-seed.json
           VECTOR_COLLISION_EDITOR_BASE_URL: http://127.0.0.1:5173
         run: |
           rm -f "${RUNNER_TEMP}/vector-collision-editor-test.json" "${RUNNER_TEMP}/vector-collision-editor-test.json.bak"
-          nohup env VITE_ENABLE_GAME_MOCKS=true VECTOR_COLLISION_DOCUMENT_PATH="${VECTOR_COLLISION_DOCUMENT_PATH}" pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
+          nohup env VITE_ENABLE_GAME_MOCKS=true VECTOR_COLLISION_DOCUMENT_PATH="${VECTOR_COLLISION_DOCUMENT_PATH}" VECTOR_COLLISION_EDITOR_SEED_PATH="${VECTOR_COLLISION_EDITOR_SEED_PATH}" pnpm --filter @workspace/telegram-game run dev >/tmp/among-gas-vite.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl -fsS "http://127.0.0.1:5173/?mock=task-interaction" >/dev/null; then break; fi
             sleep 1
@@ -256,6 +259,11 @@ jobs:
             ${{ runner.temp }}/among-gas-visual-qa/hud-state-matrix.json
             ${{ runner.temp }}/among-gas-visual-qa/character-atlas-golden-matrix.png
             ${{ runner.temp }}/among-gas-visual-qa/character-atlas-frame-metrics.json
+            artifacts/telegram-game/collision-redline-vector-qa.png
+            artifacts/telegram-game/collision-redline-detail-atlas.png
+            artifacts/telegram-game/collision-redline-detail-qa/*.png
+            lib/shared/src/collision/collision.v1.json
+            lib/shared/src/collision/generatedDocument.ts
             artifacts/telegram-game/collision-qa-overlay.png
             artifacts/telegram-game/collision-reference-overlay.png
             attached_assets/IMG_2907_1783632830477.jpeg

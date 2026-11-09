@@ -57,9 +57,11 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     apply: 'serve',
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
-        const route = (req.url || '/').split('?')[0];
+        const requestUrl = new URL(req.url || '/document', 'http://localhost');
+        const route = requestUrl.pathname;
         const zoneMatch = route.match(/^\/zones\/([A-E])$/);
         const zone = zoneMatch?.[1] ?? null;
+        const zoneFilter = requestUrl.searchParams.get('zone');
         if (route !== '/document' && zone === null) {
           next();
           return;
@@ -76,10 +78,10 @@ function vectorCollisionEditorApiPlugin(): Plugin {
         // leaving generated candidate geometry in the production source tree.
         const baseFilePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
           ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
-          : path.resolve(
-              import.meta.dirname,
-              '../../lib/shared/src/collision/collision.v1.json',
-            );
+          : path.resolve(import.meta.dirname, '.vector-collision-candidate.json');
+        const seedPath = process.env.VECTOR_COLLISION_EDITOR_SEED_PATH
+          ? path.resolve(process.env.VECTOR_COLLISION_EDITOR_SEED_PATH)
+          : path.resolve(import.meta.dirname, '../../lib/shared/src/collision/collision.v1.json');
         const filePath = zone
           ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
           : baseFilePath;
@@ -90,16 +92,22 @@ function vectorCollisionEditorApiPlugin(): Plugin {
 
         if (req.method === 'GET') {
           try {
-            const exists = fs.existsSync(filePath);
-            const document = exists
-              ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
-              : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
+            const scratch = requestUrl.searchParams.get('scratch') === '1';
+            const candidateExists = !scratch && fs.existsSync(filePath);
+            const seeded = !scratch && zone === null && !candidateExists && fs.existsSync(seedPath);
+            const document = scratch
+              ? { version: 1, mapW: 3224, mapH: 1858, shapes: [] }
+              : candidateExists
+                ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
+                : seeded
+                  ? JSON.parse(fs.readFileSync(seedPath, 'utf8'))
+                  : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
             const errors = validateCollisionDocument(document);
             if (errors.length) {
               respond(500, { error: 'Saved candidate document is invalid: ' + errors.slice(0, 5).join('; ') });
               return;
             }
-            respond(200, { document, saved: exists });
+            respond(200, { document, saved: candidateExists, seeded });
           } catch (error) {
             respond(500, { error: error instanceof Error ? error.message : String(error) });
           }
@@ -155,7 +163,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               respond(400, { error: errors.slice(0, 12).join('; ') });
               return;
             }
-            const document = candidate as { version: number; mapW: number; mapH: number; shapes: unknown[] };
+            let document = candidate as { version: number; mapW: number; mapH: number; shapes: Array<{ zone?: string }>; source?: unknown };
             if (document.mapW !== 3224 || document.mapH !== 1858) {
               respond(400, { error: 'Candidate dimensions must exactly match the 3224×1858 world' });
               return;
@@ -164,7 +172,36 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               respond(400, { error: 'Refusing to save an empty document; author and review real map contours first' });
               return;
             }
-            if (zone && (document.shapes as Array<{ zone?: string }>).some(shape => shape.zone !== zone)) {
+            if (zoneFilter !== null) {
+              if (!/^[A-E]$/.test(zoneFilter)) {
+                respond(400, { error: 'Zone save requires one of the authored zones A–E' });
+                return;
+              }
+              if (document.shapes.some(shape => shape.zone !== zoneFilter)) {
+                respond(400, { error: 'Zone save payload may contain only shapes assigned to zone ' + zoneFilter });
+                return;
+              }
+              const existingPath = fs.existsSync(baseFilePath) ? baseFilePath : fs.existsSync(seedPath) ? seedPath : null;
+              const existing = existingPath
+                ? JSON.parse(fs.readFileSync(existingPath, 'utf8')) as { version: number; mapW: number; mapH: number; shapes: Array<{ zone?: string }>; source?: unknown }
+                : { version: 1, mapW: 3224, mapH: 1858, shapes: [] as Array<{ zone?: string }> };
+              const existingErrors = validateCollisionDocument(existing);
+              if (existingErrors.length) {
+                respond(500, { error: 'Existing candidate document is invalid: ' + existingErrors.slice(0, 5).join('; ') });
+                return;
+              }
+              document = {
+                ...document,
+                shapes: [...existing.shapes.filter(shape => shape.zone !== zoneFilter), ...document.shapes],
+                source: existing.source ?? document.source,
+              };
+              const mergedErrors = validateCollisionDocument(document);
+              if (mergedErrors.length) {
+                respond(400, { error: 'Merged zone candidate is invalid: ' + mergedErrors.slice(0, 8).join('; ') });
+                return;
+              }
+            }
+            if (zone && document.shapes.some(shape => shape.zone !== zone)) {
               respond(400, { error: 'Zone ' + zone + ' saves may contain only shapes explicitly assigned to that zone' });
               return;
             }
