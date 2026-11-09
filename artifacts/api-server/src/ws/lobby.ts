@@ -90,7 +90,7 @@ const spawnGrid = INTERACTION_COLLISION_GRID;
  * point; each candidate is validated against the exact shared player
  * footprint. If no safe separated point exists, lobby start fails closed.
  */
-function computeSpawnPosition(
+export function computeSpawnPosition(
   index: number,
   total: number,
   occupied: readonly { x: number; y: number }[] = [],
