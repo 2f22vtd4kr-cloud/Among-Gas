@@ -8,7 +8,6 @@
  * Subclasses implement tick() and chooseVote().
  */
 import {
-  CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
@@ -25,9 +24,14 @@ import {
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
+import {
+  BOT_NAVIGATION_GEOMETRY,
+  BOT_NAVIGATION_GRID,
+  isBotNavigationReachable,
+} from '@workspace/shared/collision/botNavigation';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import type { CollisionWorld } from '@workspace/shared/collision';
-import type { Point, PathGridGeometry } from '@workspace/shared';
+import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
@@ -44,127 +48,13 @@ const movementGrid: CollisionWorld = getProductionCollisionWorld();
 // Match the server's independent sight grid so bots never choose a task point
 // that the authoritative interaction-visibility check will reject.
 const sightGrid = buildPreciseCollisionGrid();
-const NAV_COLS = COLS * 2;
-const NAV_ROWS = ROWS * 2;
-const NAV_CELL_X = CELL_X / 2;
-const NAV_CELL_Y = CELL_Y / 2;
-const navigationGeometry: PathGridGeometry = {
-  cols: NAV_COLS,
-  rows: NAV_ROWS,
-  cellX: NAV_CELL_X,
-  cellY: NAV_CELL_Y,
-};
-
-/** Navigation cells are rasterized from the exact same vector world as live movement. */
-const navigationGrid = Uint8Array.from(
-  movementGrid.rasterizePlayerNav(NAV_COLS, NAV_ROWS).walk,
-  value => value === 1 ? 0 : 1,
-);
-
-/** Precompute the walkable component connected to the real spawn point. */
-function buildSpawnReachability(): Uint8Array {
-  const reachable = new Uint8Array(NAV_COLS * NAV_ROWS);
-  const startCol = Math.floor(SPAWN_X / NAV_CELL_X);
-  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / NAV_CELL_Y);
-  if (startCol < 0 || startCol >= NAV_COLS || startRow < 0 || startRow >= NAV_ROWS) return reachable;
-  const startIndex = startRow * NAV_COLS + startCol;
-  if (navigationGrid[startIndex] !== 0) return reachable;
-
-  const centre = (col: number, row: number): Point => ({
-    x: (col + 0.5) * NAV_CELL_X,
-    y: (row + 0.5) * NAV_CELL_Y,
-  });
-  const canSweep = (from: Point, to: Point): boolean => {
-    const [x, y] = movementGrid.movePlayerAtFeet(
-      from.x, from.y, to.x - from.x, to.y - from.y,
-    );
-    return Math.hypot(x - to.x, y - to.y) <= 0.75;
-  };
-  const spawnFeet = { x: SPAWN_X, y: SPAWN_Y + FEET_OFFSET_Y };
-  if (!canSweep(spawnFeet, centre(startCol, startRow))) return reachable;
-
-  const queue = [startIndex];
-  reachable[startIndex] = 1;
-  const directions: readonly [number, number][] = [
-    [0, -1], [0, 1], [-1, 0], [1, 0],
-    [-1, -1], [-1, 1], [1, -1], [1, 1],
-  ];
-  for (let head = 0; head < queue.length; head++) {
-    const index = queue[head];
-    const row = Math.floor(index / NAV_COLS);
-    const col = index - row * NAV_COLS;
-    const from = centre(col, row);
-    for (const [dc, dr] of directions) {
-      const nextCol = col + dc;
-      const nextRow = row + dr;
-      if (nextCol < 0 || nextCol >= NAV_COLS || nextRow < 0 || nextRow >= NAV_ROWS) continue;
-      const nextIndex = nextRow * NAV_COLS + nextCol;
-      if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
-      // Use the same swept player-footprint rule as A*. The old side-cell
-      // diagonal guard could disconnect a real corridor even when the exact
-      // diagonal sweep is clear, causing task approach points to be falsely
-      // labelled spawn-reachable.
-      if (!canSweep(from, centre(nextCol, nextRow))) continue;
-      reachable[nextIndex] = 1;
-      queue.push(nextIndex);
-    }
-  }
-  return reachable;
-}
-const spawnReachability = buildSpawnReachability();
-
-export function isBotNavigationReachable(feetX: number, feetY: number): boolean {
-  const col = Math.floor(feetX / NAV_CELL_X);
-  const row = Math.floor(feetY / NAV_CELL_Y);
-  if (col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) return false;
-  return spawnReachability[row * NAV_COLS + col] === 1;
-}
-
-/**
- * A bot can occupy a collision-safe point whose containing navigation cell
- * centre is blocked by the conservative centre-sampled A* raster. A* rejects
- * that start cell before it can use the exact vector swept-footprint validator.
- * Connect the real position to the nearest spawn-connected cell centre only
- * when the authoritative continuous player footprint can reach that centre
- * without sliding. This keeps the coarse graph conservative without stranding
- * a player that is already in a valid part of the continuous world.
- */
-function nearestCollisionSafeNavigationStart(feetStart: Point): Point | null {
-  const startCol = Math.floor(feetStart.x / NAV_CELL_X);
-  const startRow = Math.floor(feetStart.y / NAV_CELL_Y);
-
-  for (let radius = 0; radius <= 4; radius++) {
-    const candidates: Array<{ point: Point; distanceSquared: number }> = [];
-    for (let row = startRow - radius; row <= startRow + radius; row++) {
-      for (let col = startCol - radius; col <= startCol + radius; col++) {
-        if (Math.max(Math.abs(col - startCol), Math.abs(row - startRow)) !== radius ||
-            col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) continue;
-        const index = row * NAV_COLS + col;
-        if (navigationGrid[index] !== 0 || spawnReachability[index] !== 1) continue;
-        const point = {
-          x: (col + 0.5) * NAV_CELL_X,
-          y: (row + 0.5) * NAV_CELL_Y,
-        };
-        candidates.push({
-          point,
-          distanceSquared: (point.x - feetStart.x) ** 2 + (point.y - feetStart.y) ** 2,
-        });
-      }
-    }
-    candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
-    for (const candidate of candidates) {
-      const [x, y] = movementGrid.movePlayerAtFeet(
-        feetStart.x, feetStart.y,
-        candidate.point.x - feetStart.x,
-        candidate.point.y - feetStart.y,
-      );
-      if (Math.hypot(x - candidate.point.x, y - candidate.point.y) <= 0.75) {
-        return candidate.point;
-      }
-    }
-  }
-  return null;
-}
+const NAV_COLS = BOT_NAVIGATION_GEOMETRY.cols;
+const NAV_ROWS = BOT_NAVIGATION_GEOMETRY.rows;
+const NAV_CELL_X = BOT_NAVIGATION_GEOMETRY.cellX;
+const NAV_CELL_Y = BOT_NAVIGATION_GEOMETRY.cellY;
+const navigationGeometry = BOT_NAVIGATION_GEOMETRY;
+const navigationGrid = BOT_NAVIGATION_GRID;
+export { isBotNavigationReachable };
 
 /** Keep the bot inside navigation cells that A* can represent. */
 function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
