@@ -56,6 +56,50 @@ const navigationGeometry = BOT_NAVIGATION_GEOMETRY;
 const navigationGrid = BOT_NAVIGATION_GRID;
 export { isBotNavigationReachable };
 
+/**
+ * If a valid continuous player position lies in a blocked/coarse A* cell,
+ * connect it to the nearest safely reachable centre in the spawn component.
+ * Every connector is checked by the authoritative swept player footprint.
+ */
+function nearestCollisionSafeNavigationStart(feetStart: Point): Point | null {
+  const startCol = Math.floor(feetStart.x / NAV_CELL_X);
+  const startRow = Math.floor(feetStart.y / NAV_CELL_Y);
+
+  for (let radius = 0; radius <= 4; radius++) {
+    const candidates: Array<{ point: Point; distanceSquared: number }> = [];
+    for (let row = startRow - radius; row <= startRow + radius; row++) {
+      for (let col = startCol - radius; col <= startCol + radius; col++) {
+        if (Math.max(Math.abs(col - startCol), Math.abs(row - startRow)) !== radius ||
+            col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) continue;
+        const index = row * NAV_COLS + col;
+        if (navigationGrid[index] !== 0) continue;
+        const point = {
+          x: (col + 0.5) * NAV_CELL_X,
+          y: (row + 0.5) * NAV_CELL_Y,
+        };
+        if (!isBotNavigationReachable(point.x, point.y)) continue;
+        candidates.push({
+          point,
+          distanceSquared: (point.x - feetStart.x) ** 2 + (point.y - feetStart.y) ** 2,
+        });
+      }
+    }
+    candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
+    for (const candidate of candidates) {
+      const [x, y] = movementGrid.movePlayerAtFeet(
+        feetStart.x,
+        feetStart.y,
+        candidate.point.x - feetStart.x,
+        candidate.point.y - feetStart.y,
+      );
+      if (Math.hypot(x - candidate.point.x, y - candidate.point.y) <= 0.75) {
+        return candidate.point;
+      }
+    }
+  }
+  return null;
+}
+
 /** Keep the bot inside navigation cells that A* can represent. */
 function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
   const col = Math.floor(feetX / NAV_CELL_X);
