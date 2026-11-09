@@ -11,7 +11,7 @@ import {
   isBotNavigationReachable,
   NO_TARGET,
 } from './BotAgent.js';
-import { SPAWN_X, SPAWN_Y, computeSpawnPosition } from '../ws/lobby.js';
+import { MAX_PLAYERS, SPAWN_X, SPAWN_Y, computeSpawnPosition } from '../ws/lobby.js';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX, type TaskDef } from '@workspace/shared/tasks';
 import type { Point } from '@workspace/shared';
@@ -74,7 +74,19 @@ console.log(`PASS: all ${results.length} task definitions have a reachable, visi
      `six-player spawn ${index} must belong to the bot navigation component`);
  }
 
- 
+ // The public lobby supports fifteen players. Exercise the real maximum rather
+// than assuming the six-player balance cohorts cover every spawn index.
+const maximumLobbySpawns: Point[] = [];
+for (let index = 0; index < MAX_PLAYERS; index++) {
+  const spawn = computeSpawnPosition(index, MAX_PLAYERS, maximumLobbySpawns);
+  maximumLobbySpawns.push(spawn);
+  const graphReachable = isBotNavigationReachable(spawn.x, spawn.y + FEET_OFFSET_Y);
+  console.log(`maximumLobbySpawn ${JSON.stringify({ index, spawn, graphReachable })}`);
+  assert.ok(graphReachable,
+    `maximum-capacity spawn ${index} must belong to the bot navigation component`);
+}
+assert.equal(maximumLobbySpawns.length, MAX_PLAYERS);
+
 // Reproduce the only stuck-task state observed in seeded cohort 17001:
 // a live crewmate at (1656, 797) could not finish Empty Garbage (task 3).
 // Reachability from spawn alone is insufficient; exercise the production A*
