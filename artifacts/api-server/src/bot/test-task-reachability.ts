@@ -11,7 +11,7 @@ import {
   isBotNavigationReachable,
   NO_TARGET,
 } from './BotAgent.js';
-import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
+import { SPAWN_X, SPAWN_Y, computeSpawnPosition } from '../ws/lobby.js';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX, type TaskDef } from '@workspace/shared/tasks';
 import type { Point } from '@workspace/shared';
@@ -60,6 +60,19 @@ assert.equal(unreachable.length, 0,
   `tasks without a spawn-reachable, LOS-clear interaction point: ${unreachable.map(task => `${task.id}:${task.name}`).join(', ')}`);
 
 console.log(`PASS: all ${results.length} task definitions have a reachable, visible approach point`);
+
+ // Validate the exact six-player spawn formation used by the balance cohorts.
+ // Spawn clearance alone is not enough if a legal spawn lands in a cell that
+ // the bot's connected A* navigation graph cannot represent.
+ const cohortSpawns: Point[] = [];
+ for (let index = 0; index < 6; index++) {
+   const spawn = computeSpawnPosition(index, 6, cohortSpawns);
+   cohortSpawns.push(spawn);
+   const graphReachable = isBotNavigationReachable(spawn.x, spawn.y + FEET_OFFSET_Y);
+   console.log(`cohortSpawn ${JSON.stringify({ index, spawn, graphReachable })}`);
+   assert.ok(graphReachable,
+     `six-player spawn ${index} must belong to the bot navigation component`);
+ }
 
  
 // Reproduce the only stuck-task state observed in seeded cohort 17001:
