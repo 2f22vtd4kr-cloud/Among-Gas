@@ -120,6 +120,52 @@ export function isBotNavigationReachable(feetX: number, feetY: number): boolean 
   return spawnReachability[row * NAV_COLS + col] === 1;
 }
 
+/**
+ * A bot can occupy a collision-safe point whose containing navigation cell
+ * centre is blocked by the conservative centre-sampled A* raster. A* rejects
+ * that start cell before it can use the exact vector swept-footprint validator.
+ * Connect the real position to the nearest spawn-connected cell centre only
+ * when the authoritative continuous player footprint can reach that centre
+ * without sliding. This keeps the coarse graph conservative without stranding
+ * a player that is already in a valid part of the continuous world.
+ */
+function nearestCollisionSafeNavigationStart(feetStart: Point): Point | null {
+  const startCol = Math.floor(feetStart.x / NAV_CELL_X);
+  const startRow = Math.floor(feetStart.y / NAV_CELL_Y);
+
+  for (let radius = 0; radius <= 4; radius++) {
+    const candidates: Array<{ point: Point; distanceSquared: number }> = [];
+    for (let row = startRow - radius; row <= startRow + radius; row++) {
+      for (let col = startCol - radius; col <= startCol + radius; col++) {
+        if (Math.max(Math.abs(col - startCol), Math.abs(row - startRow)) !== radius ||
+            col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) continue;
+        const index = row * NAV_COLS + col;
+        if (navigationGrid[index] !== 0 || spawnReachability[index] !== 1) continue;
+        const point = {
+          x: (col + 0.5) * NAV_CELL_X,
+          y: (row + 0.5) * NAV_CELL_Y,
+        };
+        candidates.push({
+          point,
+          distanceSquared: (point.x - feetStart.x) ** 2 + (point.y - feetStart.y) ** 2,
+        });
+      }
+    }
+    candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
+    for (const candidate of candidates) {
+      const [x, y] = movementGrid.movePlayerAtFeet(
+        feetStart.x, feetStart.y,
+        candidate.point.x - feetStart.x,
+        candidate.point.y - feetStart.y,
+      );
+      if (Math.hypot(x - candidate.point.x, y - candidate.point.y) <= 0.75) {
+        return candidate.point;
+      }
+    }
+  }
+  return null;
+}
+
 /** Keep the bot inside navigation cells that A* can represent. */
 function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
   const col = Math.floor(feetX / NAV_CELL_X);
@@ -547,12 +593,15 @@ export abstract class BotAgent {
     // bot advances along multiple adjacent cell edges each tick, rather than
     // re-running A* every tick or cutting a smoothed chord across a corner.
     if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
+      const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
       const result = this.pathCache.find(
-        navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
+        navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
       );
       this.navigationGoalKey = goalKey;
       this.navigationRoute = result?.waypoints ?? [];
       this.navigationRouteIndex = 0;
+      // Route[0] may be a nearby safe graph centre. The first segment is
+      // independently swept from the bot's exact continuous position below.
       this.navigationRouteOrigin = feetStart;
     }
 
@@ -574,8 +623,9 @@ export abstract class BotAgent {
           feetStart, segmentStart, route[this.navigationRouteIndex],
         ) > 18) {
           this.clearPath();
+          const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
           const result = this.pathCache.find(
-            navigationGrid, feetStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
+            navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
           );
           this.navigationGoalKey = goalKey;
           this.navigationRoute = result?.waypoints ?? [];
