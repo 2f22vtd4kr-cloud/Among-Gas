@@ -89,3 +89,40 @@ const emptyGarbageApproach = probe.approach(emptyGarbage);
 assertRoute({ x: SPAWN_X, y: SPAWN_Y }, emptyGarbageApproach, 'Empty Garbage from spawn');
 assertRoute({ x: 1656, y: 797 }, emptyGarbageApproach, 'Empty Garbage from timeout position');
 
+// Reproduce every unfinished task visible in the three exact-head balance
+// timeout traces. These are movement-only route probes; the tasks, geometry,
+// interaction rules and zero-timeout acceptance threshold remain unchanged.
+const observedTimeoutRoutes: Array<{
+  label: string;
+  start: Point;
+  taskIds: readonly number[];
+}> = [
+  {
+    label: 'seed 17001 game 17',
+    start: { x: 1612, y: 534 },
+    taskIds: [0, 3], // Fix Wiring, Empty Garbage
+  },
+  {
+    label: 'seed 17001 game 74',
+    start: { x: 1600, y: 468 },
+    taskIds: [6, 7], // Reboot WiFi, Fuel Engine
+  },
+  {
+    label: 'seed 17002 game 33',
+    start: { x: 1602, y: 514 },
+    taskIds: [4, 10], // Clean Filters, Clear Asteroids
+  },
+];
+
+for (const observation of observedTimeoutRoutes) {
+  for (const taskId of observation.taskIds) {
+    const task = TASK_DEFS.find(candidate => candidate.id === taskId);
+    assert.ok(task, `${observation.label}: task ${taskId} must exist`);
+    assertRoute(
+      observation.start,
+      probe.approach(task),
+      `${observation.label}: ${task.name}`,
+    );
+  }
+}
+
