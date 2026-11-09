@@ -38,6 +38,7 @@ import {
   REPORT_RANGE_PX,
 } from '@workspace/shared/collisionMap';
 import { TASK_DEFS, TASKS_PER_CREWMATE, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
+import { isBotNavigationReachable } from '@workspace/shared/collision/botNavigation';
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
@@ -97,6 +98,9 @@ export function computeSpawnPosition(
 ): { x: number; y: number } {
   const available = (x: number, y: number) =>
     isPlayerSpawnPositionClear(spawnGrid, x, y) &&
+    // Collision-safe is not enough: bot spawns must also be represented in
+    // the same continuous-sweep-connected A* component used by task routing.
+    isBotNavigationReachable(x, y + FEET_OFFSET_Y) &&
     !occupied.some(player => Math.hypot(player.x - x, player.y - y) < PLAYER_SPAWN_MIN_SEPARATION_PX);
   if (total <= 1 && available(SPAWN_X, SPAWN_Y)) return { x: SPAWN_X, y: SPAWN_Y };
   if (total > 1) {
