@@ -138,7 +138,7 @@ function ActionButton({
         ...baseButton,
         background: fill,
         opacity: disabled ? 0.45 : 1,
-        filter: disabled ? "saturate(0.25)" : "none",
+        filter: disabled ? "saturate(0.2)" : "none",
         cursor: disabled ? "default" : "pointer",
         animation: kind === "kill" && killAvailable === true && !disabled
           ? "agKillReadyPulse 1.15s ease-in-out infinite"
