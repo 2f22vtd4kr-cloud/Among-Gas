@@ -131,23 +131,23 @@ try {
   await page.getByRole("button", { name: "Close polygon" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
-  // Newly authored geometry must preserve independent movement, sight and shadow flags.
-  await page.getByRole("button", { name: "Edit vertices" }).click();
-  bounds = await canvas.boundingBox();
-  await touchTap(bounds.x + 220, bounds.y + 95);
-  const selectedShadow = page.getByLabel("Shadow");
-  await selectedShadow.waitFor();
-  assert.equal(await selectedShadow.isChecked(), false, "Casts shadow defaults must preserve the author-selected value");
   // Undo and redo must preserve the shape count and stay interactive on mobile.
   await page.getByRole("button", { name: "Undo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
   await page.getByRole("button", { name: "Redo" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
 
-  // Select an existing vertex, assign its shape to a review zone, then save that
-  // zone without replacing the other candidate document contents.
+  // Select a vertex only after the basic shape undo/redo assertion. Vertex
+  // pointer-up itself records a history snapshot even if the point is unchanged.
+  await page.getByRole("button", { name: "Edit vertices" }).click();
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + 220, bounds.y + 95);
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
+  const selectedShadow = page.getByLabel("Shadow");
+  await selectedShadow.waitFor();
+  assert.equal(await selectedShadow.isChecked(), false,
+    "new geometry retains the separately authored Casts shadow value");
   await selectedZone.selectOption("B");
   assert.equal(await selectedZone.inputValue(), "B");
   assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
