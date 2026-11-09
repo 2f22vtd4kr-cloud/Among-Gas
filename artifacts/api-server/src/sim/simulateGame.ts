@@ -286,15 +286,36 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       }
 
       // Independently audit every living bot position throughout the real
-      // simulation loop. This catches collision/pathfinding regressions that
-      // outcome-only tests miss (e.g. a bot slowly walking through a wall).
-      // Bot positions only change on the shared 5Hz bot loop. A 10Hz monitor
-      // repeats the same full vector-world checks between movement ticks, so
-      // sample once per 200ms movement interval and inspect every distinct
-      // post-movement state without doubling collision work per lobby.
+      // simulation loop. Poll at 10Hz so the audit cannot phase-lock ahead of
+      // the 5Hz movement timer: if a 100ms sample precedes a bot tick, the next
+      // sample observes its post-movement state. Cache the last audited state
+      // so the expensive full-footprint vector check runs only after a player
+      // moves, changes identity, enters/leaves a vent, or changes alive state.
+      const lastAuditedPlayerState = new Map<number, {
+        player: object;
+        x: number;
+        y: number;
+        alive: boolean;
+        inVent: boolean;
+      }>();
       collisionMonitor = setInterval(() => {
         if (settled) return;
         for (const player of lobby.players.values()) {
+          const previous = lastAuditedPlayerState.get(player.slot);
+          const unchanged = previous?.player === player &&
+            previous.x === player.x &&
+            previous.y === player.y &&
+            previous.alive === player.alive &&
+            previous.inVent === (player.inVent === true);
+          if (unchanged) continue;
+
+          lastAuditedPlayerState.set(player.slot, {
+            player,
+            x: player.x,
+            y: player.y,
+            alive: player.alive,
+            inVent: player.inVent === true,
+          });
           if (!isSimulationCollisionViolation(player, simulationCollisionGrid)) continue;
           collisionViolation = {
             slot: player.slot,
@@ -304,7 +325,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           finish('timeout');
           return;
         }
-      }, 200);
+      }, 100);
     }
 
     const initialBatch = Math.min(concurrency, games);
