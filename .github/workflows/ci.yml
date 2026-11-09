@@ -2,7 +2,7 @@ name: Among Gas build and gameplay smoke tests
 
 on:
   push:
-    branches: [main, 'work/**']
+    branches: [main, 'work/**', 'integration/**']
   pull_request:
   workflow_dispatch:
 
@@ -16,7 +16,6 @@ permissions:
 
 jobs:
   verify:
-    runs-on: ubuntu-24.04
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
