@@ -75,6 +75,12 @@
       "workspace": "./src/collision/productionWorld.ts",
       "import": "./src/collision/productionWorld.ts",
       "default": "./src/collision/productionWorld.ts"
+    },
+    "./collision/botNavigation": {
+      "types": "./dist/collision/botNavigation.d.ts",
+      "workspace": "./src/collision/botNavigation.ts",
+      "import": "./src/collision/botNavigation.ts",
+      "default": "./src/collision/botNavigation.ts"
     }
   }
 }
