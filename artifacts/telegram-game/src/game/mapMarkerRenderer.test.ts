@@ -34,6 +34,7 @@ const base = {
   trackedTaskId: null,
   role: 'crewmate',
   translateTaskName: (name: string | undefined) => name ?? 'Task',
+  translateSabotageName: (name: string | undefined) => name ?? 'System',
 };
 
 {
