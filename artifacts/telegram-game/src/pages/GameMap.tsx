@@ -1283,6 +1283,7 @@ export default function GameMap() {
         trackedTaskId: trackedTaskIdRef.current,
         role: myRoleRef.current,
         translateTaskName: name => taskRu(name, languageRef.current),
+        translateSabotageName: name => sabotageRu(name, languageRef.current),
       });
 
       // Vent positions remain active for proximity-gated controls, but we do not
