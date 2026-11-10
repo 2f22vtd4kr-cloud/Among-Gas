@@ -77,6 +77,7 @@ import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
 import { drawRemotePlayerAppearance } from '../game/mapRemotePlayerRenderer';
 import { drawLocalPlayerAppearance } from '../game/mapLocalPlayerRenderer';
 import { getCharacterGhostMotion } from '../game/characterGhostMotion';
+import { getLocalPlayerCanvasPosition, getRemotePlayerCanvasPosition } from '../game/mapPlayerCanvasPosition';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
@@ -1331,16 +1332,22 @@ export default function GameMap() {
           // Shared ghost float/breathing remains draw-only; world position and
           // collision use the untouched authoritative/interpolated coordinates.
           const ghostMotion = getCharacterGhostMotion(ts, rp.slot, rSpriteW, rSpriteH);
-          const ghostBob = rIsGhost ? ghostMotion.bobY : 0;
-          const ghostDrift = rIsGhost ? ghostMotion.driftX : 0;
           // Living characters visibly bounce on each step. This is draw-only:
           // authoritative coordinates and collision are never modified.
           const rWalkBob = rMoving
             ? getCharacterWalkBobOffset(anim.animMs, rBaseSpriteH)
             : 0;
-          const rpGroundY = Math.round((anim.renderY - srcY) * scale);
-          const rpCX = Math.round((anim.renderX - srcX) * scale + ghostDrift);
-          const rpCY = Math.round(rpGroundY - ghostBob - (rIsGhost ? 0 : rWalkBob));
+          const remoteCanvasPosition = getRemotePlayerCanvasPosition({
+            worldX: anim.renderX,
+            worldY: anim.renderY,
+            camera: { sourceX: srcX, sourceY: srcY, scale },
+            ghost: rIsGhost,
+            ghostMotion,
+            walkBobOffset: rWalkBob,
+          });
+          const rpGroundY = remoteCanvasPosition.groundY;
+          const rpCX = remoteCanvasPosition.spriteX;
+          const rpCY = remoteCanvasPosition.spriteY;
 
           // Skip players that are off-screen (with margin)
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
@@ -1382,14 +1389,8 @@ export default function GameMap() {
       // ── 4. Local player sprite ────────────────────────────────────────────
       const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
       const spriteW = PLAYER_DISPLAY_WIDTH  * scale;
-      const playerCX = (px - srcX) * scale;
-      const playerCY = (py - srcY) * scale;
-
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
       const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
-
-      const pCX = Math.round(playerCX);
-      const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
       const localMoving = pose === 'walk-1' || pose === 'walk-2';
       // Use the same elapsed movement clock as the local walk-1/walk-2 pose
@@ -1403,8 +1404,14 @@ export default function GameMap() {
       const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
       const localSlot = mySlotRef.current ?? 0;
       const localGhostMotion = getCharacterGhostMotion(ts, localSlot, sW, sH);
-      const localGhostBob = amIGhostFrame ? localGhostMotion.bobY : 0;
-      const localGhostDrift = amIGhostFrame ? localGhostMotion.driftX : 0;
+      const localCanvasPosition = getLocalPlayerCanvasPosition({
+        worldX: px,
+        worldY: py,
+        camera: { sourceX: srcX, sourceY: srcY, scale },
+        ghost: amIGhostFrame,
+        ghostMotion: localGhostMotion,
+        walkBobOffset: localWalkBob,
+      });
 
       const localShadowScale = localMoving
         ? getCharacterShadowScale(localWalkBob, sH)
@@ -1415,10 +1422,10 @@ export default function GameMap() {
         frameRect: rect,
         pose,
         ghostMotion: localGhostMotion,
-        shadowX: pCX,
-        shadowY: pCY,
-        spriteX: pCX + localGhostDrift,
-        spriteY: pCY - localGhostBob - (amIGhostFrame ? 0 : localWalkBob),
+        shadowX: localCanvasPosition.groundX,
+        shadowY: localCanvasPosition.groundY,
+        spriteX: localCanvasPosition.spriteX,
+        spriteY: localCanvasPosition.spriteY,
         spriteWidth: sW,
         spriteHeight: sH,
         facingLeft,
@@ -1454,8 +1461,8 @@ export default function GameMap() {
           cameraX: srcX,
           cameraY: srcY,
           scale,
-          playerScreenX: pCX,
-          playerScreenY: pCY,
+          playerScreenX: localCanvasPosition.groundX,
+          playerScreenY: localCanvasPosition.groundY,
           visionRadiusScreenPx: visionR,
           visiblePolygon,
         });
