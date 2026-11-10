@@ -1,24 +1,18 @@
 # Among Gas asset provenance
 
-## Legacy external bundle — removed from the current tree
+## Current status
 
-On 2026-11-10, the repository's `artifacts/telegram-game/public/au-assets/` folder was
-confirmed to be an exact copy of 17 images from
-[`AI0702/Among-Us-clone`](https://github.com/AI0702/Among-Us-clone/tree/e75a1410c8bc9e82b41f2ab51deec373c8486e29/Assets/Images).
+This file is the release inventory for visual/audio assets. No third-party asset is treated as cleared merely because it exists in the repository.
 
-The upstream README explicitly says its images were ripped from Among Us and credits Innersloth
-for the game and its assets. Although the upstream repository has an Unlicense, that licence
-does not establish that its author had authority to dedicate or sublicense the underlying
-third-party game artwork. The images were therefore not safe to redistribute on the strength
-of that repository licence.
+### Legacy external bundle — removed from the current tree
 
-All 17 local files were verified as byte-identical Git blobs against their named upstream
-counterparts. The complete bundle has now been **removed from the current source tree**. It is
-not copied into the current public build. Historical Git commits and the archived session
-handoff still preserve the original history; that is not a runtime dependency or an asset
-clearance claim.
+On 2026-11-10, `artifacts/telegram-game/public/au-assets/` was confirmed to contain 17 files byte-identical to assets in [`AI0702/Among-Us-clone`](https://github.com/AI0702/Among-Us-clone/tree/e75a1410c8bc9e82b41f2ab51deec373c8486e29/Assets/Images).
 
-| Removed local file | Exact upstream path | Git blob SHA |
+The upstream [README](https://github.com/AI0702/Among-Us-clone/blob/e75a1410c8bc9e82b41f2ab51deec373c8486e29/README.md) says its images were ripped from Among Us and credits Innersloth for the game and its assets. Although that repository declares an Unlicense, that repository-level dedication does not establish authority to dedicate or sublicense third-party game artwork. Those images were therefore not safe to redistribute on the strength of that licence.
+
+All 17 local files were compared by Git blob SHA with their named counterparts in the upstream `Assets/Images` tree at commit `e75a1410c8bc9e82b41f2ab51deec373c8486e29`. All 17 matched exactly:
+
+| Removed local file | Exact upstream source path | Git blob SHA |
 |---|---|---|
 | `defeat.png` | `Alerts/defeat.png` | `8e24947faee1addeba0f5bb4599c17c897387bb0` |
 | `eject.png` | `Alerts/eject.png` | `6c2c55635bff3d5d1e67df5ae86034c91d537949` |
@@ -38,33 +32,36 @@ clearance claim.
 | `victory.png` | `Alerts/victory.png` | `993bbbed9d7ccb59b99f22d135f1de368ae6676e` |
 | `victoryback.png` | `Alerts/victoryback.PNG` | `531b0a38b0ead0089a85fc3026014215bd718675` |
 
-Before removal, the only two direct live source consumers were
-`emergency_icon.png` (the emergency-call button) and `emergency_meeting.png` (the
-emergency-call splash), both in `GameMap.tsx`. No source-code consumer was found for the
-other 15 filenames. The two live paths now render the authored SVG components above; the
-unused 15 files were removed instead of being left in the public directory.
+**Removal status:** all 17 files have been deleted from the current source tree. The `au-assets/` directory is absent from the branch, and the current `GameMap.tsx` has no runtime reference to it. Historical Git commits and the archived handoff retain the old history; they are not runtime dependencies and do not imply asset clearance.
 
-The two previously live consumers were replaced with project-authored vector artwork:
+Before removal, only two direct live source consumers were found:
+- `emergency_icon.png` — the emergency-call action button in `GameMap.tsx`
+- `emergency_meeting.png` — the emergency-meeting splash/overlay in `GameMap.tsx`
+
+Both are replaced with project-authored SVG components:
 - `EmergencyCallIcon` in `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx`
 - `EmergencyMeetingArtwork` in the same module
 
-The full-screen call status, localization, server confirmation behavior, button placement and
-size remain unchanged. Browser smoke now asserts the authored SVGs are present and that the
-splash has no raster image dependency.
+The emergency button size/placement, localized call status, full-screen overlay, and server confirmation flow are retained. Browser smoke asserts that the authored SVGs render and that the splash no longer depends on a raster image.
+
+No direct source-code consumers were found for the other 15 files in the source audit. They were removed rather than left in the public directory.
+
+## Remaining release gate
+
+Removing this specific bundle does not automatically clear every other asset in the project. Before commercial release:
+- Record the exact source, licence, attribution requirement, and replacement path for every retained external asset.
+- Check all retained artwork, fonts, audio and source-image inputs for documented ownership or licence terms.
+- Do not ship third-party logos, title art, meeting/ejection art, character art, or ripped sound effects.
+- Do not infer commercial rights from a repository being public or from an unrelated repository-level licence.
+
+Generated character atlas output is derived from the repository's authored Among Gas character source and is covered by the existing atlas tests; that is not a licence for unrelated source art.
 
 ## Original / generated project assets
 
-| Asset family | Current classification | Notes |
+| Asset family | Status | Notes |
 |---|---|---|
 | `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx` | Project-authored SVG | Replaces the two live emergency images from the removed legacy bundle. |
 | `artifacts/telegram-game/public/sprites/` | Project-authored/generated | Character atlas is validated by runtime/golden tests. |
 | Map artwork | Project-provided | Keep transform calibration at logical 3224×1858. |
 | Procedural footsteps | Project-generated | Synthesized in `sfx.ts`; no external sample required. |
 | UI CSS / SVG primitives | Project-authored | Prefer these for icons and overlays. |
-
-## Remaining provenance gate
-
-Removing the identified ripped-image bundle does not automatically clear every asset in the
-project. Before commercial release, continue checking all other retained artwork, fonts, audio
-and source-image inputs for documented ownership or licence terms. Do not infer commercial
-rights from a repository being public or from an unrelated repository-level licence.
