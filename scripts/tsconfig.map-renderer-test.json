@@ -13,7 +13,7 @@
     "src/testTiledMapRenderer.ts",
     "../artifacts/telegram-game/src/game/TiledMap.ts",
     "../artifacts/telegram-game/src/game/mapBaseLayer.ts",
-    "src/testMapBaseLayer.ts"
+    "../artifacts/telegram-game/src/game/mapBaseLayer.test.ts"
   ],
   "exclude": []
 }
