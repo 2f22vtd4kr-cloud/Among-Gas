@@ -24,6 +24,7 @@
     "test:map-renderer": "tsc -p tsconfig.map-renderer-test.json --noEmit && tsx ../artifacts/telegram-game/src/game/mapBaseLayer.test.ts && tsx ../artifacts/telegram-game/src/game/mapMarkerRenderer.test.ts && tsx ../artifacts/telegram-game/src/game/mapWorldDetailsRenderer.test.ts && tsx ../artifacts/telegram-game/src/game/mapVisionRenderer.test.ts && tsx src/testTiledMapRenderer.ts",
     "test:minigame-registry": "tsx --tsconfig ./tsconfig.minigame.json ../artifacts/telegram-game/src/components/minigames/testMinigameRegistry.tsx",
     "test:map-camera": "tsx ../artifacts/telegram-game/src/game/mapCamera.test.ts",
+    "test:remote-player-animation": "tsx ../artifacts/telegram-game/src/game/remotePlayerAnimation.test.ts",
     "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts",
     "test:game-input": "tsx ../artifacts/telegram-game/src/game/gameInput.test.ts"
   },
