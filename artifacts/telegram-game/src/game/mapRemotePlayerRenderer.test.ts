@@ -132,8 +132,7 @@ const base = {
     ],
     [-1, 1],
   ], 'ghost breathing transform precedes the facing flip');
-  const alpha = calls.findIndex(call => call.name === 'translate');
-  assert.ok(alpha >= 0);
+  assert.ok(calls.some(call => call.name === 'translate'));
   assert.equal(state.globalAlpha,
     0.46 + 0.1 * (0.5 + 0.5 * Math.sin(500 / 430 + 3 * 0.6)),
     'ghost transparency retains its original breathing pulse');
