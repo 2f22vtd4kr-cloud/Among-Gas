@@ -258,6 +258,7 @@ jobs:
             ${{ runner.temp }}/among-gas-visual-qa/*.png
             ${{ runner.temp }}/among-gas-visual-qa/hud-state-matrix.json
             ${{ runner.temp }}/among-gas-visual-qa/character-atlas-golden-matrix.png
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-gameplay-scale.png
             ${{ runner.temp }}/among-gas-visual-qa/character-atlas-frame-metrics.json
             artifacts/telegram-game/collision-qa-overlay.png
             artifacts/telegram-game/collision-reference-overlay.png
