@@ -144,7 +144,7 @@ try {
   await touchTap(bounds.x + 220, bounds.y + 95);
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
-  const selectedShadow = page.getByLabel("Shadow");
+  const selectedShadow = page.getByRole("checkbox", { name: "Shadow" });
   await selectedShadow.waitFor();
   assert.equal(await selectedShadow.isChecked(), false,
     "new geometry retains the separately authored Casts shadow value");
