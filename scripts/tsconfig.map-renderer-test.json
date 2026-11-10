@@ -25,7 +25,9 @@
     "../artifacts/telegram-game/src/game/mapLocalPlayerRenderer.ts",
     "../artifacts/telegram-game/src/game/mapLocalPlayerRenderer.test.ts",
     "../artifacts/telegram-game/src/game/characterGhostMotion.ts",
-    "../artifacts/telegram-game/src/game/characterGhostMotion.test.ts"
+    "../artifacts/telegram-game/src/game/characterGhostMotion.test.ts",
+    "../artifacts/telegram-game/src/game/mapPlayerCanvasPosition.ts",
+    "../artifacts/telegram-game/src/game/mapPlayerCanvasPosition.test.ts"
   ],
   "exclude": []
 }
