@@ -9,6 +9,7 @@ const MAP_H = 1858;
 const WIRE_SCALE = 32000;
 const KILL_RANGE_PX = Math.round((MAP_W / 104) * 1.5);
 const REPORT_RANGE_PX = Math.round((MAP_W / 104) * 2.5);
+const KILL_COOLDOWN_MS = 15_000;
 
 function connect(id, username) {
   return new Promise((resolve, reject) => {
@@ -184,6 +185,9 @@ async function main() {
     const reporterStart = positions.get(reporter.slot);
     assert.ok(distance(reporterStart, victimPosition) > REPORT_RANGE_PX + 5,
       'reporter starts outside the authoritative report radius so the negative probe is meaningful');
+
+    console.log('--- Wait for the actual 15-second server kill cooldown ---');
+    await sleep(KILL_COOLDOWN_MS + 250);
 
     console.log('--- Move impostor through real movement intents into kill range ---');
     await sleep(220); // accrue the server's initial 200ms movement-credit window
