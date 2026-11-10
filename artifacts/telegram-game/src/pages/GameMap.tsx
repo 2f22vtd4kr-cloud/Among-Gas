@@ -1317,7 +1317,6 @@ export default function GameMap() {
           const anim = animationStep.state;
           const rMoving = animationStep.moving;
           remoteAnims.set(rp.slot, anim);
-          anim.animMs = rMoving ? anim.animMs + dtMs : 0;
           // The atlas contains one dedicated ghost pose, not a walking ghost
           // cycle. Keep that silhouette and animate its body transform rather
           // than swapping in living-player frames that would lose the ghost look.
