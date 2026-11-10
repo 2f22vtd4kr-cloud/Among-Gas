@@ -63,7 +63,7 @@ const base = {
   clipCalls.length = 0;
   const { context, calls, state } = recordingContext();
   drawLocalPlayerAppearance({
-    ...base, context, ghost: true, pose: 'ghost', facingLeft: true, slot: 2,
+    ...base, context, ghost: true, pose: 'ghost', facingLeft: true,
   });
   assert.equal(calls.some(c => c.name === 'ellipse'), false, 'ghost has no ground shadow');
   assert.deepEqual(calls.find(c => c.name === 'translate')?.args, [124, 79]);
