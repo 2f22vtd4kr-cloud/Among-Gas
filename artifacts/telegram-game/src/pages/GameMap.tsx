@@ -74,6 +74,7 @@ import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
 import { drawMapBaseLayer } from '../game/mapBaseLayer';
+import { drawWorldMarkers } from '../game/mapMarkerRenderer';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
@@ -1267,146 +1268,22 @@ export default function GameMap() {
         };
       }
 
-      // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
-      {
-        const snap = myTasksRef.current;
-        if (snap.length > 0 && !meetingActiveRef.current && sabotageRef.current?.systemId !== SABOTAGE_COMMS) {
-          ctx.textAlign = 'center';
-          for (const t of snap) {
-            // When a task is in interaction range, the fixed action button
-            // already names it; drawing the map marker beneath that button
-            // creates a crowded overlap on short portrait screens.
-            if (t.taskId === nearestTaskRef.current) continue;
-            const def = TASK_DEFS[t.taskId];
-            if (!def) continue;
-            const done = t.completedSteps >= def.steps;
-            const locked = sabotageRef.current?.systemId === SABOTAGE_DOORS &&
-              sabotageRef.current.lockedTaskIds.includes(t.taskId);
-            const tx = Math.round((def.x - srcX) * scale);
-            const ty = Math.round((def.y - srcY) * scale);
-            if (tx < -60 || tx > cw + 60 || ty < -60 || ty > ch + 60) continue;
-            const markerR = Math.round(9 * dpr);
-            // Glow ring
-            ctx.beginPath();
-            ctx.arc(tx, ty, markerR + 3, 0, Math.PI * 2);
-            ctx.fillStyle = locked ? 'rgba(255,40,40,0.25)' : done ? 'rgba(50,180,50,0.2)' : 'rgba(255,220,40,0.18)';
-            ctx.fill();
-            // Marker circle
-            ctx.beginPath();
-            ctx.arc(tx, ty, markerR, 0, Math.PI * 2);
-            ctx.fillStyle = locked ? 'rgba(150,35,40,0.95)' : done ? 'rgba(50,180,50,0.85)' : 'rgba(255,210,30,0.9)';
-            ctx.fill();
-            ctx.strokeStyle = done ? 'rgba(30,140,30,0.9)' : 'rgba(180,140,0,0.9)';
-            ctx.lineWidth = Math.round(1.5 * dpr);
-            ctx.stroke();
-            // Icon
-            ctx.fillStyle = locked ? '#ffffff' : done ? '#0d3b0d' : '#3b2a00';
-            ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
-            ctx.textBaseline = 'middle';
-            ctx.fillText(locked ? '×' : done ? '✓' : '!', tx, ty);
-            // Label
-            ctx.textBaseline = 'top';
-            ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
-            ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-            ctx.lineWidth = Math.round(3 * dpr);
-            const taskLabel = taskRu(def.name, languageRef.current);
-            ctx.strokeText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
-            ctx.fillStyle = locked ? 'rgba(255,120,120,0.95)' : done ? 'rgba(120,255,120,0.85)' : 'rgba(255,235,80,0.9)';
-            ctx.fillText(locked ? `LOCKED · ${taskLabel}` : taskLabel, tx, ty + markerR + 3);
-          }
-          // Off-screen task compass: points towards the selected task (or the next
-          // unfinished one). Coordinates are clamped in canvas pixels, so it works
-          // in both portrait Telegram WebViews and wide desktop windows.
-          if (myRoleRef.current === 'crewmate') {
-            const candidates = snap.filter(task => {
-              const def = TASK_DEFS.find(item => item.id === task.taskId);
-              if (!def || task.completedSteps >= def.steps) return false;
-              return !(sabotageRef.current?.systemId === SABOTAGE_DOORS &&
-                sabotageRef.current.lockedTaskIds.includes(task.taskId));
-            });
-            const target = candidates.find(task => task.taskId === trackedTaskIdRef.current) ?? candidates[0];
-            const def = target ? TASK_DEFS.find(item => item.id === target.taskId) : undefined;
-            if (def && !meetingActiveRef.current) {
-              const tx = (def.x - srcX) * scale;
-              const ty = (def.y - srcY) * scale;
-              const margin = 30 * dpr;
-              const inView = tx >= margin && tx <= cw - margin && ty >= margin && ty <= ch - margin;
-              if (!inView) {
-                const centerX = cw / 2;
-                const centerY = ch / 2;
-                const dx = tx - centerX;
-                const dy = ty - centerY;
-                const factorX = Math.abs(dx) > 0.001 ? (centerX - margin) / Math.abs(dx) : Number.POSITIVE_INFINITY;
-                const factorY = Math.abs(dy) > 0.001 ? (centerY - margin) / Math.abs(dy) : Number.POSITIVE_INFINITY;
-                const factor = Math.min(factorX, factorY);
-                const ax = centerX + dx * factor;
-                const ay = centerY + dy * factor;
-                ctx.save();
-                ctx.translate(ax, ay);
-                ctx.rotate(Math.atan2(dy, dx));
-                ctx.beginPath();
-                ctx.moveTo(11 * dpr, 0);
-                ctx.lineTo(-7 * dpr, -7 * dpr);
-                ctx.lineTo(-4 * dpr, 0);
-                ctx.lineTo(-7 * dpr, 7 * dpr);
-                ctx.closePath();
-                ctx.fillStyle = target.taskId === trackedTaskIdRef.current
-                  ? 'rgba(112,223,193,0.98)'
-                  : 'rgba(255,220,70,0.95)';
-                ctx.strokeStyle = 'rgba(0,0,0,0.88)';
-                ctx.lineWidth = 2 * dpr;
-                ctx.stroke();
-                ctx.fill();
-                ctx.restore();
-              }
-            }
-          }
-          ctx.textAlign = 'left';
-        }
-      }
-
-      // ── 2.6 Sabotage pad markers (Phase 8, hidden during meetings) ─────────
-      {
-        const active = sabotageRef.current;
-        if (active && !meetingActiveRef.current) {
-          const def = SABOTAGE_DEFS[active.systemId as SabotageSystemId];
-          if (def) {
-            ctx.textAlign = 'center';
-            def.pads.forEach((pad, padId) => {
-              const done = active.fixedPads.includes(padId);
-              const tx = Math.round((pad.x - srcX) * scale);
-              const ty = Math.round((pad.y - srcY) * scale);
-              if (tx < -60 || tx > cw + 60 || ty < -60 || ty > ch + 60) return;
-              const markerR = Math.round(10 * dpr);
-              ctx.beginPath();
-              ctx.arc(tx, ty, markerR + 3, 0, Math.PI * 2);
-              ctx.fillStyle = done ? 'rgba(50,180,50,0.2)' : 'rgba(255,60,60,0.22)';
-              ctx.fill();
-              ctx.beginPath();
-              ctx.arc(tx, ty, markerR, 0, Math.PI * 2);
-              ctx.fillStyle = done ? 'rgba(50,180,50,0.85)' : 'rgba(230,50,50,0.9)';
-              ctx.fill();
-              ctx.strokeStyle = done ? 'rgba(30,140,30,0.9)' : 'rgba(140,0,0,0.9)';
-              ctx.lineWidth = Math.round(1.5 * dpr);
-              ctx.stroke();
-              ctx.fillStyle = '#fff';
-              ctx.font = `bold ${Math.round(11 * dpr)}px sans-serif`;
-              ctx.textBaseline = 'middle';
-              ctx.fillText(done ? '✓' : '!', tx, ty);
-              ctx.textBaseline = 'top';
-              ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
-              ctx.strokeStyle = 'rgba(0,0,0,0.85)';
-              ctx.lineWidth = Math.round(3 * dpr);
-              const translatedName = sabotageRu(def.name, languageRef.current);
-              const label = def.pads.length > 1 ? `${translatedName} ${padId + 1}` : translatedName;
-              ctx.strokeText(label, tx, ty + markerR + 3);
-              ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
-              ctx.fillText(label, tx, ty + markerR + 3);
-            });
-            ctx.textAlign = 'left';
-          }
-        }
-      }
+      drawWorldMarkers({
+        context: ctx,
+        canvasWidth: cw,
+        canvasHeight: ch,
+        devicePixelRatio: dpr,
+        cameraX: srcX,
+        cameraY: srcY,
+        scale,
+        tasks: myTasksRef.current,
+        sabotage: sabotageRef.current,
+        meetingActive: meetingActiveRef.current,
+        nearestTaskId: nearestTaskRef.current,
+        trackedTaskId: trackedTaskIdRef.current,
+        role: myRoleRef.current,
+        translateTaskName: name => taskRu(name, languageRef.current),
+      });
 
       // Vent positions remain active for proximity-gated controls, but we do not
       // paint synthetic black/white vent glyphs over the illustrated floor.
