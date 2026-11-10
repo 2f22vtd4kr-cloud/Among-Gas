@@ -77,6 +77,7 @@ import { drawMapBaseLayer } from '../game/mapBaseLayer';
 import { drawVisionFogOverlay } from '../game/mapVisionRenderer';
 import { drawWorldMarkers } from '../game/mapMarkerRenderer';
 import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
+import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
@@ -154,33 +155,6 @@ function slotColor(slot: number): CharacterColor {
 
 // Character canvas rendering is isolated in game/characterSpriteRenderer.tsx.
 
-// ── Remote player animation state (per slot, maintained across frames) ───────
-// Remote positions arrive at 25Hz via 0xFF deltas; the rAF loop compares
-// against the previous frame to derive walk animation and facing direction.
-interface RemoteAnim {
-  /** Most recently received authoritative position. */
-  x: number;
-  y: number;
-  /** Interpolated screen position; bot updates arrive slower than human updates. */
-  renderX: number;
-  renderY: number;
-  fromX: number;
-  fromY: number;
-  targetX: number;
-  targetY: number;
-  segmentStartTs: number;
-  segmentDurationMs: number;
-  lastTargetTs: number;
-  animMs: number;
-  facingLeft: boolean;
-  lastMovedTs: number;
-}
-
-/** Keep the walk cycle alive across the server's 200ms bot tick interval. */
-const REMOTE_MOVING_WINDOW_MS = 260;
-const REMOTE_INTERPOLATION_MIN_MS = 40;
-const REMOTE_INTERPOLATION_MAX_MS = 220;
-
 function getTaskInteractionMockTaskId(mode: string | null): number | null {
   if (mode === 'task-interaction') return 4;
   if (mode === 'task-interaction-blocked' || mode === 'task-interaction-ghost-blocked') return 7;
@@ -209,7 +183,7 @@ export default function GameMap() {
   const tiledMapRef  = useRef<TiledMap | null>(null);
   const spriteImgRef = useRef<CanvasImageSource | null>(null);
   /** Per-slot animation state for remote players, maintained across rAF frames. */
-  const remoteAnimMapRef = useRef<Map<number, RemoteAnim>>(new Map());
+  const remoteAnimMapRef = useRef<Map<number, RemotePlayerAnimationState>>(new Map());
 
   const [loaded,       setLoaded]       = useState(false);
   const [error,        setError]        = useState(false);
@@ -1333,49 +1307,16 @@ export default function GameMap() {
           const rIsGhost = deadSlotsRef.current.has(rp.slot);
           // Living players see the stationary body, not the dead player's moving ghost.
           if (rIsGhost && !viewerIsDead) continue;
-          // Update per-slot animation state from position deltas
-          let anim = remoteAnims.get(rp.slot);
-          if (!anim) {
-            anim = {
-              x: rp.x, y: rp.y,
-              renderX: rp.x, renderY: rp.y,
-              fromX: rp.x, fromY: rp.y,
-              targetX: rp.x, targetY: rp.y,
-              segmentStartTs: ts, segmentDurationMs: REMOTE_INTERPOLATION_MIN_MS,
-              lastTargetTs: ts,
-              animMs: 0, facingLeft: false, lastMovedTs: -1e9,
-            };
-            remoteAnims.set(rp.slot, anim);
-          }
-          const rdx = rp.x - anim.x;
-          const rdy = rp.y - anim.y;
-          if (rdx * rdx + rdy * rdy > 0.25) {
-            // Start the next interpolation segment from the current rendered
-            // position, not the previous network sample. This avoids visible
-            // jumps when synthetic bots update at 5Hz while humans update at 25Hz.
-            anim.fromX = anim.renderX;
-            anim.fromY = anim.renderY;
-            anim.targetX = rp.x;
-            anim.targetY = rp.y;
-            anim.segmentStartTs = ts;
-            anim.segmentDurationMs = Math.max(
-              REMOTE_INTERPOLATION_MIN_MS,
-              Math.min(REMOTE_INTERPOLATION_MAX_MS, ts - anim.lastTargetTs),
-            );
-            anim.lastTargetTs = ts;
-            anim.lastMovedTs = ts;
-            if (Math.abs(rdx) > 0.1) anim.facingLeft = rdx < 0;
-          }
-          anim.x = rp.x;
-          anim.y = rp.y;
-          const segmentT = Math.max(0, Math.min(1,
-            (ts - anim.segmentStartTs) / anim.segmentDurationMs,
-          ));
-          const easedT = segmentT * segmentT * (3 - 2 * segmentT);
-          anim.renderX = anim.fromX + (anim.targetX - anim.fromX) * easedT;
-          anim.renderY = anim.fromY + (anim.targetY - anim.fromY) * easedT;
-          const rMoving = ts - anim.lastMovedTs < REMOTE_MOVING_WINDOW_MS;
-          anim.animMs = rMoving ? anim.animMs + dtMs : 0;
+          const animationStep = stepRemotePlayerAnimation(
+            remoteAnims.get(rp.slot),
+            rp.x,
+            rp.y,
+            ts,
+            dtMs,
+          );
+          const anim = animationStep.state;
+          const rMoving = animationStep.moving;
+          remoteAnims.set(rp.slot, anim);
           // The atlas contains one dedicated ghost pose, not a walking ghost
           // cycle. Keep that silhouette and animate its body transform rather
           // than swapping in living-player frames that would lose the ghost look.
