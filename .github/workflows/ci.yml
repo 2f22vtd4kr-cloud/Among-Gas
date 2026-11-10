@@ -54,6 +54,9 @@ jobs:
       - name: Test extracted GameMap camera smoothing and viewport bounds
         run: pnpm --filter @workspace/scripts run test:map-camera
 
+      - name: Verify remote-player interpolation and walk animation timing
+        run: pnpm --filter @workspace/scripts run test:remote-player-animation
+
       - name: Test extracted GameMap task and sabotage marker rendering
         run: pnpm --filter @workspace/scripts run test:map-renderer
 
