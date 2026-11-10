@@ -105,7 +105,7 @@ export function drawWorldMarkers({
       const candidates = tasks.filter(task => {
         const def = TASK_DEFS.find(item => item.id === task.taskId);
         if (!def || task.completedSteps >= def.steps) return false;
-        return !(sabotage?.systemId === 0x05 &&
+        return !(sabotage?.systemId === SABOTAGE_DOORS &&
           sabotage.lockedTaskIds.includes(task.taskId));
       });
       const target = candidates.find(task => task.taskId === trackedTaskId) ?? candidates[0];
