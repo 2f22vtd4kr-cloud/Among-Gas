@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { CharacterPose } from './characterSprites';
 import { drawLocalPlayerAppearance } from './mapLocalPlayerRenderer';
+import { getCharacterGhostMotion } from './characterGhostMotion';
 
 type Call = { name: string; args: unknown[] };
 function recordingContext(): { context: CanvasRenderingContext2D; calls: Call[]; state: Record<string, unknown> } {
@@ -24,8 +25,7 @@ const base = {
   sprite,
   frameRect: { x: 11.2, y: 702.4, width: 81.8, height: 45.5 },
   pose: 'walk-2' as const,
-  slot: 2,
-  timestampMs: 640,
+  ghostMotion: getCharacterGhostMotion(640, 2, 60, 90),
   shadowX: 120,
   shadowY: 85,
   spriteX: 124,
@@ -63,19 +63,16 @@ const base = {
   clipCalls.length = 0;
   const { context, calls, state } = recordingContext();
   drawLocalPlayerAppearance({
-    ...base, context, ghost: true, pose: 'ghost', facingLeft: true, slot: 2,
+    ...base, context, ghost: true, pose: 'ghost', facingLeft: true,
   });
   assert.equal(calls.some(c => c.name === 'ellipse'), false, 'ghost has no ground shadow');
   assert.deepEqual(calls.find(c => c.name === 'translate')?.args, [124, 79]);
-  assert.deepEqual(calls.find(c => c.name === 'rotate')?.args, [Math.sin(640 / 390 + 2 * 0.7) * 0.045]);
+  assert.deepEqual(calls.find(c => c.name === 'rotate')?.args, [base.ghostMotion.rotationRad]);
   assert.deepEqual(calls.filter(c => c.name === 'scale').map(c => c.args), [
-    [
-      1 + Math.sin(640 / 275 + 2 * 0.9) * 0.025,
-      1 - Math.sin(640 / 275 + 2 * 0.9) * 0.04,
-    ],
+    [base.ghostMotion.scaleX, base.ghostMotion.scaleY],
     [-1, 1],
   ], 'ghost pulse/sway precedes facing flip');
-  assert.equal(state.globalAlpha, 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(640 / 430 + 2 * 0.6)));
+  assert.equal(state.globalAlpha, base.ghostMotion.opacity);
   assert.deepEqual(clipCalls[0], [-30, -45, 60, 90, 'ghost']);
 }
 console.log('LOCAL PLAYER RENDERER TESTS PASSED: shadow anchor, atlas crop, clipping, ghost pulse, facing and smoothing');

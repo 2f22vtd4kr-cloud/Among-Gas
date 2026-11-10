@@ -8,7 +8,7 @@
     "build:collision": "tsx ./src/buildCollisionDocument.ts",
     "test:pathfinding": "tsx ./src/testPathfinding.ts",
     "test:map-image-transform": "tsx ./src/testMapImageTransform.ts",
-    "test:character-geometry": "tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts && tsx ../artifacts/telegram-game/src/game/characterSpriteRenderer.test.ts && tsx ../artifacts/telegram-game/src/game/characterAnimation.test.ts && tsx ./test-character-atlas.ts",
+    "test:character-geometry": "tsx ../artifacts/telegram-game/src/game/characterSprites.test.ts && tsx ../artifacts/telegram-game/src/game/characterSpriteRenderer.test.ts && tsx ../artifacts/telegram-game/src/game/characterAnimation.test.ts && tsx ../artifacts/telegram-game/src/game/characterGhostMotion.test.ts && tsx ./test-character-atlas.ts",
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vector-collision.json --noEmit && tsc -p tsconfig.collision-preview.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",

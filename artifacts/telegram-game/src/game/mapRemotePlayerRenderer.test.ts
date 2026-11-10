@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import type { CharacterPose } from './characterSprites';
 import { drawRemotePlayerAppearance } from './mapRemotePlayerRenderer';
+import { getCharacterGhostMotion } from './characterGhostMotion';
 
 type Call = { name: string; args: unknown[] };
 type PropertyWrite = { name: string; value: unknown };
@@ -37,8 +38,7 @@ const base = {
   sprite,
   frameRect,
   pose: 'walk-1' as const,
-  slot: 3,
-  timestampMs: 500,
+  ghostMotion: getCharacterGhostMotion(500, 3, 60, 90),
   screenX: 100,
   screenY: 80,
   groundY: 90,
@@ -123,19 +123,15 @@ const base = {
     'ghost appearance must not invoke the shadow fill pass');
   const rotate = calls.find(call => call.name === 'rotate');
   const scales = calls.filter(call => call.name === 'scale');
-  assert.deepEqual(rotate?.args, [Math.sin(500 / 390 + 3 * 0.7) * 0.045],
+  assert.deepEqual(rotate?.args, [base.ghostMotion.rotationRad],
     'ghost sway retains its slot/time phase');
   assert.deepEqual(scales.map(call => call.args), [
-    [
-      1 + Math.sin(500 / 275 + 3 * 0.9) * 0.025,
-      1 - Math.sin(500 / 275 + 3 * 0.9) * 0.04,
-    ],
+    [base.ghostMotion.scaleX, base.ghostMotion.scaleY],
     [-1, 1],
   ], 'ghost breathing transform precedes the facing flip');
   assert.ok(calls.some(call => call.name === 'translate'));
-  assert.equal(state.globalAlpha,
-    0.46 + 0.1 * (0.5 + 0.5 * Math.sin(500 / 430 + 3 * 0.6)),
-    'ghost transparency retains its original breathing pulse');
+  assert.equal(state.globalAlpha, base.ghostMotion.opacity,
+    'ghost transparency uses the shared breathing pulse');
   assert.equal(state.fillStyle, 'rgba(200,220,255,0.55)',
     'ghost nameplate keeps its quiet blue-white colour');
   assert.equal(calls.find(call => call.name === 'fillText')?.args[0], 'Player 3');

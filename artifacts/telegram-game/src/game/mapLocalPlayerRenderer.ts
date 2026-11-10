@@ -4,14 +4,14 @@ import {
   CHARACTER_SHADOW_Y_OFFSET_RATIO,
 } from './characterAnimation';
 import type { CharacterPose } from './characterSprites';
+import type { CharacterGhostMotion } from './characterGhostMotion';
 
 export interface LocalPlayerAppearanceOptions {
   readonly context: CanvasRenderingContext2D;
   readonly sprite: CanvasImageSource;
   readonly frameRect: { readonly x: number; readonly y: number; readonly width: number; readonly height: number };
   readonly pose: CharacterPose;
-  readonly slot: number;
-  readonly timestampMs: number;
+  readonly ghostMotion: CharacterGhostMotion;
   readonly shadowX: number;
   readonly shadowY: number;
   readonly spriteX: number;
@@ -41,8 +41,7 @@ export function drawLocalPlayerAppearance({
   sprite,
   frameRect,
   pose,
-  slot,
-  timestampMs,
+  ghostMotion,
   shadowX,
   shadowY,
   spriteX,
@@ -81,11 +80,9 @@ export function drawLocalPlayerAppearance({
   ctx.save();
   ctx.translate(spriteX, spriteY);
   if (ghost) {
-    const ghostPulse = Math.sin(timestampMs / 275 + slot * 0.9);
-    const ghostSway = Math.sin(timestampMs / 390 + slot * 0.7);
-    ctx.rotate(ghostSway * 0.045);
-    ctx.scale(1 + ghostPulse * 0.025, 1 - ghostPulse * 0.04);
-    ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(timestampMs / 430 + slot * 0.6));
+    ctx.rotate(ghostMotion.rotationRad);
+    ctx.scale(ghostMotion.scaleX, ghostMotion.scaleY);
+    ctx.globalAlpha = ghostMotion.opacity;
   }
   if (facingLeft) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = true;
