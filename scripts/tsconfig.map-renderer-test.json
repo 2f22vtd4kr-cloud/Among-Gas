@@ -15,7 +15,9 @@
     "../artifacts/telegram-game/src/game/mapBaseLayer.ts",
     "../artifacts/telegram-game/src/game/mapBaseLayer.test.ts",
     "../artifacts/telegram-game/src/game/mapVisionRenderer.ts",
-    "../artifacts/telegram-game/src/game/mapVisionRenderer.test.ts"
+    "../artifacts/telegram-game/src/game/mapVisionRenderer.test.ts",
+    "../artifacts/telegram-game/src/game/mapWorldDetailsRenderer.ts",
+    "../artifacts/telegram-game/src/game/mapWorldDetailsRenderer.test.ts"
   ],
   "exclude": []
 }
