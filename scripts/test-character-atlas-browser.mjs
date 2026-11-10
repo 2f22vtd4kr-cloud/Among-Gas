@@ -58,6 +58,21 @@ try {
       'green', 'pink', 'orange', 'yellow', 'black', 'white', 'lime', 'cyan', 'rose',
     ];
     const frames = [];
+    const gameplayMatrix = document.createElement('canvas');
+    const gameplayZoom = 0.7; // GameMap.tsx ZOOM used for the gameplay camera.
+    const playerDisplayHeight = Math.round(36 * (3224 / 1652));
+    const playerDisplayWidth = playerDisplayHeight * (cellWidth / (1401 / 9));
+    const gameplayCellWidth = Math.ceil(playerDisplayWidth * gameplayZoom) + 10;
+    const gameplayCellHeight = Math.ceil(playerDisplayHeight * gameplayZoom) + 10;
+    gameplayMatrix.width = colors.length * gameplayCellWidth;
+    gameplayMatrix.height = poseWindows.length * gameplayCellHeight;
+    const gameplayContext = gameplayMatrix.getContext('2d');
+    if (!gameplayContext) throw new Error('Could not allocate gameplay-scale character matrix');
+    gameplayContext.fillStyle = '#202a35';
+    gameplayContext.fillRect(0, 0, gameplayMatrix.width, gameplayMatrix.height);
+    gameplayContext.imageSmoothingEnabled = true;
+    gameplayContext.imageSmoothingQuality = 'high';
+
     const matrix = document.createElement('canvas');
     const cellW = 84;
     const cellH = 72;
@@ -108,6 +123,16 @@ try {
         const dx = column * cellW + Math.round((cellW - drawWidth) / 2);
         const dy = row * cellH + Math.round((cellH - drawHeight) / 2);
         matrixContext.drawImage(atlas, x, pose.top, cellWidth, height, dx, dy, drawWidth, drawHeight);
+
+        // Match GameMap.tsx's 0.7 zoom and its per-pose crop-height scaling.
+        // This second matrix makes lower-leg/feet-anchor defects visible at the
+        // size characters occupy in the actual camera, not only in source pixels.
+        const gameplayWidth = Math.max(1, Math.round(playerDisplayWidth * gameplayZoom));
+        const gameplayHeight = Math.max(1, Math.round(playerDisplayHeight * gameplayZoom * (height / (1401 / 9))));
+        const gameplayX = column * gameplayCellWidth + Math.round((gameplayCellWidth - gameplayWidth) / 2);
+        const gameplayY = row * gameplayCellHeight + Math.round((gameplayCellHeight - gameplayHeight) / 2);
+        gameplayContext.drawImage(atlas, x, pose.top, cellWidth, height,
+          gameplayX, gameplayY, gameplayWidth, gameplayHeight);
       }
     }
     return {
@@ -118,6 +143,14 @@ try {
       sourceAssetGitBlobSha,
       poseWindows,
       frames,
+      gameplayDisplay: {
+        zoom: gameplayZoom,
+        playerDisplayWidth,
+        playerDisplayHeight,
+        gameplayCellWidth,
+        gameplayCellHeight,
+      },
+      gameplayMatrixDataUrl: gameplayMatrix.toDataURL('image/png'),
       matrixDataUrl: matrix.toDataURL('image/png'),
     };
   }, { poseWindows, sourceAssetGitBlobSha });
@@ -163,7 +196,10 @@ try {
     mkdirSync(visualQaDir, { recursive: true });
     const matrixBase64 = metrics.matrixDataUrl.slice('data:image/png;base64,'.length);
     writeFileSync(join(visualQaDir, 'character-atlas-golden-matrix.png'), Buffer.from(matrixBase64, 'base64'));
+    const gameplayMatrixBase64 = metrics.gameplayMatrixDataUrl.slice('data:image/png;base64,'.length);
+    writeFileSync(join(visualQaDir, 'character-atlas-gameplay-scale.png'), Buffer.from(gameplayMatrixBase64, 'base64'));
     const manifest = {
+      gameplayDisplay: metrics.gameplayDisplay,
       sourceAssetGitBlobSha,
       width: metrics.width,
       height: metrics.height,
