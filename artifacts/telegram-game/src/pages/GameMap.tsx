@@ -1402,6 +1402,17 @@ export default function GameMap() {
         ? getCharacterWalkBobOffset(playerStateRef.current.animElapsedMs, sH)
         : 0;
 
+      // Keep local ghost float motion in the page's positioning layer; the
+      // renderer receives final coordinates and remains a draw-only module.
+      const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
+      const localGhostPhase = ts / 245 + (mySlotRef.current ?? 0) * 0.8;
+      const localGhostBob = amIGhostFrame
+        ? Math.sin(localGhostPhase) * Math.max(2.5, sH * 0.13)
+        : 0;
+      const localGhostDrift = amIGhostFrame
+        ? Math.sin(ts / 335 + (mySlotRef.current ?? 0) * 1.1) * Math.max(1.5, sW * 0.06)
+        : 0;
+
       const localShadowScale = localMoving
         ? getCharacterShadowScale(localWalkBob, sH)
         : 1;
