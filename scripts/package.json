@@ -21,7 +21,7 @@
     "test:production-world": "pnpm run build:collision && pnpm run test:vector-runtime-isolation",
     "test:vector-runtime-integration": "node ./test-vector-runtime-isolation.mjs",
     "test:vector-runtime-isolation": "node ./test-vector-runtime-isolation.mjs",
-    "test:map-renderer": "tsc -p tsconfig.map-renderer-test.json --noEmit && tsx ../artifacts/telegram-game/src/game/mapBaseLayer.test.ts && tsx src/testTiledMapRenderer.ts",
+    "test:map-renderer": "tsc -p tsconfig.map-renderer-test.json --noEmit && tsx ../artifacts/telegram-game/src/game/mapBaseLayer.test.ts && tsx ../artifacts/telegram-game/src/game/mapMarkerRenderer.test.ts && tsx src/testTiledMapRenderer.ts",
     "test:minigame-registry": "tsx --tsconfig ./tsconfig.minigame.json ../artifacts/telegram-game/src/components/minigames/testMinigameRegistry.tsx",
     "test:map-camera": "tsx ../artifacts/telegram-game/src/game/mapCamera.test.ts",
     "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts",
