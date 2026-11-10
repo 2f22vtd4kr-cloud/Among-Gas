@@ -73,6 +73,7 @@ import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings
 import { classifyMovementEcho } from '../game/movementReconciliation';
 import { mapWorldRectToImagePixels } from '@workspace/shared/mapImageTransform';
 import { TiledMap } from '../game/TiledMap';
+import { drawMapBaseLayer } from '../game/mapBaseLayer';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
@@ -1244,25 +1245,26 @@ export default function GameMap() {
       }
 
       // ── 1. Clear + Map ───────────────────────────────────────────────────
-      ctx.clearRect(0, 0, cw, ch);
-      ctx.imageSmoothingEnabled = true;
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(
-        mapImg,
-        mapSourceRect.x, mapSourceRect.y, mapSourceRect.width, mapSourceRect.height,
-        0, 0, cw, ch,
-      );
       const tiledMap = tiledMapRef.current;
-      if (tiledMap) {
-        const tilesReady = tiledMap.draw(ctx, { x: srcX, y: srcY, w: srcW, h: srcH }, ZOOM, dpr);
-        if (import.meta.env.DEV) {
-          (window as Window & { __AG_TILE_DEBUG?: unknown }).__AG_TILE_DEBUG = {
-            ...tiledMap.getStatus(),
-            overviewDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4,
-            totalDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4 + tiledMap.getStatus().decodedBytes,
-            ready: tilesReady,
-          };
-        }
+      const tilesReady = drawMapBaseLayer({
+        context: ctx,
+        canvasWidth: cw,
+        canvasHeight: ch,
+        mapImage: mapImg,
+        mapSourceRect,
+        cameraWorldRect: { x: srcX, y: srcY, w: srcW, h: srcH },
+        zoom: ZOOM,
+        dpr,
+        tiledMap,
+      });
+      if (tiledMap && import.meta.env.DEV) {
+        const tileStatus = tiledMap.getStatus();
+        (window as Window & { __AG_TILE_DEBUG?: unknown }).__AG_TILE_DEBUG = {
+          ...tileStatus,
+          overviewDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4,
+          totalDecodedBytes: mapImg.naturalWidth * mapImg.naturalHeight * 4 + tileStatus.decodedBytes,
+          ready: tilesReady,
+        };
       }
 
       // ── 2.5 Task markers (crewmates only, hidden during meetings) ──────────
