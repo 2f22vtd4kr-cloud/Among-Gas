@@ -17,16 +17,13 @@ import {
 import {
   CHARACTER_CELL_WIDTH,
   CHARACTER_CELL_HEIGHT,
-  CHARACTER_COLORS,
-  CHARACTER_POSES,
   getCharacterColorForSlot,
   getCharacterFrameRect,
-  getCharacterClipPath,
-  getCharacterClipNotch,
   type CharacterColor,
   type CharacterPose,
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
+import { CharacterSpriteCanvas, clipCharacterLegGap } from '../game/characterSpriteRenderer';
 import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
 import {
   CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
@@ -151,103 +148,7 @@ function slotColor(slot: number): CharacterColor {
   return getCharacterColorForSlot(slot);
 }
 
-// ── Canvas sprite renderer for DOM overlays (role-reveal, game-over) ─────────
-
-function clipSpriteLegGap(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-  pose: CharacterPose,
-) {
-  const notch = getCharacterClipNotch(pose);
-  if (!notch) return;
-  const leftStart = x + width * notch.leftLegStart;
-  const leftEnd = x + width * notch.leftLegEnd;
-  const rightStart = x + width * notch.rightLegStart;
-  const rightEnd = x + width * notch.rightLegEnd;
-  const top = y + height * notch.top;
-  const bottom = y + height;
-  ctx.beginPath();
-  ctx.moveTo(x, y);
-  ctx.lineTo(x + width, y);
-  ctx.lineTo(x + width, top);
-  ctx.lineTo(rightEnd, top);
-  ctx.lineTo(rightEnd, bottom);
-  ctx.lineTo(rightStart, bottom);
-  ctx.lineTo(rightStart, top);
-  ctx.lineTo(leftEnd, top);
-  ctx.lineTo(leftEnd, bottom);
-  ctx.lineTo(leftStart, bottom);
-  ctx.lineTo(leftStart, top);
-  ctx.lineTo(x, top);
-  ctx.closePath();
-  ctx.clip();
-}
-
-function CharSpriteUI({
-  color, pose = 'idle', size = 64, flipped = false,
-}: {
-  color: string; pose?: string; size?: number; flipped?: boolean;
-}) {
-  const safePose: CharacterPose = (CHARACTER_POSES as readonly string[]).includes(pose)
-    ? pose as CharacterPose
-    : 'idle';
-  const frame = getCharacterFrameRect(
-    CHARACTER_COLORS.includes(color as CharacterColor) ? color as CharacterColor : 'teal',
-    safePose,
-  );
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const scale = size / CHARACTER_CELL_WIDTH;
-  const height = frame.height * scale;
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadCharacterAtlas(import.meta.env.BASE_URL).then(atlas => {
-      if (cancelled || !canvasRef.current) return;
-      const context = canvasRef.current.getContext('2d');
-      if (!context) return;
-      context.imageSmoothingEnabled = false;
-      context.clearRect(0, 0, frame.width, frame.height);
-      context.drawImage(
-        atlas,
-        frame.x, frame.y, frame.width, frame.height,
-        0, 0, frame.width, frame.height,
-      );
-    }).catch(error => {
-      if (import.meta.env.DEV) console.error('Could not render Among Gas character sprite', error);
-    });
-    return () => { cancelled = true; };
-  }, [frame.x, frame.y, frame.width, frame.height]);
-
-  // Every pose uses its measured, isolated atlas window. The corpse is a single
-  // authored sprite (cut suit + exposed bone); do not splice in the adjacent
-  // sit-crouch row or erase pixels at guessed uniform row boundaries.
-  return (
-    <canvas
-      ref={canvasRef}
-      className="ag-character-sprite"
-      data-pose={safePose}
-      data-sprite-row={frame.row}
-      data-source-y={frame.y}
-      data-source-height={frame.height}
-      data-display-height={frame.displayHeight}
-      width={frame.width}
-      height={frame.height}
-      style={{
-        display: 'block',
-        width: size,
-        height,
-        flexShrink: 0,
-        imageRendering: 'pixelated',
-        transformOrigin: 'top center',
-        transform: flipped ? 'scaleX(-1)' : 'none',
-        clipPath: getCharacterClipPath(safePose),
-      }}
-    />
-  );
-}
+// Character canvas rendering is isolated in game/characterSpriteRenderer.tsx.
 
 // ── Remote player animation state (per slot, maintained across frames) ───────
 // Remote positions arrive at 25Hz via 0xFF deltas; the rAF loop compares
@@ -1535,7 +1436,7 @@ export default function GameMap() {
         ctx.save();
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-        clipSpriteLegGap(ctx, corpseX, corpseY, corpseW, corpseH, 'dead-body');
+        clipCharacterLegGap(ctx, corpseX, corpseY, corpseW, corpseH, 'dead-body');
         ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
         ctx.restore();
       }
@@ -1711,7 +1612,7 @@ export default function GameMap() {
           if (anim.facingLeft) ctx.scale(-1, 1);
           ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-          clipSpriteLegGap(ctx, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH, rPose);
+          clipCharacterLegGap(ctx, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH, rPose);
           ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
           ctx.restore();
           ctx.imageSmoothingEnabled = true;
@@ -1798,7 +1699,7 @@ export default function GameMap() {
       if (facingLeft) ctx.scale(-1, 1);
       ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
-      clipSpriteLegGap(ctx, -sW / 2, -sH / 2, sW, sH, pose);
+      clipCharacterLegGap(ctx, -sW / 2, -sH / 2, sW, sH, pose);
       ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
       ctx.restore();
 
@@ -1993,7 +1894,7 @@ export default function GameMap() {
               animation: 'agKillAttacker 1.65s cubic-bezier(.12,.8,.18,1) both',
               filter: 'drop-shadow(0 12px 12px rgba(0,0,0,.72))',
             }}>
-              <CharSpriteUI color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
+              <CharacterSpriteCanvas color={slotColor(killAnimation.attackerSlot ?? 0)} pose="idle" size={174} />
             </div>
             <div className="ag-kill-victim" style={{
               position: 'absolute', right: '15%', top: '17%', width: 174, height: 190, zIndex: 3,
@@ -2004,13 +1905,13 @@ export default function GameMap() {
                 // Keep the complete authored balaclava sprite visible during the strike.
                 animation: 'agKillVictimUpper 1.65s cubic-bezier(.16,.68,.25,1) both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
+                <CharacterSpriteCanvas color={slotColor(killAnimation.victimSlot)} pose="idle" size={174} />
               </div>
               <div className="ag-kill-victim-lower" role="img" aria-label={en ? 'Balaclava corpse with exposed bone' : 'Тело с открытой костью'} style={{
                 position: 'absolute', inset: 0,
                 animation: 'agKillVictimLower 1.65s ease-out both',
               }}>
-                <CharSpriteUI color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
+                <CharacterSpriteCanvas color={slotColor(killAnimation.victimSlot)} pose="dead-body" size={174} />
               </div>
             </div>
             <div className="ag-kill-slash" style={{
@@ -2992,7 +2893,7 @@ export default function GameMap() {
             {/* Character row */}
             <div style={{ display: 'flex', gap: 6, marginBottom: 28, flexWrap: 'wrap', justifyContent: 'center' }}>
               {players.map(p => (
-                <CharSpriteUI
+                <CharacterSpriteCanvas
                   key={p.slot}
                   color={slotColor(p.slot)}
                   pose={deadSlots.includes(p.slot) ? 'ghost' : 'idle'}
@@ -3117,7 +3018,7 @@ export default function GameMap() {
                     data-testid="role-reveal-character"
                     style={{ animation: isMockReveal ? 'none' : 'rrCharacterBob 1.2s ease-in-out infinite' }}
                   >
-                    <CharSpriteUI
+                    <CharacterSpriteCanvas
                       color={isImp ? 'maroon' : 'teal'}
                       pose="idle"
                       size={170}
