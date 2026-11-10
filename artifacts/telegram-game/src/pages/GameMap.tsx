@@ -26,9 +26,6 @@ import { loadCharacterAtlas } from '../game/characterAtlas';
 import { CharacterSpriteCanvas, clipCharacterLegGap } from '../game/characterSpriteRenderer';
 import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
 import {
-  CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
-  CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
-  CHARACTER_SHADOW_Y_OFFSET_RATIO,
   getCharacterShadowScale,
   getCharacterWalkBobOffset,
 } from '../game/characterAnimation';
@@ -78,6 +75,7 @@ import { drawVisionFogOverlay } from '../game/mapVisionRenderer';
 import { drawWorldMarkers } from '../game/mapMarkerRenderer';
 import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
 import { drawRemotePlayerAppearance } from '../game/mapRemotePlayerRenderer';
+import { drawLocalPlayerAppearance } from '../game/mapLocalPlayerRenderer';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
@@ -1393,10 +1391,6 @@ export default function GameMap() {
 
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
       const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
-      const sx = Math.ceil(rect.x);
-      const sy = Math.ceil(rect.y);
-      const sw = Math.floor(rect.x + rect.width)  - sx;
-      const sh = Math.floor(rect.y + rect.height) - sy;
 
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
@@ -1408,8 +1402,8 @@ export default function GameMap() {
         ? getCharacterWalkBobOffset(playerStateRef.current.animElapsedMs, sH)
         : 0;
 
-      // Ground shadow (ghosts float — no shadow). The local ghost uses the
-      // same draw-only float/sway as remote ghosts, without affecting movement.
+      // Keep local ghost float motion in the page's positioning layer; the
+      // renderer receives final coordinates and remains a draw-only module.
       const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
       const localGhostPhase = ts / 245 + (mySlotRef.current ?? 0) * 0.8;
       const localGhostBob = amIGhostFrame
@@ -1418,43 +1412,28 @@ export default function GameMap() {
       const localGhostDrift = amIGhostFrame
         ? Math.sin(ts / 335 + (mySlotRef.current ?? 0) * 1.1) * Math.max(1.5, sW * 0.06)
         : 0;
-      if (!amIGhostFrame) {
-        const blurPx = Math.max(2, Math.round(sH * 0.05));
-        ctx.save();
-        ctx.filter = `blur(${blurPx}px)`;
-        ctx.globalAlpha = 0.55;
-        ctx.fillStyle = '#000000';
-        const localShadowScale = localMoving
-          ? getCharacterShadowScale(localWalkBob, sH)
-          : 1;
-        ctx.beginPath();
-        ctx.ellipse(
-          pCX,
-          pCY + sH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
-          sW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * localShadowScale,
-          sH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * localShadowScale,
-          0, 0, Math.PI * 2,
-        );
-        ctx.fill();
-        ctx.restore();
-        ctx.filter = 'none';
-      }
 
-      ctx.save();
-      ctx.translate(pCX + localGhostDrift, pCY - localGhostBob - (amIGhostFrame ? 0 : localWalkBob));
-      if (amIGhostFrame) {
-        const ghostPulse = Math.sin(ts / 275 + (mySlotRef.current ?? 0) * 0.9);
-        const ghostSway = Math.sin(ts / 390 + (mySlotRef.current ?? 0) * 0.7);
-        ctx.rotate(ghostSway * 0.045);
-        ctx.scale(1 + ghostPulse * 0.025, 1 - ghostPulse * 0.04);
-        ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + (mySlotRef.current ?? 0) * 0.6));
-      }
-      if (facingLeft) ctx.scale(-1, 1);
-      ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-      clipCharacterLegGap(ctx, -sW / 2, -sH / 2, sW, sH, pose);
-      ctx.drawImage(sprite, sx, sy, sw, sh, -sW / 2, -sH / 2, sW, sH);
-      ctx.restore();
+      const localShadowScale = localMoving
+        ? getCharacterShadowScale(localWalkBob, sH)
+        : 1;
+      drawLocalPlayerAppearance({
+        context: ctx,
+        sprite,
+        frameRect: rect,
+        pose,
+        slot: mySlotRef.current ?? 0,
+        timestampMs: ts,
+        shadowX: pCX,
+        shadowY: pCY,
+        spriteX: pCX + localGhostDrift,
+        spriteY: pCY - localGhostBob - (amIGhostFrame ? 0 : localWalkBob),
+        spriteWidth: sW,
+        spriteHeight: sH,
+        facingLeft,
+        ghost: amIGhostFrame,
+        shadowScale: localShadowScale,
+        clipCharacterLegGap,
+      });
 
       // ── 5. Base-game vision + wall shadows ─────────────────────────────────
       // Crewmates and impostors always see only their sight radius. Lights
