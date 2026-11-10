@@ -76,6 +76,7 @@ import { drawWorldMarkers } from '../game/mapMarkerRenderer';
 import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
 import { drawRemotePlayerAppearance } from '../game/mapRemotePlayerRenderer';
 import { drawLocalPlayerAppearance } from '../game/mapLocalPlayerRenderer';
+import { getCharacterGhostMotion } from '../game/characterGhostMotion';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
@@ -1326,16 +1327,11 @@ export default function GameMap() {
           const rRect = getCharacterFrameRect(slotColor(rp.slot), rPose);
           const rSpriteH = Math.round(rBaseSpriteH * rRect.height / CHARACTER_CELL_HEIGHT);
 
-          // Give ghosts a readable float path: vertical drift, lateral sway,
-          // and a slow breathing pulse. This is draw-only; authoritative/world
-          // positions and collision remain untouched.
-          const ghostPhase = ts / 245 + rp.slot * 0.8;
-          const ghostBob = rIsGhost
-            ? Math.sin(ghostPhase) * Math.max(2.5, rSpriteH * 0.13)
-            : 0;
-          const ghostDrift = rIsGhost
-            ? Math.sin(ts / 335 + rp.slot * 1.1) * Math.max(1.5, rSpriteW * 0.06)
-            : 0;
+          // Shared ghost float/breathing remains draw-only; world position and
+          // collision use the untouched authoritative/interpolated coordinates.
+          const ghostMotion = getCharacterGhostMotion(ts, rp.slot, rSpriteW, rSpriteH);
+          const ghostBob = rIsGhost ? ghostMotion.bobY : 0;
+          const ghostDrift = rIsGhost ? ghostMotion.driftX : 0;
           // Living characters visibly bounce on each step. This is draw-only:
           // authoritative coordinates and collision are never modified.
           const rWalkBob = rMoving
@@ -1361,8 +1357,7 @@ export default function GameMap() {
             sprite,
             frameRect: rRect,
             pose: rPose,
-            slot: rp.slot,
-            timestampMs: ts,
+            ghostMotion,
             screenX: rpCX,
             screenY: rpCY,
             groundY: rpGroundY,
@@ -1402,16 +1397,13 @@ export default function GameMap() {
         ? getCharacterWalkBobOffset(playerStateRef.current.animElapsedMs, sH)
         : 0;
 
-      // Keep local ghost float motion in the page's positioning layer; the
-      // renderer receives final coordinates and remains a draw-only module.
+      // Shared ghost float/breathing is a draw-only transform. GameMap still
+      // owns the final screen coordinates, walk bob and all gameplay policy.
       const amIGhostFrame = deadSlotsRef.current.has(mySlotRef.current ?? -1);
-      const localGhostPhase = ts / 245 + (mySlotRef.current ?? 0) * 0.8;
-      const localGhostBob = amIGhostFrame
-        ? Math.sin(localGhostPhase) * Math.max(2.5, sH * 0.13)
-        : 0;
-      const localGhostDrift = amIGhostFrame
-        ? Math.sin(ts / 335 + (mySlotRef.current ?? 0) * 1.1) * Math.max(1.5, sW * 0.06)
-        : 0;
+      const localSlot = mySlotRef.current ?? 0;
+      const localGhostMotion = getCharacterGhostMotion(ts, localSlot, sW, sH);
+      const localGhostBob = amIGhostFrame ? localGhostMotion.bobY : 0;
+      const localGhostDrift = amIGhostFrame ? localGhostMotion.driftX : 0;
 
       const localShadowScale = localMoving
         ? getCharacterShadowScale(localWalkBob, sH)
@@ -1421,8 +1413,7 @@ export default function GameMap() {
         sprite,
         frameRect: rect,
         pose,
-        slot: mySlotRef.current ?? 0,
-        timestampMs: ts,
+        ghostMotion: localGhostMotion,
         shadowX: pCX,
         shadowY: pCY,
         spriteX: pCX + localGhostDrift,
