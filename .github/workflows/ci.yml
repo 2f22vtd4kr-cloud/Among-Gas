@@ -54,6 +54,9 @@ jobs:
       - name: Test extracted GameMap camera smoothing and viewport bounds
         run: pnpm --filter @workspace/scripts run test:map-camera
 
+      - name: Test extracted GameMap task and sabotage marker rendering
+        run: pnpm --filter @workspace/scripts run test:map-renderer
+
       - name: Test extracted contextual HUD action selection and disable rules
         run: pnpm --filter @workspace/scripts run test:game-action-state
 
