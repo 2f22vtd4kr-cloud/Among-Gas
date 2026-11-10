@@ -1460,8 +1460,8 @@ export default function GameMap() {
           cameraX: srcX,
           cameraY: srcY,
           scale,
-          playerScreenX: pCX,
-          playerScreenY: pCY,
+          playerScreenX: localCanvasPosition.groundX,
+          playerScreenY: localCanvasPosition.groundY,
           visionRadiusScreenPx: visionR,
           visiblePolygon,
         });
