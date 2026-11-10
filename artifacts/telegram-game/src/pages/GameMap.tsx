@@ -65,7 +65,7 @@ import {
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
 import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
-import { ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
+import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
