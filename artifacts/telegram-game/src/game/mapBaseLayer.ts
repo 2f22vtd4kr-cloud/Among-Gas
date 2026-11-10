@@ -1,15 +1,46 @@
-import type { TiledMap } from "./TiledMap";
+/**
+ * Minimal structural canvas surface used by the map underlay.
+ *
+ * Deliberately avoids DOM-library types: this module is also imported by the
+ * Node-based scripts typecheck, while browser-specific types belong at the
+ * GameMap/TiledMap integration boundary.
+ */
+export interface MapBaseLayerContext {
+  clearRect(x: number, y: number, width: number, height: number): void;
+  imageSmoothingEnabled: boolean;
+  imageSmoothingQuality: "low" | "medium" | "high";
+  drawImage(
+    image: unknown,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+    dx: number,
+    dy: number,
+    dw: number,
+    dh: number,
+  ): void;
+}
+
+export interface MapBaseLayerTileRenderer {
+  draw(
+    context: any,
+    camera: { x: number; y: number; w: number; h: number },
+    zoom: number,
+    dpr: number,
+  ): boolean;
+}
 
 export interface MapBaseLayerOptions {
-  context: CanvasRenderingContext2D;
+  context: MapBaseLayerContext;
   canvasWidth: number;
   canvasHeight: number;
-  mapImage: CanvasImageSource;
+  mapImage: unknown;
   mapSourceRect: { x: number; y: number; width: number; height: number };
   cameraWorldRect: { x: number; y: number; w: number; h: number };
   zoom: number;
   dpr: number;
-  tiledMap?: TiledMap | null;
+  tiledMap?: MapBaseLayerTileRenderer | null;
 }
 
 /**
