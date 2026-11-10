@@ -77,6 +77,7 @@ import { drawMapBaseLayer } from '../game/mapBaseLayer';
 import { drawVisionFogOverlay } from '../game/mapVisionRenderer';
 import { drawWorldMarkers } from '../game/mapMarkerRenderer';
 import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
+import { drawRemotePlayerAppearance } from '../game/mapRemotePlayerRenderer';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
@@ -1296,9 +1297,6 @@ export default function GameMap() {
         const rSpriteW = Math.round(PLAYER_DISPLAY_WIDTH  * scale);
 
         ctx.save();
-        ctx.textBaseline = 'bottom';
-        ctx.textAlign = 'center';
-        ctx.font = `bold ${Math.round(10 * dpr)}px sans-serif`;
 
         const viewerIsDead = deadSlotsRef.current.has(mySlotRef.current ?? -1);
         for (const rp of remotePlayers.values()) {
@@ -1353,62 +1351,35 @@ export default function GameMap() {
           if (rpCX < -rSpriteW * 2 || rpCX > cw + rSpriteW * 2) continue;
           if (rpCY < -rSpriteH * 2 || rpCY > ch + rSpriteH * 2) continue;
 
-          // Ground shadow (ghosts float — no shadow)
-          if (!rIsGhost) {
-            const blurPx = Math.max(2, Math.round(rSpriteH * 0.05));
-            ctx.save();
-            ctx.filter = `blur(${blurPx}px)`;
-            ctx.globalAlpha = 0.55;
-            ctx.fillStyle = '#000000';
-            const rShadowScale = rMoving
-              ? getCharacterShadowScale(rWalkBob, rBaseSpriteH)
-              : 1;
-            ctx.beginPath();
-            ctx.ellipse(
-              rpCX,
-              rpGroundY + rSpriteH * CHARACTER_SHADOW_Y_OFFSET_RATIO,
-              rSpriteW * CHARACTER_SHADOW_WIDTH_RADIUS_RATIO * rShadowScale,
-              rSpriteH * CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO * rShadowScale,
-              0, 0, Math.PI * 2,
-            );
-            ctx.fill();
-            ctx.restore();
-            ctx.filter = 'none';
-          }
-
-          // Sprite (slot-keyed color from its isolated atlas window)
-          const rsx = Math.ceil(rRect.x);
-          const rsy = Math.ceil(rRect.y);
-          const rsw = Math.floor(rRect.x + rRect.width)  - rsx;
-          const rsh = Math.floor(rRect.y + rRect.height) - rsy;
-
-          ctx.save();
-          ctx.translate(rpCX, rpCY);
-          if (rIsGhost) {
-            const ghostPulse = Math.sin(ts / 275 + rp.slot * 0.9);
-            const ghostSway = Math.sin(ts / 390 + rp.slot * 0.7);
-            ctx.rotate(ghostSway * 0.045);
-            ctx.scale(1 + ghostPulse * 0.025, 1 - ghostPulse * 0.04);
-            ctx.globalAlpha = 0.46 + 0.1 * (0.5 + 0.5 * Math.sin(ts / 430 + rp.slot * 0.6));
-          }
-          if (anim.facingLeft) ctx.scale(-1, 1);
-          ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-          clipCharacterLegGap(ctx, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH, rPose);
-          ctx.drawImage(sprite, rsx, rsy, rsw, rsh, -rSpriteW / 2, -rSpriteH / 2, rSpriteW, rSpriteH);
-          ctx.restore();
-          ctx.imageSmoothingEnabled = true;
-
-          // Username label (red for fellow impostors on an impostor's client)
+          // Keep role policy and shadow compression in GameMap; the renderer
+          // owns only the canvas appearance pass for this already-positioned player.
           const name = usernamesRef.current.get(rp.slot) ?? `Player ${rp.slot}`;
           const isTeammate = impostorSetRef.current.has(rp.slot);
-          ctx.fillStyle = rIsGhost
-            ? 'rgba(200,220,255,0.55)'
-            : isTeammate ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.9)';
-          ctx.strokeStyle = 'rgba(0,0,0,0.7)';
-          ctx.lineWidth = Math.round(2 * dpr);
-          ctx.strokeText(name, rpCX, rpCY - rSpriteH / 2 - 3);
-          ctx.fillText(name, rpCX, rpCY - rSpriteH / 2 - 3);
+          const rShadowScale = !rIsGhost && rMoving
+            ? getCharacterShadowScale(rWalkBob, rBaseSpriteH)
+            : 1;
+          drawRemotePlayerAppearance({
+            context: ctx,
+            sprite,
+            frameRect: rRect,
+            pose: rPose,
+            slot: rp.slot,
+            timestampMs: ts,
+            screenX: rpCX,
+            screenY: rpCY,
+            groundY: rpGroundY,
+            spriteWidth: rSpriteW,
+            spriteHeight: rSpriteH,
+            facingLeft: anim.facingLeft,
+            ghost: rIsGhost,
+            devicePixelRatio: dpr,
+            shadowScale: rShadowScale,
+            name,
+            labelColor: rIsGhost
+              ? 'rgba(200,220,255,0.55)'
+              : isTeammate ? 'rgba(255,80,80,0.95)' : 'rgba(255,255,255,0.9)',
+            clipCharacterLegGap,
+          });
         }
 
         ctx.restore();
