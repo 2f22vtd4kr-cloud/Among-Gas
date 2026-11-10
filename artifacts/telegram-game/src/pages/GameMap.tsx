@@ -26,9 +26,6 @@ import { loadCharacterAtlas } from '../game/characterAtlas';
 import { CharacterSpriteCanvas, clipCharacterLegGap } from '../game/characterSpriteRenderer';
 import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
 import {
-  CHARACTER_SHADOW_HEIGHT_RADIUS_RATIO,
-  CHARACTER_SHADOW_WIDTH_RADIUS_RATIO,
-  CHARACTER_SHADOW_Y_OFFSET_RATIO,
   getCharacterShadowScale,
   getCharacterWalkBobOffset,
 } from '../game/characterAnimation';
@@ -1394,10 +1391,6 @@ export default function GameMap() {
 
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
       const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
-      const sx = Math.ceil(rect.x);
-      const sy = Math.ceil(rect.y);
-      const sw = Math.floor(rect.x + rect.width)  - sx;
-      const sh = Math.floor(rect.y + rect.height) - sy;
 
       const pCX = Math.round(playerCX);
       const pCY = Math.round(playerCY);
