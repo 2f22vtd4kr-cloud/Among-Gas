@@ -51,13 +51,9 @@ import { isLineOfSightClear, isLineOfSightToInteractionTarget } from '@workspace
 import {
   SABOTAGE_DEFS,
   SABOTAGE_INTERACTION_RANGE_PX,
-  SABOTAGE_LIGHTS,
   SABOTAGE_COMMS,
   SABOTAGE_DOORS,
   getSabotageTimeoutMs,
-  NORMAL_VISION_RADIUS_PX,
-  IMPOSTOR_VISION_RADIUS_PX,
-  LIGHTS_CREWMATE_VISION_RADIUS_PX,
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
@@ -77,6 +73,7 @@ import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
 import { drawRemotePlayerAppearance } from '../game/mapRemotePlayerRenderer';
 import { drawLocalPlayerAppearance } from '../game/mapLocalPlayerRenderer';
 import { getCharacterGhostMotion } from '../game/characterGhostMotion';
+import { getPlayerVisionRadius } from '../game/mapVisionPolicy';
 import { getLocalPlayerCanvasPosition, getRemotePlayerCanvasPosition } from '../game/mapPlayerCanvasPosition';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
@@ -1440,13 +1437,12 @@ export default function GameMap() {
       // can see the entire map and continue tasks, as in the base game.
       const localRole = myRoleRef.current;
       const isLocalGhost = deadSlotsRef.current.has(mySlotRef.current ?? -1);
-      if (!isLocalGhost && (localRole === 'crewmate' || localRole === 'impostor')) {
-        const activeSabotage = sabotageRef.current;
-        const visionRadius = localRole === 'impostor'
-          ? IMPOSTOR_VISION_RADIUS_PX
-          : activeSabotage?.systemId === SABOTAGE_LIGHTS
-            ? LIGHTS_CREWMATE_VISION_RADIUS_PX
-            : NORMAL_VISION_RADIUS_PX;
+      const visionRadius = getPlayerVisionRadius(
+        localRole,
+        isLocalGhost,
+        sabotageRef.current?.systemId ?? null,
+      );
+      if (visionRadius !== null) {
         const visionR = visionRadius * scale;
         const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
