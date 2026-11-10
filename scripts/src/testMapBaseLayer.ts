@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import { drawMapBaseLayer } from "../../artifacts/telegram-game/src/game/mapBaseLayer.js";
-import type { TiledMap } from "../../artifacts/telegram-game/src/game/TiledMap.js";
+import type { MapBaseLayerContext, MapBaseLayerTileRenderer } from "../../artifacts/telegram-game/src/game/mapBaseLayer.js";
 
 const events: string[] = [];
 const imageArgs: unknown[][] = [];
-const image = {} as CanvasImageSource;
+const image = {};
 const context = {
   imageSmoothingEnabled: false,
-  imageSmoothingQuality: "low" as ImageSmoothingQuality,
+  imageSmoothingQuality: "low" as const,
   clearRect: (...args: number[]) => {
     events.push("clear");
     assert.deepEqual(args, [0, 0, 640, 480]);
@@ -16,7 +16,7 @@ const context = {
     events.push("overview");
     imageArgs.push(args);
   },
-} as unknown as CanvasRenderingContext2D;
+} as unknown as MapBaseLayerContext;
 
 const cameraWorldRect = { x: 100, y: 200, w: 300, h: 250 };
 const mapSourceRect = { x: 4, y: 8, width: 128, height: 96 };
@@ -27,7 +27,7 @@ const tiledMap = {
     tileArguments = args;
     return true;
   },
-} as unknown as TiledMap;
+} as unknown as MapBaseLayerTileRenderer;
 
 const tilesReady = drawMapBaseLayer({
   context,
