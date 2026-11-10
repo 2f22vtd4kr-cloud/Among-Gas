@@ -212,7 +212,7 @@ async function main() {
     )));
     await Promise.all(players.map(player => waitFor(
       player,
-      packet => packet[0] === 0x18 && packet[1] === victim.slot,
+      packet => packet[0] === 0x21 && packet[1] === victim.slot,
       3000,
       'immutable corpse position broadcast',
     )));
