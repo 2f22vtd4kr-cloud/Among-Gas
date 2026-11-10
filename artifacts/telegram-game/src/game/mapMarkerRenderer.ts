@@ -2,6 +2,7 @@ import { TASK_DEFS } from '@workspace/shared/tasks';
 import {
   SABOTAGE_COMMS,
   SABOTAGE_DEFS,
+  SABOTAGE_DOORS,
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 
@@ -31,6 +32,7 @@ export interface MapWorldMarkerOptions {
   readonly trackedTaskId: number | null;
   readonly role: string | null;
   readonly translateTaskName: (name: string | undefined) => string;
+  readonly translateSabotageName: (name: string | undefined) => string;
 }
 
 /**
@@ -55,6 +57,7 @@ export function drawWorldMarkers({
   trackedTaskId,
   role,
   translateTaskName,
+  translateSabotageName,
 }: MapWorldMarkerOptions): void {
   // ── Task markers (crewmates only, hidden during meetings) ────────────────
   if (tasks.length > 0 && !meetingActive && sabotage?.systemId !== SABOTAGE_COMMS) {
@@ -65,7 +68,7 @@ export function drawWorldMarkers({
       const def = TASK_DEFS[task.taskId];
       if (!def) continue;
       const done = task.completedSteps >= def.steps;
-      const locked = sabotage?.systemId === 0x05 &&
+      const locked = sabotage?.systemId === SABOTAGE_DOORS &&
         sabotage.lockedTaskIds.includes(task.taskId);
       const tx = Math.round((def.x - srcX) * scale);
       const ty = Math.round((def.y - srcY) * scale);
@@ -176,7 +179,7 @@ export function drawWorldMarkers({
         ctx.font = `${Math.round(9 * dpr)}px sans-serif`;
         ctx.strokeStyle = 'rgba(0,0,0,0.85)';
         ctx.lineWidth = Math.round(3 * dpr);
-        const translatedName = def.name;
+        const translatedName = translateSabotageName(def.name);
         const label = def.pads.length > 1 ? `${translatedName} ${padId + 1}` : translatedName;
         ctx.strokeText(label, tx, ty + markerR + 3);
         ctx.fillStyle = done ? 'rgba(120,255,120,0.85)' : 'rgba(255,140,140,0.9)';
