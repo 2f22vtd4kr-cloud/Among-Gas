@@ -81,6 +81,7 @@ import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../g
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
+import { EmergencyCallIcon, EmergencyMeetingArtwork } from '../components/EmergencyMeetingArtwork';
 
 /** Empty key set used to force-freeze local movement during a meeting. */
 const EMPTY_KEYS: ReadonlySet<string> = new Set();
@@ -2308,7 +2309,7 @@ export default function GameMap() {
               backdropFilter: 'blur(6px)', touchAction: 'manipulation',
             }}
           >
-            {emergencyMeetingUsed ? '✓' : <img src={`${import.meta.env.BASE_URL}au-assets/emergency_icon.png`} alt="" aria-hidden="true" style={{ width: 70, height: 70, objectFit: 'contain', display: 'block', opacity: emergencyMeetingUsed ? 0.4 : 1 }} />}
+            {emergencyMeetingUsed ? '✓' : <EmergencyCallIcon size={70} />}
           </button>
         </div>
       )}
@@ -2326,10 +2327,7 @@ export default function GameMap() {
             color: '#fff4df', fontFamily: "'Fredoka One', sans-serif",
           }}
         >
-          <img
-            src={`${import.meta.env.BASE_URL}au-assets/emergency_meeting.png`}
-            alt=""
-            aria-hidden="true"
+          <EmergencyMeetingArtwork
             style={{ width: 'min(76vw, 340px)', maxHeight: '42dvh', objectFit: 'contain' }}
           />
           <div
