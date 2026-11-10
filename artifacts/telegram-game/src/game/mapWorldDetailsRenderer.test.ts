@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { MAP_W, MAP_H } from '@workspace/shared/coords';
 import { ADMIN_TABLE_DEFS } from '@workspace/shared/adminTable';
+import { CHARACTER_CELL_HEIGHT } from './characterSprites';
 import { drawWorldDetails } from './mapWorldDetailsRenderer';
 
 type DrawCall = { name: string; args: unknown[] };
@@ -65,7 +66,8 @@ let clipCalls = 0;
   const draw = calls.find(call => call.name === 'drawImage');
   assert.ok(draw, 'visible corpse should draw its authored atlas frame');
   assert.equal(draw.args[0], sprite);
-  assert.deepEqual(draw.args.slice(1), [12, 703, 81, 45, 72, 163, 95, 51],
+  const expectedHeight = Math.max(12, Math.round(120 * (45.5 / CHARACTER_CELL_HEIGHT) * 0.95));
+  assert.deepEqual(draw.args.slice(1), [12, 703, 81, 44, 72.5, 180 - expectedHeight / 2, 95, expectedHeight],
     'corpse source crop and scaled destination should preserve the source pose aspect ratio');
   assert.equal(clipCalls, 1, 'corpse should retain its dedicated leg-gap clipping pass');
   assert.equal(calls.find(call => call.name === 'fillText')?.args[0], 'A',
