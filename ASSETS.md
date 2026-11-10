@@ -1,35 +1,44 @@
 # Among Gas asset provenance
 
-## Current status
+## Legacy external bundle — removed from the current tree
 
-This file is the release inventory for visual/audio assets. No third-party asset is treated as cleared merely because it exists in the repository.
+On 2026-11-10, the repository's `artifacts/telegram-game/public/au-assets/` folder was
+confirmed to be an exact copy of 17 images from
+[`AI0702/Among-Us-clone`](https://github.com/AI0702/Among-Us-clone/tree/e75a1410c8bc9e82b41f2ab51deec373c8486e29/Assets/Images).
 
-### High-risk legacy directory
+The upstream README explicitly says its images were ripped from Among Us and credits Innersloth
+for the game and its assets. Although the upstream repository has an Unlicense, that licence
+does not establish that its author had authority to dedicate or sublicense the underlying
+third-party game artwork. The images were therefore not safe to redistribute on the strength
+of that repository licence.
 
-`artifacts/telegram-game/public/au-assets/` was introduced from an external Among Us clone/reference pack and is therefore **not cleared for commercial redistribution**. It must be replaced or removed before release.
+All 17 local files were verified as byte-identical Git blobs against their named upstream
+counterparts. The complete bundle has now been **removed from the current source tree**. It is
+not copied into the current public build. Historical Git commits and the archived session
+handoff still preserve the original history; that is not a runtime dependency or an asset
+clearance claim.
 
-Known runtime references are currently limited to:
-- `kill_icon.png`
-- `sabotage_icon.png`
+The two previously live consumers were replaced with project-authored vector artwork:
+- `EmergencyCallIcon` in `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx`
+- `EmergencyMeetingArtwork` in the same module
 
-The remaining files in the directory are retained only until their production-screen usage is audited; deleting the directory blindly would break historical QA/replay fixtures.
-
-### Required release action
-
-- Replace every runtime `au-assets/*` dependency with original Among Gas artwork or clearly licensed assets.
-- Record the exact source, licence, attribution requirement, and replacement path here for every retained external asset.
-- Do not ship third-party logos, title art, meeting/ejection art, character art, or ripped sound effects.
-- Generated character atlas output is derived from the repository's authored Among Gas character source and is covered by the existing atlas tests; it is not a licence for unrelated source art.
+The full-screen call status, localization, server confirmation behavior, button placement and
+size remain unchanged. Browser smoke now asserts the authored SVGs are present and that the
+splash has no raster image dependency.
 
 ## Original / generated project assets
 
-| Asset family | Status | Notes |
+| Asset family | Current classification | Notes |
 |---|---|---|
+| `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx` | Project-authored SVG | Replaces the two live emergency images from the removed legacy bundle. |
 | `artifacts/telegram-game/public/sprites/` | Project-authored/generated | Character atlas is validated by runtime/golden tests. |
 | Map artwork | Project-provided | Keep transform calibration at logical 3224×1858. |
 | Procedural footsteps | Project-generated | Synthesized in `sfx.ts`; no external sample required. |
-| UI CSS / SVG primitives | Project-authored | Prefer these for action icons after legacy `au-assets` replacement. |
+| UI CSS / SVG primitives | Project-authored | Prefer these for icons and overlays. |
 
-## Release gate
+## Remaining provenance gate
 
-The release checklist must remain blocked until every unclear asset has a provenance entry and every uncleared `au-assets/*` runtime dependency has been removed.
+Removing the identified ripped-image bundle does not automatically clear every asset in the
+project. Before commercial release, continue checking all other retained artwork, fonts, audio
+and source-image inputs for documented ownership or licence terms. Do not infer commercial
+rights from a repository being public or from an unrelated repository-level licence.
