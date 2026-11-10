@@ -21,6 +21,7 @@ const adminTableSource = read('lib/shared/src/adminTable.ts');
 const sabotageSource = read('lib/shared/src/sabotage.ts');
 const minigameSource = read('artifacts/telegram-game/src/components/TaskMinigame.tsx');
 const gameMapSource = read('artifacts/telegram-game/src/pages/GameMap.tsx');
+const worldDetailsSource = read('artifacts/telegram-game/src/game/mapWorldDetailsRenderer.ts');
 const visibilitySource = read('artifacts/telegram-game/src/game/visibility.ts');
 const indexHtml = read('artifacts/telegram-game/index.html');
 const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
@@ -335,7 +336,7 @@ assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*fineGrid,/, 'Client prediction must use the canonical fine collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
-assert.match(gameMapSource, /getCharacterFrameRect\(slotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
+assert.match(worldDetailsSource, /getFrameRect\(getSlotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
 assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
   'Runtime character art must remain the measured balaclava PNG atlas');
 assert.match(characterSpritesSource, /POSE_ROW_WINDOWS/,
