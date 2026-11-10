@@ -583,10 +583,10 @@ try {
   assert.ok(emergencyBox && gameplaySettingsBox, 'gameplay actions must be measurable');
   assert.ok(emergencyBox.width >= 92 && emergencyBox.height >= 92,
     `Emergency icon action must be at least 92×92 CSS px (measured ${emergencyBox.width.toFixed(1)}×${emergencyBox.height.toFixed(1)})`);
-  const emergencyIcon = emergencyButton.locator('img');
+  const emergencyIcon = emergencyButton.getByTestId('emergency-call-icon');
   const emergencyIconBox = await emergencyIcon.boundingBox();
   assert.ok(emergencyIconBox && emergencyIconBox.width >= 68 && emergencyIconBox.height >= 68,
-    'Emergency control must display the large original emergency icon asset');
+    'Emergency control must display the large authored SVG alarm icon');
   await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
@@ -601,6 +601,10 @@ try {
   await emergencyButton.click();
   const emergencySplash = page.getByTestId('emergency-call-splash');
   await emergencySplash.waitFor({ state: 'visible' });
+  const emergencyArtwork = emergencySplash.getByTestId('emergency-meeting-artwork');
+  await emergencyArtwork.waitFor({ state: 'visible' });
+  assert.equal(await emergencySplash.locator('img').count(), 0,
+    'Emergency splash must not depend on a third-party raster image');
   assert.match(await emergencySplash.getByTestId('emergency-call-status').innerText(),
     /Waiting for server confirmation|Ожидаем подтверждение сервера/i);
   assert.equal(await emergencySplash.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(4, 10, 17)',
