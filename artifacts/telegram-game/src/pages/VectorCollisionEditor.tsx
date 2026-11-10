@@ -328,6 +328,17 @@ export default function VectorCollisionEditor() {
     setLocalDraft(null);
   }, []);
 
+  // Selecting a vertex without moving it is not an edit and must not add an
+  // identical history frame. The current document reference may have changed
+  // during pointer movement, so compare content before committing it.
+  const commitPendingVertexEdit = () => {
+    if (JSON.stringify(historyRef.current.current) === JSON.stringify(docRef.current)) {
+      return false;
+    }
+    historyRef.current.commit(docRef.current);
+    return true;
+  };
+
   const drawRef = useRef<() => void>(() => {});
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -793,9 +804,10 @@ export default function VectorCollisionEditor() {
       // A second finger always takes over as a viewport gesture, regardless
       // of the selected drawing/editing tool. Cancel a wall/vertex drag rather
       // than allowing the second pointer-up to commit an accidental shape.
-      if (gestureRef.current?.kind === "vertex") {
-        historyRef.current.commit(docRef.current);
+      if (gestureRef.current?.kind === "vertex" && commitPendingVertexEdit()) {
         setSaved(false);
+        setDirty(true);
+        setLocalDraft(null);
       }
       gestureRef.current = null;
       setPreviewPoint(null);
@@ -1074,10 +1086,11 @@ export default function VectorCollisionEditor() {
         }
       }
     } else if (gesture?.kind === "vertex") {
-      historyRef.current.commit(docRef.current);
-      setSaved(false);
-      setDirty(true);
-      setLocalDraft(null);
+      if (commitPendingVertexEdit()) {
+        setSaved(false);
+        setDirty(true);
+        setLocalDraft(null);
+      }
     }
     gestureRef.current = null;
     pinchRef.current = null;
