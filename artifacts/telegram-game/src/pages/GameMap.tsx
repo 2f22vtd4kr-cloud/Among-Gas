@@ -1388,14 +1388,8 @@ export default function GameMap() {
       // ── 4. Local player sprite ────────────────────────────────────────────
       const spriteH = PLAYER_DISPLAY_HEIGHT * scale;
       const spriteW = PLAYER_DISPLAY_WIDTH  * scale;
-      const playerCX = (px - srcX) * scale;
-      const playerCY = (py - srcY) * scale;
-
       const rect = getCharacterFrameRect(slotColor(mySlotRef.current ?? 0), pose);
       const sH = Math.round(spriteH * rect.height / CHARACTER_CELL_HEIGHT);
-
-      const pCX = Math.round(playerCX);
-      const pCY = Math.round(playerCY);
       const sW  = Math.round(spriteW);
       const localMoving = pose === 'walk-1' || pose === 'walk-2';
       // Use the same elapsed movement clock as the local walk-1/walk-2 pose
