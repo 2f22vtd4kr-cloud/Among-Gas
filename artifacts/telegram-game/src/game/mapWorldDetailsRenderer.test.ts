@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { MAP_W, MAP_H } from '@workspace/shared/coords';
 import { ADMIN_TABLE_DEFS } from '@workspace/shared/adminTable';
-import { CHARACTER_CELL_HEIGHT } from './characterSprites';
+import { CHARACTER_CELL_HEIGHT, type CharacterColor, type CharacterPose } from './characterSprites';
 import { drawWorldDetails } from './mapWorldDetailsRenderer';
 
 type DrawCall = { name: string; args: unknown[] };
@@ -37,7 +37,7 @@ const base = {
     assert.equal(slot, 3);
     return 'teal' as const;
   },
-  getFrameRect: (_color: 'teal', pose: 'dead-body') => {
+  getFrameRect: (_color: CharacterColor, pose: CharacterPose) => {
     assert.equal(pose, 'dead-body');
     return { x: 11.2, y: 702.4, width: 81.8, height: 45.5 };
   },
@@ -47,7 +47,7 @@ const base = {
     y: number,
     width: number,
     height: number,
-    pose: 'dead-body',
+    pose: CharacterPose,
   ) => {
     assert.equal(pose, 'dead-body');
     assert.ok(width > 0 && height > 0);
