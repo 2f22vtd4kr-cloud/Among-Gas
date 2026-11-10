@@ -65,7 +65,7 @@ import {
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
 import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
-import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
+import { ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
 import { useLanguage } from '../lib/language';
@@ -76,6 +76,7 @@ import { TiledMap } from '../game/TiledMap';
 import { drawMapBaseLayer } from '../game/mapBaseLayer';
 import { drawVisionFogOverlay } from '../game/mapVisionRenderer';
 import { drawWorldMarkers } from '../game/mapMarkerRenderer';
+import { drawWorldDetails } from '../game/mapWorldDetailsRenderer';
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
@@ -1290,64 +1291,23 @@ export default function GameMap() {
       // Vent positions remain active for proximity-gated controls, but we do not
       // paint synthetic black/white vent glyphs over the illustrated floor.
 
-      // ── 3.1 Dropped bodies (separate from the moving ghost avatar) ─────────
-      // Use the dedicated row-7 Among Gas corpse sprite: it already contains
-      // the cut suit, exposed bone, wound and ground contact. Never synthesize
-      // a corpse by cropping an upright living character or drawing a fake bone.
-      ctx.save();
-      for (const body of corpsePositionsRef.current) {
-        const bx = Math.round((body.x - srcX) * scale);
-        const by = Math.round((body.y - srcY) * scale);
-        if (bx < -48 || bx > cw + 48 || by < -48 || by > ch + 48) continue;
-        const rect = getCharacterFrameRect(slotColor(body.slot), 'dead-body');
-        const sx = Math.ceil(rect.x);
-        const sy = Math.ceil(rect.y);
-        const sw = Math.floor(rect.x + rect.width) - sx;
-        const sh = Math.floor(rect.y + rect.height) - sy;
-        // Preserve the authored sprite's pixel aspect ratio. Its row window is
-        // shorter than the atlas average, so scale height with the source window
-        // instead of stretching a mixed corpse/crouch crop into a fake landscape.
-        const corpseW = Math.max(18, Math.round(PLAYER_DISPLAY_WIDTH * scale * 0.95));
-        const corpseH = Math.max(12, Math.round(
-          PLAYER_DISPLAY_HEIGHT * scale * (rect.height / CHARACTER_CELL_HEIGHT) * 0.95,
-        ));
-        const corpseX = bx - corpseW / 2;
-        const corpseY = by - corpseH / 2;
-
-        ctx.save();
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        clipCharacterLegGap(ctx, corpseX, corpseY, corpseW, corpseH, 'dead-body');
-        ctx.drawImage(sprite, sx, sy, sw, sh, corpseX, corpseY, corpseW, corpseH);
-        ctx.restore();
-      }
-      ctx.restore();
-
-      // ── 2.9 Admin Table console marker ────────────────────────────────────
-      ctx.save();
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      for (const consoleDef of ADMIN_TABLE_DEFS) {
-        const ax = Math.round((consoleDef.x - srcX) * scale);
-        const ay = Math.round((consoleDef.y - srcY) * scale);
-        if (ax < -30 || ax > cw + 30 || ay < -30 || ay > ch + 30) continue;
-        const radius = Math.max(7, Math.round(12 * dpr));
-        ctx.beginPath();
-        ctx.arc(ax, ay, radius + 3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(0,0,0,0.58)';
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(ax, ay, radius, 0, Math.PI * 2);
-        ctx.fillStyle = '#193c4b';
-        ctx.fill();
-        ctx.lineWidth = Math.max(1, dpr);
-        ctx.strokeStyle = 'rgba(100,225,235,0.95)';
-        ctx.stroke();
-        ctx.fillStyle = '#e4ffff';
-        ctx.font = `900 ${Math.max(10, Math.round(13 * dpr))}px sans-serif`;
-        ctx.fillText('A', ax, ay + 0.5 * dpr);
-      }
-      ctx.restore();
+      // ── 2.9 Static world details (corpses + Admin console) ─────────────
+      drawWorldDetails({
+        context: ctx,
+        canvasWidth: cw,
+        canvasHeight: ch,
+        cameraX: srcX,
+        cameraY: srcY,
+        scale,
+        devicePixelRatio: dpr,
+        sprite,
+        corpses: corpsePositionsRef.current,
+        playerDisplayWidth: PLAYER_DISPLAY_WIDTH,
+        playerDisplayHeight: PLAYER_DISPLAY_HEIGHT,
+        getSlotColor: slotColor,
+        getFrameRect: getCharacterFrameRect,
+        clipCharacter: clipCharacterLegGap,
+      });
 
       // ── 3. Remote players (sprite-sheet rendering, Phase 4) ───────────────
       // Rendered before the local player so local player is always on top.
