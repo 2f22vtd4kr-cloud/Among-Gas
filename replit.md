@@ -4,7 +4,7 @@ A multi-artifact project centered on a Telegram game with a top-down map, backed
 
 ## ⚠️ Agent rule — read this first
 
-**At the start of every session, read `handoff.md` before doing anything else.** It is the running log of everything that has been built, every decision made, and where the project was left off. After completing any meaningful work, append a new dated entry to `handoff.md` following the format defined at the top of that file, then commit it with the rest of your changes.
+**At the start of every session, read `docs/SESSION_HANDOFF.md` before doing anything else.** It is the concise active project state and next-step log. After meaningful work, append a dated entry there using its format. The historical `handoff.md` log is preserved at `docs/archive/handoff-2026-07-to-2026-11.md`; do not append to that archive.
 
 ## Run & Operate
 
