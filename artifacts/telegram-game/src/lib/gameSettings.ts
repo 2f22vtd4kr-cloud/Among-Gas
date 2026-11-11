@@ -48,6 +48,9 @@ export function defaultControlPosition(
 ): ControlPosition {
   const oppositeSide = joystickSide === 'left' ? 84 : 16;
   const sameSide = joystickSide === 'left' ? 16 : 84;
+  const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
+  const landscapeViewport = typeof window !== 'undefined' && window.innerWidth > window.innerHeight;
+  const portraitPhone = typeof window !== 'undefined' && window.innerWidth <= 420 && window.innerWidth < window.innerHeight;
   switch (id) {
     case 'joystick': return { x: sameSide, y: 84 };
     case 'map': return { x: 12, y: 6 };
@@ -55,13 +58,15 @@ export function defaultControlPosition(
     case 'settings': return { x: 93, y: 6 };
     case 'emergency': return { x: 75, y: 33 };
     case 'killReport': {
-      // At narrow widths, the default action bar and joystick share the same
-      // bottom corner. Move the bar above the joystick only when their
-      // horizontal hit-area bounds would otherwise overlap.
-      const compactViewport = typeof window !== 'undefined' && window.innerWidth * 0.49 < 180;
-      return { x: joystickSide === 'left' ? 65 : 35, y: compactViewport ? 55 : 90 };
+      // Keep the persistent action cluster in the bottom-right thumb zone,
+      // above the movement joystick. The safe-bounds clamp accounts for the
+      // 4-button cluster width on 320px phones; custom positions remain editable.
+      return { x: 84, y: landscapeViewport ? (window.innerHeight < 520 ? 56 : 70) : portraitPhone || compactViewport ? 66 : 74 };
     }
-    case 'sabotage': return { x: oppositeSide, y: 74 };
+    // Keep the sabotage control in the opposite lower corner from the
+    // joystick on compact phones. The action bar sits above both, avoiding
+    // overlap while leaving the camera-centered player visible.
+    case 'sabotage': return { x: oppositeSide, y: compactViewport ? 84 : 74 };
   }
 }
 
@@ -175,9 +180,9 @@ export function customControlPositionStyle(
     map: { halfWidth: 50, halfHeight: 24 },
     tasks: { halfWidth: 54, halfHeight: 24 },
     settings: { halfWidth: 22, halfHeight: 22 },
-    emergency: { halfWidth: 74, halfHeight: 30 },
-    killReport: { halfWidth: 120, halfHeight: 38 },
-    sabotage: { halfWidth: 38, halfHeight: 38 },
+    emergency: { halfWidth: 36, halfHeight: 36 },
+    killReport: { halfWidth: 132, halfHeight: 38 },
+    sabotage: { halfWidth: 46, halfHeight: 46 },
   };
   const { halfWidth, halfHeight } = safeBounds[id];
   return {
@@ -202,9 +207,13 @@ export function useGameSettings(): GameSettings {
     };
     window.addEventListener(CHANGE_EVENT, sync);
     window.addEventListener('storage', syncExternalStorage);
+    // Recompute responsive default control positions after orientation changes
+    // or viewport resizing. The same in-memory settings remain authoritative.
+    window.addEventListener('resize', sync);
     return () => {
       window.removeEventListener(CHANGE_EVENT, sync);
       window.removeEventListener('storage', syncExternalStorage);
+      window.removeEventListener('resize', sync);
     };
   }, []);
 

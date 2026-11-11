@@ -28,6 +28,7 @@ import {
   PLAYER_SPAWN_MAX_FEET_Y,
 } from './coords.js';
 import { MANUAL_BLOCKED_POLYGONS, MANUAL_WALKABLE_REPLACEMENT_ZONES } from './collisionOverrides.js';
+import type { CollisionWorld } from './collision/vectorCollision.js';
 export { MANUAL_BLOCKED_POLYGONS, MANUAL_WALKABLE_REPLACEMENT_ZONES };
 
 // Map now renders from a pre-upscaled static asset (public/map-hires.png).
@@ -397,16 +398,15 @@ export function isBlocked(grid: Grid, px: number, py: number): boolean {
 
 /** Server-safe ray test against the same canonical collision geometry used by movement. */
 export function isLineOfSightClear(
-  grid: Grid,
+  grid: Grid | CollisionWorld,
   fromX: number,
   fromY: number,
   toX: number,
   toY: number,
   sampleSpacingPx = 2,
 ): boolean {
-  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) || sampleSpacingPx <= 0) {
-    return false;
-  }
+  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) || sampleSpacingPx <= 0) return false;
+  if ('isLineOfSightClear' in grid) return grid.isLineOfSightClear(fromX, fromY, toX, toY);
   const distance = Math.hypot(toX - fromX, toY - fromY);
   const steps = Math.max(1, Math.ceil(distance / sampleSpacingPx));
   for (let step = 0; step <= steps; step++) {
@@ -422,7 +422,7 @@ export function isLineOfSightClear(
  * an occluder while still rejecting every approach whose rays cross a wall.
  */
 export function isLineOfSightToInteractionTarget(
-  grid: Grid,
+  grid: Grid | CollisionWorld,
   fromX: number,
   fromY: number,
   targetX: number,
@@ -432,6 +432,7 @@ export function isLineOfSightToInteractionTarget(
   if (![fromX, fromY, targetX, targetY, targetRadiusPx].every(Number.isFinite) || targetRadiusPx < 0) {
     return false;
   }
+  if ('isLineOfSightToInteractionTarget' in grid) return grid.isLineOfSightToInteractionTarget(fromX, fromY, targetX, targetY, targetRadiusPx);
   // Exact co-location is already an interaction point; do not reject test or
   // gameplay states that are standing on the console/vent's own anchor.
   if (Math.hypot(targetX - fromX, targetY - fromY) <= 1) return true;
@@ -478,7 +479,8 @@ export function canMoveTo(
  * anchor. Client prediction, server validation, and spawn placement must use
  * this exact footprint so they cannot disagree about where a player can stand.
  */
-export function isPlayerFootprintWalkableAtFeet(grid: Grid, feetX: number, feetY: number): boolean {
+export function isPlayerFootprintWalkableAtFeet(grid: Grid | CollisionWorld, feetX: number, feetY: number): boolean {
+  if ('isPlayerWalkableAtFeet' in grid) return grid.isPlayerWalkableAtFeet(feetX, feetY);
   return (
     canMoveTo(grid, feetX, feetY, PLAYER_RADIUS) &&
     canMoveTo(grid, feetX - PLAYER_HALF_WIDTH, feetY, PLAYER_RADIUS) &&
@@ -487,7 +489,7 @@ export function isPlayerFootprintWalkableAtFeet(grid: Grid, feetX: number, feetY
 }
 
 /** Tests the shared foot footprint for a sprite-centre world position. */
-export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): boolean {
+export function isPlayerPositionWalkable(grid: Grid | CollisionWorld, x: number, y: number): boolean {
   return isPlayerFootprintWalkableAtFeet(grid, x, y + FEET_OFFSET_Y);
 }
 
@@ -497,7 +499,8 @@ export function isPlayerPositionWalkable(grid: Grid, x: number, y: number): bool
  * sprite rectangle does not start inside a wall, map boundary, or manually
  * traced statue base or map boundary.
  */
-export function isPlayerSpawnPositionClear(grid: Grid, x: number, y: number): boolean {
+export function isPlayerSpawnPositionClear(grid: Grid | CollisionWorld, x: number, y: number): boolean {
+  if ('isPlayerSpawnPositionClear' in grid) return grid.isPlayerSpawnPositionClear(x, y);
   if (
     x < PLAYER_SPAWN_MIN_X ||
     x > PLAYER_SPAWN_MAX_X ||
@@ -553,15 +556,18 @@ export function clampPlayerPositionToMapBounds(x: number, y: number): [number, n
 
 /** Checks the starting point and every point along a segment at <=2px spacing. */
 export function isPlayerPathWalkable(
-  grid: Grid,
+  grid: Grid | CollisionWorld,
   fromX: number,
   fromY: number,
   toX: number,
   toY: number,
   sampleSpacingPx = 2,
 ): boolean {
-  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) ||
-      sampleSpacingPx <= 0) return false;
+  if (![fromX, fromY, toX, toY, sampleSpacingPx].every(Number.isFinite) || sampleSpacingPx <= 0) return false;
+  if ('movePlayerAtFeet' in grid) {
+    const [x, y] = grid.movePlayerAtFeet(fromX, fromY + FEET_OFFSET_Y, toX - fromX, toY - fromY);
+    return Math.hypot(x - toX, y - (toY + FEET_OFFSET_Y)) <= 0.75;
+  }
   const distance = Math.hypot(toX - fromX, toY - fromY);
   const steps = Math.max(1, Math.ceil(distance / sampleSpacingPx));
   for (let step = 0; step <= steps; step++) {

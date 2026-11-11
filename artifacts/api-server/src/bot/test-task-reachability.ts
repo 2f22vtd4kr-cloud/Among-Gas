@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import {
   buildPreciseCollisionGrid,
   isLineOfSightToInteractionTarget,
@@ -10,7 +11,7 @@ import {
   isBotNavigationReachable,
   NO_TARGET,
 } from './BotAgent.js';
-import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
+import { MAX_PLAYERS, SPAWN_X, SPAWN_Y, computeSpawnPosition } from '../ws/lobby.js';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX, type TaskDef } from '@workspace/shared/tasks';
 import type { Point } from '@workspace/shared';
@@ -32,7 +33,8 @@ class TaskReachabilityProbe extends BotAgent {
   }
 }
 
-const movementGrid = buildPreciseCollisionGrid();
+const movementGrid = getProductionCollisionWorld();
+const sightGrid = buildPreciseCollisionGrid();
 const probe = new TaskReachabilityProbe();
 const results = TASK_DEFS.map(task => {
   const point = probe.approach(task);
@@ -40,7 +42,7 @@ const results = TASK_DEFS.map(task => {
     isPlayerPositionWalkable(movementGrid, point.x, point.y) &&
     isBotNavigationReachable(point.x, point.y + FEET_OFFSET_Y);
   const visible = isLineOfSightToInteractionTarget(
-    movementGrid,
+    sightGrid,
     point.x,
     point.y + FEET_OFFSET_Y,
     task.x,
@@ -59,7 +61,32 @@ assert.equal(unreachable.length, 0,
 
 console.log(`PASS: all ${results.length} task definitions have a reachable, visible approach point`);
 
- 
+ // Validate the exact six-player spawn formation used by the balance cohorts.
+ // Spawn clearance alone is not enough if a legal spawn lands in a cell that
+ // the bot's connected A* navigation graph cannot represent.
+ const cohortSpawns: Point[] = [];
+ for (let index = 0; index < 6; index++) {
+   const spawn = computeSpawnPosition(index, 6, cohortSpawns);
+   cohortSpawns.push(spawn);
+   const graphReachable = isBotNavigationReachable(spawn.x, spawn.y + FEET_OFFSET_Y);
+   console.log(`cohortSpawn ${JSON.stringify({ index, spawn, graphReachable })}`);
+   assert.ok(graphReachable,
+     `six-player spawn ${index} must belong to the bot navigation component`);
+ }
+
+ // The public lobby supports fifteen players. Exercise the real maximum rather
+// than assuming the six-player balance cohorts cover every spawn index.
+const maximumLobbySpawns: Point[] = [];
+for (let index = 0; index < MAX_PLAYERS; index++) {
+  const spawn = computeSpawnPosition(index, MAX_PLAYERS, maximumLobbySpawns);
+  maximumLobbySpawns.push(spawn);
+  const graphReachable = isBotNavigationReachable(spawn.x, spawn.y + FEET_OFFSET_Y);
+  console.log(`maximumLobbySpawn ${JSON.stringify({ index, spawn, graphReachable })}`);
+  assert.ok(graphReachable,
+    `maximum-capacity spawn ${index} must belong to the bot navigation component`);
+}
+assert.equal(maximumLobbySpawns.length, MAX_PLAYERS);
+
 // Reproduce the only stuck-task state observed in seeded cohort 17001:
 // a live crewmate at (1656, 797) could not finish Empty Garbage (task 3).
 // Reachability from spawn alone is insufficient; exercise the production A*
@@ -78,7 +105,13 @@ function assertRoute(start: Point, goal: Point, label: string): void {
     stalledTicks = moved < 0.01 ? stalledTicks + 1 : 0;
     if (stalledTicks >= 20) break;
   }
-  console.log(`taskRoute ${JSON.stringify({ label, start, goal, end: { x: player.x, y: player.y }, arrived, stalledTicks })}`);
+  const startWalkable = isPlayerPositionWalkable(movementGrid, start.x, start.y);
+  const startGraphReachable = isBotNavigationReachable(start.x, start.y + FEET_OFFSET_Y);
+  console.log(`taskRoute ${JSON.stringify({
+    label, start, startWalkable, startGraphReachable, goal,
+    end: { x: player.x, y: player.y }, arrived, stalledTicks,
+    remainingDistancePx: Math.round(Math.hypot(goal.x - player.x, goal.y - player.y)),
+  })}`);
   assert.ok(arrived, `production bot path follower must reach ${label} from the observed start point`);
 }
 
@@ -86,4 +119,29 @@ const emptyGarbage = TASK_DEFS.find(task => task.id === 3)!;
 const emptyGarbageApproach = probe.approach(emptyGarbage);
 assertRoute({ x: SPAWN_X, y: SPAWN_Y }, emptyGarbageApproach, 'Empty Garbage from spawn');
 assertRoute({ x: 1656, y: 797 }, emptyGarbageApproach, 'Empty Garbage from timeout position');
+
+// The previous sixth-player spawn candidate was collision-safe but outside
+// the A* graph. Keep that regression explicit, then prove that the replacement
+// spawn can reach every task involved in the three timeout traces.
+assert.equal(
+  isBotNavigationReachable(1645, 501 + FEET_OFFSET_Y),
+  false,
+  'the former slot-4 spawn must remain excluded from bot navigation',
+);
+assert.notDeepEqual(
+  cohortSpawns[4],
+  { x: 1645, y: 501 },
+  'slot 4 must be moved from the collision-safe but nav-disconnected cell',
+);
+
+const timeoutTaskIds = [0, 3, 6, 7, 4, 10] as const;
+for (const taskId of timeoutTaskIds) {
+  const task = TASK_DEFS.find(candidate => candidate.id === taskId);
+  assert.ok(task, `timeout task ${taskId} must exist`);
+  assertRoute(
+    cohortSpawns[4],
+    probe.approach(task),
+    `corrected six-player slot-4 spawn: ${task.name}`,
+  );
+}
 

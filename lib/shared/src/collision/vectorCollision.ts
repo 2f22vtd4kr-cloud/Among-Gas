@@ -12,10 +12,10 @@ import {
 
 /**
  * Framework-free vector collision and vision primitives.
- * Production documents are generated from the live fine-grid collision mask,
- * its explicit overrides, and the matching vision outline pipeline. The
- * generated source manifest and parity tests are required before changing
- * those inputs; an empty or guessed map must never replace the raster.
+ * Production documents are vectorized from the owner's red-line reference.
+ * Open polylines are exact boundary barriers; closed contours represent
+ * compact prop footprints. Client prediction, server authority and bots share
+ * this same generated document.
  */
 export type Point = readonly [number, number];
 
@@ -25,25 +25,22 @@ export interface CollisionShape {
   readonly closed: boolean;
   readonly blocksMove: boolean;
   readonly blocksSight: boolean;
+  /** Visual shadow occlusion is independent from movement and line-of-sight blocking. */
+  readonly castsShadow?: boolean;
   readonly label?: string;
   readonly zone?: string;
 }
 
 export interface CollisionSourceManifest {
-  readonly kind: "fine-grid-derived";
+  readonly kind: "redline-vector";
   readonly generatorVersion: number;
   readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
-  readonly fineGrid: {
-    readonly cols: number;
-    readonly rows: number;
-    readonly cellX: number;
-    readonly cellY: number;
-  };
-  readonly sightPipeline: {
-    readonly largeComponentGrid: string;
-    readonly mediumAndSmallOutlines: string;
-    readonly narrowOccluders: number;
-    readonly obsoleteStatueCircleExcluded: boolean;
+  readonly referenceImage: { readonly width: number; readonly height: number };
+  readonly vectorization: {
+    readonly redPixelCount: number; readonly skeletonPixelCount: number;
+    readonly tracedPathCount: number; readonly simplifiedPointCount: number;
+    readonly simplificationToleranceSourcePx: number;
+    readonly closedSolidCount: number; readonly openBoundaryCount: number;
   };
   readonly shapeCounts: Readonly<Record<string, number>>;
 }
@@ -165,8 +162,11 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
-    if (shape.blocksMove !== true && shape.blocksSight !== true) {
-      errors.push(prefix + " must block movement, sight, or both");
+    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
+      errors.push(prefix + ".castsShadow must be boolean when provided");
+    }
+    if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
+      errors.push(prefix + " must block movement, sight, or cast a shadow");
     }
     if (!Array.isArray(shape.points)) {
       errors.push(prefix + ".points must be an array");
@@ -203,7 +203,7 @@ export function validateCollisionDocument(value: unknown): string[] {
   });
   if (doc.source !== undefined) {
     const source = doc.source as Partial<CollisionSourceManifest>;
-    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
+    if (source.kind !== "redline-vector") errors.push("source.kind must be redline-vector");
     if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
       errors.push("source.generatorVersion must be a positive integer");
     }
@@ -216,13 +216,17 @@ export function validateCollisionDocument(value: unknown): string[] {
         }
       }
     }
-    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
-        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
-        !(source.fineGrid.cellY > 0)) {
-      errors.push("source.fineGrid must describe a positive raster grid");
-    }
-    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
-      errors.push("source.sightPipeline must describe the sight derivation");
+    if (!source.referenceImage || !Number.isInteger(source.referenceImage.width) ||
+        !Number.isInteger(source.referenceImage.height) || source.referenceImage.width < 100 ||
+        source.referenceImage.height < 100) errors.push("source.referenceImage must include valid dimensions");
+    if (!source.vectorization || !Number.isInteger(source.vectorization.redPixelCount) ||
+        !Number.isInteger(source.vectorization.skeletonPixelCount) ||
+        !Number.isInteger(source.vectorization.tracedPathCount) ||
+        !Number.isInteger(source.vectorization.simplifiedPointCount) ||
+        !(source.vectorization.simplificationToleranceSourcePx > 0) ||
+        !Number.isInteger(source.vectorization.closedSolidCount) ||
+        !Number.isInteger(source.vectorization.openBoundaryCount)) {
+      errors.push("source.vectorization must describe red-line extraction");
     }
     if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
       errors.push("source.shapeCounts.total must be a positive integer");
@@ -307,10 +311,13 @@ export class CollisionWorld {
   private readonly cell: number;
   private readonly moveSegments: Segment[] = [];
   private readonly sightSegments: Segment[] = [];
+  private readonly shadowSegments: Segment[] = [];
   private readonly moveHash = new Map<string, number[]>();
   private readonly sightHash = new Map<string, number[]>();
+  private readonly shadowHash = new Map<string, number[]>();
   private readonly moveSolids: Solid[] = [];
   private readonly sightSolids: Solid[] = [];
+  private readonly shadowSolids: Solid[] = [];
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -340,6 +347,10 @@ export class CollisionWorld {
           const index = this.sightSegments.push(segment) - 1;
           this.insert(this.sightHash, index, segment);
         }
+        if (shape.castsShadow ?? shape.blocksSight) {
+          const index = this.shadowSegments.push(segment) - 1;
+          this.insert(this.shadowHash, index, segment);
+        }
       }
       if (shape.closed) {
         const xs = shape.points.map(point => point[0]);
@@ -350,6 +361,7 @@ export class CollisionWorld {
         };
         if (shape.blocksMove) this.moveSolids.push(solid);
         if (shape.blocksSight) this.sightSolids.push(solid);
+        if (shape.castsShadow ?? shape.blocksSight) this.shadowSolids.push(solid);
       }
     });
 
@@ -475,6 +487,24 @@ export class CollisionWorld {
       const hit = raySegmentDistance(ax, ay, ux, uy, this.sightSegments[index]);
       // Ignore contacts at the observer/target endpoint. A target placed on
       // a solid is handled by the perimeter-aware interaction helper below.
+      if (hit > 0.75 && hit < length - 0.75) return false;
+    }
+    return true;
+  }
+
+  /** True when the open segment is not occluded by geometry marked castsShadow. */
+  isShadowLineOfSightClear(ax: number, ay: number, bx: number, by: number): boolean {
+    if (![ax, ay, bx, by].every(Number.isFinite) ||
+        ax < 0 || ay < 0 || bx < 0 || by < 0 ||
+        ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
+    if (this.insideSolids(ax, ay, this.shadowSolids) ||
+        this.insideSolids(bx, by, this.shadowSolids)) return false;
+    const dx = bx - ax, dy = by - ay;
+    const length = magnitude(dx, dy);
+    if (length <= EPS) return true;
+    const ux = dx / length, uy = dy / length;
+    for (const index of this.query(this.shadowHash, ax, ay, length)) {
+      const hit = raySegmentDistance(ax, ay, ux, uy, this.shadowSegments[index]);
       if (hit > 0.75 && hit < length - 0.75) return false;
     }
     return true;
