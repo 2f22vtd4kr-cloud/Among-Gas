@@ -54,6 +54,13 @@ function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use" | "
     strokeLinejoin: "round" as const,
     "aria-hidden": true as const,
   };
+  if (kind === "use" && actionKind === "task") return (
+          <svg viewBox="0 0 48 48" width="34" height="34" aria-hidden="true">
+            <path d="M16 9h-4a3 3 0 0 0-3 3v27h30V12a3 3 0 0 0-3-3h-4" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
+            <rect x="17" y="5" width="14" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="3" />
+            <path d="M16 22h16M16 29h10M16 36h13" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+          </svg>
+
   if (kind === "use" && actionKind === "repair") return (
     <svg {...common}><path d="M29 7a12 12 0 0 0-14 15L7 30a6 6 0 0 0 8 8l9-9A12 12 0 0 0 39 14l-8 8-8-8 6-7Z" /></svg>
   );
