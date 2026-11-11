@@ -85,15 +85,15 @@ assert.ok(walk1.y + walk1.height <= 312,
   'walk-1 crop must exclude the stray alpha bridge at source rows 312–315');
 assert.ok(walk2.y >= 327,
   'walk-2 crop must begin after the inter-row bleed band');
-assert.ok(walk2.y - (walk1.y + walk1.height) >= 16,
+assert.ok(walk2.y - (walk1.y + walk1.height) >= 17,
   'measured walk crops must retain the transparent safety gap');
 
 const idle = getCharacterFrameRect('teal', 'idle');
-assert.equal(idle.height, 147, 'idle source crop must retain the complete lower silhouette and feet');
+assert.equal(idle.height, 136, 'idle source crop retains its detached-stroke trim');
 assert.equal(idle.displayHeight, 153, 'original atlas baseline remains diagnostic metadata');
 const corpse = getCharacterFrameRect('teal', 'dead-body');
 assert.equal(corpse.y, 1067, 'corpse crop retains the upper bone that begins before the uniform row boundary');
-assert.equal(corpse.height, 113, 'cut-body source crop must retain the complete lower suit and exposed-bone frame');
+assert.equal(corpse.height, 93, 'cut-body source crop retains its exposed-bone frame');
 assert.equal(corpse.displayHeight, 118, 'cut-body atlas baseline remains diagnostic metadata');
 
 const baseHeight = Math.round(36 * MAP_W / 1652);

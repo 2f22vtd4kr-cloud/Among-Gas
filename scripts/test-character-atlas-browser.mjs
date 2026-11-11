@@ -44,7 +44,7 @@ try {
     { pose: 'ghost', top: 636, bottom: 770 },
     { pose: 'mask', top: 795, bottom: 896 },
     { pose: 'hold-item', top: 915, bottom: 1041 },
-    { pose: 'dead-body', top: 1067, bottom: 1180 },
+    { pose: 'dead-body', top: 1067, bottom: 1160 },
     { pose: 'sit-crouch', top: 1198, bottom: 1326 },
   ];
   const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha }) => {

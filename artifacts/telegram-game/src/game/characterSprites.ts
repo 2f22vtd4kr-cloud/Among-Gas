@@ -103,19 +103,18 @@ export type CharacterPose = (typeof CHARACTER_POSES)[number];
  * silhouette while rendered pixels keep their native scale.
  */
 const POSE_ROW_WINDOWS: ReadonlyArray<{ top: number; bottom: number; displayHeight: number }> = [
-  // Bounds are measured against the largest connected silhouette in each
-  // authored source column. The previous windows cut real pixels from idle,
-  // both walk cycles and the bottom of the corpse; keep the full silhouette
-  // and exclude only the detached underline bands outside these bounds.
-  { top: 0, bottom: 147, displayHeight: 153 }, // idle: retain the full feet and lower outline, exclude detached scanlines
-  { top: 172, bottom: 311, displayHeight: 140 }, // walk-1: retain the complete lower leg/foot edge
-  { top: 327, bottom: 461, displayHeight: 134 }, // walk-2: retain the complete lower leg/foot edge
-  { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: measured silhouette
-  { top: 636, bottom: 772, displayHeight: 139 }, // ghost: include the final float pixels
-  { top: 795, bottom: 899, displayHeight: 108 }, // mask: include the complete lower contour
-  { top: 915, bottom: 1042, displayHeight: 136 }, // hold-item: include the full hand/item contour
-  { top: 1067, bottom: 1180, displayHeight: 118 }, // dead-body: retain the complete cut suit and exposed bone
-  { top: 1198, bottom: 1327, displayHeight: 136 }, // sit-crouch: complete silhouette, without lower-row bleed
+  // Crop just beyond each measured silhouette. The source sheet has stray
+  // horizontal strokes through the otherwise transparent leg gap and below the feet;
+  // the pose-specific notch removes the bridges while retaining the outer feet.
+  { top: 0, bottom: 136, displayHeight: 153 }, // idle: trim only the final detached baseline pixels while retaining the foot tips
+  { top: 172, bottom: 310, displayHeight: 138 }, // walk-1: measured silhouette
+  { top: 327, bottom: 458, displayHeight: 131 }, // walk-2: measured silhouette
+  { top: 471, bottom: 611, displayHeight: 149 }, // run-lean: trim detached underline pixels below the feet
+  { top: 636, bottom: 770, displayHeight: 139 }, // ghost: trim detached underline pixels below the float
+  { top: 795, bottom: 896, displayHeight: 108 }, // mask: trim the detached black strokes below the pose
+  { top: 915, bottom: 1041, displayHeight: 136 }, // hold-item: trim detached underline pixels
+  { top: 1067, bottom: 1160, displayHeight: 118 }, // dead-body: preserve the cut suit and bone, exclude detached underline pixels
+  { top: 1198, bottom: 1326, displayHeight: 136 }, // sit-crouch: trim detached underline pixels
 ];
 
 /** Returns an isolated runtime-atlas window (px) for a given color and pose. */
@@ -166,13 +165,10 @@ export function getCharacterClipNotch(pose: CharacterPose): CharacterClipNotch |
 export function getCharacterClipPath(pose: CharacterPose): string | undefined {
   const notch = getCharacterClipNotch(pose);
   if (!notch) return undefined;
-  // Normalize percentage strings so simple measured fractions (e.g. 0.56)
-  // remain stable and testable instead of exposing binary floating-point tails.
-  const percent = (value: number) => Number((value * 100).toFixed(2));
-  const leftStart = percent(notch.leftLegStart);
-  const leftEnd = percent(notch.leftLegEnd);
-  const rightStart = percent(notch.rightLegStart);
-  const rightEnd = percent(notch.rightLegEnd);
-  const top = percent(notch.top);
+  const leftStart = notch.leftLegStart * 100;
+  const leftEnd = notch.leftLegEnd * 100;
+  const rightStart = notch.rightLegStart * 100;
+  const rightEnd = notch.rightLegEnd * 100;
+  const top = notch.top * 100;
   return `polygon(0 0, 100% 0, 100% ${top}%, ${rightEnd}% ${top}%, ${rightEnd}% 100%, ${rightStart}% 100%, ${rightStart}% ${top}%, ${leftEnd}% ${top}%, ${leftEnd}% 100%, ${leftStart}% 100%, ${leftStart}% ${top}%, 0 ${top}%)`;
 }
