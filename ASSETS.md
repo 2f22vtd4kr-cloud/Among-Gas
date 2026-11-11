@@ -46,6 +46,10 @@ The emergency button size/placement, localized call status, full-screen overlay,
 
 No direct source-code consumers were found for the other 15 files in the source audit. They were removed rather than left in the public directory.
 
+### Reference-only screenshot removed
+
+The v2 Plan 2 audit identified `attached_assets/IMG_2885_1783605337712.jpeg` as a third-party Switch-game HUD reference screenshot. It had no source-code consumers and was removed from the repository on 2026-11-11; keep any private comparison copy outside the source tree. This removal does not clear the other retained reference inputs listed in `attached_assets/`, which remain subject to the provenance review below.
+
 ## Remaining release gate
 
 Removing this specific bundle does not automatically clear every other asset in the project. Before commercial release:
