@@ -60,7 +60,7 @@ function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use" | "
             <rect x="17" y="5" width="14" height="8" rx="2" fill="none" stroke="currentColor" strokeWidth="3" />
             <path d="M16 22h16M16 29h10M16 36h13" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
           </svg>
-
+  );
   if (kind === "use" && actionKind === "repair") return (
     <svg {...common}><path d="M29 7a12 12 0 0 0-14 15L7 30a6 6 0 0 0 8 8l9-9A12 12 0 0 0 39 14l-8 8-8-8 6-7Z" /></svg>
   );
