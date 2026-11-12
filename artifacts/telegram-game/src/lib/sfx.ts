@@ -197,6 +197,18 @@ function playFootstep(volume: number): void {
   }, volume, ctx.currentTime + 0.008);
 }
 
+/** Public, backwards-compatible cue API used by the game UI and movement loop. */
+export function sfx(key: string, volume = 1): void {
+  if (!Number.isFinite(volume)) return;
+  const safeVolume = Math.max(0, Math.min(1, volume));
+  if (safeVolume === 0) return;
+  if (key === 'footstep') {
+    playFootstep(safeVolume);
+    return;
+  }
+  playProceduralCue(key, safeVolume);
+}
+
 const MENU_MELODY = [
   220, 261.63, 329.63, 261.63,
   196, 246.94, 293.66, 246.94,
