@@ -1,8 +1,10 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
 import { haptic } from '../lib/haptics';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
+  buildPreciseVisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
@@ -172,7 +174,8 @@ function getTaskInteractionMockTaskId(mode: string | null): number | null {
 }
 
 export default function GameMap() {
-  const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
+  const taskInteractionGrid = useMemo(() => getProductionCollisionWorld(), []);
+  const taskInteractionSightGrid = useMemo(() => buildPreciseCollisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -427,7 +430,7 @@ export default function GameMap() {
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           pad.x, pad.y + FEET_OFFSET_Y,
           24,
@@ -441,7 +444,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, amIImpostor, sabotage, taskInteractionGrid]);
+  }, [amIDead, amIImpostor, sabotage, taskInteractionGrid, taskInteractionSightGrid]);
 
   // Local countdown clock for the sabotage banner, ticked independently of
   // the canvas rAF loop — same pattern as meetingNow above.
@@ -480,7 +483,7 @@ export default function GameMap() {
         const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           body.x, body.y + FEET_OFFSET_Y,
         );
@@ -490,7 +493,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIDead, meeting, taskInteractionGrid]);
+  }, [amIDead, meeting, taskInteractionGrid, taskInteractionSightGrid]);
 
   // Local countdown clock for the meeting overlay, ticked independently of
   // the canvas rAF loop (this UI lives outside the canvas).
@@ -537,7 +540,7 @@ export default function GameMap() {
         const dy = rp.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           rp.x, rp.y + FEET_OFFSET_Y,
         );
@@ -547,7 +550,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [amIImpostor, amIDead, taskInteractionGrid]);
+  }, [amIImpostor, amIDead, taskInteractionGrid, taskInteractionSightGrid]);
 
   // ── Task system (Phase 7) ─────────────────────────────────────────────────
   // Mirror myTasks into a ref so the rAF loop can read it without closure issues.
@@ -628,7 +631,7 @@ export default function GameMap() {
         const distSq = dx * dx + dy * dy;
         // Ghosts intentionally keep through-wall task access on both client and server.
         const hasLineOfSight = amIDead || isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x,
           myPos.y + FEET_OFFSET_Y,
           def.x,
@@ -659,7 +662,7 @@ export default function GameMap() {
     }, 150);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meeting, myRole, sabotage, amIDead, taskInteractionGrid]);
+  }, [meeting, myRole, sabotage, amIDead, taskInteractionGrid, taskInteractionSightGrid]);
 
   // Living players may use the custom-map Admin Table when they stand at its console.
   // The proximity check is only client-side UI; the table itself reads replicated player
@@ -976,7 +979,7 @@ export default function GameMap() {
         const dy = vent.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           vent.x, vent.y + FEET_OFFSET_Y,
           20,
@@ -986,7 +989,7 @@ export default function GameMap() {
       setNearestVentId(best);
     }, 150);
     return () => clearInterval(id);
-  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner, taskInteractionGrid]);
+  }, [amIImpostor, amIDead, myVentId, meeting, voteResult?.winner, taskInteractionGrid, taskInteractionSightGrid]);
 
 
   useEffect(() => {
@@ -1014,9 +1017,30 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = taskInteractionGrid;
-    const fineGrid = grid;
-    const taskMockMode = new URLSearchParams(window.location.search).get('mock');
+    const visionSourceGrid = buildPreciseVisionGrid();
+    const params = new URLSearchParams(window.location.search);
+    const taskMockMode = params.get('mock');
+    // The mobile camera browser test uses the existing task-playing dev mock.
+    // Keep this fixture on that route so startup redirects cannot drop a
+    // separate query flag before the canvas effect reads it.
+    // Keep the fixture and diagnostics on one exact gate. The browser smoke
+    // test must never report a camera transform from the real lobby spawn while
+    // believing it is exercising the isolated west-room movement fixture.
+    const cameraFixtureEnabled = cameraDebugEnabled;
+    // Camera smoke tests use a collision-checked interior start so map-edge
+    // camera clamping and nearby props cannot masquerade as follow regressions.
+    if (cameraFixtureEnabled) {
+      const fixture = { x: 510, y: 1069 };
+      if (!isPlayerPositionWalkable(taskInteractionGrid, fixture.x, fixture.y)) {
+        throw new Error('Camera fixture position is not walkable in the production vector collision world');
+      }
+      playerStateRef.current = { ...playerStateRef.current, ...fixture };
+      (window as Window & { __AG_CAMERA_FIXTURE_POSITION?: unknown }).__AG_CAMERA_FIXTURE_POSITION = fixture;
+      // The mock owns its initial position; do not let a delayed first server
+      // snapshot replace the fixture before the movement/camera trace begins.
+      correctionRef.current = null;
+      pendingSentRef.current.length = 0;
+    }
     const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
       ? getTaskInteractionMockTaskId(taskMockMode)
       : null;
@@ -1033,9 +1057,9 @@ export default function GameMap() {
           const dy = fixtureTask.y - y;
           const distanceSq = dx * dx + dy * dy;
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
-          if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
+          if (!isPlayerPositionWalkable(taskInteractionGrid, x, y)) continue;
           const hasLineOfSight = isLineOfSightToInteractionTarget(
-            fineGrid, x, y + FEET_OFFSET_Y,
+            taskInteractionSightGrid, x, y + FEET_OFFSET_Y,
             fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
             fixtureTask.interactionTargetRadiusPx ?? 24,
           );
@@ -1051,10 +1075,10 @@ export default function GameMap() {
     }
     // Player prediction and visual occlusion share the canonical fine grid.
     // Compact geometry remains available to navigation consumers that need A*.
-    const shadowGrid = buildShadowGrid(fineGrid);
-    const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    const narrowSegments = buildFineShadowSegments(fineGrid);
-    if (!isSpawnWalkable(fineGrid)) {
+    const shadowGrid = buildShadowGrid(visionSourceGrid);
+    const narrowOccluders = buildNarrowShadowOccluders(visionSourceGrid, true);
+    const narrowSegments = buildFineShadowSegments(visionSourceGrid);
+    if (!isSpawnWalkable(taskInteractionGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
 
@@ -1068,7 +1092,7 @@ export default function GameMap() {
     let lastSentWireY = -1;
     let cameraX = playerStateRef.current.x;
     let cameraY = playerStateRef.current.y;
-    let hasAuthoritativePosition = false;
+    let hasAuthoritativePosition = cameraFixtureEnabled;
 
     const frame = (ts: number) => {
       const dtMs = lastTs === null ? 16 : Math.min(ts - lastTs, 48);
@@ -1078,7 +1102,12 @@ export default function GameMap() {
       // Later 0xFF snapshots only acknowledge a sent position. Delayed or
       // duplicate snapshots cannot overwrite newer local prediction; only an
       // explicit 0x22 rejection/correction is allowed to snap the player.
-      if (correctionRef.current) {
+      if (cameraFixtureEnabled) {
+        // The camera fixture is a local-only dev mock: server snapshots and
+        // echoes must not teleport it back to the real lobby spawn mid-trace.
+        correctionRef.current = null;
+        pendingSentRef.current.length = 0;
+      } else if (correctionRef.current) {
         const incoming = correctionRef.current;
         correctionRef.current = null;
         const pending = pendingSentRef.current;
@@ -1102,7 +1131,7 @@ export default function GameMap() {
         ? EMPTY_KEYS
         : keysRef.current;
       playerStateRef.current = stepPlayer(
-        fineGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
+        taskInteractionGrid, playerStateRef.current, effectiveKeys, dtMs, deadSlotsRef.current.has(mySlotRef.current ?? -1),
       );
       // Browser task fixtures must remain at their measured collision-grid
       // position. The first authoritative WebSocket spawn can arrive after the
@@ -1128,7 +1157,7 @@ export default function GameMap() {
 
       // ── Send 0x11 move intent (throttled to 25Hz) ─────────────────────────
       const sinceLastSend = ts - lastMoveSentTs;
-      if (gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
+      if (!cameraFixtureEnabled && gameplayReadyRef.current && sinceLastSend >= MOVE_SEND_INTERVAL_MS) {
         const wireX = toWire(px, MAP_W);
         const wireY = toWire(py, MAP_H);
         // Only send if position has changed in wire space
@@ -1419,7 +1448,7 @@ export default function GameMap() {
       );
       if (visionRadius !== null) {
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, false, narrowSegments);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
@@ -2118,6 +2147,7 @@ export default function GameMap() {
           reportAvailable={!amIDead && nearestBody !== null && sabotage === null && myVentId === null}
           useAvailable={useActionEnabled}
           useActionKind={useActionKind}
+          ventAvailable={!amIDead && amIImpostor && nearestVentId !== null && myVentId === null}
           english={en}
           positionStyle={customControlPositionStyle('killReport', controlLayout, joystickSide)}
           onKill={() => {
@@ -2146,6 +2176,13 @@ export default function GameMap() {
               enterVent(nearestVentId);
             } else if (useActionKind === 'admin') {
               setShowAdminTable(true);
+            }
+          }}
+          onVent={() => {
+            if (!amIDead && amIImpostor && nearestVentId !== null && myVentId === null) {
+              haptic.tap();
+              sfx('uiSelect', 0.3);
+              enterVent(nearestVentId);
             }
           }}
         />
@@ -2260,6 +2297,7 @@ export default function GameMap() {
           ...customControlPositionStyle('emergency', controlLayout, joystickSide),
         }}>
           <button
+            data-testid="emergency-meeting-button"
             aria-label={emergencyMeetingUsed
               ? (en ? 'Emergency meeting already used' : 'Экстренное собрание уже использовано')
               : (en ? 'Call emergency meeting' : 'Созвать экстренное собрание')}

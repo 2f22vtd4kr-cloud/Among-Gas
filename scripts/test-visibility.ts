@@ -3,6 +3,7 @@ import { FINE_RLE_BASE64 } from '../lib/shared/src/collisionDataFine.js';
 import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
+  buildPreciseVisionGrid,
   buildFineCollisionGridFromRle,
   buildPreciseCollisionGridFromRle,
   FINE_COLS,
@@ -20,7 +21,7 @@ import {
   type Grid,
 } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
-import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
+import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, isVisionLineClear, isVisionPointBlocked, smoothVisibilityPolygon } from '../artifacts/telegram-game/src/game/visibility.ts';
 import { CHARACTER_COLORS, CHARACTER_POSES, getCharacterClipPath, getCharacterFrameRect } from '../artifacts/telegram-game/src/game/characterSprites.ts';
 
 // Decode the committed canonical stream independently of the production
@@ -134,7 +135,7 @@ assert.ok(
   assert.equal(corpseFrames.length, 18, 'all eighteen runtime palettes have a corpse pose');
   assert.equal(new Set(corpseFrames.map(frame => frame.x)).size, 18, 'each runtime palette has its own atlas column');
   assert.equal(getCharacterFrameRect('teal', 'idle').height, 136,
-    'idle crop ends before the detached under-foot scanlines');
+    'idle crop retains the complete feet while ending before detached under-foot scanlines');
   assert.equal(corpseFrames[0].height, 93,
     'corpse crop keeps the exposed bone and cut suit but excludes detached under-foot scanlines');
   assert.match(getCharacterClipPath('idle') ?? '', /79%/,
@@ -463,6 +464,22 @@ assert.ok(LIGHTS_CREWMATE_VISION_RADIUS_PX < NORMAL_VISION_RADIUS_PX, 'Lights re
 }
 
 
+// Movement-only geometry must not leak into the shared vision model.
+{
+  const movementGrid = buildPreciseCollisionGrid();
+  const visionSourceGrid = buildPreciseVisionGrid();
+  const vanCenter = { x: 2130, y: 1170 };
+  assert.equal(isBlocked(movementGrid, vanCenter.x, vanCenter.y), true, 'van remains a solid movement obstacle');
+  assert.equal(isBlocked(visionSourceGrid, vanCenter.x, vanCenter.y), false, 'van is excluded from vision source');
+  const shadowGrid = buildShadowGrid(visionSourceGrid);
+  const occluders = buildNarrowShadowOccluders(visionSourceGrid, true);
+  const segments = buildFineShadowSegments(visionSourceGrid);
+  assert.equal(isVisionPointBlocked(shadowGrid, vanCenter.x, vanCenter.y), false, 'van is not a vision blocker');
+  assert.equal(isVisionLineClear(shadowGrid, 2000, 1170, 2250, 1170, occluders, segments), true, 'sight passes through van while movement remains blocked');
+  const wallProbe = new Uint8Array(shadowGrid);
+  wallProbe[Math.floor(1060 / FINE_CELL_Y) * FINE_COLS + Math.floor(2120 / FINE_CELL_X)] = 1;
+  assert.equal(isVisionLineClear(wallProbe, 2100, 1050, 2140, 1070), false, 'architectural wall cells still block sight');
+}
 console.log(JSON.stringify({
   ok: true,
   rayCount: realPolygon.length,
