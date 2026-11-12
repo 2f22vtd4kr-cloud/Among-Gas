@@ -52,6 +52,16 @@ Two additional reference screenshots, `attached_assets/among-us-wiki-lobby.png` 
 
 The v2 Plan 2 audit identified `attached_assets/IMG_2885_1783605337712.jpeg` as a third-party Switch-game HUD reference screenshot. It had no source-code consumers and was removed from the repository on 2026-11-11; keep any private comparison copy outside the source tree. This removal does not clear the other retained reference inputs listed in `attached_assets/`, which remain subject to the provenance review below.
 
+## Third-party audio bundle removed
+
+On 2026-11-12, the nine files formerly under `artifacts/telegram-game/public/au-sounds/` were checked against the pinned public Among Us clone source at commit `e75a1410c8bc9e82b41f2ab51deec373c8486e29`. Their Git blob hashes matched the corresponding copied audio assets. The files have been removed from the runtime tree:
+
+- `kill.wav`, `meeting.wav`, `menu_music.mp3`
+- `report_body.wav`, `roundstart.wav`, `task_complete.wav`
+- `ui_select.wav`, `victory_crew.wav`, `victory_impostor.wav`
+
+The existing public `sfx()` API now synthesizes the game cues, footstep, and a quiet looping ambient menu motif with Web Audio. It fetches no sample or music files. `scripts/test-audio-preload.mjs` verifies there are no audio network requests before or after a trusted gesture and that audio initialization does not emit browser errors.
+
 ## Remaining release gate
 
 Removing this specific bundle does not automatically clear every other asset in the project. Before commercial release:
