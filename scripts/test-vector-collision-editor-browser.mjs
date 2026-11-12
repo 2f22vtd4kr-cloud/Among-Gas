@@ -143,16 +143,16 @@ try {
   assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0,
     "touching the starting vertex must close and commit the polygon loop");
 
-  // Verify touch snapping against an authored vertex. A finger-down 6 CSS px
-  // from the existing vertex must start the wall exactly on that vertex.
+  // Verify the full 48 CSS px touch target: a finger-down 20 CSS px from
+  // the existing vertex remains inside its 24 px snap radius and must align.
   const authoredShapes = JSON.parse(await canvas.getAttribute("data-shape-points") ?? "[]");
   const snapTarget = authoredShapes[1][0];
   const zoom = Number(await canvas.getAttribute("data-zoom"));
   const cameraX = Number(await canvas.getAttribute("data-camera-x"));
   const cameraY = Number(await canvas.getAttribute("data-camera-y"));
   bounds = await canvas.boundingBox();
-  const snapScreenX = bounds.x + (snapTarget[0] - cameraX) * zoom + 6;
-  const snapScreenY = bounds.y + (snapTarget[1] - cameraY) * zoom + 4;
+  const snapScreenX = bounds.x + (snapTarget[0] - cameraX) * zoom + 12;
+  const snapScreenY = bounds.y + (snapTarget[1] - cameraY) * zoom + 16;
   await page.getByRole("button", { name: "Draw wall" }).click();
   await touch.send("Input.dispatchTouchEvent", {
     type: "touchStart", touchPoints: [{ id: 1, x: snapScreenX, y: snapScreenY }],
