@@ -54,12 +54,21 @@ The v2 Plan 2 audit identified `attached_assets/IMG_2885_1783605337712.jpeg` as 
 
 ## Third-party audio bundle removed
 
-On 2026-11-12, the nine files formerly under `artifacts/telegram-game/public/au-sounds/` were checked against the pinned public Among Us clone source at commit `e75a1410c8bc9e82b41f2ab51deec373c8486e29`. Their Git blob hashes matched the corresponding copied audio assets. The files have been removed from the runtime tree:
+On 2026-11-12, the nine files formerly under `artifacts/telegram-game/public/au-sounds/` were checked against the pinned public Among Us clone source at commit `e75a1410c8bc9e82b41f2ab51deec373c8486e29`. Every local Git blob SHA matched the corresponding upstream blob exactly:
 
-- `kill.wav`, `meeting.wav`, `menu_music.mp3`
-- `report_body.wav`, `roundstart.wav`, `task_complete.wav`
-- `ui_select.wav`, `victory_crew.wav`, `victory_impostor.wav`
+| Removed local file | Exact upstream source path | Git blob SHA | Bytes |
+|---|---|---|---:|
+| `kill.wav` | `Assets/Sounds/Kill/imposter_kill.wav` | `30436813cde6c70620757f3e9c2e9a113d38d912` | 188,448 |
+| `meeting.wav` | `Assets/Sounds/General/alarm_emergencymeeting.wav` | `3c4e59f667c8dced521e8574e3e1ab7c5f4cf5fd` | 531,500 |
+| `menu_music.mp3` | `Assets/Sounds/Background/main_menu_music.mp3` | `1392647073a9af7cbcf7567d615a1813d0eaaa01` | 3,854,902 |
+| `report_body.wav` | `Assets/Sounds/General/report_Bodyfound.wav` | `5e8fc07b5d33a9ba5f7b0284f1b8ded6572e8928` | 742,412 |
+| `roundstart.wav` | `Assets/Sounds/General/roundstart.wav` | `87c6ae695f50480e913e63cc0643d5841209ef30` | 779,176 |
+| `task_complete.wav` | `Assets/Sounds/General/task_complete.wav` | `a31bbc67e30edbcebde567e368f92050d9c1c1d4` | 214,992 |
+| `ui_select.wav` | `Assets/Sounds/UI/select.wav` | `944c05daef768eee0aa611620dfd318eedd01cc8` | 303,364 |
+| `victory_crew.wav` | `Assets/Sounds/General/victory_crew.wav` | `35a5ffc980148a5ce25ee77361de9cd1593b84b7` | 1,672,652 |
+| `victory_impostor.wav` | `Assets/Sounds/General/victory_impostor.wav` | `77ef9f4ed74c56c25283159822f1bd544507e591` | 2,229,740 |
 
+The files have been removed from the runtime tree.
 The existing public `sfx()` API now synthesizes the game cues, footstep, and a quiet looping ambient menu motif with Web Audio. It fetches no sample or music files. `scripts/test-audio-preload.mjs` verifies there are no audio network requests before or after a trusted gesture and that audio initialization does not emit browser errors.
 
 ## Remaining release gate
