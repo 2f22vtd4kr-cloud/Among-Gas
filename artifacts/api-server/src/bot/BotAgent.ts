@@ -63,6 +63,11 @@ const navigationGeometry = BOT_NAVIGATION_GEOMETRY;
 const navigationGrid = BOT_NAVIGATION_GRID;
 export { isBotNavigationReachable };
 
+/** Empty routes represent cached pathfinding failure, not successful arrival. */
+export function hasCompletedNavigationRoute(route: readonly Point[] | null, index: number): boolean {
+  return route !== null && route.length > 0 && index >= route.length;
+}
+
 /**
  * If a valid continuous player position lies in a blocked/coarse A* cell,
  * connect it to the nearest safely reachable centre in the spawn component.
@@ -610,9 +615,7 @@ export abstract class BotAgent {
     // An empty route means A* found no path. Keep that negative result
     // cached while the bot is stationary; only a successful route can be
     // "complete" and trigger the normal next-tick rebuild.
-    const routeComplete = this.navigationRoute !== null &&
-      this.navigationRoute.length > 0 &&
-      this.navigationRouteIndex >= this.navigationRoute.length;
+    const routeComplete = hasCompletedNavigationRoute(this.navigationRoute, this.navigationRouteIndex);
     const routeRefreshDistance = Math.max(
       48,
       arrivalTolerancePx + Math.hypot(NAV_CELL_X, NAV_CELL_Y),
