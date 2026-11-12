@@ -329,11 +329,11 @@ assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 150/, 'The current on
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => getProductionCollisionWorld\(\), \[\]\)/, 'GameMap must use the generated red-line vector world for collision');
 assert.match(gameMapSource, /isLineOfSightToInteractionTarget\(/, 'task actions must enforce the same line-of-sight contract as the authoritative server');
 assert.match(gameMapSource, /pad\.x,\s*pad\.y \+ FEET_OFFSET_Y/, 'sabotage repair prompts must target the visible repair pad rather than the parent system');
-assert.match(gameMapSource, /const fineGrid = taskInteractionSightGrid/, 'fine raster remains only for the established vision-shadow renderer');
-assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
-assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
-assert.match(gameMapSource, /const narrowSegments = buildFineShadowSegments\(fineGrid\)/, 'compact props must expose exact fine-grid silhouette edges');
-assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments\)/, 'GameMap must trace sight against walls, narrow circles and exact compact-prop outlines');
+assert.match(gameMapSource, /const visionSourceGrid = buildPreciseVisionGrid\(\)/, 'live vision must use a dedicated vision-source grid, not movement collision geometry');
+assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(visionSourceGrid\)/, 'GameMap must derive live vision shadows from the dedicated vision-source grid');
+assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(visionSourceGrid, true\)/, 'narrow props must use measured vision-source occluders rather than movement collision cells');
+assert.match(gameMapSource, /const narrowSegments = buildFineShadowSegments\(visionSourceGrid\)/, 'compact props must expose exact vision-source silhouette edges');
+assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, false, narrowSegments\)/, 'GameMap must trace sight against authored vision geometry without reintroducing movement-only manual polygons');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
 assert.match(gameMapSource, /stepPlayer\(\s*taskInteractionGrid,/, 'Client prediction must use the red-line vector collision world');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
