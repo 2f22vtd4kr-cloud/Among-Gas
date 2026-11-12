@@ -81,6 +81,12 @@
       "workspace": "./src/collision/botNavigation.ts",
       "import": "./src/collision/botNavigation.ts",
       "default": "./src/collision/botNavigation.ts"
+    },
+    "./collision/visibility": {
+      "types": "./dist/collision/visibility.d.ts",
+      "workspace": "./src/collision/visibility.ts",
+      "import": "./src/collision/visibility.ts",
+      "default": "./src/collision/visibility.ts"
     }
   }
 }
