@@ -280,7 +280,7 @@ export class ImpostorBot extends BotAgent {
 
     const distanceToVictim = Math.hypot(victim.x - self.x, victim.y - self.y);
     if (distanceToVictim > KILL_RANGE_PX) {
-      this.navigateTo(self, { x: victim.x, y: victim.y });
+      this.navigateTo(self, { x: victim.x, y: victim.y }, KILL_RANGE_PX - 2);
     }
 
     // A kill is attempted only while the target is currently visible and in
