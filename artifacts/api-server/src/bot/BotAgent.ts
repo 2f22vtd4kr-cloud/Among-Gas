@@ -118,6 +118,42 @@ function snapNavigationPoint(point: Point): Point {
   };
 }
 
+/**
+ * Find nearby walkable graph nodes that are within the caller's arrival range
+ * of a continuous target. Chasing a moving player must end at a safe nav node,
+ * not require a straight swept-footprint segment from that node to the exact
+ * (off-centre) target coordinate; that final segment may cross a thin wall
+ * even when both positions are independently walkable.
+ */
+function nearbyCollisionSafeNavigationGoals(feetGoal: Point, maxDistance: number): Point[] {
+  if (!Number.isFinite(maxDistance) || maxDistance < 0) return [];
+  const minCol = Math.max(0, Math.floor((feetGoal.x - maxDistance) / NAV_CELL_X));
+  const maxCol = Math.min(NAV_COLS - 1, Math.floor((feetGoal.x + maxDistance) / NAV_CELL_X));
+  const minRow = Math.max(0, Math.floor((feetGoal.y - maxDistance) / NAV_CELL_Y));
+  const maxRow = Math.min(NAV_ROWS - 1, Math.floor((feetGoal.y + maxDistance) / NAV_CELL_Y));
+  const candidates: Array<{ point: Point; distanceSquared: number }> = [];
+
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      const index = row * NAV_COLS + col;
+      if (navigationGrid[index] !== 0) continue;
+      const point = {
+        x: (col + 0.5) * NAV_CELL_X,
+        y: (row + 0.5) * NAV_CELL_Y,
+      };
+      const dx = point.x - feetGoal.x;
+      const dy = point.y - feetGoal.y;
+      const distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared > maxDistance * maxDistance ||
+          !isBotNavigationReachable(point.x, point.y)) continue;
+      candidates.push({ point, distanceSquared });
+    }
+  }
+
+  candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
+  return candidates.slice(0, 24).map(candidate => candidate.point);
+}
+
 /** Keep approach goals out of pinched wall gaps; leave extra room for the feet collider. */
 function hasApproachClearance(point: Point): boolean {
   const feetY = point.y + FEET_OFFSET_Y;
@@ -239,8 +275,8 @@ export function reserveBotDiscussionSlot(
 
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
-  private navigationGoalKey: string | null = null;
   private navigationRoute: Point[] | null = null;
+  private navigationRouteGoal: Point | null = null;
   private navigationRouteIndex = 0;
   private navigationRouteOrigin: Point | null = null;
   private discussionMeeting: Lobby['meeting'] = null;
@@ -514,6 +550,40 @@ export abstract class BotAgent {
    * nearly every real path (see .agents/memory/ for the investigation).
    * Fix: do the whole search in feet-space, then shift back once at the end.
    */
+  private rebuildNavigationRoute(feetStart: Point, feetGoal: Point, arrivalTolerancePx: number): void {
+    const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
+    const goalCandidates = nearbyCollisionSafeNavigationGoals(feetGoal, arrivalTolerancePx);
+    let result: ReturnType<PathCache["find"]> = null;
+    let selectedGoal = feetGoal;
+
+    // Prefer a route ending at a nearby safe nav-cell centre. This avoids
+    // rejecting legitimate continuous targets merely because the final
+    // centre-to-target connector crosses a thin, independently authored wall.
+    for (const candidate of goalCandidates) {
+      const attempt = this.pathCache.find(
+        navigationGrid, routeStart, candidate, false, navigationGeometry, false, validateProductionNavigationStep,
+      );
+      if (attempt) {
+        result = attempt;
+        selectedGoal = candidate;
+        break;
+      }
+    }
+
+    // Keep a best-effort exact target fallback for goals that have no reachable
+    // node inside arrival range; the movement sweeper still prevents wall cuts.
+    if (!result) {
+      result = this.pathCache.find(
+        navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
+      );
+    }
+
+    this.navigationRoute = result?.waypoints ?? [];
+    this.navigationRouteGoal = selectedGoal;
+    this.navigationRouteIndex = 0;
+    this.navigationRouteOrigin = feetStart;
+  }
+
   protected navigateTo(self: LobbyPlayer, goal: Point, arrivalTolerancePx = 25): boolean {
     const dxGoal = goal.x - self.x;
     const dyGoal = goal.y - self.y;
@@ -521,22 +591,24 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const goalKey = `${goal.x.toFixed(2)},${goal.y.toFixed(2)}`;
 
-    // Keep one exact, collision-validated raw A* route per destination. The
-    // bot advances along multiple adjacent cell edges each tick, rather than
-    // re-running A* every tick or cutting a smoothed chord across a corner.
-    if (this.navigationGoalKey !== goalKey || this.navigationRoute === null) {
-      const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
-      const result = this.pathCache.find(
-        navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
-      );
-      this.navigationGoalKey = goalKey;
-      this.navigationRoute = result?.waypoints ?? [];
-      this.navigationRouteIndex = 0;
-      // Route[0] may be a nearby safe graph centre. The first segment is
-      // independently swept from the bot's exact continuous position below.
-      this.navigationRouteOrigin = feetStart;
+    // Moving hunt targets can change coordinates on every 200ms bot tick.
+    // Retain the in-progress safe route while its endpoint remains useful;
+    // rebuild when it is exhausted or the target has moved materially away.
+    // The previous exact-coordinate key discarded the route every tick and
+    // repeatedly reset the follower at its current cell centre.
+    const routeGoalDrift = this.navigationRouteGoal
+      ? Math.hypot(this.navigationRouteGoal.x - feetGoal.x, this.navigationRouteGoal.y - feetGoal.y)
+      : Number.POSITIVE_INFINITY;
+    const routeComplete = this.navigationRoute !== null &&
+      this.navigationRouteIndex >= this.navigationRoute.length;
+    const routeRefreshDistance = Math.max(
+      48,
+      arrivalTolerancePx + Math.hypot(NAV_CELL_X, NAV_CELL_Y),
+    );
+
+    if (this.navigationRoute === null || routeComplete || routeGoalDrift >= routeRefreshDistance) {
+      this.rebuildNavigationRoute(feetStart, feetGoal, arrivalTolerancePx);
     }
 
     let route: Point[] | null = this.navigationRoute;
@@ -557,14 +629,7 @@ export abstract class BotAgent {
           feetStart, segmentStart, route[this.navigationRouteIndex],
         ) > 18) {
           this.clearPath();
-          const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
-          const result = this.pathCache.find(
-            navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
-          );
-          this.navigationGoalKey = goalKey;
-          this.navigationRoute = result?.waypoints ?? [];
-          this.navigationRouteIndex = 0;
-          this.navigationRouteOrigin = feetStart;
+          this.rebuildNavigationRoute(feetStart, feetGoal, arrivalTolerancePx);
           route = this.navigationRoute;
         }
       }
@@ -685,8 +750,8 @@ export abstract class BotAgent {
    */
   protected clearPath(): void {
     this.pathCache.clear();
-    this.navigationGoalKey = null;
     this.navigationRoute = null;
+    this.navigationRouteGoal = null;
     this.navigationRouteIndex = 0;
     this.navigationRouteOrigin = null;
   }
