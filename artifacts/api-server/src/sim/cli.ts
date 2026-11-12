@@ -72,7 +72,14 @@ function summarize(results: SimGameResult[], wallMs: number) {
     | 'huntAcquisitions' | 'isolationAborts' | 'lostTargetResets'
     | 'navigationCalls' | 'navigationReachedKillRangeTicks' | 'navigationMovementTicks'
     | 'navigationNoMovementTicks' | 'navigationProgressPx'
-    | 'killAttempts' | 'successfulKills',
+    | 'killAttempts' | 'successfulKills'
+    | 'fakeNavigationCalls' | 'fakeNavigationMovementTicks' | 'fakeNavigationNoMovementTicks'
+    | 'fakeNavigationDistancePx' | 'fakeNavigationArrivals' | 'fakeTargetSelections'
+    | 'targetSearchCalls' | 'targetSearchVisibleCandidates' | 'targetSearchNearVisionCandidates'
+    | 'targetSearchNoVisibleCandidates' | 'targetSearchNoNearCandidates'
+    | 'targetSearchRejectedByIsolation' | 'targetSearchBestIsolationScorePx'
+    | 'hiddenHuntNoLastKnown' | 'hiddenHuntExpiredLastKnown'
+    | 'hiddenHuntReachedLastKnown' | 'hiddenHuntRetargeted',
   ) => diagnosticRows.reduce((sum, row) => sum + row[key], 0);
   const diagnosticTotals = {
     roamingTicks: diagnosticSum('roamingTicks'),
@@ -89,6 +96,23 @@ function summarize(results: SimGameResult[], wallMs: number) {
     navigationProgressPx: Number(diagnosticSum('navigationProgressPx').toFixed(1)),
     killAttempts: diagnosticSum('killAttempts'),
     successfulKills: diagnosticSum('successfulKills'),
+    fakeNavigationCalls: diagnosticSum('fakeNavigationCalls'),
+    fakeNavigationMovementTicks: diagnosticSum('fakeNavigationMovementTicks'),
+    fakeNavigationNoMovementTicks: diagnosticSum('fakeNavigationNoMovementTicks'),
+    fakeNavigationDistancePx: Number(diagnosticSum('fakeNavigationDistancePx').toFixed(1)),
+    fakeNavigationArrivals: diagnosticSum('fakeNavigationArrivals'),
+    fakeTargetSelections: diagnosticSum('fakeTargetSelections'),
+    targetSearchCalls: diagnosticSum('targetSearchCalls'),
+    targetSearchVisibleCandidates: diagnosticSum('targetSearchVisibleCandidates'),
+    targetSearchNearVisionCandidates: diagnosticSum('targetSearchNearVisionCandidates'),
+    targetSearchNoVisibleCandidates: diagnosticSum('targetSearchNoVisibleCandidates'),
+    targetSearchNoNearCandidates: diagnosticSum('targetSearchNoNearCandidates'),
+    targetSearchRejectedByIsolation: diagnosticSum('targetSearchRejectedByIsolation'),
+    targetSearchBestIsolationScorePx: Number(diagnosticSum('targetSearchBestIsolationScorePx').toFixed(1)),
+    hiddenHuntNoLastKnown: diagnosticSum('hiddenHuntNoLastKnown'),
+    hiddenHuntExpiredLastKnown: diagnosticSum('hiddenHuntExpiredLastKnown'),
+    hiddenHuntReachedLastKnown: diagnosticSum('hiddenHuntReachedLastKnown'),
+    hiddenHuntRetargeted: diagnosticSum('hiddenHuntRetargeted'),
   };
   const diagnosticAverage = (value: number) => diagnosticRows.length > 0
     ? Number((value / diagnosticRows.length).toFixed(2)) : 0;
@@ -105,7 +129,20 @@ function summarize(results: SimGameResult[], wallMs: number) {
       navigationNoMovementTicks: diagnosticAverage(diagnosticTotals.navigationNoMovementTicks),
       killAttempts: diagnosticAverage(diagnosticTotals.killAttempts),
       successfulKills: diagnosticAverage(diagnosticTotals.successfulKills),
+      fakeNavigationCalls: diagnosticAverage(diagnosticTotals.fakeNavigationCalls),
+      fakeNavigationArrivals: diagnosticAverage(diagnosticTotals.fakeNavigationArrivals),
+      targetSearchCalls: diagnosticAverage(diagnosticTotals.targetSearchCalls),
+      targetSearchVisibleCandidates: diagnosticAverage(diagnosticTotals.targetSearchVisibleCandidates),
+      targetSearchNearVisionCandidates: diagnosticAverage(diagnosticTotals.targetSearchNearVisionCandidates),
+      hiddenHuntNoLastKnown: diagnosticAverage(diagnosticTotals.hiddenHuntNoLastKnown),
+      hiddenHuntReachedLastKnown: diagnosticAverage(diagnosticTotals.hiddenHuntReachedLastKnown),
     },
+    targetVisibilityCoveragePct: diagnosticTotals.targetSearchNearVisionCandidates > 0
+      ? Number((diagnosticTotals.targetSearchVisibleCandidates /
+        diagnosticTotals.targetSearchNearVisionCandidates * 100).toFixed(2)) : 0,
+    fakeNavigationMovementSharePct: diagnosticTotals.fakeNavigationCalls > 0
+      ? Number((diagnosticTotals.fakeNavigationMovementTicks /
+        diagnosticTotals.fakeNavigationCalls * 100).toFixed(2)) : 0,
     visibleHuntSharePct: diagnosticTotals.visibleHuntTicks + diagnosticTotals.hiddenHuntTicks > 0
       ? Number((diagnosticTotals.visibleHuntTicks /
         (diagnosticTotals.visibleHuntTicks + diagnosticTotals.hiddenHuntTicks) * 100).toFixed(2)) : 0,

@@ -47,6 +47,15 @@ export interface SimGameResult {
     lostTargetResets: number; navigationCalls: number; navigationReachedKillRangeTicks: number;
     navigationMovementTicks: number; navigationNoMovementTicks: number;
     navigationProgressPx: number; killAttempts: number; successfulKills: number;
+    fakeNavigationCalls: number; fakeNavigationMovementTicks: number;
+    fakeNavigationNoMovementTicks: number; fakeNavigationDistancePx: number;
+    fakeNavigationArrivals: number; fakeTargetSelections: number;
+    targetSearchCalls: number; targetSearchVisibleCandidates: number;
+    targetSearchNearVisionCandidates: number; targetSearchNoVisibleCandidates: number;
+    targetSearchNoNearCandidates: number; targetSearchRejectedByIsolation: number;
+    targetSearchBestIsolationScorePx: number;
+    hiddenHuntNoLastKnown: number; hiddenHuntExpiredLastKnown: number;
+    hiddenHuntReachedLastKnown: number; hiddenHuntRetargeted: number;
   }>;
   /** Snapshot captured before cleanup when the simulator safety watchdog fires. */
   timeoutState?: SimTimeoutSnapshot;
