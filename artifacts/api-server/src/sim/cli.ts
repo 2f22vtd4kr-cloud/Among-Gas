@@ -64,6 +64,57 @@ function summarize(results: SimGameResult[], wallMs: number) {
   const avg = (f: (r: SimGameResult) => number) =>
     finished.length > 0 ? finished.reduce((s, r) => s + f(r), 0) / finished.length : 0;
 
+  // Aggregate per-impostor telemetry so a failed cohort identifies where a
+  // hunt stalls without requiring reviewers to scrape every gameResult line.
+  const diagnosticRows = results.flatMap(result => result.impostorDiagnostics ?? []);
+  const diagnosticSum = (key:
+    | 'roamingTicks' | 'huntTicks' | 'visibleHuntTicks' | 'hiddenHuntTicks'
+    | 'huntAcquisitions' | 'isolationAborts' | 'lostTargetResets'
+    | 'navigationCalls' | 'navigationArrivals' | 'navigationMovementTicks'
+    | 'navigationNoMovementTicks' | 'navigationProgressPx'
+    | 'killAttempts' | 'successfulKills',
+  ) => diagnosticRows.reduce((sum, row) => sum + row[key], 0);
+  const diagnosticTotals = {
+    roamingTicks: diagnosticSum('roamingTicks'),
+    huntTicks: diagnosticSum('huntTicks'),
+    visibleHuntTicks: diagnosticSum('visibleHuntTicks'),
+    hiddenHuntTicks: diagnosticSum('hiddenHuntTicks'),
+    huntAcquisitions: diagnosticSum('huntAcquisitions'),
+    isolationAborts: diagnosticSum('isolationAborts'),
+    lostTargetResets: diagnosticSum('lostTargetResets'),
+    navigationCalls: diagnosticSum('navigationCalls'),
+    navigationArrivals: diagnosticSum('navigationArrivals'),
+    navigationMovementTicks: diagnosticSum('navigationMovementTicks'),
+    navigationNoMovementTicks: diagnosticSum('navigationNoMovementTicks'),
+    navigationProgressPx: Number(diagnosticSum('navigationProgressPx').toFixed(1)),
+    killAttempts: diagnosticSum('killAttempts'),
+    successfulKills: diagnosticSum('successfulKills'),
+  };
+  const diagnosticAverage = (value: number) => diagnosticRows.length > 0
+    ? Number((value / diagnosticRows.length).toFixed(2)) : 0;
+  const impostorDiagnostics = {
+    trackedImpostors: diagnosticRows.length,
+    totals: diagnosticTotals,
+    perImpostorAverage: {
+      huntAcquisitions: diagnosticAverage(diagnosticTotals.huntAcquisitions),
+      visibleHuntTicks: diagnosticAverage(diagnosticTotals.visibleHuntTicks),
+      hiddenHuntTicks: diagnosticAverage(diagnosticTotals.hiddenHuntTicks),
+      isolationAborts: diagnosticAverage(diagnosticTotals.isolationAborts),
+      lostTargetResets: diagnosticAverage(diagnosticTotals.lostTargetResets),
+      navigationCalls: diagnosticAverage(diagnosticTotals.navigationCalls),
+      navigationNoMovementTicks: diagnosticAverage(diagnosticTotals.navigationNoMovementTicks),
+      killAttempts: diagnosticAverage(diagnosticTotals.killAttempts),
+      successfulKills: diagnosticAverage(diagnosticTotals.successfulKills),
+    },
+    visibleHuntSharePct: diagnosticTotals.visibleHuntTicks + diagnosticTotals.hiddenHuntTicks > 0
+      ? Number((diagnosticTotals.visibleHuntTicks /
+        (diagnosticTotals.visibleHuntTicks + diagnosticTotals.hiddenHuntTicks) * 100).toFixed(2)) : 0,
+    navigationMovementSharePct: diagnosticTotals.navigationCalls > 0
+      ? Number((diagnosticTotals.navigationMovementTicks / diagnosticTotals.navigationCalls * 100).toFixed(2)) : 0,
+    killAttemptSuccessPct: diagnosticTotals.killAttempts > 0
+      ? Number((diagnosticTotals.successfulKills / diagnosticTotals.killAttempts * 100).toFixed(2)) : 0,
+  };
+
   return {
     type: 'summary' as const,
     games: results.length,
@@ -80,6 +131,7 @@ function summarize(results: SimGameResult[], wallMs: number) {
     avgSabotages: Number(avg(r => r.sabotageStarts).toFixed(1)),
     avgSabotagesResolved: Number(avg(r => r.sabotageResolved).toFixed(1)),
     avgSabotagesFixed: Number(avg(r => r.sabotageFixed).toFixed(1)),
+    impostorDiagnostics,
     wallMs,
   };
 }
@@ -168,6 +220,7 @@ async function main(): Promise<void> {
   console.error(`── Simulation results (${summary.games} games, ${fmtDuration(summary.wallMs)} wall-clock) ──`);
   console.error(`Crewmate win rate: ${pct(summary.crewWins, summary.games - summary.timeouts)}   Impostor win rate: ${pct(summary.impostorWins, summary.games - summary.timeouts)}`);
   console.error(`Win reasons: ${JSON.stringify(summary.winReasons)}`);
+  console.error(`[simulate] Impostor diagnostics: ${JSON.stringify(summary.impostorDiagnostics)}`);
   console.error(`Avg game length:   ${fmtDuration(summary.avgDurationMs)}   Avg tasks completed: ${summary.avgTasksCompleted}   Avg kills/game: ${summary.avgKills}   Avg meetings/game: ${summary.avgMeetings}   Avg sabotages/game: ${summary.avgSabotages}   Avg sabotages resolved: ${summary.avgSabotagesResolved}   Avg sabotages fixed: ${summary.avgSabotagesFixed}`);
   if (minCrewWinRatePct !== undefined && maxCrewWinRatePct !== undefined) {
     const actualCrewRate = summary.games > summary.timeouts
