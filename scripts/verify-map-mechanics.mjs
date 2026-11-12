@@ -325,7 +325,7 @@ assert.match(crewmateBotSource, /TASK_INTERACTION_RANGE_PX - 8/, 'ghost task com
 assert.match(crewmateBotSource, /interactionDistance \+ 1/, 'ghost task approach must tolerate sub-pixel floating-point residue at arrival');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 12/, 'The one-variable balance retest must use 2.4s task-step dwell at the 5Hz bot AI rate');
 assert.match(impostorBotSource, /HUNT_ACQUIRE_THRESHOLD_PX = -200/, 'The current one-variable balance candidate must use the measured -200px visible-target acquisition threshold');
-assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 150/, 'The current one-variable balance candidate must use a 30s recurring sabotage interval at the 5Hz tick rate');
+assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 120/, 'The current 24s sabotage-pressure experiment must remain explicit and be accepted only by the unchanged three-seed balance cohorts');
 assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => getProductionCollisionWorld\(\), \[\]\)/, 'GameMap must use the generated red-line vector world for collision');
 assert.match(gameMapSource, /isLineOfSightToInteractionTarget\(/, 'task actions must enforce the same line-of-sight contract as the authoritative server');
 assert.match(gameMapSource, /pad\.x,\s*pad\.y \+ FEET_OFFSET_Y/, 'sabotage repair prompts must target the visible repair pad rather than the parent system');
