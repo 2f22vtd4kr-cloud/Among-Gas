@@ -24,7 +24,8 @@ import {
 } from '../game/characterSprites';
 import { loadCharacterAtlas } from '../game/characterAtlas';
 import { CharacterSpriteCanvas, clipCharacterLegGap } from '../game/characterSpriteRenderer';
-import { clearMovementInput, setMovementInputKey, shouldCaptureMovementKey } from '../game/gameInput';
+import { clearMovementInput } from '../game/gameInput';
+import { useGameMapMovementInput } from '../game/useGameMapMovementInput';
 import {
   getCharacterShadowScale,
   getCharacterWalkBobOffset,
@@ -950,33 +951,7 @@ export default function GameMap() {
     clearMovementInput(keysRef.current);
     pendingSentRef.current.length = 0;
   }, [leaveConfirmOpen]);
-  useEffect(() => {
-    const onDown = (e: KeyboardEvent) => {
-      unlockSfx();
-      const target = e.target instanceof HTMLElement ? e.target : null;
-      const isEditableTarget = Boolean(target?.closest(
-        'input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]',
-      ));
-      const modalOpen = settingsOpenRef.current || leaveConfirmOpenRef.current;
-      if (!shouldCaptureMovementKey(e.key, isEditableTarget, modalOpen)) return;
-      e.preventDefault();
-      setMovementInputKey(keysRef.current, e.key, true);
-    };
-    const onUp = (e: KeyboardEvent) => {
-      setMovementInputKey(keysRef.current, e.key, false);
-    };
-    const clear = () => clearMovementInput(keysRef.current);
-    window.addEventListener('keydown', onDown);
-    window.addEventListener('keyup',   onUp);
-    window.addEventListener('blur',    clear);
-    document.addEventListener('visibilitychange', clear);
-    return () => {
-      window.removeEventListener('keydown', onDown);
-      window.removeEventListener('keyup',   onUp);
-      window.removeEventListener('blur',    clear);
-      document.removeEventListener('visibilitychange', clear);
-    };
-  }, []);
+  useGameMapMovementInput(keysRef, settingsOpenRef, leaveConfirmOpenRef);
 
   // ── Main rAF render loop ───────────────────────────────────────────────────
   const initialPlayerState = createInitialPlayerState();
