@@ -70,6 +70,17 @@ const FAKE_DWELL_TICKS = 3;
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
 
 export class ImpostorBot extends BotAgent {
+  private readonly _simulationDiagnostics = {
+    roamingTicks: 0, huntTicks: 0, visibleHuntTicks: 0, hiddenHuntTicks: 0,
+    huntAcquisitions: 0, isolationAborts: 0, lostTargetResets: 0,
+    navigationCalls: 0, killAttempts: 0, successfulKills: 0,
+  };
+
+  /** Lightweight counters consumed only by the deterministic headless simulator. */
+  getSimulationDiagnostics() {
+    return { ...this._simulationDiagnostics };
+  }
+
   private _state: BotState = 'FAKING';
 
   /** Current fake-task target (impostor visits these to look busy). */
@@ -97,6 +108,7 @@ export class ImpostorBot extends BotAgent {
   private _ventAttemptedThisCooldown = true;
 
   override roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    this._simulationDiagnostics.roamingTicks++;
     // A meeting can forcibly eject a bot from its vent. Discard that old plan.
     if (this._ventMode === 'inside' && !self.inVent) {
       this._resetVentPlan();
@@ -126,6 +138,7 @@ export class ImpostorBot extends BotAgent {
       const target = this._findIsolatedTarget(lobby, self);
       if (target !== null) {
         this._state = 'HUNTING';
+        this._simulationDiagnostics.huntAcquisitions++;
         this._huntTargetSlot = target;
         this.clearPath();
       }
@@ -208,6 +221,7 @@ export class ImpostorBot extends BotAgent {
   // ── Hunting ──────────────────────────────────────────────────────────────
 
   private _huntTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    this._simulationDiagnostics.huntTicks++;
     // Validate current target
     const target = this._huntTargetSlot !== null
       ? lobby.players.get(this._huntTargetSlot)
@@ -217,6 +231,7 @@ export class ImpostorBot extends BotAgent {
       // Target gone — re-evaluate
       const newTarget = this._findIsolatedTarget(lobby, self);
       if (newTarget === null) {
+        this._simulationDiagnostics.lostTargetResets++;
         this._state = 'FAKING';
         this._huntTargetSlot = null;
         this.clearPath();
@@ -232,6 +247,7 @@ export class ImpostorBot extends BotAgent {
     const currentlyVisible = visibleCrew.some(player => player.slot === victim.slot);
 
     if (!currentlyVisible) {
+      this._simulationDiagnostics.hiddenHuntTicks++;
       // Follow only the last position this bot actually observed. Do not read
       // victim.x/y from the authoritative lobby while the victim is hidden.
       const lastKnown = this._huntLastKnownPosition;
@@ -261,6 +277,7 @@ export class ImpostorBot extends BotAgent {
       return;
     }
 
+    this._simulationDiagnostics.visibleHuntTicks++;
     this._huntLastKnownPosition = {
       slot: victim.slot,
       x: victim.x,
@@ -271,6 +288,7 @@ export class ImpostorBot extends BotAgent {
     // Re-check isolation using only crewmates currently visible to the bot.
     const score = this._isolationScore(self, victim, visibleCrew);
     if (score < -ISOLATION_THRESHOLD_PX) {
+      this._simulationDiagnostics.isolationAborts++;
       this._state = 'FAKING';
       this._huntTargetSlot = null;
       this._huntLastKnownPosition = null;
@@ -280,14 +298,17 @@ export class ImpostorBot extends BotAgent {
 
     const distanceToVictim = Math.hypot(victim.x - self.x, victim.y - self.y);
     if (distanceToVictim > KILL_RANGE_PX) {
+      this._simulationDiagnostics.navigationCalls++;
       this.navigateTo(self, { x: victim.x, y: victim.y }, KILL_RANGE_PX - 2);
     }
 
     // A kill is attempted only while the target is currently visible and in
     // the server-authoritative interaction radius. The server revalidates.
     if (self.killCooldownMs === 0 && distanceToVictim <= KILL_RANGE_PX) {
+      this._simulationDiagnostics.killAttempts++;
       const applied = manager.applyKill(lobby, self.slot, victim.slot);
       if (applied) {
+        this._simulationDiagnostics.successfulKills++;
         this._state = 'COOLDOWN';
         this._huntTargetSlot = null;
         this._huntLastKnownPosition = null;
