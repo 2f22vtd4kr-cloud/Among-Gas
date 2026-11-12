@@ -1,51 +1,30 @@
 /**
- * Fire-and-forget sound-effect player. Never throws — if audio is blocked
- * or unsupported the calls are silently ignored.
+ * Original procedural sound-effects and ambient-music player.
+ *
+ * All cues are synthesized with Web Audio. No third-party samples or remote
+ * audio assets are fetched. Calls are fire-and-forget and never affect play.
  */
-const cache = new Map<string, HTMLAudioElement>();
 let audioContext: AudioContext | null = null;
 let lastFootstepAt = 0;
-let decodedKillBuffer: AudioBuffer | null = null;
-let decodedKillLoad: Promise<void> | null = null;
+let menuMusicTimer: number | null = null;
+let menuMusicStep = 0;
 
-function preloadDecodedKill(ctx: AudioContext): Promise<void> {
-  if (decodedKillBuffer) return Promise.resolve();
-  if (decodedKillLoad) return decodedKillLoad;
-  decodedKillLoad = fetch('/au-sounds/kill.wav')
-    .then(response => {
-      if (!response.ok) throw new Error(`Kill sound preload failed: HTTP ${response.status}`);
-      return response.arrayBuffer();
-    })
-    .then(bytes => ctx.decodeAudioData(bytes))
-    .then(buffer => { decodedKillBuffer = buffer; })
-    .catch(() => {
-      // The regular HTMLAudio path remains available if Web Audio decoding fails.
-    })
-    .finally(() => { decodedKillLoad = null; });
-  return decodedKillLoad;
-}
-
-function playDecodedKill(volume: number, ctx: AudioContext): boolean {
-  if (!decodedKillBuffer) return false;
-  try {
-    if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-    const source = ctx.createBufferSource();
-    const gain = ctx.createGain();
-    gain.gain.setValueAtTime(Math.min(1, Math.max(0, volume)), ctx.currentTime);
-    source.buffer = decodedKillBuffer;
-    source.connect(gain);
-    gain.connect(ctx.destination);
-    source.start(ctx.currentTime);
-    return true;
-  } catch {
-    return false;
-  }
+interface Tone {
+  frequency: number;
+  duration: number;
+  offset?: number;
+  peak?: number;
+  wave?: OscillatorType;
+  endFrequency?: number;
+  attack?: number;
+  lowpass?: number;
 }
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
   try {
-    const AudioContextCtor = window.AudioContext || (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    const AudioContextCtor = window.AudioContext ||
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!AudioContextCtor) return null;
     if (!audioContext) audioContext = new AudioContextCtor();
     return audioContext;
@@ -54,147 +33,237 @@ function getAudioContext(): AudioContext | null {
   }
 }
 
-/** Call from a real pointer/key gesture to unlock Web Audio in mobile browsers. */
-export function unlockSfx(): void {
-  const ctx = getAudioContext();
-  if (!ctx) return;
+function resumeAudio(ctx: AudioContext): void {
   if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-  // The first trusted menu/game gesture primes the kill buffer before a match event needs it.
-  void preloadDecodedKill(ctx);
 }
 
-/** Original procedural soft bootstep; no external copyrighted audio asset needed. */
+function playTone(ctx: AudioContext, tone: Tone, volume: number, baseTime: number): void {
+  try {
+    const startAt = baseTime + Math.max(0, tone.offset ?? 0);
+    const duration = Math.max(0.035, tone.duration);
+    const attack = Math.min(duration * 0.45, Math.max(0.006, tone.attack ?? 0.018));
+    const peak = Math.max(0.0002, Math.min(0.16, (tone.peak ?? 0.07) * volume));
+    const oscillator = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const envelope = ctx.createGain();
+
+    oscillator.type = tone.wave ?? 'triangle';
+    oscillator.frequency.setValueAtTime(Math.max(1, tone.frequency), startAt);
+    if (tone.endFrequency !== undefined) {
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, tone.endFrequency), startAt + duration);
+    }
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(Math.max(120, tone.lowpass ?? 4200), startAt);
+    filter.Q.setValueAtTime(0.65, startAt);
+
+    envelope.gain.setValueAtTime(0.0001, startAt);
+    envelope.gain.exponentialRampToValueAtTime(peak, startAt + attack);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+
+    oscillator.connect(filter);
+    filter.connect(envelope);
+    envelope.connect(ctx.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.015);
+  } catch {
+    // Audio is decorative; a device/audio failure must not affect gameplay.
+  }
+}
+
+function playNoiseBurst(ctx: AudioContext, volume: number, startAt: number, duration = 0.055): void {
+  try {
+    const frameCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+    const buffer = ctx.createBuffer(1, frameCount, ctx.sampleRate);
+    const channel = buffer.getChannelData(0);
+    for (let index = 0; index < frameCount; index++) {
+      const fade = 1 - index / frameCount;
+      channel[index] = (Math.random() * 2 - 1) * fade;
+    }
+    const source = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const envelope = ctx.createGain();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(1800, startAt);
+    envelope.gain.setValueAtTime(Math.max(0.0002, Math.min(0.045, volume * 0.035)), startAt);
+    envelope.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    source.buffer = buffer;
+    source.connect(filter);
+    filter.connect(envelope);
+    envelope.connect(ctx.destination);
+    source.start(startAt);
+    source.stop(startAt + duration + 0.01);
+  } catch {
+    // Noise is an optional transient layer.
+  }
+}
+
+function cueTones(key: string): Tone[] | null {
+  switch (key) {
+    case 'roundStart':
+      return [
+        { frequency: 196, endFrequency: 220, duration: 0.34, peak: 0.075, offset: 0, wave: 'triangle' },
+        { frequency: 261.63, endFrequency: 293.66, duration: 0.36, peak: 0.075, offset: 0.17, wave: 'triangle' },
+        { frequency: 392, endFrequency: 440, duration: 0.56, peak: 0.09, offset: 0.34, wave: 'sine' },
+      ];
+    case 'victoryCrewmate':
+      return [
+        { frequency: 261.63, duration: 0.28, peak: 0.075, offset: 0, wave: 'sine' },
+        { frequency: 329.63, duration: 0.3, peak: 0.075, offset: 0.13, wave: 'sine' },
+        { frequency: 392, duration: 0.34, peak: 0.085, offset: 0.26, wave: 'sine' },
+        { frequency: 523.25, duration: 0.78, peak: 0.095, offset: 0.39, wave: 'triangle' },
+        { frequency: 659.25, duration: 0.66, peak: 0.035, offset: 0.43, wave: 'sine' },
+      ];
+    case 'victoryImpostor':
+      return [
+        { frequency: 164.81, endFrequency: 146.83, duration: 0.58, peak: 0.09, offset: 0, wave: 'sawtooth', lowpass: 1100 },
+        { frequency: 123.47, endFrequency: 98, duration: 0.72, peak: 0.095, offset: 0.34, wave: 'triangle', lowpass: 850 },
+        { frequency: 82.41, endFrequency: 65.41, duration: 0.88, peak: 0.09, offset: 0.72, wave: 'sine', lowpass: 500 },
+      ];
+    case 'bodyReport':
+      return [
+        { frequency: 740, duration: 0.13, peak: 0.07, offset: 0, wave: 'square', lowpass: 2600 },
+        { frequency: 587.33, duration: 0.19, peak: 0.08, offset: 0.15, wave: 'triangle' },
+        { frequency: 880, duration: 0.2, peak: 0.08, offset: 0.35, wave: 'triangle' },
+      ];
+    case 'meeting':
+      return [
+        { frequency: 220, endFrequency: 196, duration: 0.48, peak: 0.08, offset: 0, wave: 'sawtooth', lowpass: 1000 },
+        { frequency: 293.66, endFrequency: 261.63, duration: 0.54, peak: 0.075, offset: 0.42, wave: 'triangle', lowpass: 1300 },
+        { frequency: 220, endFrequency: 196, duration: 0.48, peak: 0.08, offset: 0.88, wave: 'sawtooth', lowpass: 1000 },
+      ];
+    case 'taskComplete':
+      return [
+        { frequency: 523.25, duration: 0.16, peak: 0.065, offset: 0, wave: 'sine' },
+        { frequency: 659.25, duration: 0.18, peak: 0.07, offset: 0.11, wave: 'sine' },
+        { frequency: 783.99, duration: 0.32, peak: 0.075, offset: 0.23, wave: 'triangle' },
+      ];
+    case 'kill':
+      return [
+        { frequency: 170, endFrequency: 48, duration: 0.22, peak: 0.13, offset: 0, wave: 'sawtooth', lowpass: 900 },
+        { frequency: 880, endFrequency: 210, duration: 0.075, peak: 0.035, offset: 0, wave: 'triangle', lowpass: 2200 },
+      ];
+    case 'uiSelect':
+      return [
+        { frequency: 660, endFrequency: 740, duration: 0.075, peak: 0.045, offset: 0, wave: 'sine' },
+      ];
+    case 'sabotage':
+      return [
+        { frequency: 440, endFrequency: 260, duration: 0.31, peak: 0.085, offset: 0, wave: 'sawtooth', lowpass: 1800 },
+        { frequency: 330, endFrequency: 220, duration: 0.26, peak: 0.045, offset: 0.12, wave: 'triangle' },
+      ];
+    case 'vent':
+      return [
+        { frequency: 170, endFrequency: 52, duration: 0.23, peak: 0.075, offset: 0, wave: 'triangle', lowpass: 1100 },
+      ];
+    default:
+      return null;
+  }
+}
+
+function playProceduralCue(key: string, volume: number): void {
+  const tones = cueTones(key);
+  if (!tones) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
+  resumeAudio(ctx);
+  const baseTime = ctx.currentTime + 0.012;
+  for (const tone of tones) playTone(ctx, tone, volume, baseTime);
+  if (key === 'kill' || key === 'bodyReport') playNoiseBurst(ctx, volume, baseTime);
+}
+
+/** Call from a trusted pointer/key gesture to unlock Web Audio on mobile browsers. */
+export function unlockSfx(): void {
+  const ctx = getAudioContext();
+  if (ctx) resumeAudio(ctx);
+}
+
+/** Original procedural bootstep, rate-limited to avoid a continuous rumble. */
 function playFootstep(volume: number): void {
   const ctx = getAudioContext();
   if (!ctx) return;
   const nowMs = performance.now();
   if (nowMs - lastFootstepAt < 220) return;
   lastFootstepAt = nowMs;
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-
-  try {
-    const now = ctx.currentTime;
-    const oscillator = ctx.createOscillator();
-    const filter = ctx.createBiquadFilter();
-    const gain = ctx.createGain();
-    oscillator.type = 'triangle';
-    oscillator.frequency.setValueAtTime(92, now);
-    oscillator.frequency.exponentialRampToValueAtTime(43, now + 0.085);
-    filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(190, now);
-    gain.gain.setValueAtTime(0.0001, now);
-    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.12, volume * 0.11)), now + 0.009);
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.12);
-    oscillator.connect(filter);
-    filter.connect(gain);
-    gain.connect(ctx.destination);
-    oscillator.start(now);
-    oscillator.stop(now + 0.13);
-  } catch {
-    // Audio is decorative; a browser/device audio failure must not affect gameplay.
-  }
+  resumeAudio(ctx);
+  playTone(ctx, {
+    frequency: 92,
+    endFrequency: 43,
+    duration: 0.13,
+    peak: 0.11,
+    attack: 0.009,
+    wave: 'triangle',
+    lowpass: 190,
+  }, volume, ctx.currentTime + 0.008);
 }
 
-const AUDIO_URLS: Record<string, string> = {
-  roundStart: '/au-sounds/roundstart.wav',
-  victoryCrewmate: '/au-sounds/victory_crew.wav',
-  victoryImpostor: '/au-sounds/victory_impostor.wav',
-  bodyReport: '/au-sounds/report_body.wav',
-  meeting: '/au-sounds/meeting.wav',
-  taskComplete: '/au-sounds/task_complete.wav',
-  kill: '/au-sounds/kill.wav',
-  uiSelect: '/au-sounds/ui_select.wav',
-  menuMusic: '/au-sounds/menu_music.mp3',
-};
-
-/** Create an audio element only when its sound is actually needed. */
-function getAudio(key: string): HTMLAudioElement | undefined {
-  const cached = cache.get(key);
-  if (cached) return cached;
-  const url = AUDIO_URLS[key];
-  if (!url) return undefined;
-  try {
-    const audio = new Audio();
-    audio.preload = 'none';
-    audio.src = url;
-    cache.set(key, audio);
-    return audio;
-  } catch {
-    // Audio is optional; Web Audio or the browser may be unavailable.
-    return undefined;
+/** Public, backwards-compatible cue API used by the game UI and movement loop. */
+export function sfx(key: string, volume = 1): void {
+  if (!Number.isFinite(volume)) return;
+  const safeVolume = Math.max(0, Math.min(1, volume));
+  if (safeVolume === 0) return;
+  if (key === 'footstep') {
+    playFootstep(safeVolume);
+    return;
   }
+  playProceduralCue(key, safeVolume);
 }
 
-function playCue(key: 'sabotage' | 'vent', volume: number): void {
+const MENU_MELODY = [
+  220, 261.63, 329.63, 261.63,
+  196, 246.94, 293.66, 246.94,
+  174.61, 220, 261.63, 220,
+  196, 246.94, 293.66, 246.94,
+];
+const MENU_BASS = [110, 98, 87.31, 98];
+
+/** A quiet original ambient loop, started only after a trusted user gesture. */
+export function startMenuMusic(): void {
+  if (menuMusicTimer !== null) return;
   const ctx = getAudioContext();
   if (!ctx) return;
-  if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
-  try {
-    const now = ctx.currentTime;
-    const oscillator = ctx.createOscillator();
-    const gain = ctx.createGain();
-    let duration = 0.23;
-    oscillator.type = key === 'sabotage' ? 'sawtooth' : 'triangle';
-    if (key === 'sabotage') {
-      duration = 0.31;
-      oscillator.frequency.setValueAtTime(440, now);
-      oscillator.frequency.exponentialRampToValueAtTime(260, now + 0.22);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.012);
-      gain.gain.setValueAtTime(Math.max(0.0002, Math.min(0.1, volume * 0.08)), now + 0.12);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.3);
-    } else {
-      oscillator.frequency.setValueAtTime(170, now);
-      oscillator.frequency.exponentialRampToValueAtTime(52, now + 0.19);
-      gain.gain.setValueAtTime(0.0001, now);
-      gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, Math.min(0.08, volume * 0.07)), now + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.22);
-      duration = 0.23;
+  resumeAudio(ctx);
+  menuMusicStep = 0;
+
+  const tick = () => {
+    const step = menuMusicStep % MENU_MELODY.length;
+    const now = ctx.currentTime + 0.025;
+    playTone(ctx, {
+      frequency: MENU_MELODY[step],
+      duration: 0.43,
+      peak: 0.105,
+      attack: 0.08,
+      wave: 'sine',
+      lowpass: 1450,
+    }, 0.18, now);
+    if (step % 4 === 0) {
+      playTone(ctx, {
+        frequency: MENU_BASS[Math.floor(step / 4) % MENU_BASS.length],
+        duration: 1.72,
+        peak: 0.12,
+        attack: 0.22,
+        wave: 'triangle',
+        lowpass: 520,
+      }, 0.18, now);
+      playTone(ctx, {
+        frequency: MENU_BASS[Math.floor(step / 4) % MENU_BASS.length] * 1.5,
+        duration: 1.58,
+        peak: 0.055,
+        attack: 0.2,
+        wave: 'sine',
+        lowpass: 900,
+      }, 0.18, now);
     }
-    oscillator.connect(gain);
-    gain.connect(ctx.destination);
-    oscillator.start(now);
-    oscillator.stop(now + duration);
-  } catch {
-    // Audio is decorative; a browser/device audio failure must not affect gameplay.
-  }
-}
+    menuMusicStep = (menuMusicStep + 1) % MENU_MELODY.length;
+  };
 
-export function sfx(key: string, volume = 1): void {
-  if (key === 'kill') {
-    const ctx = getAudioContext();
-    if (ctx && playDecodedKill(volume, ctx)) return;
-    if (ctx) void preloadDecodedKill(ctx);
-  }
-  if (key === 'footstep') {
-    playFootstep(volume);
-    return;
-  }
-  if (key === 'sabotage' || key === 'vent') {
-    playCue(key, volume);
-    return;
-  }
-  const src = getAudio(key);
-  if (!src) return;
-  try {
-    const clone = src.cloneNode(true) as HTMLAudioElement;
-    clone.volume = Math.min(1, Math.max(0, volume));
-    clone.play().catch(() => {});
-  } catch { /* ignore */ }
-}
-
-/** Start quiet menu music only after a user gesture, respecting browser autoplay rules. */
-export function startMenuMusic(): void {
-  const track = getAudio('menuMusic');
-  if (!track) return;
-  track.loop = true;
-  track.volume = 0.18;
-  if (track.paused) track.play().catch(() => {});
+  tick();
+  menuMusicTimer = window.setInterval(tick, 500);
 }
 
 export function stopMenuMusic(): void {
-  const track = cache.get('menuMusic');
-  if (!track) return;
-  track.pause();
-  track.currentTime = 0;
+  if (menuMusicTimer !== null && typeof window !== 'undefined') {
+    window.clearInterval(menuMusicTimer);
+  }
+  menuMusicTimer = null;
 }
