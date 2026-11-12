@@ -207,7 +207,14 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           : winner === 'impostor' ? 'sabotage'
           : 'unknown';
         const impostorCount = playersAtEnd.filter(p => p.role === 'impostor').length;
+        const impostorDiagnostics = playersAtEnd
+          .filter(player => player.role === 'impostor' && player.botAgent instanceof ImpostorBot)
+          .map(player => ({
+            slot: player.slot,
+            ...(player.botAgent as ImpostorBot).getSimulationDiagnostics(),
+          }));
         const result: SimGameResult = {
+          impostorDiagnostics,
           gameIndex, code: lobby.code, botCount: bots, impostorCount,
           winner, winReason, aliveCrewAtEnd, aliveImpostorsAtEnd, ejectedSlot,
           durationMs: Date.now() - startedAt, kills, meetings, sabotageStarts, sabotageResolved, sabotageFixed,
