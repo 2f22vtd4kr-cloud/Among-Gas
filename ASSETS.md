@@ -69,5 +69,5 @@ Generated character atlas output is derived from the repository's authored Among
 | `artifacts/telegram-game/src/components/EmergencyMeetingArtwork.tsx` | Project-authored SVG | Replaces the two live emergency images from the removed legacy bundle. |
 | `artifacts/telegram-game/public/sprites/` | Project-authored/generated | Character atlas is validated by runtime/golden tests. |
 | Map artwork | Project-provided | Keep transform calibration at logical 3224×1858. |
-| Procedural footsteps | Project-generated | Synthesized in `sfx.ts`; no external sample required. |
+| Runtime audio | Project-generated | All sound effects, footstep cues, and ambient menu music are synthesized in `sfx.ts` with Web Audio; no external samples or music assets are requested. |
 | UI CSS / SVG primitives | Project-authored | Prefer these for icons and overlays. |
