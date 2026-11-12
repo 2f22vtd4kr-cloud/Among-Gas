@@ -216,7 +216,6 @@ export class ImpostorBot extends BotAgent {
     else this._simulationDiagnostics.fakeNavigationNoMovementTicks++;
     if (arrived) {
       this._simulationDiagnostics.fakeNavigationArrivals++;
-      this._simulationDiagnostics.fakeNavigationDistancePx += Math.max(0, distanceBefore);
       this._fakeDwellTicks++;
       if (this._fakeDwellTicks >= FAKE_DWELL_TICKS) {
         this._pickFakeTarget(self);
