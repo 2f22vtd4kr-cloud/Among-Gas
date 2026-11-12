@@ -11,6 +11,7 @@ import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
+  isBlocked,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
 } from '@workspace/shared/collisionMap';
@@ -791,6 +792,10 @@ export abstract class BotAgent {
    * Results are memoized per target since both the grid and spawn point are
    * static for the lifetime of the process.
    */
+  protected isSightPointBlocked(point: Point): boolean {
+    return isBlocked(sightGrid, point.x, point.y + FEET_OFFSET_Y);
+  }
+
   protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
     return isLineOfSightClear(
       sightGrid,

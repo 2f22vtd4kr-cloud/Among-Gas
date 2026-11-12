@@ -83,6 +83,8 @@ export class ImpostorBot extends BotAgent {
     targetSearchNearVisionCandidates: 0, targetSearchNoVisibleCandidates: 0,
     targetSearchNoNearCandidates: 0, targetSearchRejectedByIsolation: 0,
     targetSearchBestIsolationScorePx: 0,
+    losCandidateChecks: 0, losOriginBlockedCandidates: 0,
+    losTargetBlockedCandidates: 0, losBlockedBetweenClearEndpoints: 0,
     hiddenHuntNoLastKnown: 0, hiddenHuntExpiredLastKnown: 0,
     hiddenHuntReachedLastKnown: 0, hiddenHuntRetargeted: 0,
   };
@@ -366,6 +368,7 @@ export class ImpostorBot extends BotAgent {
     // An impostor knows their allies, but cannot track crewmates through walls
     // or across the map. The observation is bounded by the actual impostor
     // vision radius and the same fine-grid LOS geometry used by gameplay.
+    const sightOriginBlocked = this.isSightPointBlocked(self);
     const observations = observeVisiblePlayers(
       self.slot,
       self.x,
@@ -380,7 +383,18 @@ export class ImpostorBot extends BotAgent {
           alive: player.alive,
         })),
       IMPOSTOR_VISION_RADIUS_PX,
-      (x, y) => this.hasLineOfSightToPoint(self, { x, y }),
+      (x, y) => {
+        const target = { x, y };
+        const targetBlocked = this.isSightPointBlocked(target);
+        const visible = this.hasLineOfSightToPoint(self, target);
+        this._simulationDiagnostics.losCandidateChecks++;
+        if (sightOriginBlocked) this._simulationDiagnostics.losOriginBlockedCandidates++;
+        if (targetBlocked) this._simulationDiagnostics.losTargetBlockedCandidates++;
+        if (!visible && !sightOriginBlocked && !targetBlocked) {
+          this._simulationDiagnostics.losBlockedBetweenClearEndpoints++;
+        }
+        return visible;
+      },
     );
     return observations
       .map(observation => lobby.players.get(observation.slot))
