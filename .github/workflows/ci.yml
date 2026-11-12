@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   verify:
@@ -98,19 +98,6 @@ jobs:
 
       - name: Generate production red-line vector collision document and verify live runtime cutover
         run: pnpm --filter @workspace/scripts run test:production-world
-      # The generator is deterministic and the generated module is imported by the live client/server runtime.
-      # Commit the exact inputs/outputs from the push workflow so the source of truth is reviewable in Git.
-      - name: Track reproducible production vector collision artifacts
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/')
-        run: |
-          git add -f lib/shared/src/collision/collision.v1.json lib/shared/src/collision/generatedDocument.ts
-          if ! git diff --cached --quiet; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git commit -m "Track generated production vector collision document"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
-          fi
-
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
@@ -312,3 +299,33 @@ jobs:
             echo "::endgroup::"
           done
           exit "$cohort_status"
+
+  commit-generated-collision:
+    if: always() && github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/')
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+
+      - name: Download reproducible vector collision generator outputs
+        uses: actions/download-artifact@v7
+        with:
+          name: vector-collision-seed-review
+          path: /tmp/vector-collision-seed-review
+
+      - name: Commit generated collision source of truth
+        run: |
+          install -D /tmp/vector-collision-seed-review/collision.v1.json lib/shared/src/collision/collision.v1.json
+          install -D /tmp/vector-collision-seed-review/generatedDocument.ts lib/shared/src/collision/generatedDocument.ts
+          git add -f lib/shared/src/collision/collision.v1.json lib/shared/src/collision/generatedDocument.ts
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Track generated production vector collision document"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
