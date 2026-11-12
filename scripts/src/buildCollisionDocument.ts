@@ -4,6 +4,10 @@ import path from "node:path";
 import sharp from "sharp";
 import { CollisionWorld, validateCollisionDocument, type CollisionDocument, type CollisionShape, type Point } from "../../lib/shared/src/collision/vectorCollision.js";
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
+import {
+  MANUAL_BLOCKED_POLYGONS,
+  MANUAL_WALKABLE_REPLACEMENT_ZONES,
+} from "../../lib/shared/src/collisionOverrides.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const referencePath = path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg");
@@ -139,6 +143,149 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   // keep the area unclassified until an owner-traced outline is reviewed.
   return shapes;
 }
+type ReplacementBounds = readonly [number, number, number, number];
+
+function pointAt(a: Point, b: Point, t: number): Point {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+}
+
+/** Return the segment's parameter interval inside an axis-aligned rectangle. */
+function segmentRectInterval(
+  a: Point,
+  b: Point,
+  bounds: ReplacementBounds,
+): readonly [number, number] | null {
+  const [minX, minY, maxX, maxY] = bounds;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let t0 = 0, t1 = 1;
+  const tests: readonly [number, number][] = [
+    [-dx, a[0] - minX], [dx, maxX - a[0]],
+    [-dy, a[1] - minY], [dy, maxY - a[1]],
+  ];
+  for (const [p, q] of tests) {
+    if (Math.abs(p) < 1e-9) {
+      if (q < 0) return null;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > t1) return null;
+      if (ratio > t0) t0 = ratio;
+    } else {
+      if (ratio < t0) return null;
+      if (ratio < t1) t1 = ratio;
+    }
+  }
+  return t1 - t0 > 1e-7 ? [t0, t1] : null;
+}
+
+/**
+ * Remove red-line barriers only inside explicitly measured, source-reviewed
+ * walkable replacement zones. Segments outside each zone are retained and
+ * terminated exactly at the rectangle edge; this does not delete a nearby
+ * room wall or broaden the opening beyond the reviewed coordinates.
+ */
+function applyWalkableReplacementZones(
+  sourceShapes: readonly CollisionShape[],
+): CollisionShape[] {
+  const zones = MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone => ({
+    id: zone.id,
+    bounds: zone.bounds as ReplacementBounds,
+  }));
+  const output: CollisionShape[] = [];
+
+  for (const shape of sourceShapes) {
+    const segmentCount = shape.closed ? shape.points.length : shape.points.length - 1;
+    let wasClipped = false;
+    const paths: Point[][] = [];
+    let current: Point[] | null = null;
+    const flush = () => {
+      if (current && current.length >= 2) paths.push(current);
+      current = null;
+    };
+
+    for (let index = 0; index < segmentCount; index++) {
+      const a = shape.points[index];
+      const b = shape.points[(index + 1) % shape.points.length];
+      let pieces: Array<{ start: Point; end: Point }> = [{ start: a, end: b }];
+
+      for (const zone of zones) {
+        const nextPieces: Array<{ start: Point; end: Point }> = [];
+        for (const piece of pieces) {
+          const interval = segmentRectInterval(piece.start, piece.end, zone.bounds);
+          if (!interval) {
+            nextPieces.push(piece);
+            continue;
+          }
+          wasClipped = true;
+          const [insideStart, insideEnd] = interval;
+          const clippedStart = pointAt(piece.start, piece.end, insideStart);
+          const clippedEnd = pointAt(piece.start, piece.end, insideEnd);
+          if (insideStart > 1e-7 && Math.hypot(
+            clippedStart[0] - piece.start[0], clippedStart[1] - piece.start[1],
+          ) > 0.01) {
+            nextPieces.push({ start: piece.start, end: clippedStart });
+          }
+          if (insideEnd < 1 - 1e-7 && Math.hypot(
+            piece.end[0] - clippedEnd[0], piece.end[1] - clippedEnd[1],
+          ) > 0.01) {
+            nextPieces.push({ start: clippedEnd, end: piece.end });
+          }
+        }
+        pieces = nextPieces;
+      }
+
+      if (pieces.length === 0) {
+        flush();
+        continue;
+      }
+      for (const piece of pieces) {
+        const joins = current !== null && Math.hypot(
+          current[current.length - 1][0] - piece.start[0],
+          current[current.length - 1][1] - piece.start[1],
+        ) <= 0.01;
+        if (!joins) flush();
+        if (current === null) current = [[piece.start[0], piece.start[1]]];
+        current.push([piece.end[0], piece.end[1]]);
+        // A clipped segment ends at a replacement boundary. Do not reconnect
+        // the far side of that removed interval into one continuous wall.
+        if (Math.hypot(piece.end[0] - b[0], piece.end[1] - b[1]) > 0.01) flush();
+      }
+    }
+    flush();
+
+    if (!wasClipped) {
+      output.push(shape);
+      continue;
+    }
+    for (let index = 0; index < paths.length; index++) {
+      const points = paths[index];
+      if (points.length < 2) continue;
+      output.push({
+        ...shape,
+        id: shape.id + "-outside-replacement-" + String(index + 1).padStart(2, "0"),
+        points,
+        closed: false,
+      });
+    }
+  }
+
+  // The original authored van footprint is kept as its own compact movement
+  // polygon. It replaces the coarse red-line outline inside the van-bay zone.
+  for (const [index, polygon] of MANUAL_BLOCKED_POLYGONS.entries()) {
+    output.push({
+      id: "manual-blocked-" + String(index + 1).padStart(3, "0") + "-" + polygon.id,
+      points: polygon.points.map(([x, y]) => [x, y] as Point),
+      closed: true,
+      blocksMove: true,
+      blocksSight: false,
+      label: polygon.id,
+      zone: "E",
+    });
+  }
+  return output;
+}
+
 async function main():Promise<void> {
   const {data,info}=await sharp(referencePath).removeAlpha().raw().toBuffer({resolveWithObject:true});
   if(info.channels<3||info.width<100||info.height<100) throw new Error("red-line reference is missing/invalid");
@@ -149,21 +296,33 @@ async function main():Promise<void> {
   for(const v of skeleton) skeletonCount+=v;
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
-  const shapes=makeShapes(paths,info.width,info.height);
+  const tracedShapes=makeShapes(paths,info.width,info.height);
+  const shapes=applyWalkableReplacementZones(tracedShapes);
   const points=shapes.reduce((n,s)=>n+s.points.length,0);
   if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:5,
+      kind:"redline-vector",generatorVersion:6,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
         collisionEngine:{path:"lib/shared/src/collision/vectorCollision.ts",sha256:await hash("lib/shared/src/collision/vectorCollision.ts")},
+        collisionOverrides:{path:"lib/shared/src/collisionOverrides.ts",sha256:await hash("lib/shared/src/collisionOverrides.ts")},
+      },
+      geometryOverrides:{
+        walkableReplacementZones:MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone=>({id:zone.id,bounds:zone.bounds})),
+        movementOnlyBlockedPolygons:MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
       },
       referenceImage:{width:info.width,height:info.height},
       vectorization:{redPixelCount:redCount,skeletonPixelCount:skeletonCount,tracedPathCount:paths.length,simplifiedPointCount:points,simplificationToleranceSourcePx:TOLERANCE,closedSolidCount:shapes.filter(s=>s.closed).length,openBoundaryCount:shapes.filter(s=>!s.closed).length},
-      shapeCounts:{total:shapes.length,closedSolids:shapes.filter(s=>s.closed).length,openBoundaries:shapes.filter(s=>!s.closed).length},
+      shapeCounts:{
+        total:shapes.length,
+        tracedAfterReplacementClipping:tracedShapes.length,
+        closedSolids:shapes.filter(s=>s.closed).length,
+        openBoundaries:shapes.filter(s=>!s.closed).length,
+        manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
+      },
     },
   };
   const errors=validateCollisionDocument(document); if(errors.length) throw new Error("invalid red-line geometry: "+errors.join("; "));

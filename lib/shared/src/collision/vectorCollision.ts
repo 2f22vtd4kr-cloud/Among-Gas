@@ -43,6 +43,13 @@ export interface CollisionSourceManifest {
     readonly closedSolidCount: number; readonly openBoundaryCount: number;
   };
   readonly shapeCounts: Readonly<Record<string, number>>;
+  readonly geometryOverrides?: {
+    readonly walkableReplacementZones: readonly {
+      readonly id: string;
+      readonly bounds: readonly [number, number, number, number];
+    }[];
+    readonly movementOnlyBlockedPolygons: readonly string[];
+  };
 }
 
 export interface CollisionDocument {
