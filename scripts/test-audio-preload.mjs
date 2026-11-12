@@ -42,6 +42,8 @@ try {
   await page.mouse.click(5, 5);
   await page.waitForFunction(() => window.__amongGasAudioContextsCreated > 0, null, { timeout: 5000 });
   await page.waitForTimeout(650);
+  assert.equal(window.__amongGasAudioContextsCreated, 1,
+    'all game sounds and menu music must share one lazily-created AudioContext');
   assert.deepEqual(audioRequests, [],
     'procedural effects and menu music must not request copied or remote audio assets');
   assert.deepEqual(pageErrors, [], 'procedural Web Audio playback must not emit browser runtime errors');
