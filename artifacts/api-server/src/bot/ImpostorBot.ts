@@ -53,13 +53,13 @@ const ISOLATION_THRESHOLD_PX = 300;
 const HUNT_ACQUIRE_THRESHOLD_PX = -200; // one-variable, 50px more permissive after the 2.4s dwell cohort remained 66%
 
 /**
- * Recurring sabotage interval: 30s = 150 × 200ms ticks, plus the existing
+ * Recurring sabotage interval experiment: 24s = 120 × 200ms ticks, plus the existing
  * 0–12s jitter. The 10s opening cooldown is unchanged. The 2026-11-03
  * 3×100-game cohorts passed at 60%, 65%, and 58% crew wins (zero timeouts);
  * seed 17002 is exactly at the upper acceptance boundary. See SINGLE_PLAY.md
  * §9 for the prior 300/450-tick measurements and current evidence.
  */
-const SABOTAGE_INTERVAL_TICKS = 150; // 30s recurring interval; one-variable balance retest
+const SABOTAGE_INTERVAL_TICKS = 120; // 24s recurring interval; one-variable balance experiment
 // The Skeld's opening sabotage cooldown is 10 seconds. Keep the recurring
 // cooldown independent so the initial-pressure experiment changes one variable.
 const SABOTAGE_INITIAL_COOLDOWN_TICKS = 50;
