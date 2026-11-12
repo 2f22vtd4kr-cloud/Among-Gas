@@ -292,7 +292,7 @@ try {
   const roleRevealSnapshot = await roleRevealSnapshotHandle.jsonValue();
   await roleRevealSnapshotHandle.dispose();
   assert.equal(roleRevealSnapshot.pose, 'idle');
-  assert.equal(roleRevealSnapshot.sourceHeight, '147',
+  assert.equal(roleRevealSnapshot.sourceHeight, '136',
     'role reveal must crop detached black strokes below the idle character feet');
   assert.equal(roleRevealSnapshot.displayHeight, '153',
     'the authored role-reveal baseline remains available as metadata');
@@ -1059,7 +1059,7 @@ try {
   assert.equal(corpseSnapshot.pose, 'dead-body');
   assert.equal(corpseSnapshot.row, '7');
   assert.equal(corpseSnapshot.sourceY, '1067');
-  assert.equal(corpseSnapshot.sourceHeight, '113');
+  assert.equal(corpseSnapshot.sourceHeight, '93');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
@@ -1080,7 +1080,7 @@ try {
     return Array.from({ length: 7 }, (_, column) => {
       const left = Math.floor(column * cellWidth);
       const right = Math.ceil((column + 1) * cellWidth);
-      const pixels = context.getImageData(left, 1067, right - left, 113).data;
+      const pixels = context.getImageData(left, 1067, right - left, 93).data;
       let opaque = 0;
       for (let i = 3; i < pixels.length; i += 4) if (pixels[i] > 0) opaque++;
       return opaque;
@@ -1102,7 +1102,7 @@ try {
     const context = atlas.getContext('2d', { willReadFrequently: true });
     if (!context) throw new Error('Could not inspect the generated runtime character atlas');
     const columns = Array.from({ length: 18 }, (_, column) => {
-      const pixels = context.getImageData(column * 161, 1067, 161, 113).data;
+      const pixels = context.getImageData(column * 161, 1067, 161, 93).data;
       let opaque = 0;
       let red = 0;
       let green = 0;
