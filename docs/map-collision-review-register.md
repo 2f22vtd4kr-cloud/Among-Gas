@@ -35,6 +35,21 @@ The recovered review compared each listed boundary with both source references. 
 
 The C0/C20/C27/C38/C56 identifiers are retained from the review register as diagnostic labels. They are scan-order component IDs, not runtime identifiers. The table does not treat any of these areas as approved inaccessible or approved accessible spaces.
 
+## Working candidate disposition for continued verification — 2026-11-12
+
+For this candidate's verification, use the conservative no-entry default for all five regions: retain the existing source-art perimeters as movement boundaries, preserve the surrounding playable corridors, and add no door, entrance, vent, teleport, or collision hole that is not present in the source art.
+
+| Candidate | Working disposition | Explicit non-change |
+|---|---|---|
+| C0 | Retain the upper cafeteria furniture/partition boundary; keep adjacent cafeteria floor and corridor routes open | Do not invent an opening through the partition |
+| C20 | Retain the tank/pipe machinery enclosure boundary; keep its surrounding corridor open | Do not turn the machinery enclosure into a traversable shortcut |
+| C27 | Retain the south-central playground/service-fixture perimeter; keep surrounding paths open | Do not invent a door through the equipment enclosure |
+| C38 | Keep the east vehicle-service bay perimeter blocked while preserving its existing internal bay floor and van-clearance geometry | Do not add a bay entrance or change the van footprint |
+| C56 | Retain the southwest shelving/display boundary; keep the adjacent shop floor open | Do not add a passage through the diagonal shelving wall |
+
+This is a conservative working disposition for candidate implementation and route verification, **not a claim that a design owner has approved the game-design intent**. The owner-approval fields below remain pending until the owner or an independent reviewer confirms the five decisions. The production collision baseline remains unchanged until all release gates pass.
+
+
 The five sector approach targets A–E are a separate acceptance set. They must continue to have full-player-footprint, spawn-connected routes; they are not the same thing as the five detached candidate pockets above.
 
 ## Remaining classification questions

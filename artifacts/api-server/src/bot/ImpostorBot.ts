@@ -73,7 +73,7 @@ export class ImpostorBot extends BotAgent {
   private readonly _simulationDiagnostics = {
     roamingTicks: 0, huntTicks: 0, visibleHuntTicks: 0, hiddenHuntTicks: 0,
     huntAcquisitions: 0, isolationAborts: 0, lostTargetResets: 0,
-    navigationCalls: 0, navigationArrivals: 0, navigationMovementTicks: 0,
+    navigationCalls: 0, navigationReachedKillRangeTicks: 0, navigationMovementTicks: 0,
     navigationNoMovementTicks: 0, navigationProgressPx: 0,
     killAttempts: 0, successfulKills: 0,
   };
@@ -303,10 +303,12 @@ export class ImpostorBot extends BotAgent {
       this._simulationDiagnostics.navigationCalls++;
       const beforeX = self.x;
       const beforeY = self.y;
-      const navigationArrived = this.navigateTo(self, { x: victim.x, y: victim.y }, KILL_RANGE_PX - 2);
+      this.navigateTo(self, { x: victim.x, y: victim.y }, KILL_RANGE_PX - 2);
       const movementDistance = Math.hypot(self.x - beforeX, self.y - beforeY);
       const distanceAfterNavigation = Math.hypot(victim.x - self.x, victim.y - self.y);
-      if (navigationArrived) this._simulationDiagnostics.navigationArrivals++;
+      if (distanceAfterNavigation <= KILL_RANGE_PX) {
+        this._simulationDiagnostics.navigationReachedKillRangeTicks++;
+      }
       if (movementDistance > 0.01) this._simulationDiagnostics.navigationMovementTicks++;
       else this._simulationDiagnostics.navigationNoMovementTicks++;
       this._simulationDiagnostics.navigationProgressPx += Math.max(0, distanceToVictim - distanceAfterNavigation);

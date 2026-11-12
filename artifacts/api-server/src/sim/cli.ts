@@ -70,7 +70,7 @@ function summarize(results: SimGameResult[], wallMs: number) {
   const diagnosticSum = (key:
     | 'roamingTicks' | 'huntTicks' | 'visibleHuntTicks' | 'hiddenHuntTicks'
     | 'huntAcquisitions' | 'isolationAborts' | 'lostTargetResets'
-    | 'navigationCalls' | 'navigationArrivals' | 'navigationMovementTicks'
+    | 'navigationCalls' | 'navigationReachedKillRangeTicks' | 'navigationMovementTicks'
     | 'navigationNoMovementTicks' | 'navigationProgressPx'
     | 'killAttempts' | 'successfulKills',
   ) => diagnosticRows.reduce((sum, row) => sum + row[key], 0);
@@ -83,7 +83,7 @@ function summarize(results: SimGameResult[], wallMs: number) {
     isolationAborts: diagnosticSum('isolationAborts'),
     lostTargetResets: diagnosticSum('lostTargetResets'),
     navigationCalls: diagnosticSum('navigationCalls'),
-    navigationArrivals: diagnosticSum('navigationArrivals'),
+    navigationReachedKillRangeTicks: diagnosticSum('navigationReachedKillRangeTicks'),
     navigationMovementTicks: diagnosticSum('navigationMovementTicks'),
     navigationNoMovementTicks: diagnosticSum('navigationNoMovementTicks'),
     navigationProgressPx: Number(diagnosticSum('navigationProgressPx').toFixed(1)),

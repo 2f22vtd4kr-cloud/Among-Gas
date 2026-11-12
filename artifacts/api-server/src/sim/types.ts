@@ -44,7 +44,7 @@ export interface SimGameResult {
   impostorDiagnostics?: Array<{
     slot: number; roamingTicks: number; huntTicks: number; visibleHuntTicks: number;
     hiddenHuntTicks: number; huntAcquisitions: number; isolationAborts: number;
-    lostTargetResets: number; navigationCalls: number; navigationArrivals: number;
+    lostTargetResets: number; navigationCalls: number; navigationReachedKillRangeTicks: number;
     navigationMovementTicks: number; navigationNoMovementTicks: number;
     navigationProgressPx: number; killAttempts: number; successfulKills: number;
   }>;
