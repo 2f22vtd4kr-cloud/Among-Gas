@@ -607,7 +607,11 @@ export abstract class BotAgent {
     const routeGoalDrift = this.navigationRouteGoal
       ? Math.hypot(this.navigationRouteGoal.x - feetGoal.x, this.navigationRouteGoal.y - feetGoal.y)
       : Number.POSITIVE_INFINITY;
+    // An empty route means A* found no path. Keep that negative result
+    // cached while the bot is stationary; only a successful route can be
+    // "complete" and trigger the normal next-tick rebuild.
     const routeComplete = this.navigationRoute !== null &&
+      this.navigationRoute.length > 0 &&
       this.navigationRouteIndex >= this.navigationRoute.length;
     const routeRefreshDistance = Math.max(
       48,
