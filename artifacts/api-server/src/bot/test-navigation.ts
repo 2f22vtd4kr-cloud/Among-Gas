@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
+import { BotAgent, hasCompletedNavigationRoute, isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { KILL_RANGE_PX, buildPreciseCollisionGrid, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
@@ -102,40 +102,17 @@ for (const task of TASK_DEFS) {
   assertPathFollowerRoute(goal, { x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y }, task.name + ' task-to-spawn');
 }
 
-// A missing A* route is a cached negative result. Verify that an
-// unreachable target does not rebuild the same empty route on every bot tick
-// while the short boundary detour cannot advance a full navigation cell.
-const missingRouteProbe = new NavigationProbe();
-const missingRouteBot = { x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y } as LobbyPlayer;
-const missingRouteInternals = missingRouteProbe as unknown as {
-  rebuildNavigationRoute: (
-    feetStart: { x: number; y: number },
-    feetGoal: { x: number; y: number },
-    arrivalTolerancePx: number,
-  ) => void;
-  navigationRoute: { x: number; y: number }[] | null;
-  navigationRouteGoal: { x: number; y: number } | null;
-  navigationRouteIndex: number;
-  navigationRouteOrigin: { x: number; y: number } | null;
-};
-let missingRouteBuilds = 0;
-missingRouteInternals.rebuildNavigationRoute = function (
-  this: typeof missingRouteInternals,
-  feetStart,
-  feetGoal,
-) {
-  missingRouteBuilds++;
-  this.navigationRoute = [];
-  this.navigationRouteGoal = { ...feetGoal };
-  this.navigationRouteIndex = 0;
-  this.navigationRouteOrigin = { ...feetStart };
-};
-const unreachableGoal = { x: -100, y: PLAYER_SPAWN_Y };
-missingRouteProbe.moveTo(missingRouteBot, unreachableGoal, 0);
-assert.equal(missingRouteBuilds, 1, 'the first unreachable target computes one empty route');
-missingRouteProbe.moveTo(missingRouteBot, unreachableGoal, 0);
-assert.equal(missingRouteBuilds, 1,
-  'an empty route is not a completed route and must stay cached until meaningful progress or target drift');
+// A missing A* route is a cached negative result, not a completed route.
+// Treating [] as complete would force the follower to rebuild the same failed
+// A* search every 200ms instead of waiting for target drift or meaningful detour progress.
+assert.equal(hasCompletedNavigationRoute(null, 0), false,
+  'a route that has not been built is not complete');
+assert.equal(hasCompletedNavigationRoute([], 0), false,
+  'an empty/unreachable route is not complete and remains cached');
+assert.equal(hasCompletedNavigationRoute([{ x: 1, y: 1 }], 0), false,
+  'a route with a remaining waypoint is not complete');
+assert.equal(hasCompletedNavigationRoute([{ x: 1, y: 1 }], 1), true,
+  'a non-empty route becomes complete after its final waypoint is consumed');
 
 // A moving player's authoritative position is not guaranteed to coincide
 // with a navigation-cell centre. Verify target jitter does not reset the
