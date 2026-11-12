@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -98,6 +98,19 @@ jobs:
 
       - name: Generate production red-line vector collision document and verify live runtime cutover
         run: pnpm --filter @workspace/scripts run test:production-world
+      # The generator is deterministic and the generated module is imported by the live client/server runtime.
+      # Commit the exact inputs/outputs from the push workflow so the source of truth is reviewable in Git.
+      - name: Track reproducible production vector collision artifacts
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/work/')
+        run: |
+          git add -f lib/shared/src/collision/collision.v1.json lib/shared/src/collision/generatedDocument.ts
+          if ! git diff --cached --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "Track generated production vector collision document"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
