@@ -568,7 +568,7 @@ export abstract class BotAgent {
     // centre-to-target connector crosses a thin, independently authored wall.
     for (const candidate of goalCandidates) {
       const attempt = this.pathCache.find(
-        navigationGrid, routeStart, candidate, false, navigationGeometry, false, validateProductionNavigationStep,
+        navigationGrid, routeStart, candidate, false, navigationGeometry, true, validateProductionNavigationStep,
       );
       if (attempt) {
         result = attempt;
@@ -581,7 +581,7 @@ export abstract class BotAgent {
     // node inside arrival range; the movement sweeper still prevents wall cuts.
     if (!result) {
       result = this.pathCache.find(
-        navigationGrid, routeStart, feetGoal, false, navigationGeometry, false, validateProductionNavigationStep,
+        navigationGrid, routeStart, feetGoal, false, navigationGeometry, true, validateProductionNavigationStep,
       );
     }
 
