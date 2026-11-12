@@ -6276,7 +6276,7 @@
       "zone": "E"
     },
     {
-      "id": "redline-0235",
+      "id": "redline-0235-outside-replacement-01",
       "points": [
         [
           2977.095729013255,
@@ -6292,11 +6292,21 @@
         ],
         [
           2946.2326951399114,
-          939.6781609195403
-        ],
+          950
+        ]
+      ],
+      "closed": false,
+      "blocksMove": true,
+      "blocksSight": false,
+      "label": "red-line boundary",
+      "zone": "E"
+    },
+    {
+      "id": "redline-0235-outside-replacement-02",
+      "points": [
         [
-          2939.1104565537553,
-          932.5593869731802
+          2780,
+          934.4988144935783
         ],
         [
           2744.435935198822,
@@ -10090,84 +10100,6 @@
       "zone": "A"
     },
     {
-      "id": "redline-0364",
-      "points": [
-        [
-          2172.2827687776144,
-          1079.6807151979565
-        ],
-        [
-          2207.8939617083947,
-          1082.0536398467434
-        ],
-        [
-          2217.3902798232693,
-          1086.7994891443168
-        ],
-        [
-          2234.0088365243005,
-          1108.1558109833973
-        ],
-        [
-          2241.1310751104565,
-          1184.0893997445721
-        ],
-        [
-          2241.1310751104565,
-          1203.072796934866
-        ],
-        [
-          2234.0088365243005,
-          1222.0561941251597
-        ],
-        [
-          2217.3902798232693,
-          1233.9208173690931
-        ],
-        [
-          2184.153166421208,
-          1241.0395913154534
-        ],
-        [
-          2070.19734904271,
-          1241.0395913154534
-        ],
-        [
-          2036.9602356406479,
-          1231.5478927203067
-        ],
-        [
-          2020.3416789396172,
-          1212.5644955300127
-        ],
-        [
-          2013.2194403534609,
-          1191.2081736909324
-        ],
-        [
-          2013.2194403534609,
-          1150.868454661558
-        ],
-        [
-          2020.3416789396172,
-          1131.8850574712644
-        ],
-        [
-          2065.449189985273,
-          1089.1724137931033
-        ],
-        [
-          2093.938144329897,
-          1082.0536398467434
-        ]
-      ],
-      "closed": true,
-      "blocksMove": true,
-      "blocksSight": false,
-      "label": "red-line solid footprint",
-      "zone": "E"
-    },
-    {
       "id": "redline-0365",
       "points": [
         [
@@ -10484,11 +10416,73 @@
       "blocksSight": false,
       "label": "red-line solid footprint",
       "zone": "E"
+    },
+    {
+      "id": "manual-blocked-001-green-service-van-silhouette",
+      "points": [
+        [
+          2026,
+          1190
+        ],
+        [
+          2029,
+          1165
+        ],
+        [
+          2045,
+          1139
+        ],
+        [
+          2070,
+          1108
+        ],
+        [
+          2100,
+          1100
+        ],
+        [
+          2205,
+          1100
+        ],
+        [
+          2225,
+          1110
+        ],
+        [
+          2233,
+          1130
+        ],
+        [
+          2232,
+          1199
+        ],
+        [
+          2215,
+          1227
+        ],
+        [
+          2190,
+          1240
+        ],
+        [
+          2065,
+          1233
+        ],
+        [
+          2035,
+          1215
+        ]
+      ],
+      "closed": true,
+      "blocksMove": true,
+      "blocksSight": false,
+      "label": "green-service-van-silhouette",
+      "zone": "E"
     }
   ],
   "source": {
     "kind": "redline-vector",
-    "generatorVersion": 5,
+    "generatorVersion": 6,
     "sourceFiles": {
       "redlineReference": {
         "path": "attached_assets/IMG_2907_1783590932507.jpeg",
@@ -10496,12 +10490,41 @@
       },
       "generator": {
         "path": "scripts/src/buildCollisionDocument.ts",
-        "sha256": "4eb0cbfca770d6dce9a11abdbe28c94b1d04f1b4f52e84d600d544026129736d"
+        "sha256": "bb12db134ea73eb1bcc330688d59ebbdf9c2abb587374c8377786c696f990fed"
       },
       "collisionEngine": {
         "path": "lib/shared/src/collision/vectorCollision.ts",
-        "sha256": "9cf6e7517bae41e0787c3ca3eb0dc4255e97876c9282af927951d13e783ae6e7"
+        "sha256": "25386c1ca0177137f233d0c126c26170a9f278035273bebe0a1f84f3db6052f6"
+      },
+      "collisionOverrides": {
+        "path": "lib/shared/src/collisionOverrides.ts",
+        "sha256": "5087532b21986c65fc4047643147aedf01cc06e231591fc9f9aa7c90321f5749"
       }
+    },
+    "geometryOverrides": {
+      "walkableReplacementZones": [
+        {
+          "id": "green-service-van-bay",
+          "bounds": [
+            1985,
+            1055,
+            2260,
+            1260
+          ]
+        },
+        {
+          "id": "east-generator-approach-aisle",
+          "bounds": [
+            2780,
+            850,
+            3100,
+            950
+          ]
+        }
+      ],
+      "movementOnlyBlockedPolygons": [
+        "green-service-van-silhouette"
+      ]
     },
     "referenceImage": {
       "width": 1359,
@@ -10511,15 +10534,17 @@
       "redPixelCount": 128957,
       "skeletonPixelCount": 24072,
       "tracedPathCount": 820,
-      "simplifiedPointCount": 1698,
+      "simplifiedPointCount": 1694,
       "simplificationToleranceSourcePx": 1.25,
       "closedSolidCount": 14,
-      "openBoundaryCount": 355
+      "openBoundaryCount": 356
     },
     "shapeCounts": {
-      "total": 369,
+      "total": 370,
+      "tracedAfterReplacementClipping": 369,
       "closedSolids": 14,
-      "openBoundaries": 355
+      "openBoundaries": 356,
+      "manualBlockedPolygons": 1
     }
   }
 }
