@@ -67,5 +67,4 @@ Thumbs.db
 /artifacts/telegram-game/public/map-tiles-sharp/
 /artifacts/telegram-game/public/map-overview.webp
 
-# Generated production vector collision artifacts (reproducibly rebuilt before dev/build)
-/lib/shared/src/collision/generatedDocument.ts
+# Production vector collision document and generated TypeScript are tracked release inputs.
