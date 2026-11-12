@@ -54,6 +54,8 @@ export interface SimGameResult {
     targetSearchNearVisionCandidates: number; targetSearchNoVisibleCandidates: number;
     targetSearchNoNearCandidates: number; targetSearchRejectedByIsolation: number;
     targetSearchBestIsolationScorePx: number;
+    losCandidateChecks: number; losOriginBlockedCandidates: number;
+    losTargetBlockedCandidates: number; losBlockedBetweenClearEndpoints: number;
     hiddenHuntNoLastKnown: number; hiddenHuntExpiredLastKnown: number;
     hiddenHuntReachedLastKnown: number; hiddenHuntRetargeted: number;
   }>;
