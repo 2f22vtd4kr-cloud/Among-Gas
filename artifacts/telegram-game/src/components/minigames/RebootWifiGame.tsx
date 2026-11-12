@@ -41,7 +41,7 @@ export function RebootWifiGame({ onComplete }: MinigameProps) {
             onLostPointerCapture={() => setDragging(false)}
             aria-label={en ? 'Drag WiFi lever up to ON' : 'Перетащите рычаг связи вверх до ВКЛ'}
             style={{ position: 'absolute', left: '50%', top: `${lever}%`, transform: 'translate(-50%,-50%)',
-              width: 83, height: 44, borderRadius: 9, border: '2px solid #b5f5ff',
+              width: 83, height: 48, borderRadius: 9, border: '2px solid #b5f5ff',
               background: dragging ? '#21a9d0' : '#117da4', color: '#fff', fontSize: 20, fontWeight: 950,
               boxShadow: '0 4px 0 #063a51', touchAction: 'none', cursor: 'grab' }}>↕</button>
         </div>
