@@ -19,9 +19,9 @@ export function useGameMapMovementInput(
     const onDown = (event: KeyboardEvent) => {
       unlockSfx();
       const target = event.target instanceof HTMLElement ? event.target : null;
-      const isEditableTarget = !!target?.closest(
-        'input,textarea,select,[contenteditable="true"]',
-      );
+      const isEditableTarget = Boolean(target?.closest(
+        'input, textarea, select, [contenteditable="true"], [contenteditable=""], [role="textbox"]',
+      ));
       const modalOpen = settingsOpenRef.current || leaveConfirmOpenRef.current;
       if (!shouldCaptureMovementKey(event.key, isEditableTarget, modalOpen)) return;
       event.preventDefault();
