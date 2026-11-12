@@ -24,6 +24,20 @@ class NavigationProbe extends BotAgent {
 const grid = getProductionCollisionWorld();
 const sightGrid = buildPreciseCollisionGrid();
 const probe = new NavigationProbe();
+
+// Preserve the two already-reviewed sector-specific movement corrections when
+// the vector world is authoritative. These are local geometry checks, not an
+// assertion that the disconnected vehicle bay has an intended entrance.
+assert.equal(isPlayerPositionWalkable(grid, 2120, 1150), false,
+  'vector collision keeps the green service van body solid');
+assert.equal(isPlayerPositionWalkable(grid, 2000, 1150), true,
+  'vector collision preserves left-side service-van bay clearance');
+assert.equal(isPlayerPositionWalkable(grid, 2250, 1150), true,
+  'vector collision preserves right-side service-van bay clearance');
+for (let x = 2820; x <= 3060; x += 8) {
+  assert.equal(isPlayerPositionWalkable(grid, x, 900), true,
+    'vector collision preserves the full east-generator approach aisle at x=' + x);
+}
 for (const task of TASK_DEFS) {
   const approach = probe.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
   const distance = Math.hypot(approach.x - task.x, approach.y - task.y);
@@ -72,6 +86,12 @@ const assertPathFollowerRoute = (
       ' bestDistance=' + bestDistance.toFixed(1) + 'px)');
   console.log('PASS: ' + label + ' (' + ticks + ' ticks)');
 };
+
+// The east generator room's visually open aisle is a named route, not merely
+// a centreline sample. Exercise it in both directions with the full player
+// footprint and the same live vector BotAgent path follower.
+assertPathFollowerRoute({ x: 2820, y: 900 }, { x: 3060, y: 900 }, 'east generator aisle west-to-east');
+assertPathFollowerRoute({ x: 3060, y: 900 }, { x: 2820, y: 900 }, 'east generator aisle east-to-west');
 
 // Coarse A* reachability is only a preflight. These routes exercise the actual
 // BotAgent path follower and fine swept-footprint collision in both directions,
