@@ -44,7 +44,9 @@ export interface SimGameResult {
   impostorDiagnostics?: Array<{
     slot: number; roamingTicks: number; huntTicks: number; visibleHuntTicks: number;
     hiddenHuntTicks: number; huntAcquisitions: number; isolationAborts: number;
-    lostTargetResets: number; navigationCalls: number; killAttempts: number; successfulKills: number;
+    lostTargetResets: number; navigationCalls: number; navigationArrivals: number;
+    navigationMovementTicks: number; navigationNoMovementTicks: number;
+    navigationProgressPx: number; killAttempts: number; successfulKills: number;
   }>;
   /** Snapshot captured before cleanup when the simulator safety watchdog fires. */
   timeoutState?: SimTimeoutSnapshot;
