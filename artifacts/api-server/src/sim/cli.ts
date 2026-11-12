@@ -78,6 +78,8 @@ function summarize(results: SimGameResult[], wallMs: number) {
     | 'targetSearchCalls' | 'targetSearchVisibleCandidates' | 'targetSearchNearVisionCandidates'
     | 'targetSearchNoVisibleCandidates' | 'targetSearchNoNearCandidates'
     | 'targetSearchRejectedByIsolation' | 'targetSearchBestIsolationScorePx'
+    | 'losCandidateChecks' | 'losOriginBlockedCandidates'
+    | 'losTargetBlockedCandidates' | 'losBlockedBetweenClearEndpoints'
     | 'hiddenHuntNoLastKnown' | 'hiddenHuntExpiredLastKnown'
     | 'hiddenHuntReachedLastKnown' | 'hiddenHuntRetargeted',
   ) => diagnosticRows.reduce((sum, row) => sum + row[key], 0);
@@ -109,6 +111,10 @@ function summarize(results: SimGameResult[], wallMs: number) {
     targetSearchNoNearCandidates: diagnosticSum('targetSearchNoNearCandidates'),
     targetSearchRejectedByIsolation: diagnosticSum('targetSearchRejectedByIsolation'),
     targetSearchBestIsolationScorePx: Number(diagnosticSum('targetSearchBestIsolationScorePx').toFixed(1)),
+    losCandidateChecks: diagnosticSum('losCandidateChecks'),
+    losOriginBlockedCandidates: diagnosticSum('losOriginBlockedCandidates'),
+    losTargetBlockedCandidates: diagnosticSum('losTargetBlockedCandidates'),
+    losBlockedBetweenClearEndpoints: diagnosticSum('losBlockedBetweenClearEndpoints'),
     hiddenHuntNoLastKnown: diagnosticSum('hiddenHuntNoLastKnown'),
     hiddenHuntExpiredLastKnown: diagnosticSum('hiddenHuntExpiredLastKnown'),
     hiddenHuntReachedLastKnown: diagnosticSum('hiddenHuntReachedLastKnown'),
@@ -134,12 +140,22 @@ function summarize(results: SimGameResult[], wallMs: number) {
       targetSearchCalls: diagnosticAverage(diagnosticTotals.targetSearchCalls),
       targetSearchVisibleCandidates: diagnosticAverage(diagnosticTotals.targetSearchVisibleCandidates),
       targetSearchNearVisionCandidates: diagnosticAverage(diagnosticTotals.targetSearchNearVisionCandidates),
+      losCandidateChecks: diagnosticAverage(diagnosticTotals.losCandidateChecks),
+      losOriginBlockedCandidates: diagnosticAverage(diagnosticTotals.losOriginBlockedCandidates),
+      losTargetBlockedCandidates: diagnosticAverage(diagnosticTotals.losTargetBlockedCandidates),
+      losBlockedBetweenClearEndpoints: diagnosticAverage(diagnosticTotals.losBlockedBetweenClearEndpoints),
       hiddenHuntNoLastKnown: diagnosticAverage(diagnosticTotals.hiddenHuntNoLastKnown),
       hiddenHuntReachedLastKnown: diagnosticAverage(diagnosticTotals.hiddenHuntReachedLastKnown),
     },
     targetVisibilityCoveragePct: diagnosticTotals.targetSearchNearVisionCandidates > 0
       ? Number((diagnosticTotals.targetSearchVisibleCandidates /
         diagnosticTotals.targetSearchNearVisionCandidates * 100).toFixed(2)) : 0,
+    losOriginBlockedPct: diagnosticTotals.losCandidateChecks > 0
+      ? Number((diagnosticTotals.losOriginBlockedCandidates / diagnosticTotals.losCandidateChecks * 100).toFixed(2)) : 0,
+    losTargetBlockedPct: diagnosticTotals.losCandidateChecks > 0
+      ? Number((diagnosticTotals.losTargetBlockedCandidates / diagnosticTotals.losCandidateChecks * 100).toFixed(2)) : 0,
+    losBlockedBetweenClearEndpointsPct: diagnosticTotals.losCandidateChecks > 0
+      ? Number((diagnosticTotals.losBlockedBetweenClearEndpoints / diagnosticTotals.losCandidateChecks * 100).toFixed(2)) : 0,
     fakeNavigationMovementSharePct: diagnosticTotals.fakeNavigationCalls > 0
       ? Number((diagnosticTotals.fakeNavigationMovementTicks /
         diagnosticTotals.fakeNavigationCalls * 100).toFixed(2)) : 0,
