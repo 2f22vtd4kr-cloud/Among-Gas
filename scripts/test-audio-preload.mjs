@@ -55,9 +55,9 @@ try {
   await page.getByTestId('main-menu-tab-guide').click();
   await page.waitForFunction(() => window.__amongGasOscillatorsStarted > 0, null, { timeout: 5000 });
   await page.waitForTimeout(650);
-  assert.equal(window.__amongGasAudioContextsCreated, 1,
+  assert.equal(await page.evaluate(() => window.__amongGasAudioContextsCreated), 1,
     'all game sounds and menu music must share one lazily-created AudioContext');
-  assert.ok(window.__amongGasOscillatorsStarted > 0,
+  assert.ok(await page.evaluate(() => window.__amongGasOscillatorsStarted) > 0,
     'the trusted menu gesture and UI action must schedule audible procedural oscillators');
   assert.deepEqual(audioRequests, [],
     'procedural effects and menu music must not request copied or remote audio assets');
