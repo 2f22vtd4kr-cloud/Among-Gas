@@ -4,6 +4,7 @@ import { getProductionCollisionWorld } from '@workspace/shared/collision/product
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
+  buildPreciseVisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
@@ -1041,7 +1042,7 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const fineGrid = taskInteractionSightGrid;
+    const visionSourceGrid = buildPreciseVisionGrid();
     const params = new URLSearchParams(window.location.search);
     const taskMockMode = params.get('mock');
     // The mobile camera browser test uses the existing task-playing dev mock.
@@ -1099,9 +1100,9 @@ export default function GameMap() {
     }
     // Player prediction and visual occlusion share the canonical fine grid.
     // Compact geometry remains available to navigation consumers that need A*.
-    const shadowGrid = buildShadowGrid(fineGrid);
-    const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    const narrowSegments = buildFineShadowSegments(fineGrid);
+    const shadowGrid = buildShadowGrid(visionSourceGrid);
+    const narrowOccluders = buildNarrowShadowOccluders(visionSourceGrid, true);
+    const narrowSegments = buildFineShadowSegments(visionSourceGrid);
     if (!isSpawnWalkable(taskInteractionGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
@@ -1472,7 +1473,7 @@ export default function GameMap() {
       );
       if (visionRadius !== null) {
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, false, narrowSegments);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 
