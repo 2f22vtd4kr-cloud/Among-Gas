@@ -3,6 +3,7 @@ import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
 import { KILL_RANGE_PX, buildPreciseCollisionGrid, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
+import { BOT_NAVIGATION_GEOMETRY } from '@workspace/shared/collision/botNavigation';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 
@@ -14,6 +15,9 @@ class NavigationProbe extends BotAgent {
   }
   moveTo(self: LobbyPlayer, goal: {x:number;y:number}, arrivalTolerancePx = 25) {
     return this.navigateTo(self, goal, arrivalTolerancePx);
+  }
+  randomPoint() {
+    return this.randomWalkablePoint();
   }
 }
 
@@ -81,29 +85,44 @@ for (const task of TASK_DEFS) {
 // A moving player's authoritative position is not guaranteed to coincide
 // with a navigation-cell centre. Verify target jitter does not reset the
 // follower every tick or make the exact end connector reject a reachable chase.
-const chaseBase = probe.approach(
-  TASK_DEFS[0],
-  TASK_INTERACTION_RANGE_PX - 8,
-  TASK_DEFS[0].interactionTargetRadiusPx ?? 24,
-);
+// Use a deterministic sample already certified by the production vector
+// world and spawn-connected nav graph. Unlike a hand-picked wall-adjacent
+// task point, this guarantees a valid continuous off-centre target.
+const originalRandom = Math.random;
+let randomState = 0x51a7c0de;
+Math.random = () => {
+  randomState = (Math.imul(randomState, 1664525) + 1013904223) >>> 0;
+  return randomState / 0x1_0000_0000;
+};
 let chaseGoal: { x: number; y: number } | null = null;
-for (const [dx, dy] of [[2.25, 1.5], [-2.25, 1.5], [1.5, -2.25], [-1.5, -2.25], [2.25, -2.25]] as const) {
-  const [feetX, feetY] = grid.movePlayerAtFeet(
-    chaseBase.x, chaseBase.y + FEET_OFFSET_Y, dx, dy,
-  );
-  if (Math.hypot(feetX - chaseBase.x - dx, feetY - chaseBase.y - dy) <= 0.1 &&
-      isPlayerPositionWalkable(grid, feetX, feetY - FEET_OFFSET_Y) &&
-      isBotNavigationReachable(feetX, feetY)) {
-    chaseGoal = { x: feetX, y: feetY - FEET_OFFSET_Y };
-    break;
+try {
+  for (let attempt = 0; attempt < 12; attempt++) {
+    const candidate = probe.randomPoint();
+    const feetY = candidate.y + FEET_OFFSET_Y;
+    const col = Math.floor(candidate.x / BOT_NAVIGATION_GEOMETRY.cellX);
+    const row = Math.floor(feetY / BOT_NAVIGATION_GEOMETRY.cellY);
+    const centreX = (col + 0.5) * BOT_NAVIGATION_GEOMETRY.cellX;
+    const centreY = (row + 0.5) * BOT_NAVIGATION_GEOMETRY.cellY;
+    if (Math.hypot(candidate.x - centreX, feetY - centreY) > 1) {
+      chaseGoal = candidate;
+      break;
+    }
   }
+} finally {
+  Math.random = originalRandom;
 }
-assert.ok(chaseGoal, 'must find an off-centre, reachable target position for the hunt-path regression');
+assert.ok(chaseGoal, 'must find a deterministic off-centre, spawn-reachable target');
+assert.equal(isPlayerPositionWalkable(grid, chaseGoal.x, chaseGoal.y), true,
+  'sampled off-centre target must have a valid production player footprint');
+assert.equal(isBotNavigationReachable(chaseGoal.x, chaseGoal.y + FEET_OFFSET_Y), true,
+  'sampled off-centre target must be in the spawn-connected nav component');
 
 const chaseProbe = new NavigationProbe();
 const chaser = { x: PLAYER_SPAWN_X, y: PLAYER_SPAWN_Y } as LobbyPlayer;
 let chaseDistance = Infinity;
 for (let tick = 0; tick < 500; tick++) {
+  // Sub-cell position changes model the continuous coordinates of a moving
+  // player; they should not throw away the bot's whole A* route every tick.
   const jitterX = Math.sin(tick * 0.7) * 1.25;
   const jitterY = Math.cos(tick * 0.7) * 1.25;
   const [targetFeetX, targetFeetY] = grid.movePlayerAtFeet(
@@ -119,6 +138,6 @@ for (let tick = 0; tick < 500; tick++) {
 assert.ok(chaseDistance <= KILL_RANGE_PX - 2,
   'vector bot navigation must close to kill range against a continuously moving, off-centre target (distance=' +
     chaseDistance.toFixed(1) + 'px)');
-console.log('PASS: moving off-centre hunt target remains reachable without per-tick route reset');
+
 
 console.log('PASS: every task approach has a bidirectional production path-follower route with full-footprint collision');
