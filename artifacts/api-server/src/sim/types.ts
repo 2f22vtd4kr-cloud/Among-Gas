@@ -10,12 +10,6 @@ export interface SimTimeoutSnapshot {
   sabotage: { systemId: number; lockedTaskIds: number[]; fixedPads: number[] } | null;
   completedTaskSteps: number;
   totalTaskSteps: number;
-  /** Per-impostor decision counters for diagnosing seeded balance cohorts. */
-  impostorDiagnostics?: Array<{
-    slot: number; roamingTicks: number; huntTicks: number; visibleHuntTicks: number;
-    hiddenHuntTicks: number; huntAcquisitions: number; isolationAborts: number;
-    lostTargetResets: number; navigationCalls: number; killAttempts: number; successfulKills: number;
-  }>;
   collisionViolation?: { slot: number; x: number; y: number };
   players: Array<{
     slot: number;
@@ -46,6 +40,12 @@ export interface SimGameResult {
   sabotageFixed: number;
   tasksCompleted: number;
   totalTaskSteps: number;
+  /** Per-impostor decision counters for diagnosing seeded balance cohorts. */
+  impostorDiagnostics?: Array<{
+    slot: number; roamingTicks: number; huntTicks: number; visibleHuntTicks: number;
+    hiddenHuntTicks: number; huntAcquisitions: number; isolationAborts: number;
+    lostTargetResets: number; navigationCalls: number; killAttempts: number; successfulKills: number;
+  }>;
   /** Snapshot captured before cleanup when the simulator safety watchdog fires. */
   timeoutState?: SimTimeoutSnapshot;
 }
