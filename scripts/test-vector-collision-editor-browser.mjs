@@ -21,6 +21,28 @@ try {
 
   // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
   const touch = await page.context().newCDPSession(page);
+  const touchTap = async (x, y) => {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart", touchPoints: [{ id: 1, x, y }],
+    });
+    await page.waitForTimeout(35);
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(35);
+  };
+  const touchDrag = async (startX, startY, endX, endY, steps = 5) => {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart", touchPoints: [{ id: 1, x: startX, y: startY }],
+    });
+    for (let step = 1; step <= steps; step++) {
+      const t = step / steps;
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [{ id: 1, x: startX + (endX - startX) * t, y: startY + (endY - startY) * t }],
+      });
+    }
+    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    await page.waitForTimeout(50);
+  };
 
   // A one-finger freehand wall stroke must create an active chain on a touch device.
   await page.getByRole("button", { name: "Draw wall" }).click();
@@ -98,10 +120,7 @@ try {
   bounds = await canvas.boundingBox();
   const chainEndX = bounds.x + bounds.width / 2;
   const chainEndY = bounds.y + bounds.height / 2;
-  await page.mouse.move(chainEndX, chainEndY);
-  await page.mouse.down();
-  await page.mouse.move(chainEndX + 45, chainEndY + 35, { steps: 5 });
-  await page.mouse.up();
+  await touchDrag(chainEndX, chainEndY, chainEndX + 45, chainEndY + 35, 5);
   await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 3);
   await page.getByRole("button", { name: "Finish chain" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "1");
@@ -110,14 +129,44 @@ try {
   // the independent polygon so its vertices remain inside the authored map.
   await page.getByRole("button", { name: "Fit map" }).click();
 
-  // Draw and close a solid polygon with three taps.
+  // Draw and close a solid polygon using four real finger taps. The fourth
+  // tap lands back on the first vertex and must close the loop without a mouse
+  // event or the toolbar's Close polygon shortcut.
   await page.getByRole("button", { name: "Draw solid" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 220, bounds.y + 95);
-  await page.mouse.click(bounds.x + 280, bounds.y + 95);
-  await page.mouse.click(bounds.x + 250, bounds.y + 150);
-  await page.getByRole("button", { name: "Close polygon" }).click();
+  const polygonFirst = { x: bounds.x + 220, y: bounds.y + 95 };
+  await touchTap(polygonFirst.x, polygonFirst.y);
+  await touchTap(bounds.x + 280, bounds.y + 95);
+  await touchTap(bounds.x + 250, bounds.y + 150);
+  await touchTap(polygonFirst.x + 2, polygonFirst.y + 2);
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
+  assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0,
+    "touching the starting vertex must close and commit the polygon loop");
+
+  // Verify the full 48 CSS px touch target: a finger-down 20 CSS px from
+  // the existing vertex remains inside its 24 px snap radius and must align.
+  const authoredShapes = JSON.parse(await canvas.getAttribute("data-shape-points") ?? "[]");
+  const snapTarget = authoredShapes[1][0];
+  const zoom = Number(await canvas.getAttribute("data-zoom"));
+  const cameraX = Number(await canvas.getAttribute("data-camera-x"));
+  const cameraY = Number(await canvas.getAttribute("data-camera-y"));
+  bounds = await canvas.boundingBox();
+  const snapScreenX = bounds.x + (snapTarget[0] - cameraX) * zoom + 12;
+  const snapScreenY = bounds.y + (snapTarget[1] - cameraY) * zoom + 16;
+  await page.getByRole("button", { name: "Draw wall" }).click();
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart", touchPoints: [{ id: 1, x: snapScreenX, y: snapScreenY }],
+  });
+  await page.waitForFunction(
+    () => JSON.parse(document.querySelector("canvas")?.getAttribute("data-draft-wall-points") || "[]").length === 1,
+    null,
+    { timeout: 3000 },
+  );
+  const snappedWallStart = JSON.parse(await canvas.getAttribute("data-draft-wall-points"))[0];
+  assert.deepEqual(snappedWallStart, snapTarget,
+    "touch hit-radius snapping must align a new wall endpoint to the existing polygon vertex");
+  await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+  await page.getByRole("button", { name: "Fit map" }).click();
 
   // Undo and redo must preserve the shape count and stay interactive on mobile.
   await page.getByRole("button", { name: "Undo" }).click();
@@ -129,7 +178,7 @@ try {
   // active zone selector aligned with that assignment for saving.
   await page.getByRole("button", { name: "Edit vertices" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 220, bounds.y + 95);
+  await touchTap(bounds.x + 220, bounds.y + 95);
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
   await selectedZone.selectOption("B");
@@ -154,16 +203,14 @@ try {
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
   bounds = await canvas.boundingBox();
-  await page.mouse.click(bounds.x + 40, bounds.y + 40);
+  await touchTap(bounds.x + 40, bounds.y + 40);
   await page.waitForFunction(
     () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
     null,
     { timeout: 10000 },
   );
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await page.mouse.move(bounds.x + 100, bounds.y + 40);
-  await page.mouse.down();
-  await page.mouse.up();
+  await touchTap(bounds.x + 100, bounds.y + 40);
   await page.waitForFunction(
     () => {
       const canvas = document.querySelector("canvas");
