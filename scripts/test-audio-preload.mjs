@@ -23,7 +23,18 @@ try {
   await page.addInitScript(() => {
     const NativeAudioContext = window.AudioContext;
     window.__amongGasAudioContextsCreated = 0;
+    window.__amongGasOscillatorsStarted = 0;
     if (NativeAudioContext) {
+      const nativeCreateOscillator = NativeAudioContext.prototype.createOscillator;
+      NativeAudioContext.prototype.createOscillator = function (...args) {
+        const oscillator = nativeCreateOscillator.apply(this, args);
+        const nativeStart = oscillator.start.bind(oscillator);
+        oscillator.start = (...startArgs) => {
+          window.__amongGasOscillatorsStarted += 1;
+          nativeStart(...startArgs);
+        };
+        return oscillator;
+      };
       window.AudioContext = class extends NativeAudioContext {
         constructor(...args) {
           super(...args);
@@ -41,9 +52,13 @@ try {
 
   await page.mouse.click(5, 5);
   await page.waitForFunction(() => window.__amongGasAudioContextsCreated > 0, null, { timeout: 5000 });
+  await page.getByTestId('main-menu-tab-guide').click();
+  await page.waitForFunction(() => window.__amongGasOscillatorsStarted > 0, null, { timeout: 5000 });
   await page.waitForTimeout(650);
   assert.equal(window.__amongGasAudioContextsCreated, 1,
     'all game sounds and menu music must share one lazily-created AudioContext');
+  assert.ok(window.__amongGasOscillatorsStarted > 0,
+    'the trusted menu gesture and UI action must schedule audible procedural oscillators');
   assert.deepEqual(audioRequests, [],
     'procedural effects and menu music must not request copied or remote audio assets');
   assert.deepEqual(pageErrors, [], 'procedural Web Audio playback must not emit browser runtime errors');
