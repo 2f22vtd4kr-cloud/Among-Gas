@@ -9,7 +9,7 @@
  *   COOLDOWN  → After a kill: return to FAKING while cooldown drains.
  *
  * Sabotage:
- *   Every ~60s (configurable, ±jitter), trigger a sabotage to force
+ *   Every ~30s (configurable, ±jitter), trigger a sabotage to force
  *   crewmates apart and create hunting opportunities. Only fires when
  *   FAKING or HUNTING and no sabotage is currently active.
  *
