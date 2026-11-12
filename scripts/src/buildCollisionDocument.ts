@@ -1,287 +1,393 @@
-/**
- * Build an ignored, non-production vector-analysis preview from the current
- * fine raster movement mask and vision derivations. This is deliberately not
- * the authored map: do not import its output into client/server gameplay.
- * Runtime cut-over remains blocked on all-zone author tracing and review.
- */
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { FINE_COLS, FINE_ROWS } from "../../lib/shared/src/collisionDataFine.js";
+import sharp from "sharp";
+import { CollisionWorld, validateCollisionDocument, type CollisionDocument, type CollisionShape, type Point } from "../../lib/shared/src/collision/vectorCollision.js";
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
-import { buildPreciseCollisionGrid, FINE_CELL_X, FINE_CELL_Y } from "../../lib/shared/src/collisionMap.js";
-import { MANUAL_BLOCKED_POLYGONS } from "../../lib/shared/src/collisionOverrides.js";
-import { validateCollisionDocument } from "../../lib/shared/src/collision/vectorCollision.js";
-import type { CollisionDocument, CollisionShape } from "../../lib/shared/src/collision/vectorCollision.js";
 import {
-  buildFineShadowGrid,
-  buildFineShadowSegments,
-  buildNarrowShadowOccluders,
-} from "../../artifacts/telegram-game/src/game/visibility.js";
+  MANUAL_BLOCKED_POLYGONS,
+  MANUAL_WALKABLE_REPLACEMENT_ZONES,
+} from "../../lib/shared/src/collisionOverrides.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
+const referencePath = path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg");
 const outputDir = path.join(root, "lib/shared/src/collision");
-const outputJson = path.join(outputDir, "collision.v1.json");
-const outputTs = path.join(outputDir, "generatedDocument.ts");
-const GENERATOR_VERSION = 2;
+const qaPath = path.join(root, "artifacts/telegram-game/collision-redline-vector-qa.png");
+const TOLERANCE = 1.25;
 
-async function sha256(relativePath: string): Promise<string> {
-  const bytes = await readFile(path.join(root, relativePath));
-  return createHash("sha256").update(bytes).digest("hex");
+async function hash(relative: string): Promise<string> {
+  return createHash("sha256").update(await readFile(path.join(root, relative))).digest("hex");
 }
-
-interface ActiveRect {
-  colStart: number;
-  colEnd: number;
-  rowStart: number;
-  rowEnd: number;
+function red(data: Buffer, offset: number): boolean {
+  const r=data[offset], g=data[offset+1], b=data[offset+2];
+  return r>=90 && r-g>=42 && r-b>=34 && r>g*1.35 && r>b*1.25;
 }
-
-function gridToRectangles(
-  grid: Uint8Array,
-  idPrefix: string,
-  blocksMove: boolean,
-  blocksSight: boolean,
-): CollisionShape[] {
-  if (grid.length !== FINE_COLS * FINE_ROWS) {
-    throw new Error(`${idPrefix}: expected ${FINE_COLS * FINE_ROWS} fine-grid cells, received ${grid.length}`);
-  }
-
-  const active = new Map<string, ActiveRect>();
-  const shapes: CollisionShape[] = [];
-  let nextId = 0;
-
-  const finish = (rect: ActiveRect) => {
-    const x0 = rect.colStart * FINE_CELL_X;
-    const x1 = rect.colEnd * FINE_CELL_X;
-    const y0 = rect.rowStart * FINE_CELL_Y;
-    const y1 = rect.rowEnd * FINE_CELL_Y;
-    shapes.push({
-      id: `${idPrefix}-${String(nextId++).padStart(5, "0")}`,
-      points: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]],
-      closed: true,
-      blocksMove,
-      blocksSight,
-      label: idPrefix,
-    });
-  };
-
-  for (let row = 0; row < FINE_ROWS; row++) {
-    const runs: Array<[number, number]> = [];
-    let col = 0;
-    while (col < FINE_COLS) {
-      if (grid[row * FINE_COLS + col] !== 1) {
-        col++;
-        continue;
+function thin(mask: Uint8Array, w: number, h: number): Uint8Array {
+  let changed=true, rounds=0;
+  const p=new Int32Array(8);
+  while(changed) {
+    changed=false;
+    if(++rounds>32) throw new Error("red-line thinning did not converge");
+    for(let phase=0;phase<2;phase++) {
+      const remove:number[]=[];
+      for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++) {
+        const i=y*w+x; if(!mask[i]) continue;
+        p[0]=mask[i-w]; p[1]=mask[i-w+1]; p[2]=mask[i+1]; p[3]=mask[i+w+1];
+        p[4]=mask[i+w]; p[5]=mask[i+w-1]; p[6]=mask[i-1]; p[7]=mask[i-w-1];
+        let n=0,a=0;
+        for(let k=0;k<8;k++){ n+=p[k]; if(!p[k]&&p[(k+1)%8]) a++; }
+        if(n<2||n>6||a!==1) continue;
+        const [p2,p3,p4,p5,p6,p7,p8,p9]=p;
+        const keep=phase===0 ? p2*p4*p6===0&&p4*p6*p8===0 : p2*p4*p8===0&&p2*p6*p8===0;
+        if(keep) remove.push(i);
       }
-      const start = col;
-      while (col < FINE_COLS && grid[row * FINE_COLS + col] === 1) col++;
-      runs.push([start, col]);
-    }
-
-    const currentKeys = new Set(runs.map(([start, end]) => `${start}:${end}`));
-    for (const [key, rect] of active) {
-      if (currentKeys.has(key)) continue;
-      finish(rect);
-      active.delete(key);
-    }
-    for (const [start, end] of runs) {
-      const key = `${start}:${end}`;
-      const existing = active.get(key);
-      if (existing) existing.rowEnd = row + 1;
-      else active.set(key, { colStart: start, colEnd: end, rowStart: row, rowEnd: row + 1 });
+      for(const i of remove) mask[i]=0;
+      if(remove.length) changed=true;
     }
   }
-
-  for (const rect of active.values()) finish(rect);
+  return mask;
+}
+function edgeKey(a:number,b:number,total:number):number { const lo=Math.min(a,b),hi=Math.max(a,b); return lo*total+hi; }
+function graphOf(s:Uint8Array,w:number,h:number):Map<number,number[]> {
+  const g=new Map<number,number[]>();
+  const dirs:readonly [number,number][]=[[-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1]];
+  for(let y=1;y<h-1;y++) for(let x=1;x<w-1;x++) {
+    const i=y*w+x; if(!s[i]) continue;
+    const ns:number[]=[];
+    for(const [dx,dy] of dirs) {
+      const nx=x+dx,ny=y+dy,j=ny*w+nx; if(!s[j]) continue;
+      if(dx&&dy&&(s[y*w+nx]||s[ny*w+x])) continue;
+      ns.push(j);
+    }
+    g.set(i,ns);
+  }
+  return g;
+}
+function trace(g:Map<number,number[]>,total:number):number[][] {
+  const used=new Set<number>(),paths:number[][]=[];
+  const walk=(start:number,next:number)=>{
+    const path=[start,next]; used.add(edgeKey(start,next,total));
+    let prev=start,cur=next;
+    while((g.get(cur)?.length??0)===2) {
+      const n=g.get(cur)!.find(v=>v!==prev); if(n===undefined) break;
+      const key=edgeKey(cur,n,total); if(used.has(key)) break;
+      used.add(key); path.push(n); prev=cur; cur=n;
+    }
+    return path;
+  };
+  for(const [i,ns] of g) if(ns.length!==2) for(const n of ns)
+    if(!used.has(edgeKey(i,n,total))) paths.push(walk(i,n));
+  for(const [i,ns] of g) for(const n of ns) if(!used.has(edgeKey(i,n,total))) {
+    const path=[i,n]; used.add(edgeKey(i,n,total)); let prev=i,cur=n;
+    while(cur!==i) {
+      const next=g.get(cur)?.find(v=>v!==prev); if(next===undefined) break;
+      const key=edgeKey(cur,next,total); if(used.has(key)) break;
+      used.add(key); path.push(next); prev=cur; cur=next;
+    }
+    paths.push(path);
+  }
+  return paths;
+}
+function simplify(p:readonly Point[],tol:number):Point[] {
+  if(p.length<=2) return p.map(q=>[q[0],q[1]]);
+  const a=p[0],b=p[p.length-1],dx=b[0]-a[0],dy=b[1]-a[1],den=dx*dx+dy*dy;
+  let max=-1,split=-1;
+  for(let i=1;i<p.length-1;i++) {
+    const q=p[i],t=den?Math.max(0,Math.min(1,((q[0]-a[0])*dx+(q[1]-a[1])*dy)/den)):0;
+    const d=Math.hypot(q[0]-a[0]-t*dx,q[1]-a[1]-t*dy);
+    if(d>max){max=d;split=i;}
+  }
+  if(max<=tol||split<0) return [[a[0],a[1]],[b[0],b[1]]];
+  const l=simplify(p.slice(0,split+1),tol),r=simplify(p.slice(split),tol);
+  return [...l.slice(0,-1),...r];
+}
+function area(p:readonly Point[]):number {
+  let a=0; for(let i=0;i<p.length;i++){const q=p[i],r=p[(i+1)%p.length];a+=q[0]*r[1]-r[0]*q[1];}
+  return Math.abs(a)/2;
+}
+function editorZone(points: readonly Point[]): "A" | "B" | "C" | "D" | "E" {
+  const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
+  const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
+  const centers = [
+    { zone: "A" as const, x: MAP_W * 0.25, y: MAP_H * 0.24 },
+    { zone: "B" as const, x: MAP_W * 0.75, y: MAP_H * 0.24 },
+    { zone: "C" as const, x: MAP_W * 0.50, y: MAP_H * 0.50 },
+    { zone: "D" as const, x: MAP_W * 0.25, y: MAP_H * 0.80 },
+    { zone: "E" as const, x: MAP_W * 0.75, y: MAP_H * 0.80 },
+  ];
+  return centers.reduce((best, current) =>
+    Math.hypot(x - current.x, y - current.y) < Math.hypot(x - best.x, y - best.y)
+      ? current
+      : best,
+  ).zone;
+}
+function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
+  const shapes:CollisionShape[]=[];
+  for(const path of paths) {
+    if(path.length<4) continue;
+    const raw:Point[]=path.map(i=>[i%w,Math.floor(i/w)]);
+    let length=0; for(let i=1;i<raw.length;i++) length+=Math.hypot(raw[i][0]-raw[i-1][0],raw[i][1]-raw[i-1][1]);
+    if(length<4) continue;
+    const simple=simplify(raw,TOLERANCE),loop=path[0]===path[path.length-1];
+    const unique=loop?simple.slice(0,-1):simple; if(unique.length<(loop?3:2)) continue;
+    const cx=unique.reduce((s,p)=>s+p[0],0)/unique.length,cy=unique.reduce((s,p)=>s+p[1],0)/unique.length;
+    const statueRing=Math.abs(cx/w-.54)<.09&&Math.abs(cy/h-.27)<.10;
+    const closed=loop&&area(unique)>=20&&area(unique)<=8000&&!statueRing;
+    const selected=closed?unique:simple;
+    const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
+    if(closed&&area(points)<1) continue;
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:editorZone(points)});
+  }
+  // The red-line reference does not author a statue-pedestal contour.
+  // Do not promote the old estimated rectangle as production movement geometry;
+  // keep the area unclassified until an owner-traced outline is reviewed.
   return shapes;
 }
+type ReplacementBounds = readonly [number, number, number, number];
 
-function narrowCircleShape(
-  id: string,
-  x: number,
-  y: number,
-  radius: number,
-): CollisionShape {
-  const points: Array<[number, number]> = [];
-  const sides = 24;
-  for (let index = 0; index < sides; index++) {
-    const angle = (index / sides) * Math.PI * 2;
-    points.push([x + Math.cos(angle) * radius, y + Math.sin(angle) * radius]);
-  }
-  return {
-    id,
-    points,
-    closed: true,
-    blocksMove: false,
-    blocksSight: true,
-    label: "narrow vision occluder",
-  };
+function pointAt(a: Point, b: Point, t: number): Point {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 }
 
-async function main(): Promise<void> {
-  const movementGrid = buildPreciseCollisionGrid();
-  const shadowGrid = buildFineShadowGrid(movementGrid);
-  const shadowSegments = buildFineShadowSegments(movementGrid);
-  const narrowOccluders = buildNarrowShadowOccluders(movementGrid, true);
-
-  // Movement is derived from the exact fine grid used by the live raster
-  // collision code, including the currently approved walkable replacement zones.
-  const movementShapes = gridToRectangles(movementGrid, "movement-cell", true, false);
-
-  // Vision uses the same fine source, with the existing large-component /
-  // medium-object decomposition. Manual collision polygons are retained as
-  // explicit object outlines; the obsolete statue circle is not reintroduced.
-  const manualShapes: CollisionShape[] = MANUAL_BLOCKED_POLYGONS.map((polygon, index) => ({
-    id: `manual-blocked-${String(index).padStart(3, "0")}-${polygon.id}`,
-    points: polygon.points.map(([x, y]) => [x, y] as [number, number]),
-    closed: true,
-    blocksMove: true,
-    blocksSight: true,
-    label: polygon.id,
-  }));
-  const sightAreaShapes = gridToRectangles(shadowGrid, "sight-area", false, true);
-  const sightSegmentShapes: CollisionShape[] = shadowSegments.map((segment, index) => ({
-    id: `sight-segment-${String(index).padStart(5, "0")}`,
-    points: [[segment.ax, segment.ay], [segment.bx, segment.by]],
-    closed: false,
-    blocksMove: false,
-    blocksSight: true,
-    label: "fine-grid object outline",
-  }));
-  const narrowShapes = narrowOccluders.map((circle, index) =>
-    narrowCircleShape(`narrow-occluder-${String(index).padStart(3, "0")}`, circle.x, circle.y, circle.radius),
-  );
-
-  const sourceFiles = {
-    fineCollisionData: {
-      path: "lib/shared/src/collisionDataFine.ts",
-      sha256: await sha256("lib/shared/src/collisionDataFine.ts"),
-    },
-    collisionOverrides: {
-      path: "lib/shared/src/collisionOverrides.ts",
-      sha256: await sha256("lib/shared/src/collisionOverrides.ts"),
-    },
-    collisionMap: {
-      path: "lib/shared/src/collisionMap.ts",
-      sha256: await sha256("lib/shared/src/collisionMap.ts"),
-    },
-    visibility: {
-      path: "artifacts/telegram-game/src/game/visibility.ts",
-      sha256: await sha256("artifacts/telegram-game/src/game/visibility.ts"),
-    },
-    coordinates: {
-      path: "lib/shared/src/coords.ts",
-      sha256: await sha256("lib/shared/src/coords.ts"),
-    },
-    generator: {
-      path: "scripts/src/buildCollisionDocument.ts",
-      sha256: await sha256("scripts/src/buildCollisionDocument.ts"),
-    },
-    redlineReference: {
-      path: "attached_assets/IMG_2907_1783632830477.jpeg",
-      sha256: await sha256("attached_assets/IMG_2907_1783632830477.jpeg"),
-    },
-  };
-
-  const shapes = [
-    ...movementShapes,
-    ...manualShapes,
-    ...sightAreaShapes,
-    ...sightSegmentShapes,
-    ...narrowShapes,
+/** Return the segment's parameter interval inside an axis-aligned rectangle. */
+function segmentRectInterval(
+  a: Point,
+  b: Point,
+  bounds: ReplacementBounds,
+): readonly [number, number] | null {
+  const [minX, minY, maxX, maxY] = bounds;
+  const dx = b[0] - a[0], dy = b[1] - a[1];
+  let t0 = 0, t1 = 1;
+  const tests: readonly [number, number][] = [
+    [-dx, a[0] - minX], [dx, maxX - a[0]],
+    [-dy, a[1] - minY], [dy, maxY - a[1]],
   ];
-  const document: CollisionDocument = {
-    version: 1,
-    mapW: MAP_W,
-    mapH: MAP_H,
-    shapes,
-    source: {
-      kind: "fine-grid-derived",
-      generatorVersion: GENERATOR_VERSION,
-      sourceFiles,
-      fineGrid: {
-        cols: FINE_COLS,
-        rows: FINE_ROWS,
-        cellX: FINE_CELL_X,
-        cellY: FINE_CELL_Y,
-      },
-      sightPipeline: {
-        largeComponentGrid: "buildFineShadowGrid",
-        mediumAndSmallOutlines: "buildFineShadowSegments",
-        narrowOccluders: narrowOccluders.length,
-        obsoleteStatueCircleExcluded: true,
-      },
-      shapeCounts: {
-        movementRectangles: movementShapes.length,
-        manualBlockedPolygons: manualShapes.length,
-        sightRectangles: sightAreaShapes.length,
-        sightSegments: sightSegmentShapes.length,
-        narrowOccluders: narrowShapes.length,
-        total: shapes.length,
-      },
-    },
-  };
-
-  const generatedErrors = validateCollisionDocument(document);
-  if (generatedErrors.length) {
-    throw new Error("Generated collision baseline is invalid: " + generatedErrors.join("; "));
+  for (const [p, q] of tests) {
+    if (Math.abs(p) < 1e-9) {
+      if (q < 0) return null;
+      continue;
+    }
+    const ratio = q / p;
+    if (p < 0) {
+      if (ratio > t1) return null;
+      if (ratio > t0) t0 = ratio;
+    } else {
+      if (ratio < t0) return null;
+      if (ratio < t1) t1 = ratio;
+    }
   }
+  return t1 - t0 > 1e-7 ? [t0, t1] : null;
+}
 
-  await mkdir(outputDir, { recursive: true });
-  let activeDocument = document;
-  try {
-    const existing = JSON.parse(await readFile(outputJson, "utf8")) as CollisionDocument;
-    const existingErrors = validateCollisionDocument(existing);
-    if (existingErrors.length) {
-      throw new Error("Saved vector candidate is invalid; refusing to overwrite it: " + existingErrors.join("; "));
-    }
-    if (!existing.source?.sourceFiles) {
-      throw new Error("Saved vector candidate has no source manifest; refusing to use it in live gameplay.");
-    }
-    for (const [name, current] of Object.entries(sourceFiles)) {
-      const saved = existing.source.sourceFiles[name];
-      if (!saved || saved.sha256 !== current.sha256) {
-        throw new Error(
-          "Saved vector candidate is stale because source input '" + name +
-          "' changed. Export/review the candidate before regenerating it.",
-        );
+/**
+ * Remove red-line barriers only inside explicitly measured, source-reviewed
+ * walkable replacement zones. Segments outside each zone are retained and
+ * terminated exactly at the rectangle edge; this does not delete a nearby
+ * room wall or broaden the opening beyond the reviewed coordinates.
+ */
+function applyWalkableReplacementZones(
+  sourceShapes: readonly CollisionShape[],
+): CollisionShape[] {
+  const zones = MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone => ({
+    id: zone.id,
+    bounds: zone.bounds as ReplacementBounds,
+  }));
+  const output: CollisionShape[] = [];
+
+  for (const shape of sourceShapes) {
+    const segmentCount = shape.closed ? shape.points.length : shape.points.length - 1;
+    let wasClipped = false;
+    const paths: Point[][] = [];
+    let current: Point[] | null = null;
+    const flush = () => {
+      if (current && current.length >= 2) paths.push(current);
+      current = null;
+    };
+
+    for (let index = 0; index < segmentCount; index++) {
+      const a = shape.points[index];
+      const b = shape.points[(index + 1) % shape.points.length];
+      let pieces: Array<{ start: Point; end: Point }> = [{ start: a, end: b }];
+
+      for (const zone of zones) {
+        const nextPieces: Array<{ start: Point; end: Point }> = [];
+        for (const piece of pieces) {
+          const interval = segmentRectInterval(piece.start, piece.end, zone.bounds);
+          if (!interval) {
+            nextPieces.push(piece);
+            continue;
+          }
+          wasClipped = true;
+          const [insideStart, insideEnd] = interval;
+          const clippedStart = pointAt(piece.start, piece.end, insideStart);
+          const clippedEnd = pointAt(piece.start, piece.end, insideEnd);
+          if (insideStart > 1e-7 && Math.hypot(
+            clippedStart[0] - piece.start[0], clippedStart[1] - piece.start[1],
+          ) > 0.01) {
+            nextPieces.push({ start: piece.start, end: clippedStart });
+          }
+          if (insideEnd < 1 - 1e-7 && Math.hypot(
+            piece.end[0] - clippedEnd[0], piece.end[1] - clippedEnd[1],
+          ) > 0.01) {
+            nextPieces.push({ start: clippedEnd, end: piece.end });
+          }
+        }
+        pieces = nextPieces;
+      }
+
+      if (pieces.length === 0) {
+        flush();
+        continue;
+      }
+      for (const piece of pieces) {
+        const joins = current !== null && Math.hypot(
+          current[current.length - 1][0] - piece.start[0],
+          current[current.length - 1][1] - piece.start[1],
+        ) <= 0.01;
+        if (!joins) flush();
+        if (current === null) current = [[piece.start[0], piece.start[1]]];
+        current.push([piece.end[0], piece.end[1]]);
+        // A clipped segment ends at a replacement boundary. Do not reconnect
+        // the far side of that removed interval into one continuous wall.
+        if (Math.hypot(piece.end[0] - b[0], piece.end[1] - b[1]) > 0.01) flush();
       }
     }
-    activeDocument = {
-      ...existing,
-      source: {
-        ...existing.source,
-        shapeCounts: {
-          ...existing.source.shapeCounts,
-          total: existing.shapes.length,
-        },
-      },
-    };
-    await writeFile(outputJson, JSON.stringify(activeDocument, null, 2) + "\n");
-    console.log("Using saved vector candidate as the runtime collision source.");
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    await writeFile(outputJson, JSON.stringify(document, null, 2) + "\n");
-    console.log("Bootstrapped the editable vector candidate from the current fine-grid and vision sources.");
+    flush();
+
+    if (!wasClipped) {
+      output.push(shape);
+      continue;
+    }
+    for (let index = 0; index < paths.length; index++) {
+      const points = paths[index];
+      if (points.length < 2) continue;
+      output.push({
+        ...shape,
+        id: shape.id + "-outside-replacement-" + String(index + 1).padStart(2, "0"),
+        points,
+        closed: false,
+      });
+    }
   }
 
-  const serializedDocument = JSON.stringify(activeDocument);
-  await writeFile(
-    outputTs,
-    `import type { CollisionDocument } from "./vectorCollision.js";\nconst COLLISION_DOCUMENT_JSON = ${JSON.stringify(serializedDocument)};\nexport const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n`,
-  );
-
-  console.log(JSON.stringify({
-    ok: true,
-    generatorVersion: GENERATOR_VERSION,
-    sourceKind: activeDocument.source?.kind,
-    fineGridCells: movementGrid.length,
-    shapes: activeDocument.source?.shapeCounts,
-    sourceFiles,
-    outputJson: path.relative(root, outputJson),
-    outputTs: path.relative(root, outputTs),
-  }, null, 2));
+  // The original authored van footprint is kept as its own compact movement
+  // polygon. It replaces the coarse red-line outline inside the van-bay zone.
+  for (const [index, polygon] of MANUAL_BLOCKED_POLYGONS.entries()) {
+    output.push({
+      id: "manual-blocked-" + String(index + 1).padStart(3, "0") + "-" + polygon.id,
+      points: polygon.points.map(([x, y]) => [x, y] as Point),
+      closed: true,
+      blocksMove: true,
+      blocksSight: false,
+      label: polygon.id,
+      zone: "E",
+    });
+  }
+  return output;
 }
 
+async function main():Promise<void> {
+  const {data,info}=await sharp(referencePath).removeAlpha().raw().toBuffer({resolveWithObject:true});
+  if(info.channels<3||info.width<100||info.height<100) throw new Error("red-line reference is missing/invalid");
+  const mask=new Uint8Array(info.width*info.height); let redCount=0;
+  for(let i=0;i<mask.length;i++) if(red(data,i*info.channels)){mask[i]=1;redCount++;}
+  if(redCount<1500) throw new Error("too few red reference pixels: "+redCount);
+  const skeleton=thin(mask,info.width,info.height); let skeletonCount=0;
+  for(const v of skeleton) skeletonCount+=v;
+  if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
+  const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
+  const tracedShapes=makeShapes(paths,info.width,info.height);
+  const shapes=applyWalkableReplacementZones(tracedShapes);
+  const points=shapes.reduce((n,s)=>n+s.points.length,0);
+  if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
+  const document:CollisionDocument={
+    version:1,mapW:MAP_W,mapH:MAP_H,shapes,
+    source:{
+      kind:"redline-vector",generatorVersion:6,
+      sourceFiles:{
+        redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
+        generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
+        collisionEngine:{path:"lib/shared/src/collision/vectorCollision.ts",sha256:await hash("lib/shared/src/collision/vectorCollision.ts")},
+        collisionOverrides:{path:"lib/shared/src/collisionOverrides.ts",sha256:await hash("lib/shared/src/collisionOverrides.ts")},
+      },
+      geometryOverrides:{
+        walkableReplacementZones:MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone=>({id:zone.id,bounds:zone.bounds})),
+        movementOnlyBlockedPolygons:MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
+      },
+      referenceImage:{width:info.width,height:info.height},
+      vectorization:{redPixelCount:redCount,skeletonPixelCount:skeletonCount,tracedPathCount:paths.length,simplifiedPointCount:points,simplificationToleranceSourcePx:TOLERANCE,closedSolidCount:shapes.filter(s=>s.closed).length,openBoundaryCount:shapes.filter(s=>!s.closed).length},
+      shapeCounts:{
+        total:shapes.length,
+        tracedAfterReplacementClipping:tracedShapes.length,
+        closedSolids:shapes.filter(s=>s.closed).length,
+        openBoundaries:shapes.filter(s=>!s.closed).length,
+        manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
+      },
+    },
+  };
+  const errors=validateCollisionDocument(document); if(errors.length) throw new Error("invalid red-line geometry: "+errors.join("; "));
+  const world=new CollisionWorld(shapes,MAP_W,MAP_H);
+  let edgeCount=0,blocked=0;
+  for(const shape of shapes) {
+    const count=shape.closed?shape.points.length:shape.points.length-1;
+    for(let i=0;i<count;i++) {
+      const a=shape.points[i],b=shape.points[(i+1)%shape.points.length];
+      edgeCount++; if(!world.isWalkable((a[0]+b[0])/2,(a[1]+b[1])/2,0)) blocked++;
+    }
+  }
+  if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount);
+  await mkdir(outputDir,{recursive:true}); await mkdir(path.dirname(qaPath),{recursive:true});
+  await writeFile(path.join(outputDir,"collision.v1.json"),JSON.stringify(document,null,2)+"\n");
+  await writeFile(path.join(outputDir,"generatedDocument.ts"),
+    'import type { CollisionDocument } from "./vectorCollision.js";\n'+
+    "const COLLISION_DOCUMENT_JSON = "+JSON.stringify(JSON.stringify(document))+";\n"+
+    "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n");
+  const svgPaths=shapes.map(s=>{
+    const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ")+(s.closed?" Z":"");
+    return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
+  }).join("");
+  const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+info.width+'" height="'+info.height+'" viewBox="0 0 '+info.width+" "+info.height+'">'+svgPaths+"</svg>");
+  await sharp(referencePath).composite([{input:svg}]).png().toFile(qaPath);
+
+  // Produce a 4×3 close-up atlas of the entire map. Each cell is rendered at
+  // 3× source zoom so the owner can inspect every traced wall/prop boundary,
+  // not just the tiny full-map overview. The same vector paths are overlaid
+  // on the untouched red reference; no collision geometry is inferred from
+  // the presentation image.
+  const detailDir=path.join(root,"artifacts/telegram-game/collision-redline-detail-qa");
+  await mkdir(detailDir,{recursive:true});
+  const detailLabels=[
+    ["NW service bay","North-west storage","North atrium west","North atrium east"],
+    ["West pipe room","West service corridor","Central atrium","East control room"],
+    ["South-west garage","South loading bay","South utility room","East generator bay"],
+  ];
+  const detailWidth=1020,detailHeight=784,labelHeight=42,detailScale=3;
+  const detailComposites:{input:Buffer,left:number,top:number}[]=[];
+  for(let row=0;row<3;row++) for(let col=0;col<4;col++) {
+    const left=Math.floor(col*info.width/4),top=Math.floor(row*info.height/3);
+    const right=Math.floor((col+1)*info.width/4),bottom=Math.floor((row+1)*info.height/3);
+    const cropWidth=right-left,cropHeight=bottom-top;
+    const localPaths=shapes.map(shape=>{
+      const d=shape.points.map((point,index)=>(index?"L ":"M ")+
+        ((point[0]/MAP_W*info.width-left)*detailScale).toFixed(2)+" "+
+        ((point[1]/MAP_H*info.height-top)*detailScale).toFixed(2)).join(" ");
+      return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>';
+    }).join("");
+    const overlay=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+(cropWidth*detailScale)+'" height="'+(cropHeight*detailScale)+'">'+localPaths+'</svg>');
+    const detail=await sharp(referencePath).extract({left,top,width:cropWidth,height:cropHeight})
+      .resize(cropWidth*detailScale,cropHeight*detailScale,{fit:"fill",kernel:"lanczos3"})
+      .composite([{input:overlay}]).png().toBuffer();
+    const filename="collision-redline-detail-r"+(row+1)+"-c"+(col+1)+".png";
+    await writeFile(path.join(detailDir,filename),detail);
+    const label=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+detailWidth+'" height="'+labelHeight+'"><rect width="100%" height="100%" fill="#101820"/><text x="18" y="29" fill="#ffffff" font-size="22" font-family="sans-serif" font-weight="600">'+String(row*4+col+1).padStart(2,"0")+'  '+detailLabels[row][col]+'</text></svg>');
+    const normalized=await sharp(detail).resize(detailWidth,detailHeight,{fit:"fill"}).png().toBuffer();
+    detailComposites.push({input:label,left:col*detailWidth,top:row*(detailHeight+labelHeight)});
+    detailComposites.push({input:normalized,left:col*detailWidth,top:row*(detailHeight+labelHeight)+labelHeight});
+  }
+  const detailAtlas=path.join(root,"artifacts/telegram-game/collision-redline-detail-atlas.png");
+  await sharp({create:{width:detailWidth*4,height:(detailHeight+labelHeight)*3,channels:3,background:"#101820"}})
+    .composite(detailComposites).png().toFile(detailAtlas);
+
+  console.log(JSON.stringify({ok:true,source:"owner red-line reference",dimensions:{width:info.width,height:info.height},redCount,skeletonCount,tracedPaths:paths.length,shapeCounts:document.source?.shapeCounts,edgeCount,blocked,detailZoom:detailScale,detailRegions:12,outputs:["lib/shared/src/collision/collision.v1.json","lib/shared/src/collision/generatedDocument.ts","artifacts/telegram-game/collision-redline-vector-qa.png","artifacts/telegram-game/collision-redline-detail-atlas.png","artifacts/telegram-game/collision-redline-detail-qa/*.png"]},null,2));
+}
 await main();

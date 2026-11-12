@@ -40,6 +40,25 @@ export interface SimGameResult {
   sabotageFixed: number;
   tasksCompleted: number;
   totalTaskSteps: number;
+  /** Per-impostor decision counters for diagnosing seeded balance cohorts. */
+  impostorDiagnostics?: Array<{
+    slot: number; roamingTicks: number; huntTicks: number; visibleHuntTicks: number;
+    hiddenHuntTicks: number; huntAcquisitions: number; isolationAborts: number;
+    lostTargetResets: number; navigationCalls: number; navigationReachedKillRangeTicks: number;
+    navigationMovementTicks: number; navigationNoMovementTicks: number;
+    navigationProgressPx: number; killAttempts: number; successfulKills: number;
+    fakeNavigationCalls: number; fakeNavigationMovementTicks: number;
+    fakeNavigationNoMovementTicks: number; fakeNavigationDistancePx: number;
+    fakeNavigationArrivals: number; fakeTargetSelections: number;
+    targetSearchCalls: number; targetSearchVisibleCandidates: number;
+    targetSearchNearVisionCandidates: number; targetSearchNoVisibleCandidates: number;
+    targetSearchNoNearCandidates: number; targetSearchRejectedByIsolation: number;
+    targetSearchBestIsolationScorePx: number;
+    losCandidateChecks: number; losOriginBlockedCandidates: number;
+    losTargetBlockedCandidates: number; losBlockedBetweenClearEndpoints: number;
+    hiddenHuntNoLastKnown: number; hiddenHuntExpiredLastKnown: number;
+    hiddenHuntReachedLastKnown: number; hiddenHuntRetargeted: number;
+  }>;
   /** Snapshot captured before cleanup when the simulator safety watchdog fires. */
   timeoutState?: SimTimeoutSnapshot;
 }
