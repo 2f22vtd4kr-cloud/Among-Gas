@@ -1493,7 +1493,7 @@ export default function VectorCollisionEditor() {
         </button>
       </section>
 
-      <details style={{ background: "#101c26", borderBottom: "1px solid #334c5e", padding: "6px 10px" }}>
+      <details style={{ flex: "0 0 auto", maxHeight: 220, overflowY: "auto", background: "#101c26", borderBottom: "1px solid #334c5e", padding: "6px 10px" }}>
         <summary style={{ minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#d9e7ee", fontSize: 12, fontWeight: 700 }}>
           Zone review / owner decision record
         </summary>
@@ -1517,7 +1517,7 @@ export default function VectorCollisionEditor() {
           value={zoneReviewJson}
           onChange={event => setZoneReviewJson(event.target.value)}
           spellCheck={false}
-          rows={8}
+          rows={5}
           placeholder="Load a zone review record or create a new one, then record source evidence, author, independent review and owner decision."
           style={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", background: "#0a141c", color: "#d9e7ee", border: "1px solid #536879", borderRadius: 6, padding: 9, font: "11px ui-monospace, SFMono-Regular, monospace", lineHeight: 1.45 }}
         />
