@@ -174,6 +174,11 @@ try {
     assert.equal(result.saved, false, zoneId + " begins without an authored candidate");
   }
 
+  for (const invalidZoneId of ["A", "Z00", "Z13"]) {
+    const response = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/" + invalidZoneId, { cache: "no-store" });
+    assert.equal(response.status, 404, invalidZoneId + " is not a registered authoring zone");
+  }
+
   const mixedZone = structuredClone(validDocument);
   mixedZone.shapes[1].zone = "Z02";
   const mixedZoneResponse = await postZone(JSON.stringify(mixedZone));
