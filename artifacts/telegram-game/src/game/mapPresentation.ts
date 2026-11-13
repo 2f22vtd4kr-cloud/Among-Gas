@@ -20,16 +20,16 @@ const SABOTAGE_NAME_RU: Record<string, string> = {
   'Comms':    'Связь',
   'Doors':    'Двери',
 };
-function taskRu(name: string | undefined, language: 'ru' | 'en'): string {
+export function taskRu(name: string | undefined, language: 'ru' | 'en'): string {
   if (language === 'en') return name || 'Task';
   return (name && TASK_NAME_RU[name]) || name || 'Задание';
 }
-function sabotageRu(name: string | undefined, language: 'ru' | 'en'): string {
+export function sabotageRu(name: string | undefined, language: 'ru' | 'en'): string {
   if (language === 'en') return name || 'System';
   return (name && SABOTAGE_NAME_RU[name]) || name || 'Система';
 }
 
-const ADMIN_DOT_COLORS: Record<CharacterColor, string> = {
+export const ADMIN_DOT_COLORS: Record<CharacterColor, string> = {
   teal: '#31c6b4',
   maroon: '#c44958',
   navy: '#4679d4',
