@@ -616,10 +616,11 @@ export abstract class BotAgent {
     // cached while the bot is stationary; only a successful route can be
     // "complete" and trigger the normal next-tick rebuild.
     const routeComplete = hasCompletedNavigationRoute(this.navigationRoute, this.navigationRouteIndex);
-    const routeRefreshDistance = Math.max(
-      48,
-      arrivalTolerancePx + Math.hypot(NAV_CELL_X, NAV_CELL_Y),
-    );
+    // Hunt targets move continuously between 5Hz bot ticks. A 48px
+    // refresh radius lets the bot chase a stale cell centre for many ticks,
+    // which materially reduces kill opportunities. Replan once the target
+    // drifts half an interaction radius from the selected safe endpoint.
+    const routeRefreshDistance = Math.max(12, arrivalTolerancePx * 0.5);
 
     if (this.navigationRoute === null || routeComplete || routeGoalDrift >= routeRefreshDistance) {
       this.rebuildNavigationRoute(feetStart, feetGoal, arrivalTolerancePx);
