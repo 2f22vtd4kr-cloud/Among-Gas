@@ -225,6 +225,42 @@ async function main() {
     assert.equal(meetingSnapshot.meeting.hasVoted, false);
     assert.ok(Array.isArray(meetingSnapshot.meeting.messages));
 
+    console.log('--- Reconnect the same client after the authoritative discussion timer opens voting ---');
+    await new Promise(resolve => setTimeout(resolve, 15_150));
+    reconnectedGuest.ws.close();
+    await waitForClose(reconnectedGuest);
+    const votingGuest = await connect(guestId, 'ReconnectGuest');
+    sockets.push(votingGuest);
+    send(votingGuest, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const votingRejoinSlot = await waitFor(votingGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x05,
+    );
+    assert.equal(votingRejoinSlot[2], 1, 'voting reconnect must preserve the guest slot');
+    await waitFor(votingGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+    );
+    const votingResumeFrame = await waitFor(votingGuest, packet => packet[0] === 0x25);
+    const votingSnapshot = JSON.parse(votingResumeFrame.subarray(2).toString('utf8'));
+    assert.equal(votingSnapshot.phase, 'MEETING');
+    assert.equal(votingSnapshot.mySlot, 1);
+    assert.equal(votingSnapshot.meeting.votingOpen, true,
+      'a reconnect during voting must restore the authoritative open-vote state');
+    assert.equal(votingSnapshot.meeting.hasVoted, false,
+      'a player who disconnected before voting must not inherit a phantom vote');
+    assert.ok(Array.isArray(votingSnapshot.meeting.messages));
+
+    send(replacement, [0x14, 1]);
+    send(votingGuest, [0x14, 0]);
+    const tieResults = await Promise.all([
+      waitFor(replacement, packet => packet[0] === 0x1C, 3000, 'host vote result after voting reconnect'),
+      waitFor(votingGuest, packet => packet[0] === 0x1C, 3000, 'restored guest vote result'),
+    ]);
+    for (const result of tieResults) {
+      assert.equal(result[1], 0xFF, 'two opposing votes must preserve the no-ejection result');
+      assert.equal(result[2], 0x00, 'a tied vote must not award either team a win');
+    }
+
+    console.log('PASS: live WebSocket reconnect during voting restores same slot, open ballot and valid no-ejection tally');
     console.log('PASS: live WebSocket reconnect during active meeting restores same slot and authoritative discussion state');
     console.log('PASS: live active-match WebSocket reconnect, same-slot identity, 0x25/v1 snapshot, old-socket retirement and targeted readiness');
   } finally {
