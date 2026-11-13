@@ -62,7 +62,7 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   };
   assert.deepEqual(validateMapAuthoringZoneDocument(validZoneDocument, "Z01"), [],
     "a seam-crossing shape is owned by the zone containing its ground centroid");
-  assert.ok(validateMapAuthoringZoneDocument(validZoneDocument, "Z02").some(error => error.includes("belongs to Z01")));
+  assert.ok(validateMapAuthoringZoneDocument(validZoneDocument, "Z02").some(error => error.includes("assigned to Z01")));
   assert.ok(validateMapAuthoringZoneDocument({
     shapes: [{ ...shape("wrong-zone", [[850, 100], [900, 100]]), zone: "Z01" }],
   }, "Z01").some(error => error.includes("belongs to Z02")));
