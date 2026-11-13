@@ -1478,7 +1478,16 @@ export default function VectorCollisionEditor() {
                 style={{ minHeight: 40, maxWidth: 100, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}
               >
                 <option value="unassigned">Unassigned</option>
-                {["A", "B", "C", "D", "E"].map(value => <option key={value} value={value}>Zone {value}</option>)}
+                {selected.zone && !isMapAuthoringZoneId(selected.zone) && (
+                  <option value={selected.zone} disabled>
+                    Legacy {selected.zone} · reassign before zone save
+                  </option>
+                )}
+                {MAP_AUTHORING_ZONES.map(authoringZone => (
+                  <option key={authoringZone.id} value={authoringZone.id}>
+                    {authoringZone.id}
+                  </option>
+                ))}
               </select>
             </label>
           </span>
