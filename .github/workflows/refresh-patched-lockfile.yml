@@ -30,3 +30,8 @@ jobs:
           path: pnpm-lock.yaml
           if-no-files-found: error
           retention-days: 1
+      - name: Emit generated lockfile for controlled commit
+        run: |
+          printf '%s\\n' '---PNPM_LOCKFILE_BEGIN---'
+          cat pnpm-lock.yaml
+          printf '%s\\n' '---PNPM_LOCKFILE_END---'
