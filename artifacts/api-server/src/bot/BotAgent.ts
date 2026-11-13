@@ -384,35 +384,60 @@ export abstract class BotAgent {
       this.voteRequestMeeting = meeting;
       this.voteRequestPending = false;
     }
-    if (meeting.votes.has(self.slot)) return;
+    if (meeting.votes.has(self.slot) || this.voteRequestPending) return;
+
     const fallback = this.chooseVote(lobby, self);
     const voteDeadlineAtMs = (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS + MEETING_VOTING_MS;
+    const publicRoster = Array.from(lobby.players.values())
+      .filter(player => player.alive)
+      .map(player => ({ slot: player.slot, username: player.username, alive: true }));
+    const recentMessages = meeting.messages.slice(-12);
+    const publicTranscript = recentMessages.map(message => ({
+      slot: message.slot,
+      text: message.text,
+    }));
+    const transcriptStartIndex = Math.max(0, meeting.messages.length - recentMessages.length);
+    const observedPlayerSlots = publicRoster.map(player => player.slot);
+    const transcriptMessageIndexes = recentMessages.map((_, index) => transcriptStartIndex + index);
+    recordBotObservation(lobby, {
+      botSlot: self.slot,
+      phase: 'MEETING',
+      kind: 'meeting-vote-context',
+      observedPlayerSlots,
+      transcriptMessageIndexes,
+      candidateCount: Math.max(0, publicRoster.length - 1),
+      decision: 'observed',
+    });
+
+    const commitFallback = () => {
+      recordBotObservation(lobby, {
+        botSlot: self.slot,
+        phase: 'MEETING',
+        kind: 'meeting-vote-result',
+        observedPlayerSlots,
+        transcriptMessageIndexes,
+        selectedTargetSlot: fallback === NO_TARGET ? null : fallback,
+        usedFallback: true,
+        decision: 'fallback',
+      });
+      manager.castVote(lobby, self.slot, fallback);
+    };
 
     // Do not let a slow provider or a long shared-key queue leave a bot with no
-    // vote. Commit its deterministic decision with one provider-timeout of
-    // safety margin; any eventual model response is rejected by the voted guard.
+    // vote. Commit its deterministic decision before the deadline reserve.
     if (Date.now() >= voteDeadlineAtMs - GROQ_DECISION_RESERVE_MS) {
-      manager.castVote(lobby, self.slot, fallback);
+      commitFallback();
       return;
     }
-    if (this.voteRequestPending) return;
 
     const sessionKey = this.getSessionGroqApiKey(lobby);
-
     // Without a configured provider, preserve immediate deterministic play.
     if (!sessionKey) {
-      manager.castVote(lobby, self.slot, fallback);
+      commitFallback();
       return;
     }
 
     this.voteRequestPending = true;
-    const publicRoster = Array.from(lobby.players.values())
-      .filter(player => player.alive)
-      .map(player => ({ slot: player.slot, username: player.username, alive: true }));
-    const publicTranscript = meeting.messages.slice(-12).map(message => ({
-      slot: message.slot,
-      text: message.text,
-    }));
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
 
     void (async () => {
@@ -437,7 +462,19 @@ export abstract class BotAgent {
       const legal = candidate === NO_TARGET ||
         (!!target && target.alive && target.slot !== self.slot &&
           (self.role !== 'impostor' || target.role !== 'impostor'));
-      manager.castVote(lobby, self.slot, legal ? candidate : fallback);
+      const committed = legal ? candidate : fallback;
+      const usedFallback = parsed === null || !legal;
+      recordBotObservation(lobby, {
+        botSlot: self.slot,
+        phase: 'MEETING',
+        kind: 'meeting-vote-result',
+        observedPlayerSlots,
+        transcriptMessageIndexes,
+        selectedTargetSlot: committed === NO_TARGET ? null : committed,
+        usedFallback,
+        decision: usedFallback ? 'fallback' : 'accepted',
+      });
+      manager.castVote(lobby, self.slot, committed);
     })().catch(() => {
       if (canCommitBotVote({
         phase: lobby.phase,
@@ -446,7 +483,7 @@ export abstract class BotAgent {
         votingOpen: meeting.votingOpen,
         alive: self.alive,
         hasVoted: meeting.votes.has(self.slot),
-      })) manager.castVote(lobby, self.slot, fallback);
+      })) commitFallback();
     }).finally(() => {
       // A request from an older meeting must not clear the pending state of a
       // newer meeting that started while the provider call was still in flight.
