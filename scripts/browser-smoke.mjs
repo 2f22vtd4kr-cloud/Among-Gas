@@ -1740,7 +1740,7 @@ try {
   // drag. Starting the trace only after mouse.move() misses most of the walk:
   // Playwright's stepped drag can already carry the player to nearby geometry.
   await cameraPage.evaluate(() => {
-    const trace = { active: true, samples: [] };
+    const trace = { active: true, samples: [], maxSamples: 24 };
     window.__AG_CAMERA_TRACE = trace;
     const capture = () => {
       if (!trace.active) return;
@@ -1748,6 +1748,10 @@ try {
       if (sample && Number.isFinite(sample.screenX) && Number.isFinite(sample.screenY) &&
           Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY)) {
         trace.samples.push({ ...sample });
+      }
+      if (trace.samples.length >= trace.maxSamples) {
+        trace.active = false;
+        return;
       }
       requestAnimationFrame(capture);
     };
@@ -1759,12 +1763,14 @@ try {
   // Keep the movement long enough to prove camera follow, but short
   // enough to stay inside the viewport's camera-centering envelope.
   await cameraPage.mouse.move(joystickX + 16, joystickY, { steps: 6 });
-  // Keep the pointer held for the entire trace window so the browser samples
-  // include both acceleration/motion and the camera-follow response.
-  // At the full-speed digital joystick rate, 140ms produces ~123px of
-  // travel: enough for a >30px final-quarter movement assertion while staying
-  // inside the camera's right-edge centering envelope from this start point.
-  await cameraPage.waitForTimeout(140);
+  // Bound the held-pointer trace to 24 animation frames. Earlier samples
+  // establish the baseline; the final quarter must still show >30px of real
+  // movement, while the whole trace stays inside the camera-centering envelope.
+  await cameraPage.waitForFunction(
+    () => window.__AG_CAMERA_TRACE?.samples.length >= 24,
+    undefined,
+    { timeout: 5000 },
+  );
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
