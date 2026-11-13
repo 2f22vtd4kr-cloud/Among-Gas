@@ -1756,7 +1756,9 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
+  // Keep the movement long enough to prove camera follow, but short
+  // enough to stay inside the viewport's camera-centering envelope.
+  await cameraPage.mouse.move(joystickX + 16, joystickY, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
   await cameraPage.waitForTimeout(420);
