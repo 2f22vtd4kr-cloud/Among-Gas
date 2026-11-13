@@ -92,6 +92,8 @@ const assertPathFollowerRoute = (
 // footprint and the same live vector BotAgent path follower.
 assertPathFollowerRoute({ x: 2820, y: 900 }, { x: 3060, y: 900 }, 'east generator aisle west-to-east');
 assertPathFollowerRoute({ x: 3060, y: 900 }, { x: 2820, y: 900 }, 'east generator aisle east-to-west');
+assertPathFollowerRoute({ x: 2670, y: 900 }, { x: 2950, y: 900 }, 'east generator camera aisle west-to-east');
+assertPathFollowerRoute({ x: 2950, y: 900 }, { x: 2670, y: 900 }, 'east generator camera aisle east-to-west');
 
 // Coarse A* reachability is only a preflight. These routes exercise the actual
 // BotAgent path follower and fine swept-footprint collision in both directions,
