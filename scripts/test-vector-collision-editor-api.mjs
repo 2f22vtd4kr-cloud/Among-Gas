@@ -4,7 +4,9 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 
 // The checked-in zone review scaffolds must remain source-backed and explicitly unapproved.
-const repositoryRoot = process.cwd();
+const repositoryRoot = fs.existsSync(path.join(process.cwd(), "attached_assets"))
+  ? process.cwd()
+  : path.resolve(process.cwd(), "..");
 for (let index = 0; index < 12; index++) {
   const zone = "Z" + String(index + 1).padStart(2, "0");
   const reviewPath = path.join(repositoryRoot, "lib/shared/src/collision/collision.zone-" + zone + ".review.v1.json");
