@@ -28,7 +28,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.6.5
+          version: 11.13.1
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -51,6 +51,12 @@ jobs:
         run: node --check scripts/test-server-soak.mjs
       - name: Test partial-auth socket cleanup in the soak harness
         run: node scripts/test-server-soak-sockets.mjs
+
+      - name: Audit production dependency advisories
+        run: pnpm audit --prod --audit-level low
+
+      - name: Audit complete workspace dependency graph
+        run: pnpm audit --audit-level low
 
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform

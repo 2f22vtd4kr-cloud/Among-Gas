@@ -54,3 +54,6 @@ All 12 zones are currently **not traced / not reviewed** in this register. The 3
 ## Current release decision
 
 **NOT APPROVED** The 12-zone authoring/review requirement remains open. This register makes the ownership boundaries explicit; it is not evidence that any zone has been authored, independently reviewed or owner-approved.
+
+
+**Baseline note (2026-11-13):** PR #144 merged this review register to main at `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. No geometry was changed or approved by that documentation merge.

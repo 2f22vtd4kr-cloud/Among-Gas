@@ -118,3 +118,8 @@ The candidate must remain unmerged until:
 ### Still blocked by the active recovery restrictions
 
 Issue #90 remains controlling: no Replit/Vercel access, publishing, deployment, production mutation or real external investigation is authorized during repository recovery. CI's local production-serving checks are not a deployment. Physical-device acceptance, a 20-minute soak, external target-platform verification and the final release dossier therefore remain uncompleted. Do not mark Plan v2 complete or release-ready until the owner explicitly lifts the restriction and the remaining geometry/design decisions are recorded.
+
+
+## Update after provenance merge — 2026-11-13
+
+PR #144 merged as `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. This is the current main SHA at this checkpoint. PR #144 added source/provenance/review documentation and the asset inventory only; it did not change runtime geometry, map assets, collision behavior, or gameplay. The previously audited runtime baseline `925a465458e8462cef8b6112daff90a0edc239b3` therefore remains the relevant code baseline. Mainline CI run `43375367783` is verifying the documentation merge; the exact-head PR #144 run `43372802248` passed all checks, including the three seeded balance cohorts.

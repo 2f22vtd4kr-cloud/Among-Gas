@@ -173,3 +173,6 @@ Do not infer sight or shadow boundaries from these movement shapes. The five det
 The original map and red-line reference hashes and historical transform recipes above remain the recorded source evidence. The tiled runtime adds a derivative layer; any regenerated overview or detail tile must record the exact source hash, tile manifest, generator version/parameters and pixel-fidelity report. Do not replace source art, collision masks or production runtime geometry from a screenshot-only inference.
 
 This manifest is a provenance record, not an approval of any collision/vision/shadow contour. Promotion still requires before/after region captures, full three-circle-footprint routes, client/server parity, and author plus independent reviewer dispositions. Where intent is unresolved, preserve main's existing geometry.
+
+
+**Mainline note (2026-11-13):** The provenance/review documentation was merged in PR #144 at main SHA `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. This was documentation-only; the geometry source/runtime baseline recorded above remains `925a465458e8462cef8b6112daff90a0edc239b3`.
