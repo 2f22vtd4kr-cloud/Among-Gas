@@ -1855,6 +1855,154 @@ try {
   await cameraPage.mouse.up();
   await cameraPage.close();
 
+  // Exercise the development-only vector editor on a real touch-capable
+  // browser context. This remains a scratch document: no candidate or zone is
+  // saved to the server and live gameplay geometry is never mutated.
+  const editorPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  editorPage.on('pageerror', error => failures.push(error.message));
+  await editorPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await editorPage.goto(`${origin}/dev/collision`, { waitUntil: 'domcontentloaded' });
+  const editorCanvas = editorPage.locator('canvas[data-editor-loaded="true"]');
+  await editorCanvas.waitFor({ state: 'visible', timeout: 20_000 });
+  for (const label of ['Draw wall', 'Draw solid', 'Walk test', 'Vision preview (hold)', 'Loupe (4×)']) {
+    const target = editorPage.getByRole('button', { name: label, exact: true });
+    const box = await target.boundingBox();
+    assert.ok(box && box.height >= 48,
+      `mobile vector editor control "${label}" must retain a 48 CSS-pixel touch target`);
+  }
+
+  const editorTouch = await editorPage.context().newCDPSession(editorPage);
+  const touchEvent = async (type, points = []) => editorTouch.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: points.map(point => ({ id: point.id, x: point.x, y: point.y })),
+  });
+  const editorScreenPoint = async world => editorCanvas.evaluate((canvas, point) => {
+    const rect = canvas.getBoundingClientRect();
+    const zoom = Number(canvas.dataset.zoom);
+    const cameraX = Number(canvas.dataset.cameraX);
+    const cameraY = Number(canvas.dataset.cameraY);
+    return {
+      x: rect.left + (point[0] - cameraX) * zoom,
+      y: rect.top + (point[1] - cameraY) * zoom,
+    };
+  }, world);
+  const editorTap = async world => {
+    const point = await editorScreenPoint(world);
+    await touchEvent('touchStart', [{ ...point, id: 1 }]);
+    await touchEvent('touchEnd');
+  };
+  const editorStroke = async (from, to) => {
+    const start = await editorScreenPoint(from);
+    const end = await editorScreenPoint(to);
+    await touchEvent('touchStart', [{ ...start, id: 1 }]);
+    for (let step = 1; step <= 8; step++) {
+      await touchEvent('touchMove', [{
+        id: 1,
+        x: start.x + (end.x - start.x) * step / 8,
+        y: start.y + (end.y - start.y) * step / 8,
+      }]);
+    }
+    await touchEvent('touchEnd');
+  };
+
+  await editorPage.getByRole('button', { name: 'Draw wall', exact: true }).click();
+  await editorStroke([1000, 900], [1200, 900]);
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-active-chain-point-count')) >= 2,
+  );
+  await editorPage.getByRole('button', { name: 'Finish chain', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 1,
+  );
+
+  // A second touch stroke begins 120 world pixels from the existing endpoint.
+  // The 48px touch hit radius must snap it to that endpoint, not leave a gap.
+  await editorStroke([1320, 900], [1450, 900]);
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-active-chain-point-count')) >= 2,
+  );
+  await editorPage.getByRole('button', { name: 'Finish chain', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 2,
+  );
+  const snappedWallPoints = await editorCanvas.getAttribute('data-shape-points').then(JSON.parse);
+  assert.ok(Math.abs(snappedWallPoints[1].points[0][0] - 1200) <= 1 &&
+    Math.abs(snappedWallPoints[1].points[0][1] - 900) <= 1,
+    'touch snapping must attach the second wall to the first wall endpoint');
+
+  await editorPage.getByRole('button', { name: 'Draw solid', exact: true }).click();
+  await editorTap([2300, 1300]);
+  await editorTap([2500, 1300]);
+  await editorTap([2400, 1500]);
+  await editorPage.getByRole('button', { name: 'Close polygon', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
+  );
+  const closedLoopShapes = await editorCanvas.getAttribute('data-shape-points').then(JSON.parse);
+  assert.equal(closedLoopShapes[2].closed, true,
+    'three touch vertices and Close polygon must commit a closed solid loop');
+
+  await editorPage.getByRole('button', { name: 'Walk test', exact: true }).click();
+  await editorTap([800, 1500]);
+  await editorTap([1000, 1500]);
+  await editorPage.waitForFunction(() =>
+    document.querySelector('canvas')?.getAttribute('data-walk-point-count') === '2' &&
+    document.querySelector('canvas')?.getAttribute('data-walk-status')?.startsWith('PASS:'),
+  );
+  await editorPage.getByRole('button', { name: 'Vision preview (hold)', exact: true }).click();
+  const visionPoint = await editorScreenPoint([1800, 1600]);
+  await touchEvent('touchStart', [{ ...visionPoint, id: 1 }]);
+  await editorPage.waitForFunction(() =>
+    document.querySelector('canvas')?.getAttribute('data-vision-preview') === 'true',
+    null,
+    { timeout: 5_000 },
+  );
+  await touchEvent('touchEnd');
+  assert.equal(await editorCanvas.getAttribute('data-vision-preview'), 'true',
+    'a stationary touch hold must activate candidate-only vision preview');
+
+  await editorPage.getByRole('button', { name: 'Pan / zoom', exact: true }).click();
+  const editorBox = await editorCanvas.boundingBox();
+  assert.ok(editorBox);
+  const beforePinchZoom = Number(await editorCanvas.getAttribute('data-zoom'));
+  const pinchX = editorBox.x + editorBox.width / 2;
+  const pinchY = editorBox.y + editorBox.height / 2;
+  await touchEvent('touchStart', [
+    { id: 2, x: pinchX - 30, y: pinchY },
+    { id: 3, x: pinchX + 30, y: pinchY },
+  ]);
+  await touchEvent('touchMove', [
+    { id: 2, x: pinchX - 55, y: pinchY },
+    { id: 3, x: pinchX + 55, y: pinchY },
+  ]);
+  await touchEvent('touchEnd');
+  await editorPage.waitForFunction(previous =>
+    Number(document.querySelector('canvas')?.getAttribute('data-zoom')) > previous * 1.1,
+  beforePinchZoom);
+  await editorTouch.detach();
+
+  // Draft autosave/restore must survive reload without writing a server zone.
+  await editorPage.waitForTimeout(400);
+  await editorPage.reload({ waitUntil: 'domcontentloaded' });
+  await editorCanvas.waitFor({ state: 'visible', timeout: 20_000 });
+  const restoreDraft = editorPage.getByRole('button', { name: 'Restore local draft', exact: true });
+  await restoreDraft.waitFor({ state: 'visible', timeout: 10_000 });
+  await restoreDraft.click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
+  );
+  await editorPage.screenshot({ path: join(visualQaDir, 'vector-editor-mobile-touch-acceptance.png'), fullPage: true });
+  await editorPage.close();
+
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 
   console.log(JSON.stringify({
