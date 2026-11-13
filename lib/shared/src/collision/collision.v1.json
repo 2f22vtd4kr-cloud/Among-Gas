@@ -10490,11 +10490,11 @@
       },
       "generator": {
         "path": "scripts/src/buildCollisionDocument.ts",
-        "sha256": "cec593b444bd1c60be85527f8a196d8b33c13ec13f00007f932ce1f40adcd1e9"
+        "sha256": "db7fecd3a0fedda2ec5157370a4831d73436f3a6e066ae1e0b13d0ab63411c57"
       },
       "collisionEngine": {
         "path": "lib/shared/src/collision/vectorCollision.ts",
-        "sha256": "25386c1ca0177137f233d0c126c26170a9f278035273bebe0a1f84f3db6052f6"
+        "sha256": "6f9b020b31917d55c48309b783a246819491b36a7c2cf4f533636b1ee735496b"
       },
       "collisionOverrides": {
         "path": "lib/shared/src/collisionOverrides.ts",
@@ -10544,21 +10544,21 @@
       "tracedAfterReplacementClipping": 369,
       "closedSolids": 14,
       "openBoundaries": 356,
-      "manualBlockedPolygons": 1,
-      "authoringZones": {
-        "Z01": 26,
-        "Z02": 32,
-        "Z03": 22,
-        "Z04": 16,
-        "Z05": 22,
-        "Z06": 72,
-        "Z07": 40,
-        "Z08": 30,
-        "Z09": 14,
-        "Z10": 36,
-        "Z11": 44,
-        "Z12": 16
-      }
+      "manualBlockedPolygons": 1
+    },
+    "zoneShapeCounts": {
+      "Z01": 26,
+      "Z02": 32,
+      "Z03": 22,
+      "Z04": 16,
+      "Z05": 22,
+      "Z06": 72,
+      "Z07": 40,
+      "Z08": 30,
+      "Z09": 14,
+      "Z10": 36,
+      "Z11": 44,
+      "Z12": 16
     }
   }
 }

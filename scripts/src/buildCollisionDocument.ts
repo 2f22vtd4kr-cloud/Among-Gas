@@ -306,8 +306,8 @@ async function main():Promise<void> {
         closedSolids:shapes.filter(s=>s.closed).length,
         openBoundaries:shapes.filter(s=>!s.closed).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
-        authoringZones:Object.fromEntries(Array.from({length:12},(_,index)=>{const id="Z"+String(index+1).padStart(2,"0");return [id,shapes.filter(shape=>shape.zone===id).length];})),
       },
+      zoneShapeCounts:Object.fromEntries(Array.from({length:12},(_,index)=>{const id="Z"+String(index+1).padStart(2,"0");return [id,shapes.filter(shape=>shape.zone===id).length];})),
     },
   };
   const errors=validateCollisionDocument(document); if(errors.length) throw new Error("invalid red-line geometry: "+errors.join("; "));

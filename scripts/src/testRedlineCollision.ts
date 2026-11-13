@@ -30,6 +30,9 @@ assert.equal(document.shapes.some(shape => shape.id === "statue-pedestal"), fals
 const editorZones = new Set(document.shapes.map(shape => shape.zone));
 assert.deepEqual([...editorZones].sort(), MAP_AUTHORING_ZONES.map(zone => zone.id).sort(),
   "the production seed must use the canonical twelve-zone authoring partition");
+assert.deepEqual(document.source?.zoneShapeCounts,
+  Object.fromEntries(MAP_AUTHORING_ZONES.map(zone => [zone.id, document.shapes.filter(shape => shape.zone === zone.id).length])),
+  "source manifest records the canonical zone ownership counts");
 for (const zone of MAP_AUTHORING_ZONES) {
   assert.ok(document.shapes.some(shape => shape.zone === zone.id),
     zone.id + " must own at least one source-derived candidate shape");
