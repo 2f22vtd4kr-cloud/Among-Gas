@@ -203,7 +203,7 @@ try {
       zone: "Z12",
     }],
   };
-  const finalEdgeSave = await fetch(base.replace(/\\/$/, "") + "/__vector-collision-api/zones/Z12", {
+  const finalEdgeSave = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z12", {
     method: "POST",
     headers,
     body: JSON.stringify(finalEdgeDocument),
