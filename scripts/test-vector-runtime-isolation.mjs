@@ -18,11 +18,7 @@ const generatorPath = path.join(root, "scripts/src/buildCollisionDocument.ts");
 const generatorBytes = await fs.readFile(generatorPath);
 const generator = generatorBytes.toString("utf8");
 assert.match(generator, /owner red-line reference|red-line reference/i);
-assert.equal(document.source.sourceFiles.generator.sha256, hash(generatorBytes),
-  "candidate source manifest must identify the exact generator bytes");
-const collisionEngineBytes = await fs.readFile(path.join(root, "lib/shared/src/collision/vectorCollision.ts"));
-assert.equal(document.source.sourceFiles.collisionEngine.sha256, hash(collisionEngineBytes),
-  "candidate source manifest must identify the exact collision engine bytes");
+
 assert.match(generator, /skeletonize|function thin/);
 // Vectorization must remain independent from the old fine movement/vision
 // raster, but it must preserve the two already-reviewed local movement edits.
@@ -37,6 +33,11 @@ assert.ok(document.source.vectorization.skeletonPixelCount >= 1000);
 
 const { createHash } = await import("node:crypto");
 const hash = (bytes) => createHash("sha256").update(bytes).digest("hex");
+assert.equal(document.source.sourceFiles.generator.sha256, hash(generatorBytes),
+  "candidate source manifest must identify the exact generator bytes");
+const collisionEngineBytes = await fs.readFile(path.join(root, "lib/shared/src/collision/vectorCollision.ts"));
+assert.equal(document.source.sourceFiles.collisionEngine.sha256, hash(collisionEngineBytes),
+  "candidate source manifest must identify the exact collision engine bytes");
 const reference = await fs.readFile(path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg"));
 assert.equal(document.source.sourceFiles.redlineReference.sha256, hash(reference));
 
