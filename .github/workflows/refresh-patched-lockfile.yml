@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 24
       - name: Resolve only the declared security patches
-        run: pnpm install --lockfile-only --no-frozen-lockfile
+        run: pnpm install --lockfile-only --no-frozen-lockfile --prefer-frozen-lockfile
       - name: Upload regenerated frozen lockfile
         uses: actions/upload-artifact@v7
         with:
