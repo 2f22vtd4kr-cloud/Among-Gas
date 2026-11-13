@@ -1,10 +1,14 @@
-import { CELL_X, CELL_Y, COLS, ROWS } from "../collisionMap.js";
+import {
+  CELL_X, CELL_Y, COLS, ROWS,
+  buildPreciseCollisionGrid,
+  isPlayerFootprintWalkableAtFeet,
+  isPlayerPathWalkable,
+} from "../collisionMap.js";
 import {
   FEET_OFFSET_Y,
   PLAYER_SPAWN_X,
   PLAYER_SPAWN_Y,
 } from "../coords.js";
-import { getProductionCollisionWorld } from "./productionWorld.js";
 
 export interface BotNavigationGeometry {
   cols: number;
@@ -25,14 +29,30 @@ export const BOT_NAVIGATION_GEOMETRY: BotNavigationGeometry = {
   cellY: CELL_Y / 2,
 };
 
-const movementWorld = getProductionCollisionWorld();
-export const BOT_NAVIGATION_GRID = Uint8Array.from(
-  movementWorld.rasterizePlayerNav(
-    BOT_NAVIGATION_GEOMETRY.cols,
-    BOT_NAVIGATION_GEOMETRY.rows,
-  ).walk,
-  value => value === 1 ? 0 : 1,
-);
+// Diagnostic parity experiment: keep bots on the already-accepted fine-grid
+// route topology while their actual steps are still validated by the vector
+// production world in BotAgent. This isolates whether newly opened vector
+// corridors are reducing encounters by separating bots from visible players.
+// Do not promote this bridge to production without a passing exact-head balance
+// run and the required 12-zone source/reviewer approvals.
+const navigationCollisionGrid = buildPreciseCollisionGrid();
+export const BOT_NAVIGATION_GRID = (() => {
+  const { cols, rows, cellX, cellY } = BOT_NAVIGATION_GEOMETRY;
+  const walk = new Uint8Array(cols * rows);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const index = row * cols + col;
+      const feetX = (col + 0.5) * cellX;
+      const feetY = (row + 0.5) * cellY;
+      walk[index] = isPlayerFootprintWalkableAtFeet(
+        navigationCollisionGrid,
+        feetX,
+        feetY,
+      ) ? 0 : 1;
+    }
+  }
+  return walk;
+})();
 
 function buildSpawnReachability(): Uint8Array {
   const { cols, rows, cellX, cellY } = BOT_NAVIGATION_GEOMETRY;
@@ -50,15 +70,14 @@ function buildSpawnReachability(): Uint8Array {
     x: (col + 0.5) * cellX,
     y: (row + 0.5) * cellY,
   });
-  const canSweep = (from: { x: number; y: number }, to: { x: number; y: number }) => {
-    const [x, y] = movementWorld.movePlayerAtFeet(
+  const canSweep = (from: { x: number; y: number }, to: { x: number; y: number }) =>
+    isPlayerPathWalkable(
+      navigationCollisionGrid,
       from.x,
-      from.y,
-      to.x - from.x,
-      to.y - from.y,
+      from.y - FEET_OFFSET_Y,
+      to.x,
+      to.y - FEET_OFFSET_Y,
     );
-    return Math.hypot(x - to.x, y - to.y) <= 0.75;
-  };
   const spawnFeet = {
     x: PLAYER_SPAWN_X,
     y: PLAYER_SPAWN_Y + FEET_OFFSET_Y,
