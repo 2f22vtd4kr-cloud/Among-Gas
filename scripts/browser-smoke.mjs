@@ -1940,9 +1940,9 @@ try {
     'touch snapping must attach the second wall to the first wall endpoint');
 
   await editorPage.getByRole('button', { name: 'Draw solid', exact: true }).click();
-  await editorTap([2300, 1300]);
-  await editorTap([2500, 1300]);
-  await editorTap([2400, 1500]);
+  await editorTap([2100, 1200]);
+  await editorTap([2600, 1200]);
+  await editorTap([2350, 1750]);
   await editorPage.getByRole('button', { name: 'Close polygon', exact: true }).click();
   await editorPage.waitForFunction(() =>
     Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
