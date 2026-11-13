@@ -218,7 +218,8 @@ try {
   assert.ok(fs.existsSync(reviewFilePath), "review metadata is stored separately from collision geometry");
   const reloadedReview = await jsonResponse(await fetch(reviewEndpoint, { cache: "no-store" }));
   assert.equal(reloadedReview.record.status, "approved");
-  assert.equal(reloadedReview.record.updatedAt, validReviewResponse.ok ? reloadedReview.record.updatedAt : null);
+  assert.equal(typeof reloadedReview.record.updatedAt, "string");
+  assert.ok(Number.isFinite(Date.parse(reloadedReview.record.updatedAt)), "server stamps the saved review record");
   const rejectedWithoutReason = structuredClone(reviewRecord);
   rejectedWithoutReason.status = "rejected";
   rejectedWithoutReason.reviewer.disposition = "accepted";
