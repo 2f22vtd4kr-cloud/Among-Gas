@@ -26,6 +26,7 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { requestGroqDialogue } from './groqDialogue.js';
+import { recordBotObservation } from './botObservationLog.js';
 import {
   buildImpostorHuntPlanningMessages,
   buildImpostorSabotagePlanningMessages,
@@ -430,12 +431,22 @@ export class ImpostorBot extends BotAgent {
     }
 
     if (Number.isFinite(bestScore)) this._simulationDiagnostics.targetSearchBestIsolationScorePx += bestScore;
-    if (bestSlot === null || bestScore < HUNT_ACQUIRE_THRESHOLD_PX) {
+    const acceptedSlot = bestSlot !== null && bestScore >= HUNT_ACQUIRE_THRESHOLD_PX ? bestSlot : null;
+    recordBotObservation(lobby, {
+      botSlot: self.slot,
+      phase: 'ROAMING',
+      kind: 'visible-target-search',
+      observedPlayerSlots: visibleCrew.map(player => player.slot),
+      candidateCount: visibleCrew.length,
+      selectedTargetSlot: acceptedSlot,
+      decision: acceptedSlot === null ? 'none' : 'accepted',
+    });
+    if (acceptedSlot === null) {
       this._simulationDiagnostics.targetSearchRejectedByIsolation++;
       return null;
     }
-    this._requestHuntTargetChoice(lobby, self, visibleCrew, bestSlot);
-    return bestSlot;
+    this._requestHuntTargetChoice(lobby, self, visibleCrew, acceptedSlot);
+    return acceptedSlot;
   }
 
   /**
