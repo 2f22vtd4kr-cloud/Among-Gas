@@ -193,7 +193,7 @@ try {
   // Each Z01–Z12 zone has a separate versioned file and independent 20-backup rotation.
 
   // Review records are separate from geometry and must not allow self-approval.
-  const reviewEndpoint = base.replace(/\\/$/, "") + "/__vector-collision-api/zones/Z01/review";
+  const reviewEndpoint = base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z01/review";
   const reviewFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.review.v1.json");
   const reviewBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01-review");
   fs.rmSync(reviewFilePath, { force: true });
