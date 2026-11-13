@@ -62,6 +62,13 @@ function vectorCollisionEditorApiPlugin(): Plugin {
         const zoneMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))$/);
         const zoneCandidate = zoneMatch?.[1] ?? null;
         const zone = isMapAuthoringZoneId(zoneCandidate) ? zoneCandidate : null;
+        if (route.startsWith('/zones/') && zone === null) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ error: 'Unknown authoring zone; expected Z01–Z12' }));
+          return;
+        }
         if (route !== '/document' && zone === null) {
           next();
           return;
