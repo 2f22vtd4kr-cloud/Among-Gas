@@ -1761,10 +1761,10 @@ try {
   await cameraPage.mouse.move(joystickX + 16, joystickY, { steps: 6 });
   // Keep the pointer held for the entire trace window so the browser samples
   // include both acceleration/motion and the camera-follow response.
-  // At the full-speed digital joystick rate, 195ms produces ~130px of
-  // travel: enough for a >30px final-quarter movement assertion while keeping
-  // the player just inside the camera's right-edge centering envelope.
-  await cameraPage.waitForTimeout(195);
+  // At the full-speed digital joystick rate, 140ms produces ~123px of
+  // travel: enough for a >30px final-quarter movement assertion while staying
+  // inside the camera's right-edge centering envelope from this start point.
+  await cameraPage.waitForTimeout(140);
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
