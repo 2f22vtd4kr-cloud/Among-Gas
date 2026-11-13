@@ -8,5 +8,6 @@ export {
   getCollisionShapeGroundCentroid,
   isMapAuthoringZoneId,
   validateMapAuthoringZoneDocument,
+  assignMapAuthoringZonesByCentroid,
 } from "./mapZones.js";
 export type { MapAuthoringZoneId } from "./mapZones.js";
