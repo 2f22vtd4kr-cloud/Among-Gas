@@ -33,6 +33,8 @@ export const BOT_NAVIGATION_GEOMETRY: BotNavigationGeometry = {
 // route topology while their actual steps are still validated by the vector
 // production world in BotAgent. This isolates whether newly opened vector
 // corridors are reducing encounters by separating bots from visible players.
+// CI experiment branch: this work/* ref runs the full workflow on the controlled
+// parity probe without changing the PR #138 branch or production main.
 // Do not promote this bridge to production without a passing exact-head balance
 // run and the required 12-zone source/reviewer approvals.
 const navigationCollisionGrid = buildPreciseCollisionGrid();
