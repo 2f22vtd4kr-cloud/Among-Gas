@@ -1470,7 +1470,7 @@ try {
   const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
   const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
-  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.64)) < 3,
     'Cancel must preserve the previously saved X position');
   assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.62)) < 3,
     'Cancel must preserve the previously saved Y position');
