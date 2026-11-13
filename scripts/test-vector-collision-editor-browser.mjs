@@ -181,9 +181,9 @@ try {
   await touchTap(bounds.x + 220, bounds.y + 95);
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
-  await selectedZone.selectOption("B");
-  assert.equal(await selectedZone.inputValue(), "B");
-  assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
+  await selectedZone.selectOption("Z02");
+  assert.equal(await selectedZone.inputValue(), "Z02");
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "Z02",
     "the active zone selector follows the selected shape's zone");
 
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
