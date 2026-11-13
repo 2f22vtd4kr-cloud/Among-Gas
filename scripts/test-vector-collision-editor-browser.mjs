@@ -30,6 +30,7 @@ try {
   await reviewEditor.fill(JSON.stringify(scratchReview, null, 2));
   await page.getByRole("button", { name: "Save review" }).click();
   await page.getByText(/Saved Z01 review record · tracing/).waitFor({ timeout: 5000 });
+  await page.getByText("Zone review / owner decision record").click(); // collapse review panel so the mobile canvas keeps its full work area
   const savedScratchReview = JSON.parse(await reviewEditor.inputValue());
   assert.equal(savedScratchReview.status, "tracing", "review metadata persists separately from geometry");
   const canvas = page.locator("canvas[data-editor-loaded='true']");
