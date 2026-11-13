@@ -32,6 +32,6 @@ jobs:
           retention-days: 1
       - name: Emit generated lockfile for controlled commit
         run: |
-          printf '%s\\n' '---PNPM_LOCKFILE_BEGIN---'
+          echo '---PNPM_LOCKFILE_BEGIN---'
           cat pnpm-lock.yaml
-          printf '%s\\n' '---PNPM_LOCKFILE_END---'
+          echo '---PNPM_LOCKFILE_END---'
