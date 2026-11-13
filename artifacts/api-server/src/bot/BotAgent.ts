@@ -36,7 +36,8 @@ import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
-import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, parsePublicBotDialogueResponse, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
+import { recordBotObservation } from './botObservationLog.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
 import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
 
@@ -509,46 +510,78 @@ export abstract class BotAgent {
 
     const hasBody = meeting.bodySlot !== NO_TARGET;
     const speaker = latestRelevant ? lobby.players.get(latestRelevant.slot) : undefined;
-    const humanText = latestRelevant?.text.toLocaleLowerCase() ?? '';
+    const livingPlayers = Array.from(lobby.players.values())
+      .filter(player => player.alive)
+      .map(player => ({ slot: player.slot, username: player.username }));
     const fallback = buildInternalBotDialogue({
       username: self.username,
       role: self.role,
       meetingType: hasBody ? 'body report' : 'emergency call',
-      livingRoster: Array.from(lobby.players.values()).filter(player => player.alive).map(player => player.username),
+      livingRoster: livingPlayers.map(player => player.username),
       latestSpeaker: speaker?.username,
       latestSpeakerIsBot: speaker?.isBot === true,
       latestMessage: latestRelevant?.text,
+    });
+    const publicTranscript = recentMessages.map(entry => ({
+      slot: entry.slot,
+      username: lobby.players.get(entry.slot)?.username ?? 'Player',
+      text: entry.text.slice(0, 220),
+    }));
+    const transcriptStartIndex = Math.max(0, meeting.messages.length - recentMessages.length);
+    recordBotObservation(lobby, {
+      botSlot: self.slot,
+      phase: 'MEETING',
+      kind: 'meeting-dialogue-context',
+      observedPlayerSlots: livingPlayers.map(player => player.slot),
+      transcriptMessageIndexes: recentMessages.map((_, index) => transcriptStartIndex + index),
+      candidateCount: publicTranscript.length,
+      decision: 'observed',
     });
 
     this.lastDiscussionMessageKey = messageKey;
     this.lastDiscussionReplyAtMs = now;
     this.discussionRequestPending = true;
     const sessionKey = this.getSessionGroqApiKey(lobby);
-    const roster = Array.from(lobby.players.values())
-      .filter(player => player.alive)
-      .map(player => player.username)
-      .join(', ');
-    const transcript = recentMessages.map(entry => {
-      const player = lobby.players.get(entry.slot);
-      return `${player?.username ?? 'Player'}: ${entry.text.slice(0, 220)}`;
-    }).join('\n');
 
     void (async () => {
-      let reply: string | null = null;
+      let validatedReply: ReturnType<typeof parsePublicBotDialogueResponse> = null;
       if (sessionKey) {
-        reply = await requestGroqDialogue(sessionKey, buildPublicBotDialogueMessages({
-          username: self.username,
-          livingRoster: roster,
+        const response = await requestGroqDialogue(sessionKey, buildPublicBotDialogueMessages({
+          actingPlayer: { slot: self.slot, username: self.username },
+          livingPlayers,
           meetingType: hasBody ? 'body report' : 'emergency call',
-          publicTranscript: transcript,
-        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
+          publicTranscript,
+        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS, { temperature: 0.2, jsonMode: true });
+        if (response !== null) validatedReply = parsePublicBotDialogueResponse(response, publicTranscript);
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
-      manager.sendMeetingChat(lobby, self.slot, reply ?? fallback);
+      const usedFallback = validatedReply === null;
+      recordBotObservation(lobby, {
+        botSlot: self.slot,
+        phase: 'MEETING',
+        kind: 'meeting-dialogue-result',
+        observedPlayerSlots: livingPlayers.map(player => player.slot),
+        transcriptMessageIndexes: recentMessages.map((_, index) => transcriptStartIndex + index),
+        replyKind: validatedReply?.kind ?? 'fallback',
+        usedFallback,
+        decision: usedFallback ? 'fallback' : 'accepted',
+      });
+      manager.sendMeetingChat(lobby, self.slot, validatedReply?.text ?? fallback);
     })().catch(() => {
       if (lobby.meeting === meeting && !meeting.votingOpen && lobby.phase === 'MEETING') {
+        recordBotObservation(lobby, {
+          botSlot: self.slot,
+          phase: 'MEETING',
+          kind: 'meeting-dialogue-result',
+          observedPlayerSlots: livingPlayers.map(player => player.slot),
+          transcriptMessageIndexes: recentMessages.map((_, index) => transcriptStartIndex + index),
+          replyKind: 'fallback',
+          usedFallback: true,
+          decision: 'fallback',
+        });
         manager.sendMeetingChat(lobby, self.slot, fallback);
       }
+    });
     }).finally(() => {
       // Do not let a stale meeting request mutate the scheduling state of the
       // next meeting after a fast meeting rollover.
