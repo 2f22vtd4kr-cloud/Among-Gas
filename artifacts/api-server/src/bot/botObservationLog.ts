@@ -10,6 +10,7 @@
 export type BotObservationPhase = "ROAMING" | "MEETING";
 export type BotObservationKind =
   | "visible-target-search"
+  | "task-selection"
   | "meeting-dialogue-context"
   | "meeting-dialogue-result"
   | "meeting-vote-context"
@@ -23,9 +24,11 @@ export interface BotObservationRecord {
   phase: BotObservationPhase;
   kind: BotObservationKind;
   observedPlayerSlots?: number[];
+  observedTaskIds?: number[];
   transcriptMessageIndexes?: number[];
   candidateCount?: number;
   selectedTargetSlot?: number | null;
+  selectedTaskId?: number | null;
   replyKind?: BotDialogueReplyKind;
   usedFallback?: boolean;
   decision: BotObservationDecision;
@@ -41,6 +44,13 @@ function validSlot(value: unknown): value is number {
 function uniqueSlots(values: readonly number[] | undefined): number[] | undefined {
   if (!values) return undefined;
   return [...new Set(values.filter(validSlot))].slice(0, 32);
+}
+
+function boundedTaskIds(values: readonly number[] | undefined): number[] | undefined {
+  if (!values) return undefined;
+  return [...new Set(values.filter(value =>
+    Number.isInteger(value) && value >= 0 && value <= 4095,
+  ))].slice(0, 64);
 }
 
 function boundedIndexes(values: readonly number[] | undefined): number[] | undefined {
@@ -64,6 +74,8 @@ export function recordBotObservation(
   };
   const observedPlayerSlots = uniqueSlots(input.observedPlayerSlots);
   if (observedPlayerSlots) record.observedPlayerSlots = observedPlayerSlots;
+  const observedTaskIds = boundedTaskIds(input.observedTaskIds);
+  if (observedTaskIds) record.observedTaskIds = observedTaskIds;
   const transcriptMessageIndexes = boundedIndexes(input.transcriptMessageIndexes);
   if (transcriptMessageIndexes) record.transcriptMessageIndexes = transcriptMessageIndexes;
   if (Number.isInteger(input.candidateCount) && Number(input.candidateCount) >= 0) {
@@ -71,6 +83,10 @@ export function recordBotObservation(
   }
   if (input.selectedTargetSlot === null || validSlot(input.selectedTargetSlot)) {
     record.selectedTargetSlot = input.selectedTargetSlot;
+  }
+  if (input.selectedTaskId === null ||
+      (Number.isInteger(input.selectedTaskId) && Number(input.selectedTaskId) >= 0 && Number(input.selectedTaskId) <= 4095)) {
+    record.selectedTaskId = input.selectedTaskId;
   }
   if (input.replyKind) record.replyKind = input.replyKind;
   if (typeof input.usedFallback === "boolean") record.usedFallback = input.usedFallback;
@@ -87,6 +103,7 @@ export function getBotObservationLog(lobby: object): BotObservationRecord[] {
   return (observationsByLobby.get(lobby) ?? []).map(record => ({
     ...record,
     observedPlayerSlots: record.observedPlayerSlots?.slice(),
+    observedTaskIds: record.observedTaskIds?.slice(),
     transcriptMessageIndexes: record.transcriptMessageIndexes?.slice(),
   }));
 }
