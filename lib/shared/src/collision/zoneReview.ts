@@ -1,4 +1,5 @@
 import type { MapAuthoringZoneId } from "./mapZones.js";
+import { MAP_H, MAP_W } from "../coords.js";
 
 export type ZoneReviewStatus =
   | "not-started"
@@ -101,6 +102,15 @@ function validateEvidence(value: unknown, index: number): string[] {
     if (![t.scaleX, t.scaleY, t.offsetX, t.offsetY].every(Number.isFinite) ||
         (t.scaleX as number) <= 0 || (t.scaleY as number) <= 0) {
       errors.push("Source evidence " + index + " transform must have finite positive scales and finite offsets");
+    } else if (Array.isArray(rect) && rect.length === 4 && rect.every(Number.isFinite)) {
+      const worldLeft = rect[0] * (t.scaleX as number) + (t.offsetX as number);
+      const worldTop = rect[1] * (t.scaleY as number) + (t.offsetY as number);
+      const worldRight = rect[2] * (t.scaleX as number) + (t.offsetX as number);
+      const worldBottom = rect[3] * (t.scaleY as number) + (t.offsetY as number);
+      if (worldLeft < -0.5 || worldTop < -0.5 || worldRight > MAP_W + 0.5 ||
+          worldBottom > MAP_H + 0.5 || worldRight <= worldLeft || worldBottom <= worldTop) {
+        errors.push("Source evidence " + index + " transform must map its crop inside the canonical world bounds");
+      }
     }
   }
   return errors;
