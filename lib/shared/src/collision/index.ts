@@ -11,3 +11,5 @@ export {
   assignMapAuthoringZonesByCentroid,
 } from "./mapZones.js";
 export type { MapAuthoringZoneId } from "./mapZones.js";
+export { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "./zoneReview.js";
+export type { ZoneReviewStatus, ZoneSourceEvidence, ZoneReviewRecord } from "./zoneReview.js";

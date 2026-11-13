@@ -9,6 +9,7 @@ import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData';
 import { validateCollisionDocument } from '../../lib/shared/src/collision/vectorCollision';
 import { isMapAuthoringZoneId, validateMapAuthoringZoneDocument } from '../../lib/shared/src/collision/mapZones';
+import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from '../../lib/shared/src/collision/zoneReview';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dev-only API for the in-app Collision Editor (/collision-editor).
@@ -59,8 +60,10 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
         const route = (req.url || '/').split('?')[0];
+        const reviewMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))\/review$/);
         const zoneMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))$/);
-        const zoneCandidate = zoneMatch?.[1] ?? null;
+        const reviewRoute = Boolean(reviewMatch);
+        const zoneCandidate = reviewMatch?.[1] ?? zoneMatch?.[1] ?? null;
         const zone = isMapAuthoringZoneId(zoneCandidate) ? zoneCandidate : null;
         if (route.startsWith('/zones/') && zone === null) {
           res.statusCode = 404;
@@ -89,17 +92,35 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               import.meta.dirname,
               '../../lib/shared/src/collision/collision.v1.json',
             );
-        const filePath = zone
-          ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
-          : baseFilePath;
-        const backupDirectory = zone
-          ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone)
-          : path.join(path.dirname(baseFilePath), '.backups');
-        const backupPrefix = zone ? 'collision.zone-' + zone + '.v1.' : 'collision.v1.';
+        const filePath = reviewRoute
+          ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.review.v1.json')
+          : zone
+            ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
+            : baseFilePath;
+        const backupDirectory = reviewRoute
+          ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone + '-review')
+          : zone
+            ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone)
+            : path.join(path.dirname(baseFilePath), '.backups');
+        const backupPrefix = reviewRoute
+          ? 'collision.zone-' + zone + '.review.v1.'
+          : zone ? 'collision.zone-' + zone + '.v1.' : 'collision.v1.';
 
         if (req.method === 'GET') {
           try {
             const exists = fs.existsSync(filePath);
+            if (reviewRoute) {
+              const record = exists
+                ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
+                : createDefaultZoneReviewRecord(zone!);
+              const reviewErrors = validateZoneReviewRecord(record, zone);
+              if (reviewErrors.length) {
+                respond(500, { error: 'Saved zone review record is invalid: ' + reviewErrors.slice(0, 8).join('; ') });
+                return;
+              }
+              respond(200, { record, saved: exists });
+              return;
+            }
             const document = exists
               ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
               : { version: 1, mapW: 3224, mapH: 1858, shapes: [] };
@@ -159,6 +180,37 @@ function vectorCollisionEditorApiPlugin(): Plugin {
           }
           try {
             const candidate = JSON.parse(body) as unknown;
+            if (reviewRoute) {
+              const reviewErrors = validateZoneReviewRecord(candidate, zone);
+              if (reviewErrors.length) {
+                respond(400, { error: reviewErrors.slice(0, 12).join('; ') });
+                return;
+              }
+              const record = { ...(candidate as Record<string, unknown>), updatedAt: new Date().toISOString() };
+              fs.mkdirSync(path.dirname(filePath), { recursive: true });
+              if (fs.existsSync(filePath)) {
+                fs.mkdirSync(backupDirectory, { recursive: true });
+                const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+                const backupName = backupPrefix + stamp + '.' + process.pid + '.' + randomUUID() + '.json';
+                fs.copyFileSync(filePath, path.join(backupDirectory, backupName));
+                const backups = fs.readdirSync(backupDirectory)
+                  .filter(name => name.startsWith(backupPrefix) && name.endsWith('.json'))
+                  .sort();
+                for (const stale of backups.slice(0, Math.max(0, backups.length - 20))) {
+                  fs.unlinkSync(path.join(backupDirectory, stale));
+                }
+              }
+              const serialized = JSON.stringify(record, null, 2) + '\n';
+              const contentHash = createHash('sha256').update(serialized).digest('hex');
+              const temporaryPath = filePath + '.' + process.pid + '.' + randomUUID() + '.tmp';
+              fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
+              fs.renameSync(temporaryPath, filePath);
+              const backupCount = fs.existsSync(backupDirectory)
+                ? fs.readdirSync(backupDirectory).filter(name => name.startsWith(backupPrefix) && name.endsWith('.json')).length
+                : 0;
+              respond(200, { saved: true, zone, status: record.status, contentHash, backupCount });
+              return;
+            }
             const errors = validateCollisionDocument(candidate);
             if (errors.length) {
               respond(400, { error: errors.slice(0, 12).join('; ') });
