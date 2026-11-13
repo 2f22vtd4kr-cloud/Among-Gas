@@ -256,6 +256,46 @@ jobs:
         if: always()
         run: pnpm --filter @workspace/scripts exec tsx renderCollisionQa.ts --candidate
 
+      - name: Upload gameplay visual QA screenshots
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: among-gas-visual-qa
+          path: |
+            ${{ runner.temp }}/among-gas-visual-qa/*.png
+            ${{ runner.temp }}/among-gas-visual-qa/hud-state-matrix.json
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-golden-matrix.png
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-gameplay-scale.png
+            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-frame-metrics.json
+            artifacts/telegram-game/collision-qa-overlay.png
+            artifacts/telegram-game/collision-reference-overlay.png
+            attached_assets/IMG_2907_1783632830477.jpeg
+            artifacts/telegram-game/collision-qa-overlay-webp.png
+            artifacts/telegram-game/collision-shadow-qa-overlay.png
+            artifacts/telegram-game/collision-vision-qa-overlay.png
+            artifacts/telegram-game/collision-qa-tiles/*.png
+            lib/shared/src/collisionData.generated-preview.ts
+            lib/shared/src/collisionDataFine.generated-preview.ts
+          if-no-files-found: warn
+          retention-days: 3
+
+      - name: Run three independently seeded 100-game balance batches
+        run: |
+          set -uo pipefail
+          cohort_status=0
+          for seed in 17001 17002 17003; do
+            echo "::group::Seeded balance cohort $seed"
+            if pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0 --minCrewWinRatePct 45 --maxCrewWinRatePct 65 --seed "$seed"; then
+              echo "Cohort $seed passed the 45–65% crew-win band with zero timeouts."
+            else
+              echo "::error::Cohort $seed failed its balance or timeout gate."
+              cohort_status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit "$cohort_status"
+
+
   plan2-soak:
     if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline'
     runs-on: ubuntu-24.04
@@ -304,42 +344,3 @@ jobs:
             cat /tmp/among-gas-soak-api.log
             exit 1
           }
-
-      - name: Upload gameplay visual QA screenshots
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: among-gas-visual-qa
-          path: |
-            ${{ runner.temp }}/among-gas-visual-qa/*.png
-            ${{ runner.temp }}/among-gas-visual-qa/hud-state-matrix.json
-            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-golden-matrix.png
-            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-gameplay-scale.png
-            ${{ runner.temp }}/among-gas-visual-qa/character-atlas-frame-metrics.json
-            artifacts/telegram-game/collision-qa-overlay.png
-            artifacts/telegram-game/collision-reference-overlay.png
-            attached_assets/IMG_2907_1783632830477.jpeg
-            artifacts/telegram-game/collision-qa-overlay-webp.png
-            artifacts/telegram-game/collision-shadow-qa-overlay.png
-            artifacts/telegram-game/collision-vision-qa-overlay.png
-            artifacts/telegram-game/collision-qa-tiles/*.png
-            lib/shared/src/collisionData.generated-preview.ts
-            lib/shared/src/collisionDataFine.generated-preview.ts
-          if-no-files-found: warn
-          retention-days: 3
-
-      - name: Run three independently seeded 100-game balance batches
-        run: |
-          set -uo pipefail
-          cohort_status=0
-          for seed in 17001 17002 17003; do
-            echo "::group::Seeded balance cohort $seed"
-            if pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 6 --concurrency 25 --timeoutMs 300000 --quiet --maxTimeouts 0 --minCrewWinRatePct 45 --maxCrewWinRatePct 65 --seed "$seed"; then
-              echo "Cohort $seed passed the 45–65% crew-win band with zero timeouts."
-            else
-              echo "::error::Cohort $seed failed its balance or timeout gate."
-              cohort_status=1
-            fi
-            echo "::endgroup::"
-          done
-          exit "$cohort_status"
