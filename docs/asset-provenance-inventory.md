@@ -109,3 +109,6 @@
 5. Keep assets with unknown rights out of commercial release until documented permission or an original replacement exists.
 
 **Decision:** inventory is complete by tracked path, size and blob SHA. Rights/creator provenance is not complete; this file deliberately does not mark unknown assets as cleared.
+
+
+**Mainline note (2026-11-13):** This inventory was merged to main by documentation-only PR #144 at `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. The asset set and blob hashes were unchanged by that merge.
