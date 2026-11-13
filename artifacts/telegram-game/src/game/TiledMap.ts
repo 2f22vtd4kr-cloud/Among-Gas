@@ -212,21 +212,21 @@ export class TiledMap {
   }
 
   private evict(visible: ReadonlySet<string>): void {
-    if (this.cache.size <= this.maxResident) return;
+    // Keep only the current priority set, even when it contains fewer tiles
+    // than the budget. Otherwise a previous zoomed-out frame can leave stale
+    // decoded images resident after the camera moves to a single corner tile.
     for (const file of this.cache.keys()) {
-      if (this.cache.size <= this.maxResident) break;
-      if (!visible.has(file)) {
-        const pending = this.pending.get(file);
-        if (pending) {
-          pending.onload = null; pending.onerror = null; pending.src = "";
-          this.pending.delete(file);
-        }
-        const entry = this.cache.get(file);
-        if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
-          entry.onload = null; entry.onerror = null; entry.src = "";
-        }
-        this.cache.delete(file);
+      if (visible.has(file)) continue;
+      const pending = this.pending.get(file);
+      if (pending) {
+        pending.onload = null; pending.onerror = null; pending.src = "";
+        this.pending.delete(file);
       }
+      const entry = this.cache.get(file);
+      if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
+        entry.onload = null; entry.onerror = null; entry.src = "";
+      }
+      this.cache.delete(file);
     }
   }
 }
