@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "zone": "Z04",
+  "status": "not-started",
+  "author": null,
+  "sourceEvidence": [
+    {
+      "sourcePath": "attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png",
+      "sourceSha256": "c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80",
+      "sourceWidth": 1652,
+      "sourceHeight": 952,
+      "sourceRect": [
+        1239,
+        0,
+        1652,
+        317.33333333333337
+      ],
+      "worldTransform": {
+        "scaleX": 1.9515738498789346,
+        "scaleY": 1.9516806722689075,
+        "offsetX": 0,
+        "offsetY": 0
+      }
+    }
+  ],
+  "reviewer": null,
+  "ownerDecision": null,
+  "notes": "Evidence scaffold only. This record stores the original map-art crop and independent X/Y world transform for tracing. No geometry has been author-traced, independently reviewed, or approved. Do not treat this record as a collision disposition or production sign-off.",
+  "updatedAt": null
+}

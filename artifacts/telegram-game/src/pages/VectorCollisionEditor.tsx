@@ -10,6 +10,7 @@ import {
   MAP_AUTHORING_ZONES,
   isMapAuthoringZoneId,
   assignMapAuthoringZonesByCentroid,
+  createDefaultZoneReviewRecord,
   type CollisionDocument,
   type CollisionShape,
   type Point,
@@ -305,6 +306,7 @@ export default function VectorCollisionEditor() {
   const [blocksSight, setBlocksSight] = useState(true);
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
+  const [zoneReviewJson, setZoneReviewJson] = useState("");
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
@@ -1291,6 +1293,73 @@ export default function VectorCollisionEditor() {
     }
   };
 
+  const loadZoneReview = async () => {
+    if (!isMapAuthoringZoneId(zone)) {
+      setStatus("Select one of the 12 registered zones before loading its review record.");
+      return;
+    }
+    setZoneBusy(true);
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone + "/review", {
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        saved?: boolean;
+        record?: unknown;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone review load rejected (" + response.status + ")");
+      const record = result.record ?? createDefaultZoneReviewRecord(zone);
+      setZoneReviewJson(JSON.stringify(record, null, 2));
+      setStatus("Loaded " + zone + " review record · " + (result.saved ? "saved metadata" : "not started") +
+        ". Review identities are self-attested local metadata, not authenticated approvals.");
+    } catch (error) {
+      setStatus("Zone review load failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
+  const saveZoneReview = async () => {
+    if (!isMapAuthoringZoneId(zone)) {
+      setStatus("Select one of the 12 registered zones before saving its review record.");
+      return;
+    }
+    let record: unknown;
+    try {
+      record = JSON.parse(zoneReviewJson);
+    } catch (error) {
+      setStatus("Review record JSON is invalid: " + (error instanceof Error ? error.message : String(error)));
+      return;
+    }
+    setZoneBusy(true);
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/zones/" + zone + "/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
+        body: JSON.stringify(record),
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        status?: string;
+        contentHash?: string;
+        backupCount?: number;
+      };
+      if (!response.ok) throw new Error(result.error || "Zone review save rejected (" + response.status + ")");
+      if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
+        throw new Error("Zone review save did not return a valid SHA-256 digest");
+      }
+      await loadZoneReview();
+      setStatus("Saved " + zone + " review record · " + result.status + " · SHA-256 " +
+        result.contentHash.slice(0, 12) + " · " + (result.backupCount ?? 0) +
+        " retained review backups. Geometry and live gameplay are unchanged.");
+    } catch (error) {
+      setStatus("Zone review save failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
   const restoreLocalDraft = () => {
     if (!localDraft) return;
     replaceDocument(localDraft.document);
@@ -1423,6 +1492,36 @@ export default function VectorCollisionEditor() {
           {saving ? "Saving…" : saved ? "Saved ✓" : "Save candidate"}
         </button>
       </section>
+
+      <details style={{ flex: "0 0 auto", maxHeight: 220, overflowY: "auto", background: "#101c26", borderBottom: "1px solid #334c5e", padding: "6px 10px" }}>
+        <summary style={{ minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#d9e7ee", fontSize: 12, fontWeight: 700 }}>
+          Zone review / owner decision record
+        </summary>
+        <p style={{ margin: "4px 0 8px", color: "#a9bbc7", fontSize: 11, lineHeight: 1.4 }}>
+          Records source-image crop and transform, author, independent reviewer, and design-owner decision separately from geometry. Approval is blocked unless evidence is present and author, reviewer, and owner are distinct. Names are self-attested; this local tool does not authenticate identities.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+          <button type="button" style={buttonStyle()} onClick={() => setZoneReviewJson(JSON.stringify(createDefaultZoneReviewRecord(isMapAuthoringZoneId(zone) ? zone : "Z01"), null, 2))} disabled={zoneBusy}>
+            New review record
+          </button>
+          <button type="button" style={buttonStyle()} onClick={() => void loadZoneReview()} disabled={zoneBusy || !isMapAuthoringZoneId(zone)}>
+            Load review
+          </button>
+          <button type="button" style={buttonStyle()} onClick={() => void saveZoneReview()} disabled={zoneBusy || !isMapAuthoringZoneId(zone) || !zoneReviewJson.trim()}>
+            Save review
+          </button>
+        </div>
+        <textarea
+          aria-label="Zone review record JSON"
+          data-testid="zone-review-record"
+          value={zoneReviewJson}
+          onChange={event => setZoneReviewJson(event.target.value)}
+          spellCheck={false}
+          rows={5}
+          placeholder="Load a zone review record or create a new one, then record source evidence, author, independent review and owner decision."
+          style={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", background: "#0a141c", color: "#d9e7ee", border: "1px solid #536879", borderRadius: 6, padding: 9, font: "11px ui-monospace, SFMono-Regular, monospace", lineHeight: 1.45 }}
+        />
+      </details>
 
       <div style={{ position: "relative", flex: 1, minHeight: 0 }}>
         <canvas

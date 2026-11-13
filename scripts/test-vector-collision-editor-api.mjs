@@ -1,7 +1,38 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
+// The checked-in zone review scaffolds must remain source-backed and explicitly unapproved.
+const repositoryRoot = fs.existsSync(path.join(process.cwd(), "attached_assets"))
+  ? process.cwd()
+  : path.resolve(process.cwd(), "..");
+for (let index = 0; index < 12; index++) {
+  const zone = "Z" + String(index + 1).padStart(2, "0");
+  const reviewPath = path.join(repositoryRoot, "lib/shared/src/collision/collision.zone-" + zone + ".review.v1.json");
+  const record = JSON.parse(fs.readFileSync(reviewPath, "utf8"));
+  assert.equal(record.zone, zone);
+  assert.equal(record.status, "not-started");
+  assert.equal(record.author, null);
+  assert.equal(record.reviewer, null);
+  assert.equal(record.ownerDecision, null);
+  assert.equal(record.sourceEvidence.length, 1);
+  const evidence = record.sourceEvidence[0];
+  const sourcePath = path.resolve(repositoryRoot, evidence.sourcePath);
+  const sourceBytes = fs.readFileSync(sourcePath);
+  assert.equal(createHash("sha256").update(sourceBytes).digest("hex"), evidence.sourceSha256, zone + " source crop hash");
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  const expectedRect = [
+    column * 806 * 1652 / 3224,
+    row * (1858 / 3) * 952 / 1858,
+    (column + 1) * 806 * 1652 / 3224,
+    (row + 1) * (1858 / 3) * 952 / 1858,
+  ];
+  for (let coordinate = 0; coordinate < 4; coordinate++) {
+    assert.ok(Math.abs(evidence.sourceRect[coordinate] - expectedRect[coordinate]) < 1e-8, zone + " source crop coordinate " + coordinate);
+  }
+}
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
@@ -160,6 +191,89 @@ try {
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20");
 
   // Each Z01–Z12 zone has a separate versioned file and independent 20-backup rotation.
+
+  // Review records are separate from geometry and must not allow self-approval.
+  const reviewEndpoint = base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z01/review";
+  const reviewFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.review.v1.json");
+  const reviewBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01-review");
+  fs.rmSync(reviewFilePath, { force: true });
+  fs.rmSync(reviewBackupDirectory, { recursive: true, force: true });
+  const defaultReviewResponse = await fetch(reviewEndpoint, { cache: "no-store" });
+  assert.equal(defaultReviewResponse.status, 200);
+  const defaultReview = await jsonResponse(defaultReviewResponse);
+  assert.equal(defaultReview.saved, false);
+  assert.equal(defaultReview.record.status, "not-started");
+  assert.equal(defaultReview.record.zone, "Z01");
+
+  const reviewRecord = {
+    version: 1,
+    zone: "Z01",
+    status: "approved",
+    author: { name: "Map author", completedAt: "2026-11-13T10:00:00.000Z" },
+    sourceEvidence: [{
+      sourcePath: "attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png",
+      sourceSha256: "c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80",
+      sourceWidth: 1652,
+      sourceHeight: 952,
+      sourceRect: [0, 0, 1652, 952],
+      worldTransform: { scaleX: 3224 / 1652, scaleY: 1858 / 952, offsetX: 0, offsetY: 0 },
+    }],
+    reviewer: {
+      name: "Independent reviewer",
+      reviewedAt: "2026-11-13T11:00:00.000Z",
+      disposition: "accepted",
+      notes: "Source crop and collision semantics reviewed.",
+    },
+    ownerDecision: {
+      name: "Design owner",
+      decidedAt: "2026-11-13T12:00:00.000Z",
+      decision: "approved",
+      notes: "Approved for the candidate review register only.",
+    },
+    notes: "Test fixture only; not a real approval.",
+    updatedAt: null,
+  };
+  const selfApproved = structuredClone(reviewRecord);
+  selfApproved.reviewer.name = selfApproved.author.name;
+  const selfApprovalResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(selfApproved),
+  });
+  assert.equal(selfApprovalResponse.status, 400, "author cannot independently review their own zone");
+  const badSourceHash = structuredClone(reviewRecord);
+  badSourceHash.sourceEvidence[0].sourceSha256 = "b".repeat(64);
+  const badSourceHashResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(badSourceHash),
+  });
+  assert.equal(badSourceHashResponse.status, 400, "source SHA-256 must match bytes in the repository");
+
+  const outOfBoundsTransform = structuredClone(reviewRecord);
+  outOfBoundsTransform.sourceEvidence[0].worldTransform.offsetX = 5000;
+  const outOfBoundsTransformResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(outOfBoundsTransform),
+  });
+  assert.equal(outOfBoundsTransformResponse.status, 400, "source transform must map the crop inside the canonical world");
+
+  const validReviewResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(reviewRecord),
+  });
+  assert.equal(validReviewResponse.status, 200, "a fully evidenced, independently reviewed owner decision can be recorded");
+  const validReview = await jsonResponse(validReviewResponse);
+  assert.equal(validReview.status, "approved");
+  assert.match(validReview.contentHash, /^[a-f0-9]{64}$/);
+  assert.ok(fs.existsSync(reviewFilePath), "review metadata is stored separately from collision geometry");
+  const reloadedReview = await jsonResponse(await fetch(reviewEndpoint, { cache: "no-store" }));
+  assert.equal(reloadedReview.record.status, "approved");
+  assert.equal(typeof reloadedReview.record.updatedAt, "string");
+  assert.ok(Number.isFinite(Date.parse(reloadedReview.record.updatedAt)), "server stamps the saved review record");
+  const rejectedWithoutReason = structuredClone(reviewRecord);
+  rejectedWithoutReason.status = "rejected";
+  rejectedWithoutReason.reviewer.disposition = "accepted";
+  rejectedWithoutReason.ownerDecision.decision = "deferred";
+  const invalidRejectedResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(rejectedWithoutReason),
+  });
+  assert.equal(invalidRejectedResponse.status, 400, "rejected status needs an explicit reviewer change request or owner rejection");
+
   const initialZoneResponse = await fetch(zoneEndpoint, { cache: "no-store" });
   assert.equal(initialZoneResponse.status, 200);
   const initialZone = await jsonResponse(initialZoneResponse);

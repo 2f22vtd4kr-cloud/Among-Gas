@@ -42,6 +42,39 @@ All 12 zones are currently **not traced / not reviewed** in this register. The 3
 7. Author name/date and independent reviewer name/date, each with a written disposition. The author cannot self-approve.
 8. Owner decision for any ambiguity affecting access, gameplay semantics, or a visible object whose collision/occlusion role is not evident.
 
+## Initial source-crop scaffolds
+
+Twelve `collision.zone-Z01.review.v1.json` through `collision.zone-Z12.review.v1.json` records are checked in beside the candidate collision document. Each begins at `not-started` with:
+
+- the recovered original 1652×952 map-art source path and verified SHA-256;
+- the exact native-image crop rectangle for that zone's canonical world rectangle; and
+- independent X/Y source-to-world scales (`3224/1652` and `1858/952`) with zero offsets.
+
+These are provenance/crop scaffolds only. They contain no author, reviewer or owner identity, no traced boundary, no geometry disposition and no approval. The zone editor loads them as not-started records so a tracer can work from the correct source crop without treating centroid ownership as authored geometry.
+## Per-zone review record workflow
+
+The dev-only vector editor exposes a separate review record at
+`/__vector-collision-api/zones/Z01/review` (replace Z01 with the selected zone).
+Review records are stored separately from collision geometry, have independent
+20-version backup rotation, and include:
+
+- native source path, SHA-256, dimensions, crop rectangle and exact world transform;
+- author name and completion date;
+- independent reviewer name/date, disposition and notes; and
+- design-owner name/date and explicit approve/reject/defer decision.
+
+The API rejects a submitted record without source evidence, rejects an author
+reviewing their own work, requires a reviewer before review completion, and
+requires an accepted independent review plus a distinct design-owner approval
+before the status can be `approved`. A rejected record must contain an explicit
+reviewer change request or owner rejection.
+
+**Identity limitation:** this is a local, self-attested audit record, not an
+identity provider or cryptographic signature. It does not prove that the names
+entered correspond to real reviewers or the design owner. The record must be
+corroborated through the project's external review/approval process before any
+geometry is considered production-eligible. An `approved` record is metadata
+only and never changes runtime geometry or authorizes a cut-over.
 ## Cross-zone acceptance
 
 - Test every adjacent seam for continuous walls, continuous walkable lanes and no duplicate/gapped contours.
