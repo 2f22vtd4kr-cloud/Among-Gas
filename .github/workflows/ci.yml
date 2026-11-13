@@ -47,6 +47,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Validate local server soak harness syntax
+        run: node --check scripts/test-server-soak.mjs
+      - name: Test partial-auth socket cleanup in the soak harness
+        run: node scripts/test-server-soak-sockets.mjs
 
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform
@@ -292,3 +296,55 @@ jobs:
             echo "::endgroup::"
           done
           exit "$cohort_status"
+
+
+  plan2-soak:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.5
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Generate and verify candidate vector collision document
+        run: pnpm --filter @workspace/scripts run test:production-world
+      - name: Build API server
+        run: pnpm --filter @workspace/api-server run build
+      - name: Run 20-minute local API and WebSocket soak
+        env:
+          PORT: 8081
+          WS_URL: ws://127.0.0.1:8081/api/ws
+          SOAK_DURATION_MS: 1200000
+        run: |
+          set -euo pipefail
+          PORT=8081 NODE_ENV=development node --enable-source-maps artifacts/api-server/dist/index.mjs >/tmp/among-gas-soak-api.log 2>&1 &
+          api_pid=$!
+          cleanup() {
+            kill "$api_pid" 2>/dev/null || true
+            wait "$api_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for attempt in $(seq 1 60); do
+            if curl -fsS "http://127.0.0.1:8081/api/healthz" >/dev/null; then break; fi
+            if ! kill -0 "$api_pid" 2>/dev/null; then cat /tmp/among-gas-soak-api.log; exit 1; fi
+            sleep 1
+          done
+          curl -fsS "http://127.0.0.1:8081/api/healthz" >/dev/null || {
+            cat /tmp/among-gas-soak-api.log
+            exit 1
+          }
+          API_PID="$api_pid" node scripts/test-server-soak.mjs || {
+            cat /tmp/among-gas-soak-api.log
+            exit 1
+          }
