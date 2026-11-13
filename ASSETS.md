@@ -81,6 +81,10 @@ Removing this specific bundle does not automatically clear every other asset in 
 
 Generated character atlas output is derived from the repository's authored Among Gas character source and is covered by the existing atlas tests; that is not a licence for unrelated source art.
 
+## Retained attached-assets inventory
+
+The complete tracked-file inventory for `attached_assets/` is maintained in [docs/asset-provenance-inventory.md](docs/asset-provenance-inventory.md). It records all 66 paths, Git blob hashes, byte sizes, eight duplicate groups, known source/QA references and unresolved creator/licence status. The inventory is complete by repository path and hash, **not** by rights clearance. Unknown provenance must remain a release blocker; no image is cleared by being present in the repository or by being user-provided.
+
 ## Original / generated project assets
 
 | Asset family | Status | Notes |

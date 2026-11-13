@@ -80,3 +80,41 @@ This branch implements the safe tooling and lifecycle/test gaps that can be addr
 8. Obtain explicit owner clearance for the recovery restriction before any Replit/Vercel or target-device integration. Issue #90 remains controlling until then.
 
 **Decision:** this branch advances the map refinement tooling and runtime resource management, but Plan v2 is not complete and the game is not release-ready.
+
+---
+
+## Current-main reconciliation — 2026-11-13
+
+This addendum supersedes stale status rows above where later merged PRs changed the repository. It does not waive any map-design or target-device gate.
+
+### Updated implementation state
+
+| Area | Verified current state | Remaining acceptance |
+|---|---|---|
+| Mainline baseline | Main is `925a465458e8462cef8b6112daff90a0edc239b3`. Main CI run [43358830692](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43358830692) passed all 45 verify steps. Its three 100-game cohorts were 58%, 66% and 58% crew wins, zero timeouts, with 0.9/1.0/1.0 average kills. | The mainline baseline is green; it does not verify the separate PR #138 vector candidate. |
+| Tiled map | Runtime now uses the 1612×929 overview and 28 viewport-detail tiles; CI has tile lifecycle, retry/fallback, seam and mobile/desktop capture coverage. | The optional sharpened set is not neural super-resolution. No model-generated detail candidate or owner-approved artwork switch exists. |
+| Minigames | All 11 task minigames are independent modules under `components/minigames/`, behind a registry. The registry test and CI browser gallery mount all 11. | Continue per-game functional/visual review; the previous statement that the minigames remain a single monolith is stale. |
+| GameMap and input/render refactors | Camera, keyboard lifecycle, map base layer, task/sabotage markers, HUD actions, sprite projection/rendering and vision overlay have been incrementally extracted across merged PRs. | `GameMap.tsx` remains a large module (roughly 2.7k lines at the last measured baseline). A complete behavior-preserving scene/render decomposition remains open. |
+| HUD/editor | The persistent action bar and six-state HUD matrix exist. The editor's touch/pinch browser acceptance was merged, including a 20px-offset hit inside the specified 48px target. | Chromium touch is not physical iOS/Android/Telegram hardware acceptance. |
+| Multiplayer meetings/reports | Main CI exercises real server-backed multi-socket kill/body-report, out-of-range report rejection, emergency call, discussion, early-vote rejection, voting/ejection, sabotage authorization, reconnect and a solo human-plus-four-bots contextual meeting reply. | Reconnect during an active meeting/vote and a complete human-versus-bot match playtest remain separate acceptance items. |
+| Audio and legacy artwork | PR #142 replaced nine upstream-clone-identical runtime sound files with original procedural Web Audio while preserving the public SFX API. PR #137 removed uncleared legacy artwork from active runtime use; PR #139 removed unreferenced third-party HUD reference screenshots. | Complete retained-asset provenance classification for the remaining attached/source images and any other third-party assets before commercial release. |
+| Source provenance | The missing historical map geometry manifest is restored in this documentation PR and now includes a current-main delta. | Verify all retained source assets and reproducible transforms; a manifest does not approve collision contours. |
+| Sprite QA | CI emits the 18-colour × 9-pose atlas matrix, gameplay-scale matrix and frame metrics. | Review all frames against authored source/anchors and record explicit golden-image acceptance; a generated matrix alone is not owner approval. |
+
+### Current vector-collision candidate — PR #138
+
+PR #138 remains a separate draft candidate and must not be described as merged or production-approved. Its current generated document contains 370 movement-only shapes (14 closed and 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. It has five coarse sectors A–E, not the Plan's 12 author/reviewer zones.
+
+The earlier candidate exact-head run failed seed 17002 at 70% crew wins (other seeds 62% and 60%), despite zero timeouts. Tightening the moving-target route refresh alone did not fix it. The latest follow-up aligns impostor target observation with the server's authoritative interaction sight grid, restores the accepted 30-second sabotage cadence, corrects the browser camera fixture, and removes CI's push-only generated-file writeback. The new exact-head run is still in progress; no balance pass is claimed until all three unchanged 100-game cohorts finish.
+
+The candidate must remain unmerged until:
+- exact-head CI and all three balance cohorts pass without changing acceptance limits;
+- the 12-zone source tracing and independent review are complete;
+- C0/C20/C27/C38/C56 dispositions and all gameplay-anchor routes have explicit design-owner/reviewer decisions;
+- parking gaps/markings, vehicle clearance and statue/planter contours are source-backed and reviewed;
+- movement, sight and shadow semantics are independently authored and tested; and
+- client/server/bot parity and visual evidence are reviewed on the same candidate head.
+
+### Still blocked by the active recovery restrictions
+
+Issue #90 remains controlling: no Replit/Vercel access, publishing, deployment, production mutation or real external investigation is authorized during repository recovery. CI's local production-serving checks are not a deployment. Physical-device acceptance, a 20-minute soak, external target-platform verification and the final release dossier therefore remain uncompleted. Do not mark Plan v2 complete or release-ready until the owner explicitly lifts the restriction and the remaining geometry/design decisions are recorded.
