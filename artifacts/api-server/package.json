@@ -10,7 +10,7 @@
     "start:dev": "NODE_ENV=development node --enable-source-maps ./dist/index.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "simulate": "LOG_LEVEL=silent tsx src/sim/cli.ts",
-    "test:gameplay": "tsx src/bot/test-discussion-cadence.ts && tsx src/ws/test-meeting-flow.ts && tsx src/ws/test-solo-flow.ts && tsx src/sim/test-seeded-random.ts && tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/bot/test-groq-dialogue.ts && tsx src/bot/test-ai-voting.ts && tsx src/bot/test-strategic-policy.ts && tsx src/bot/test-strategic-dispatch.ts && tsx src/bot/test-internal-dialogue.ts && tsx src/bot/test-navigation.ts && tsx src/bot/test-task-reachability.ts && tsx src/sim/test-simulation-collision.ts && tsx src/test-remote-player-delta.ts",
+    "test:gameplay": "tsx src/bot/test-discussion-cadence.ts && tsx src/ws/test-meeting-flow.ts && tsx src/ws/test-solo-flow.ts && tsx src/sim/test-seeded-random.ts && tsx src/test_gameplay_invariants.ts && tsx src/bot/test-crewmate-bot.ts && tsx src/bot/test-groq-dialogue.ts && tsx src/bot/test-bot-dialogue-observation-log.ts && tsx src/bot/test-ai-voting.ts && tsx src/bot/test-strategic-policy.ts && tsx src/bot/test-strategic-dispatch.ts && tsx src/bot/test-internal-dialogue.ts && tsx src/bot/test-navigation.ts && tsx src/bot/test-task-reachability.ts && tsx src/sim/test-simulation-collision.ts && tsx src/test-remote-player-delta.ts",
     "test:remote-delta": "tsx src/test-remote-player-delta.ts",
     "test:groq": "tsx src/bot/test-groq-dialogue.ts"
   },
