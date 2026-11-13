@@ -1397,8 +1397,10 @@ try {
     y: dragBox.y + dragBox.height / 2,
     id: 1,
   };
+  // The action cluster is 264px wide and remains fully inside the 390px
+  // gameplay viewport. 64% is reachable; 68% would be clamped by its safe bounds.
   const touchEnd = {
-    x: previewBox.x + previewBox.width * 0.68,
+    x: previewBox.x + previewBox.width * 0.64,
     y: previewBox.y + previewBox.height * 0.62,
     id: 1,
   };
@@ -1418,7 +1420,7 @@ try {
   await layoutSettings.getByTestId('control-layout-save').click();
   let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.64) < 3,
     'dragged action bar X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
     'dragged action bar Y position must be applied to the gameplay HUD');
@@ -1435,7 +1437,7 @@ try {
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
   const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
-  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.64)) < 3,
     'saved action bar X position must hydrate after reload');
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
     'saved action bar Y position must hydrate after reload');
