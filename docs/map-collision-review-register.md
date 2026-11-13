@@ -16,10 +16,10 @@ This register records what can be established from current repository evidence w
 
 ## Evidence sources
 
-- Original custom map artwork: [recovered 1652 × 952 PNG](https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/recovery/map-connectivity-regressions/attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png), SHA-256 c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80.
-- Red-line collision reference: [1359 × 784 JPEG](https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/recovery/map-connectivity-regressions/attached_assets/IMG_2907_1783632830477.jpeg), Git blob 4e6018afca7dd8eb27a8b460c3e51c6b58bc33b2.
-- Detailed five-region review: [source-art boundary review register](https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/recovery/map-connectivity-regressions/docs/map-connectivity-island-review.md).
-- Source inventory and coordinate transform: [map geometry source manifest](https://github.com/2f22vtd4kr-cloud/Among-Gas/blob/recovery/map-connectivity-regressions/docs/map-geometry-source-manifest.md).
+- Original custom map artwork: [recovered 1652 × 952 PNG](../attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png), SHA-256 c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80.
+- Red-line collision reference: [1359 × 784 JPEG](../attached_assets/IMG_2907_1783632830477.jpeg), Git blob 4e6018afca7dd8eb27a8b460c3e51c6b58bc33b2.
+- Detailed five-region review: [source-art boundary review register](map-connectivity-island-review.md).
+- Source inventory and coordinate transform: [map geometry source manifest](map-geometry-source-manifest.md).
 
 The recovered review compared each listed boundary with both source references. The labels below describe visible source-art features; they do not establish whether a room or enclosure should be playable.
 
@@ -35,7 +35,7 @@ The recovered review compared each listed boundary with both source references. 
 
 The C0/C20/C27/C38/C56 identifiers are retained from the review register as diagnostic labels. They are scan-order component IDs, not runtime identifiers. The table does not treat any of these areas as approved inaccessible or approved accessible spaces.
 
-The five sector approach targets A–E are a separate acceptance set. They must continue to have full-player-footprint, spawn-connected routes; they are not the same thing as the five detached candidate pockets above.
+The 12-zone authoring/review partition is tracked in [map-zone-review-register.md](map-zone-review-register.md); all 12 zones are currently untraced and unreviewed. The five sector approach targets A–E are a separate acceptance set. They must continue to have full-player-footprint, spawn-connected routes; they are not the same thing as the five detached candidate pockets above.
 
 ## Remaining classification questions
 
