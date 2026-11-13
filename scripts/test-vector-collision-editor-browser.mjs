@@ -186,6 +186,14 @@ try {
   assert.equal(await page.getByLabel("Map zone").inputValue(), "Z02",
     "the active zone selector follows the selected shape's zone");
 
+  const shapeCountBeforeMigration = Number(await canvas.getAttribute("data-shape-count"));
+  await page.getByTestId("assign-zones-by-centroid").click();
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "Z01",
+    "bulk metadata migration returns the authoring selector to the first canonical zone");
+  assert.equal(Number(await canvas.getAttribute("data-shape-count")), shapeCountBeforeMigration,
+    "centroid zone migration must not add or remove geometry");
+  await page.getByText(/Assigned .* shapes to primary zones by ground centroid/).waitFor();
+
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
   await page.getByRole("button", { name: "Analyze candidate" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-analysis-task-count") === "11");
