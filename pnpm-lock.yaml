@@ -79,6 +79,7 @@ overrides:
   source-map-js: 1.2.2
   postcss-selector-parser: 6.1.5
   vite: 7.3.7
+  electron-to-chromium: 1.5.387
   esbuild>@esbuild/darwin-arm64: '-'
   esbuild>@esbuild/darwin-x64: '-'
   esbuild>@esbuild/freebsd-arm64: '-'
