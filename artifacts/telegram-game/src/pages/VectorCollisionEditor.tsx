@@ -9,6 +9,7 @@ import {
   validateCollisionDocument,
   MAP_AUTHORING_ZONES,
   isMapAuthoringZoneId,
+  assignMapAuthoringZonesByCentroid,
   type CollisionDocument,
   type CollisionShape,
   type Point,
@@ -1183,6 +1184,23 @@ export default function VectorCollisionEditor() {
     }
   };
 
+  const assignZonesByCentroid = () => {
+    const current = cloneDocument(docRef.current);
+    const next = assignMapAuthoringZonesByCentroid(current);
+    const counts = new Map<string, number>();
+    for (const shape of next.shapes) {
+      const owner = shape.zone ?? "unassigned";
+      counts.set(owner, (counts.get(owner) ?? 0) + 1);
+    }
+    const assigned = next.shapes.length - (counts.get("unassigned") ?? 0);
+    replaceDocument(next);
+    setZone("Z01");
+    setStatus(
+      "Assigned " + assigned + " of " + next.shapes.length +
+      " shapes to primary zones by ground centroid. Geometry is unchanged; inspect each zone before review.",
+    );
+  };
+
   const saveZone = async () => {
     if (!isMapAuthoringZoneId(zone)) {
       setStatus("Select one of the 12 registered authoring zones (Z01–Z12) before saving a zone candidate.");
@@ -1394,6 +1412,7 @@ export default function VectorCollisionEditor() {
             </option>
           ))}
         </select>
+        <button type="button" data-testid="assign-zones-by-centroid" style={buttonStyle()} onClick={assignZonesByCentroid} disabled={zoneBusy || saving || !document.shapes.length}>Assign zones by centroid</button>
         <button type="button" style={buttonStyle()} onClick={() => void loadZone()} disabled={zoneBusy || saving || zone === "unassigned"}>Load zone</button>
         <button type="button" style={buttonStyle()} onClick={() => void saveZone()} disabled={zoneBusy || saving || zone === "unassigned" || !document.shapes.some(shape => shape.zone === zone)}>Save zone</button>
         <button type="button" style={buttonStyle()} onClick={exportDocument}>Export JSON</button>
