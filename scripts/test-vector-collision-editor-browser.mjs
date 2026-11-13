@@ -181,10 +181,18 @@ try {
   await touchTap(bounds.x + 220, bounds.y + 95);
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
-  await selectedZone.selectOption("B");
-  assert.equal(await selectedZone.inputValue(), "B");
-  assert.equal(await page.getByLabel("Map zone").inputValue(), "B",
+  await selectedZone.selectOption("Z02");
+  assert.equal(await selectedZone.inputValue(), "Z02");
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "Z02",
     "the active zone selector follows the selected shape's zone");
+
+  const shapeCountBeforeMigration = Number(await canvas.getAttribute("data-shape-count"));
+  await page.getByTestId("assign-zones-by-centroid").click();
+  assert.equal(await page.getByLabel("Map zone").inputValue(), "Z01",
+    "bulk metadata migration returns the authoring selector to the first canonical zone");
+  assert.equal(Number(await canvas.getAttribute("data-shape-count")), shapeCountBeforeMigration,
+    "centroid zone migration must not add or remove geometry");
+  await page.getByText(/Assigned .* shapes to primary zones by ground centroid/).waitFor();
 
   // Candidate analyzer uses the shared task/vent targets and production player footprint.
   await page.getByRole("button", { name: "Analyze candidate" }).click();

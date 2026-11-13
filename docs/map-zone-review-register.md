@@ -1,7 +1,7 @@
 # Plan 2 — 12-zone map authoring and review register
 
 **Baseline:** main `925a465458e8462cef8b6112daff90a0edc239b3`; world 3224×1858.  
-**Purpose:** establish the non-overlapping 12-zone authoring/review partition required by Master Plan Phase 2. This is a work-allocation and evidence register only. It does not add, infer, approve or change any collision, vision or shadow geometry.
+**Purpose:** establish the non-overlapping 12-zone authoring/review partition required by Master Plan Phase 2. This is a work-allocation and evidence register only. It does not add, infer, approve or change any collision, vision or shadow geometry. The dev-only vector editor/API now uses this same Z01–Z12 partition, enforces primary-owner centroid assignment and stores each zone separately with its own 20-backup rotation. This is authoring infrastructure only; no zone is thereby traced, independently reviewed or owner-approved.
 
 ## Partition contract
 

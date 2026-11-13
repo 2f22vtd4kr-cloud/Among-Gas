@@ -6,10 +6,12 @@ const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
-const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-A.v1.json");
-const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-A");
+const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.v1.json");
+const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01");
+const finalZoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z12.v1.json");
+const finalZoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z12");
 const endpoint = base.replace(/\/$/, "") + "/__vector-collision-api/document";
-const zoneEndpoint = base.replace(/\/$/, "") + "/__vector-collision-api/zones/A";
+const zoneEndpoint = base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z01";
 const origin = new URL(base).origin;
 const headers = {
   "Content-Type": "application/json",
@@ -29,7 +31,7 @@ const validDocument = {
       blocksMove: true,
       blocksSight: true,
       label: "API test wall",
-      zone: "A",
+      zone: "Z01",
     },
     {
       id: "api-test-bench",
@@ -38,7 +40,7 @@ const validDocument = {
       blocksMove: true,
       blocksSight: false,
       label: "Low bench",
-      zone: "A",
+      zone: "Z01",
     },
   ],
 };
@@ -68,6 +70,8 @@ try {
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(finalZoneFilePath, { force: true });
+  fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
 
   const initialResponse = await fetch(endpoint, { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
@@ -155,17 +159,62 @@ try {
   assert.equal(reloaded.saved, true);
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20");
 
-  // Each A–E zone has a separate versioned file and independent 20-backup rotation.
+  // Each Z01–Z12 zone has a separate versioned file and independent 20-backup rotation.
   const initialZoneResponse = await fetch(zoneEndpoint, { cache: "no-store" });
   assert.equal(initialZoneResponse.status, 200);
   const initialZone = await jsonResponse(initialZoneResponse);
   assert.equal(initialZone.saved, false);
   assert.deepEqual(initialZone.document.shapes, []);
 
+  // Every canonical authoring zone has an isolated GET endpoint and starts empty.
+  for (const zoneId of Array.from({ length: 12 }, (_, index) => "Z" + String(index + 1).padStart(2, "0"))) {
+    const response = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/" + zoneId, { cache: "no-store" });
+    assert.equal(response.status, 200, zoneId + " endpoint is registered");
+    const result = await jsonResponse(response);
+    assert.equal(result.saved, false, zoneId + " begins without an authored candidate");
+  }
+
+  for (const invalidZoneId of ["A", "Z00", "Z13"]) {
+    const response = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/" + invalidZoneId, { cache: "no-store" });
+    assert.equal(response.status, 404, invalidZoneId + " is not a registered authoring zone");
+  }
+
   const mixedZone = structuredClone(validDocument);
-  mixedZone.shapes[1].zone = "B";
+  mixedZone.shapes[1].zone = "Z02";
   const mixedZoneResponse = await postZone(JSON.stringify(mixedZone));
   assert.equal(mixedZoneResponse.status, 400, "a zone file cannot contain shapes assigned to another zone");
+
+  const wrongPrimaryZone = structuredClone(validDocument);
+  wrongPrimaryZone.shapes[0].points = [[850, 100], [900, 100]];
+  const wrongPrimaryResponse = await postZone(JSON.stringify(wrongPrimaryZone));
+  assert.equal(wrongPrimaryResponse.status, 400, "a shape centroid must belong to its single primary zone");
+
+  const boundaryOwner = structuredClone(validDocument);
+  boundaryOwner.shapes[0].points = [[806, 100], [806, 200]];
+  const boundaryResponse = await postZone(JSON.stringify(boundaryOwner));
+  assert.equal(boundaryResponse.status, 400, "half-open zone boundaries assign x=806 to Z02, not Z01");
+
+  const finalEdgeDocument = {
+    version: 1,
+    mapW: 3224,
+    mapH: 1858,
+    shapes: [{
+      id: "south-east-boundary-wall",
+      points: [[3224, 1800], [3224, 1858]],
+      closed: false,
+      blocksMove: true,
+      blocksSight: true,
+      label: "Final east/south boundary",
+      zone: "Z12",
+    }],
+  };
+  const finalEdgeSave = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z12", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(finalEdgeDocument),
+  });
+  assert.equal(finalEdgeSave.status, 200, "the final east and south map edges are included in Z12");
+  assert.ok(fs.existsSync(finalZoneFilePath), "Z12 writes its own independent candidate file");
 
   const firstZoneSave = await postZone(JSON.stringify(validDocument));
   assert.equal(firstZoneSave.status, 200, "a valid single-zone candidate can be saved");
@@ -176,7 +225,7 @@ try {
   assert.ok(fs.existsSync(zoneFilePath), "zone save writes a separate candidate file");
 
   const modifiedZone = structuredClone(validDocument);
-  modifiedZone.shapes[0].label = "Zone A revised wall";
+  modifiedZone.shapes[0].label = "Zone Z01 revised wall";
   const secondZoneSave = await postZone(JSON.stringify(modifiedZone));
   assert.equal(secondZoneSave.status, 200);
   const secondZoneResult = await jsonResponse(secondZoneSave);
@@ -185,18 +234,18 @@ try {
 
   for (let index = 0; index < 21; index++) {
     const rotating = structuredClone(modifiedZone);
-    rotating.shapes[0].label = "Zone A rotation " + index;
+    rotating.shapes[0].label = "Zone Z01 rotation " + index;
     const response = await postZone(JSON.stringify(rotating));
     assert.equal(response.status, 200, "zone backup rotation " + index + " succeeds");
   }
-  const zoneBackups = fs.readdirSync(zoneBackupDirectory).filter(name => name.startsWith("collision.zone-A.v1.") && name.endsWith(".json"));
+  const zoneBackups = fs.readdirSync(zoneBackupDirectory).filter(name => name.startsWith("collision.zone-Z01.v1.") && name.endsWith(".json"));
   assert.equal(zoneBackups.length, 20, "each zone independently retains only its newest 20 versions");
 
   const zoneReloadResponse = await fetch(zoneEndpoint, { cache: "no-store" });
   assert.equal(zoneReloadResponse.status, 200);
   const zoneReload = await jsonResponse(zoneReloadResponse);
   assert.equal(zoneReload.saved, true);
-  assert.equal(zoneReload.document.shapes[0].label, "Zone A rotation 20");
+  assert.equal(zoneReload.document.shapes[0].label, "Zone Z01 rotation 20");
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20",
     "saving a zone must never overwrite the full candidate file");
   console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global and per-zone candidate versioning");
@@ -205,4 +254,6 @@ try {
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(finalZoneFilePath, { force: true });
+  fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
 }

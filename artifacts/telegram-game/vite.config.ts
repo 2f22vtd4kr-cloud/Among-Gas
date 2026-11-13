@@ -8,6 +8,7 @@ import { defineConfig, type Plugin } from 'vite';
 import runtimeErrorOverlay from '@replit/vite-plugin-runtime-error-modal';
 import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData';
 import { validateCollisionDocument } from '../../lib/shared/src/collision/vectorCollision';
+import { isMapAuthoringZoneId, validateMapAuthoringZoneDocument } from '../../lib/shared/src/collision/mapZones';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Dev-only API for the in-app Collision Editor (/collision-editor).
@@ -58,8 +59,16 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
         const route = (req.url || '/').split('?')[0];
-        const zoneMatch = route.match(/^\/zones\/([A-E])$/);
-        const zone = zoneMatch?.[1] ?? null;
+        const zoneMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))$/);
+        const zoneCandidate = zoneMatch?.[1] ?? null;
+        const zone = isMapAuthoringZoneId(zoneCandidate) ? zoneCandidate : null;
+        if (route.startsWith('/zones/') && zone === null) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ error: 'Unknown authoring zone; expected Z01–Z12' }));
+          return;
+        }
         if (route !== '/document' && zone === null) {
           next();
           return;
@@ -164,9 +173,15 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               respond(400, { error: 'Refusing to save an empty document; author and review real map contours first' });
               return;
             }
-            if (zone && (document.shapes as Array<{ zone?: string }>).some(shape => shape.zone !== zone)) {
-              respond(400, { error: 'Zone ' + zone + ' saves may contain only shapes explicitly assigned to that zone' });
-              return;
+            if (zone) {
+              const zoneErrors = validateMapAuthoringZoneDocument(
+                document as Parameters<typeof validateMapAuthoringZoneDocument>[0],
+                zone,
+              );
+              if (zoneErrors.length) {
+                respond(400, { error: zoneErrors.slice(0, 12).join('; ') });
+                return;
+              }
             }
             if (document.shapes.length > 1000) {
               respond(400, { error: 'Candidate document may contain at most 1000 shapes' });
