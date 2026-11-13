@@ -1027,10 +1027,12 @@ export default function GameMap() {
     // test must never report a camera transform from the real lobby spawn while
     // believing it is exercising the isolated west-room movement fixture.
     const cameraFixtureEnabled = cameraDebugEnabled;
-    // Camera smoke tests use a collision-checked interior start so map-edge
-    // camera clamping and nearby props cannot masquerade as follow regressions.
+    // Camera smoke tests use the east generator approach aisle, whose full
+    // player-footprint route is independently exercised in both directions.
+    // This keeps the held-pointer fixture unobstructed long enough to measure
+    // camera follow rather than accidentally measuring a nearby wall collision.
     if (cameraFixtureEnabled) {
-      const fixture = { x: 510, y: 1069 };
+      const fixture = { x: 2820, y: 900 };
       if (!isPlayerPositionWalkable(taskInteractionGrid, fixture.x, fixture.y)) {
         throw new Error('Camera fixture position is not walkable in the production vector collision world');
       }
