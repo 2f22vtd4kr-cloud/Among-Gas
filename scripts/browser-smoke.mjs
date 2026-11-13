@@ -785,6 +785,18 @@ try {
 
     const minigameDialog = page.getByTestId('minigame-shell');
     await minigameDialog.waitFor({ state: 'visible', timeout: 5_000 });
+    const undersizedTouchTargets = await minigameDialog.locator('button').evaluateAll(buttons =>
+      buttons.map(button => {
+        const rect = button.getBoundingClientRect();
+        return {
+          label: button.getAttribute('aria-label') || button.textContent?.trim() || button.dataset.testid || 'unlabelled',
+          width: Math.round(rect.width * 10) / 10,
+          height: Math.round(rect.height * 10) / 10,
+        };
+      }).filter(target => target.width < 48 || target.height < 48),
+    );
+    assert.deepEqual(undersizedTouchTargets, [],
+      `task ${taskId} controls must all provide at least 48×48 CSS px touch targets`);
     const dialogText = await minigameDialog.innerText();
     assert.ok(
       dialogText.includes(englishName) || dialogText.includes(russianName),

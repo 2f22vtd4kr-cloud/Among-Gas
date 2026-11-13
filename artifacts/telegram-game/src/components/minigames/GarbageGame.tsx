@@ -59,7 +59,7 @@ export function GarbageGame({ onComplete }: MinigameProps) {
             onLostPointerCapture={() => setDragging(false)}
             aria-label={en ? 'Drag garbage lever down' : 'Потяните рычаг мусора вниз'}
             style={{ position: 'absolute', left: '50%', top: `${(lever - 8) / 84 * 100}%`,
-              transform: 'translate(-50%,-50%)', width: 48, height: 34, borderRadius: 8,
+              transform: 'translate(-50%,-50%)', width: 48, height: 48, borderRadius: 8,
               background: dragging ? '#e5b34e' : '#986a2d', border: '2px solid #f3d18b',
               boxShadow: '0 3px 0 #412c15', touchAction: 'none', cursor: 'grab', color: '#fff', fontWeight: 950 }}>
             ↕

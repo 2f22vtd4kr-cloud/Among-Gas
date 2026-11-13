@@ -55,7 +55,7 @@ export function AlignEngineGame({ onComplete }: MinigameProps) {
           onLostPointerCapture={() => setDragging(false)}
           aria-label={en ? 'Drag engine alignment lever to target' : 'Перетащите рычаг выравнивания двигателя к цели'}
           style={{ position: 'absolute', left: `${slider}%`, top: '50%', transform: 'translate(-50%,-50%)',
-            width: 42, height: 44, borderRadius: 8, border: '2px solid #d7ffe6',
+            width: 48, height: 48, borderRadius: 8, border: '2px solid #d7ffe6',
             background: dragging ? '#3ecb7e' : '#248b55', color: '#fff', fontWeight: 950,
             boxShadow: '0 3px 0 #0b3e24', touchAction: 'none' }}>↔</button>
       </div>
