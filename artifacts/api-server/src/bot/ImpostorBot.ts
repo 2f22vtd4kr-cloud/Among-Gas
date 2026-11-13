@@ -368,7 +368,12 @@ export class ImpostorBot extends BotAgent {
     // An impostor knows their allies, but cannot track crewmates through walls
     // or across the map. The observation is bounded by the actual impostor
     // vision radius and the same fine-grid LOS geometry used by gameplay.
-    const sightOriginBlocked = this.isVisionPointBlocked(self);
+    // Target selection must use the same sight contract as the server's
+    // kill validator. The client fog/shadow mask is a presentation layer and
+    // may intentionally filter low props differently; using it here can make
+    // bots see a target that the server cannot legally kill (or miss one that
+    // is visible under the authoritative interaction sight grid).
+    const sightOriginBlocked = this.isSightPointBlocked(self);
     const observations = observeVisiblePlayers(
       self.slot,
       self.x,
@@ -385,8 +390,8 @@ export class ImpostorBot extends BotAgent {
       IMPOSTOR_VISION_RADIUS_PX,
       (x, y) => {
         const target = { x, y };
-        const targetBlocked = this.isVisionPointBlocked(target);
-        const visible = this.hasVisionLineOfSightToPoint(self, target);
+        const targetBlocked = this.isSightPointBlocked(target);
+        const visible = this.hasLineOfSightToPoint(self, target);
         this._simulationDiagnostics.losCandidateChecks++;
         if (sightOriginBlocked) this._simulationDiagnostics.losOriginBlockedCandidates++;
         if (targetBlocked) this._simulationDiagnostics.losTargetBlockedCandidates++;
