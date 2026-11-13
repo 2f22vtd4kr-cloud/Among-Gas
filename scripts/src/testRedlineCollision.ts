@@ -14,6 +14,7 @@ import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 import { SABOTAGE_DEFS, SABOTAGE_INTERACTION_RANGE_PX } from "@workspace/shared/sabotage";
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from "@workspace/shared/adminTable";
+import { MAP_AUTHORING_ZONES } from "@workspace/shared/collision";
 
 const document = getProductionCollisionDocument();
 const world = getProductionCollisionWorld();
@@ -27,8 +28,12 @@ assert.ok(world.isPlayerSpawnPositionClear(PLAYER_SPAWN_X, PLAYER_SPAWN_Y),
 assert.equal(document.shapes.some(shape => shape.id === "statue-pedestal"), false,
   "the red-line source does not define a reviewed statue-pedestal contour; never promote the old estimated rectangle");
 const editorZones = new Set(document.shapes.map(shape => shape.zone));
-assert.deepEqual([...editorZones].sort(), ["A", "B", "C", "D", "E"],
-  "the production seed must be assigned across all five spatial editor zones");
+assert.deepEqual([...editorZones].sort(), MAP_AUTHORING_ZONES.map(zone => zone.id).sort(),
+  "the production seed must use the canonical twelve-zone authoring partition");
+for (const zone of MAP_AUTHORING_ZONES) {
+  assert.ok(document.shapes.some(shape => shape.zone === zone.id),
+    zone.id + " must own at least one source-derived candidate shape");
+}
 
 const cols = COLS * 2, rows = ROWS * 2;
 const nav = world.rasterizePlayerNav(cols, rows);

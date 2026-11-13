@@ -4,6 +4,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { CollisionWorld, validateCollisionDocument, type CollisionDocument, type CollisionShape, type Point } from "../../lib/shared/src/collision/vectorCollision.js";
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
+import { assignMapAuthoringZonesByCentroid } from "../../lib/shared/src/collision/mapZones.js";
 import {
   MANUAL_BLOCKED_POLYGONS,
   MANUAL_WALKABLE_REPLACEMENT_ZONES,
@@ -105,22 +106,6 @@ function area(p:readonly Point[]):number {
   let a=0; for(let i=0;i<p.length;i++){const q=p[i],r=p[(i+1)%p.length];a+=q[0]*r[1]-r[0]*q[1];}
   return Math.abs(a)/2;
 }
-function editorZone(points: readonly Point[]): "A" | "B" | "C" | "D" | "E" {
-  const x = points.reduce((sum, point) => sum + point[0], 0) / points.length;
-  const y = points.reduce((sum, point) => sum + point[1], 0) / points.length;
-  const centers = [
-    { zone: "A" as const, x: MAP_W * 0.25, y: MAP_H * 0.24 },
-    { zone: "B" as const, x: MAP_W * 0.75, y: MAP_H * 0.24 },
-    { zone: "C" as const, x: MAP_W * 0.50, y: MAP_H * 0.50 },
-    { zone: "D" as const, x: MAP_W * 0.25, y: MAP_H * 0.80 },
-    { zone: "E" as const, x: MAP_W * 0.75, y: MAP_H * 0.80 },
-  ];
-  return centers.reduce((best, current) =>
-    Math.hypot(x - current.x, y - current.y) < Math.hypot(x - best.x, y - best.y)
-      ? current
-      : best,
-  ).zone;
-}
 function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   const shapes:CollisionShape[]=[];
   for(const path of paths) {
@@ -136,7 +121,7 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary",zone:editorZone(points)});
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary"});
   }
   // The red-line reference does not author a statue-pedestal contour.
   // Do not promote the old estimated rectangle as production movement geometry;
@@ -280,7 +265,6 @@ function applyWalkableReplacementZones(
       blocksMove: true,
       blocksSight: false,
       label: polygon.id,
-      zone: "E",
     });
   }
   return output;
@@ -297,13 +281,13 @@ async function main():Promise<void> {
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
   const tracedShapes=makeShapes(paths,info.width,info.height);
-  const shapes=applyWalkableReplacementZones(tracedShapes);
+  const shapes=assignMapAuthoringZonesByCentroid({shapes:applyWalkableReplacementZones(tracedShapes)}).shapes;
   const points=shapes.reduce((n,s)=>n+s.points.length,0);
   if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:6,
+      kind:"redline-vector",generatorVersion:7,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -322,6 +306,7 @@ async function main():Promise<void> {
         closedSolids:shapes.filter(s=>s.closed).length,
         openBoundaries:shapes.filter(s=>!s.closed).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
+        authoringZones:Object.fromEntries(Array.from({length:12},(_,index)=>{const id="Z"+String(index+1).padStart(2,"0");return [id,shapes.filter(shape=>shape.zone===id).length];})),
       },
     },
   };
