@@ -12,6 +12,26 @@ try {
   page.on("pageerror", error => errors.push(error.message));
   await page.goto(base + "/dev/collision", { waitUntil: "domcontentloaded" });
   await page.getByText("VECTOR GEOMETRY WORKSPACE").waitFor({ timeout: 15000 });
+  // The zone review workflow is a separate record from candidate geometry.
+  await page.getByLabel("Map zone").selectOption("Z01");
+  await page.getByText("Zone review / owner decision record").click();
+  await page.getByRole("button", { name: "Load review" }).click();
+  const reviewEditor = page.getByTestId("zone-review-record");
+  await reviewEditor.waitFor({ state: "visible" });
+  await page.waitForFunction(() => {
+    const editor = document.querySelector('[data-testid="zone-review-record"]');
+    return !!editor && editor.value.includes('"status": "not-started"');
+  });
+  await page.getByRole("button", { name: "New review record" }).click();
+  const scratchReview = JSON.parse(await reviewEditor.inputValue());
+  assert.equal(scratchReview.zone, "Z01");
+  scratchReview.status = "tracing";
+  scratchReview.notes = "Browser smoke scratch record; not a real design approval.";
+  await reviewEditor.fill(JSON.stringify(scratchReview, null, 2));
+  await page.getByRole("button", { name: "Save review" }).click();
+  await page.getByText(/Saved Z01 review record · tracing/).waitFor({ timeout: 5000 });
+  const savedScratchReview = JSON.parse(await reviewEditor.inputValue());
+  assert.equal(savedScratchReview.status, "tracing", "review metadata persists separately from geometry");
   const canvas = page.locator("canvas[data-editor-loaded='true']");
   await canvas.waitFor({ timeout: 15000 });
   await page.waitForFunction(() => {
