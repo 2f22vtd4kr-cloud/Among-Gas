@@ -68,3 +68,6 @@ Current main is `925a465458e8462cef8b6112daff90a0edc239b3`. The current mainline
 The 12-zone authoring register is `docs/map-zone-review-register.md`. All 12 zones are explicitly untraced/unreviewed there. The source manifest is `docs/map-geometry-source-manifest.md`. These records preserve source provenance and review evidence but do not replace authoring, independent review, or owner approval.
 
 **Current decision:** preserve main's existing production geometry. Do not promote the diagnostic polygons or vector candidate until the owner has made each of the five access/design decisions and the author/reviewer evidence is complete.
+
+
+**Mainline note (2026-11-13):** This historical diagnostic was merged in documentation-only PR #144 at main SHA `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. It does not certify the five detached regions as approved or production-safe.
