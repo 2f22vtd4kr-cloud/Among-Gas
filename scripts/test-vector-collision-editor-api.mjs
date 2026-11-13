@@ -180,8 +180,8 @@ try {
     status: "approved",
     author: { name: "Map author", completedAt: "2026-11-13T10:00:00.000Z" },
     sourceEvidence: [{
-      sourcePath: "attached_assets/map-source.png",
-      sourceSha256: "a".repeat(64),
+      sourcePath: "attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png",
+      sourceSha256: "c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80",
       sourceWidth: 1652,
       sourceHeight: 952,
       sourceRect: [0, 0, 1652, 952],
@@ -208,6 +208,13 @@ try {
     method: "POST", headers, body: JSON.stringify(selfApproved),
   });
   assert.equal(selfApprovalResponse.status, 400, "author cannot independently review their own zone");
+  const badSourceHash = structuredClone(reviewRecord);
+  badSourceHash.sourceEvidence[0].sourceSha256 = "b".repeat(64);
+  const badSourceHashResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(badSourceHash),
+  });
+  assert.equal(badSourceHashResponse.status, 400, "source SHA-256 must match bytes in the repository");
+
   const validReviewResponse = await fetch(reviewEndpoint, {
     method: "POST", headers, body: JSON.stringify(reviewRecord),
   });
