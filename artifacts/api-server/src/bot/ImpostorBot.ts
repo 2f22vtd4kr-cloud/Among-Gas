@@ -50,7 +50,7 @@ const ISOLATION_THRESHOLD_PX = 300;
  * ~65-68%: making the impostor commit to slightly-less-than-perfectly-isolated
  * targets increases kill frequency without changing hunt-abort behaviour.
  */
-const HUNT_ACQUIRE_THRESHOLD_PX = -200; // one-variable, 50px more permissive after the 2.4s dwell cohort remained 66%
+const HUNT_ACQUIRE_THRESHOLD_PX = -300; // acquire only targets that remain inside the active-hunt abort envelope
 
 /**
  * Recurring sabotage interval: 30s = 150 × 200ms ticks, plus the existing
