@@ -817,7 +817,8 @@ export default function GameMap() {
     void overviewPromise.then(async image => {
       let tiledMap: TiledMap | null = null;
       try {
-        tiledMap = await TiledMap.load(`${import.meta.env.BASE_URL}${variant}`);
+        const maxResidentTiles = window.matchMedia('(max-width: 767px)').matches ? 6 : 12;
+        tiledMap = await TiledMap.load(`${import.meta.env.BASE_URL}${variant}`, maxResidentTiles);
       } catch (tileError) {
         // The overview remains a complete playable fallback if optional tiles fail.
         if (import.meta.env.DEV) console.warn('Map detail tiles unavailable; using overview fallback', tileError);
