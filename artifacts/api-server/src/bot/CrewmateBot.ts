@@ -19,6 +19,7 @@ import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import type { Point } from '@workspace/shared';
 import { chooseEvidenceWeightedVote } from './voting.js';
 import { requestGroqDialogue } from './groqDialogue.js';
+import { recordBotObservation } from './botObservationLog.js';
 import { buildCrewTaskPlanningMessages, observeVisiblePlayers, parseCrewTaskChoice } from './strategicPolicy.js';
 
 /** How long (ms) the bot waits at a task console before completing each step. */
@@ -216,9 +217,27 @@ export class CrewmateBot extends BotAgent {
     const fallback = options[0];
     if (!fallback) {
       this._targetTaskId = null;
+      recordBotObservation(lobby, {
+        botSlot: self.slot,
+        phase: 'ROAMING',
+        kind: 'task-selection',
+        observedTaskIds: [],
+        candidateCount: 0,
+        selectedTaskId: null,
+        decision: 'none',
+      });
       return null;
     }
 
+    recordBotObservation(lobby, {
+      botSlot: self.slot,
+      phase: 'ROAMING',
+      kind: 'task-selection',
+      observedTaskIds: options.map(option => option.taskId),
+      candidateCount: options.length,
+      selectedTaskId: fallback.taskId,
+      decision: 'accepted',
+    });
     this._targetTaskId = fallback.taskId;
     this._dwellTicks = 0;
     this.clearPath();
@@ -264,6 +283,16 @@ export class CrewmateBot extends BotAgent {
       availableTasks: options,
       nearbyPlayers,
     });
+    recordBotObservation(lobby, {
+      botSlot: self.slot,
+      phase: 'ROAMING',
+      kind: 'task-selection',
+      observedPlayerSlots: nearbyPlayers.map(player => player.slot),
+      observedTaskIds: options.map(option => option.taskId),
+      candidateCount: options.length,
+      selectedTaskId: fallbackTaskId,
+      decision: 'requested',
+    });
     const generation = ++this._taskPlanningGeneration;
     const roundStartedAtMs = lobby.startedAtMs;
     this._taskPlanningPending = true;
@@ -275,16 +304,64 @@ export class CrewmateBot extends BotAgent {
             this._targetTaskId !== fallbackTaskId) return;
 
         const choice = parseCrewTaskChoice(response, options.map(option => option.taskId));
-        if (choice === null || choice === fallbackTaskId) return;
+        if (choice === null || choice === fallbackTaskId) {
+          recordBotObservation(lobby, {
+            botSlot: self.slot,
+            phase: 'ROAMING',
+            kind: 'task-selection',
+            observedPlayerSlots: nearbyPlayers.map(player => player.slot),
+            observedTaskIds: options.map(option => option.taskId),
+            candidateCount: options.length,
+            selectedTaskId: fallbackTaskId,
+            usedFallback: true,
+            decision: 'fallback',
+          });
+          return;
+        }
         const chosenOption = options.find(option => option.taskId === choice);
-        if (!chosenOption || this._nextStep(lobby, self, choice) === null || this.isDoorLockedTask(lobby, choice)) return;
+        if (!chosenOption || this._nextStep(lobby, self, choice) === null || this.isDoorLockedTask(lobby, choice)) {
+          recordBotObservation(lobby, {
+            botSlot: self.slot,
+            phase: 'ROAMING',
+            kind: 'task-selection',
+            observedPlayerSlots: nearbyPlayers.map(player => player.slot),
+            observedTaskIds: options.map(option => option.taskId),
+            candidateCount: options.length,
+            selectedTaskId: fallbackTaskId,
+            usedFallback: true,
+            decision: 'fallback',
+          });
+          return;
+        }
 
         this._targetTaskId = choice;
         this._dwellTicks = 0;
         this.clearPath();
+        recordBotObservation(lobby, {
+          botSlot: self.slot,
+          phase: 'ROAMING',
+          kind: 'task-selection',
+          observedPlayerSlots: nearbyPlayers.map(player => player.slot),
+          observedTaskIds: options.map(option => option.taskId),
+          candidateCount: options.length,
+          selectedTaskId: choice,
+          usedFallback: false,
+          decision: 'accepted',
+        });
       })
       .catch(() => {
         // The local nearest-task policy remains authoritative on provider errors.
+        recordBotObservation(lobby, {
+          botSlot: self.slot,
+          phase: 'ROAMING',
+          kind: 'task-selection',
+          observedPlayerSlots: nearbyPlayers.map(player => player.slot),
+          observedTaskIds: options.map(option => option.taskId),
+          candidateCount: options.length,
+          selectedTaskId: fallbackTaskId,
+          usedFallback: true,
+          decision: 'fallback',
+        });
       })
       .finally(() => {
         if (this._taskPlanningGeneration === generation) this._taskPlanningPending = false;
