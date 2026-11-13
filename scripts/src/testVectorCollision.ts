@@ -8,6 +8,10 @@ import {
   snapPoint,
   type CollisionShape,
   type Point,
+  MAP_AUTHORING_ZONES,
+  getPrimaryMapAuthoringZone,
+  getCollisionShapeGroundCentroid,
+  validateMapAuthoringZoneDocument,
 } from "@workspace/shared/collision";
 
 const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true): CollisionShape =>
@@ -21,6 +25,52 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
       point[0] < ((b[0] - a[0]) * (point[1] - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
   }
   return inside;
+}
+
+// Canonical Plan 2 4×3 authoring partition and primary-owner centroid contract.
+{
+  assert.equal(MAP_AUTHORING_ZONES.length, 12);
+  assert.deepEqual(MAP_AUTHORING_ZONES.map(zone => zone.id), [
+    "Z01", "Z02", "Z03", "Z04", "Z05", "Z06",
+    "Z07", "Z08", "Z09", "Z10", "Z11", "Z12",
+  ]);
+  assert.equal(getPrimaryMapAuthoringZone(0, 0), "Z01");
+  assert.equal(getPrimaryMapAuthoringZone(806, 100), "Z02", "vertical seams belong to the eastern zone");
+  assert.equal(getPrimaryMapAuthoringZone(1612, 100), "Z03");
+  assert.equal(getPrimaryMapAuthoringZone(2418, 100), "Z04");
+  assert.equal(getPrimaryMapAuthoringZone(100, 1858 / 3), "Z05", "horizontal seams belong to the southern zone");
+  assert.equal(getPrimaryMapAuthoringZone(3224, 1858), "Z12", "the final east/south boundary is inclusive");
+  assert.equal(getPrimaryMapAuthoringZone(-0.01, 0), null);
+  assert.equal(getPrimaryMapAuthoringZone(3224.01, 100), null);
+  assert.equal(getPrimaryMapAuthoringZone(100, Number.NaN), null);
+
+  const clockwise = shape("clockwise-square", [[100, 100], [200, 100], [200, 200], [100, 200]], true);
+  const counterClockwise = shape("counter-clockwise-square", [[100, 100], [100, 200], [200, 200], [200, 100]], true);
+  assert.deepEqual(getCollisionShapeGroundCentroid(clockwise), [150, 150]);
+  assert.deepEqual(getCollisionShapeGroundCentroid(counterClockwise), [150, 150],
+    "signed-area centroid must be winding-independent");
+
+  const weightedWall = shape("weighted-wall", [[0, 0], [100, 0], [100, 300]]);
+  const [wallX, wallY] = getCollisionShapeGroundCentroid(weightedWall);
+  assert.equal(wallX, 75);
+  assert.equal(wallY, 75, "open-wall centroid weights each segment by its length");
+
+  const validZoneDocument = {
+    shapes: [
+      { ...shape("seam-wall", [[790, 100], [820, 100]]), zone: "Z01" },
+    ],
+  };
+  assert.deepEqual(validateMapAuthoringZoneDocument(validZoneDocument, "Z01"), [],
+    "a seam-crossing shape is owned by the zone containing its ground centroid");
+  assert.ok(validateMapAuthoringZoneDocument(validZoneDocument, "Z02").some(error => error.includes("belongs to Z01")));
+  assert.ok(validateMapAuthoringZoneDocument({
+    shapes: [{ ...shape("wrong-zone", [[850, 100], [900, 100]]), zone: "Z01" }],
+  }, "Z01").some(error => error.includes("belongs to Z02")));
+  assert.ok(validateMapAuthoringZoneDocument({
+    shapes: [{ ...shape("unassigned", [[100, 100], [200, 100]]) }],
+  }, "Z01").some(error => error.includes("unassigned")));
+  assert.ok(validateMapAuthoringZoneDocument({ shapes: [] }, "A").length > 0,
+    "legacy A–E identifiers are rejected");
 }
 
 // Diagonal wall slide and fast thin-wall rejection.
