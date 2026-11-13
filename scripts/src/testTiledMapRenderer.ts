@@ -162,8 +162,14 @@ try {
     .filter(src => src.startsWith("/bounded-map/"))
     .map(src => src.slice("/bounded-map/".length));
   assert.equal(boundedTileNames.length, 6);
-  assert.ok(boundedTileNames.every(name => /^tile_r[12]_c[234]\.webp$/.test(name)),
-    "full-map zoom-out prioritizes the central six tiles, not a corner-first batch");
+  assert.deepEqual(new Set(boundedTileNames), new Set([
+    "tile_r1_c3.webp",
+    "tile_r1_c2.webp",
+    "tile_r2_c3.webp",
+    "tile_r2_c2.webp",
+    "tile_r0_c3.webp",
+    "tile_r1_c4.webp",
+  ]), "full-map zoom-out prioritizes the six tiles nearest the camera centre, not a corner-first batch");
 
   const farCornerCamera = { x: 3072, y: 1536, w: 152, h: 322 };
   assert.equal(boundedMap.draw(fullMapContext, farCornerCamera, 1, 1), false,
