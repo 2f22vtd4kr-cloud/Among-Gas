@@ -92,6 +92,22 @@ export function getCollisionShapeGroundCentroid(shape: Pick<CollisionShape, "poi
 }
 
 /**
+ * Assign each existing shape to the unique zone containing its ground
+ * centroid. This migrates legacy A–E / unassigned metadata without changing
+ * geometry, flags, labels, or shape order. Out-of-bounds shapes stay explicitly
+ * unassigned so they cannot silently enter a zone candidate.
+ */
+export function assignMapAuthoringZonesByCentroid<T extends Pick<CollisionDocument, "shapes">>(document: T): T {
+  return {
+    ...document,
+    shapes: document.shapes.map(shape => {
+      const [x, y] = getCollisionShapeGroundCentroid(shape);
+      return { ...shape, zone: getPrimaryMapAuthoringZone(x, y) ?? "unassigned" };
+    }),
+  } as T;
+}
+
+/**
  * Validate a zone candidate against the canonical 4×3 partition. Shapes may
  * cross a seam (the adjacent zone receives 24px context), but their ground
  * centroid must belong to exactly one primary zone.
