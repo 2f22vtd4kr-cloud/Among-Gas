@@ -42,6 +42,15 @@ All 12 zones are currently **not traced / not reviewed** in this register. The 3
 7. Author name/date and independent reviewer name/date, each with a written disposition. The author cannot self-approve.
 8. Owner decision for any ambiguity affecting access, gameplay semantics, or a visible object whose collision/occlusion role is not evident.
 
+## Initial source-crop scaffolds
+
+Twelve `collision.zone-Z01.review.v1.json` through `collision.zone-Z12.review.v1.json` records are checked in beside the candidate collision document. Each begins at `not-started` with:
+
+- the recovered original 1652×952 map-art source path and verified SHA-256;
+- the exact native-image crop rectangle for that zone's canonical world rectangle; and
+- independent X/Y source-to-world scales (`3224/1652` and `1858/952`) with zero offsets.
+
+These are provenance/crop scaffolds only. They contain no author, reviewer or owner identity, no traced boundary, no geometry disposition and no approval. The zone editor loads them as not-started records so a tracer can work from the correct source crop without treating centroid ownership as authored geometry.
 ## Per-zone review record workflow
 
 The dev-only vector editor exposes a separate review record at
