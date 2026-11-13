@@ -8,6 +8,8 @@ assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposab
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.v1.json");
 const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01");
+const finalZoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z12.v1.json");
+const finalZoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z12");
 const endpoint = base.replace(/\/$/, "") + "/__vector-collision-api/document";
 const zoneEndpoint = base.replace(/\/$/, "") + "/__vector-collision-api/zones/Z01";
 const origin = new URL(base).origin;
@@ -68,6 +70,8 @@ try {
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(finalZoneFilePath, { force: true });
+  fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
 
   const initialResponse = await fetch(endpoint, { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
@@ -185,6 +189,28 @@ try {
   const boundaryResponse = await postZone(JSON.stringify(boundaryOwner));
   assert.equal(boundaryResponse.status, 400, "half-open zone boundaries assign x=806 to Z02, not Z01");
 
+  const finalEdgeDocument = {
+    version: 1,
+    mapW: 3224,
+    mapH: 1858,
+    shapes: [{
+      id: "south-east-boundary-wall",
+      points: [[3224, 1800], [3224, 1858]],
+      closed: false,
+      blocksMove: true,
+      blocksSight: true,
+      label: "Final east/south boundary",
+      zone: "Z12",
+    }],
+  };
+  const finalEdgeSave = await fetch(base.replace(/\\/$/, "") + "/__vector-collision-api/zones/Z12", {
+    method: "POST",
+    headers,
+    body: JSON.stringify(finalEdgeDocument),
+  });
+  assert.equal(finalEdgeSave.status, 200, "the final east and south map edges are included in Z12");
+  assert.ok(fs.existsSync(finalZoneFilePath), "Z12 writes its own independent candidate file");
+
   const firstZoneSave = await postZone(JSON.stringify(validDocument));
   assert.equal(firstZoneSave.status, 200, "a valid single-zone candidate can be saved");
   const firstZoneResult = await jsonResponse(firstZoneSave);
@@ -223,4 +249,6 @@ try {
   fs.rmSync(backupDirectory, { recursive: true, force: true });
   fs.rmSync(zoneFilePath, { force: true });
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(finalZoneFilePath, { force: true });
+  fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
 }
