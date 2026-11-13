@@ -1032,7 +1032,7 @@ export default function GameMap() {
     // This keeps the held-pointer fixture unobstructed long enough to measure
     // camera follow rather than accidentally measuring a nearby wall collision.
     if (cameraFixtureEnabled) {
-      const fixture = { x: 2820, y: 900 };
+      const fixture = { x: 2950, y: 900 };
       if (!isPlayerPositionWalkable(taskInteractionGrid, fixture.x, fixture.y)) {
         throw new Error('Camera fixture position is not walkable in the production vector collision world');
       }
