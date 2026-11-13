@@ -185,7 +185,7 @@ try {
       sourceWidth: 1652,
       sourceHeight: 952,
       sourceRect: [0, 0, 1652, 952],
-      worldTransform: { scaleX: 1.9516, scaleY: 1.9516, offsetX: 0, offsetY: 0 },
+      worldTransform: { scaleX: 3224 / 1652, scaleY: 1858 / 952, offsetX: 0, offsetY: 0 },
     }],
     reviewer: {
       name: "Independent reviewer",
@@ -214,6 +214,13 @@ try {
     method: "POST", headers, body: JSON.stringify(badSourceHash),
   });
   assert.equal(badSourceHashResponse.status, 400, "source SHA-256 must match bytes in the repository");
+
+  const outOfBoundsTransform = structuredClone(reviewRecord);
+  outOfBoundsTransform.sourceEvidence[0].worldTransform.offsetX = 5000;
+  const outOfBoundsTransformResponse = await fetch(reviewEndpoint, {
+    method: "POST", headers, body: JSON.stringify(outOfBoundsTransform),
+  });
+  assert.equal(outOfBoundsTransformResponse.status, 400, "source transform must map the crop inside the canonical world");
 
   const validReviewResponse = await fetch(reviewEndpoint, {
     method: "POST", headers, body: JSON.stringify(reviewRecord),
