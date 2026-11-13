@@ -164,7 +164,7 @@ try {
 
   // Every canonical authoring zone has an isolated GET endpoint and starts empty.
   for (const zoneId of Array.from({ length: 12 }, (_, index) => "Z" + String(index + 1).padStart(2, "0"))) {
-    const response = await fetch(base.replace(/\\/$/, "") + "/__vector-collision-api/zones/" + zoneId, { cache: "no-store" });
+    const response = await fetch(base.replace(/\/$/, "") + "/__vector-collision-api/zones/" + zoneId, { cache: "no-store" });
     assert.equal(response.status, 200, zoneId + " endpoint is registered");
     const result = await jsonResponse(response);
     assert.equal(result.saved, false, zoneId + " begins without an authored candidate");
