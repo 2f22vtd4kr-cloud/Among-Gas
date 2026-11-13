@@ -10,7 +10,6 @@
 import {
   buildCollisionGrid,
   buildPreciseCollisionGrid,
-  buildPreciseVisionGrid,
   isPlayerPositionWalkable,
   isBlocked,
   isLineOfSightClear,
@@ -32,7 +31,6 @@ import {
   isBotNavigationReachable,
 } from '@workspace/shared/collision/botNavigation';
 import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
-import { buildFineShadowGrid, buildFineShadowSegments, buildNarrowShadowOccluders, isVisionLineClear, isVisionPointBlocked as isVisionGridPointBlocked } from '@workspace/shared/collision/visibility';
 import type { CollisionWorld } from '@workspace/shared/collision';
 import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
@@ -51,10 +49,6 @@ const movementGrid: CollisionWorld = getProductionCollisionWorld();
 // Match the server's independent sight grid so bots never choose a task point
 // that the authoritative interaction-visibility check will reject.
 const sightGrid = buildPreciseCollisionGrid();
-const visionSourceGrid = buildPreciseVisionGrid();
-const botVisionGrid = buildFineShadowGrid(visionSourceGrid);
-const botVisionOccluders = buildNarrowShadowOccluders(visionSourceGrid, true);
-const botVisionSegments = buildFineShadowSegments(visionSourceGrid);
 const NAV_COLS = BOT_NAVIGATION_GEOMETRY.cols;
 const NAV_ROWS = BOT_NAVIGATION_GEOMETRY.rows;
 const NAV_CELL_X = BOT_NAVIGATION_GEOMETRY.cellX;
@@ -816,15 +810,6 @@ export abstract class BotAgent {
       from.x, from.y + FEET_OFFSET_Y,
       to.x, to.y + FEET_OFFSET_Y,
     );
-  }
-
-  /** Match the client's filtered visual occlusion model for player visibility. */
-  protected isVisionPointBlocked(point: Point): boolean {
-    return isVisionGridPointBlocked(botVisionGrid, point.x, point.y + FEET_OFFSET_Y);
-  }
-
-  protected hasVisionLineOfSightToPoint(from: Point, to: Point): boolean {
-    return isVisionLineClear(botVisionGrid, from.x, from.y + FEET_OFFSET_Y, to.x, to.y + FEET_OFFSET_Y, botVisionOccluders, botVisionSegments);
   }
 
   /**
