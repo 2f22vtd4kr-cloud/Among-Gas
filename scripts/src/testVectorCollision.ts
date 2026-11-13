@@ -12,6 +12,7 @@ import {
   getPrimaryMapAuthoringZone,
   getCollisionShapeGroundCentroid,
   validateMapAuthoringZoneDocument,
+  assignMapAuthoringZonesByCentroid,
 } from "@workspace/shared/collision";
 
 const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true): CollisionShape =>
@@ -71,6 +72,19 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   }, "Z01").some(error => error.includes("unassigned")));
   assert.ok(validateMapAuthoringZoneDocument({ shapes: [] }, "A").length > 0,
     "legacy A–E identifiers are rejected");
+
+  const legacyShape = { ...shape("legacy-north-west", [[100, 100], [200, 100]]), zone: "A" };
+  const eastShape = { ...shape("legacy-south-east", [[3180, 1800], [3220, 1800]]), zone: "E" };
+  const outOfBoundsShape = shape("outside-map", [[-20, 100], [-10, 100]]);
+  const migrated = assignMapAuthoringZonesByCentroid({
+    shapes: [legacyShape, eastShape, outOfBoundsShape],
+  });
+  assert.deepEqual(migrated.shapes.map(item => item.zone), ["Z01", "Z12", "unassigned"]);
+  assert.deepEqual(migrated.shapes[0].points, legacyShape.points,
+    "centroid migration changes zone metadata only, never geometry");
+  assert.equal(migrated.shapes[0].blocksMove, legacyShape.blocksMove);
+  assert.equal(migrated.shapes[1].label, eastShape.label);
+  assert.equal(migrated.shapes.length, 3, "migration preserves shape count and order");
 }
 
 // Diagonal wall slide and fast thin-wall rejection.
