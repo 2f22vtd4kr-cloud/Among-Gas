@@ -1,6 +1,6 @@
 /**
  * Browser tile renderer for the canonical 3224×1858 world.
- * Tiles are 2× WebP; only the camera-visible 4–6 tiles stay decoded in memory.
+ * Tiles are 2× WebP; a hard mobile/desktop residency budget bounds decoded image memory.
  * Shared world boundaries are rounded with the same expression on both
  * neighbouring tiles, so no fractional-zoom hairline gaps can appear.
  */
@@ -138,7 +138,7 @@ export class TiledMap {
         const bottom = Math.round((wy + wh - camera.y) * deviceScale);
         if (right <= left || bottom <= top) continue;
         // One-device-pixel bleed closes compositor hairlines at fractional zoom.
-        // Tiles draw in stable row/column order, so overlap is deterministic.
+        // Tiles draw in stable centre-priority order, so overlap is deterministic.
         ctx.drawImage(image, left, top, right - left + 1, bottom - top + 1);
         visibleLoaded++;
       }
