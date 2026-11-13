@@ -315,6 +315,8 @@ jobs:
           cache-dependency-path: pnpm-lock.yaml
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Generate and verify candidate vector collision document
+        run: pnpm --filter @workspace/scripts run test:production-world
       - name: Build API server
         run: pnpm --filter @workspace/api-server run build
       - name: Run 20-minute local API and WebSocket soak
