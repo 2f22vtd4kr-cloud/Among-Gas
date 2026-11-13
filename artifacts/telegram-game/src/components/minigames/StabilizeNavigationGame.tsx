@@ -63,7 +63,7 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
           onLostPointerCapture={() => setDragging(false)}
           aria-label={en ? 'Drag navigation marker to target' : 'Перетащите маркер навигации к цели'}
           style={{ position: 'absolute', left: `${marker.x}%`, top: `${marker.y}%`,
-            transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
+            transform: 'translate(-50%,-50%)', width: 48, height: 48, borderRadius: '50%',
             border: '2px solid #d7fffb', background: dragging ? '#00cdbb' : '#078e89',
             color: '#fff', fontSize: 20, fontWeight: 950, boxShadow: '0 0 18px rgba(0,220,200,0.5)',
             touchAction: 'none', cursor: 'grab' }}>●</button>

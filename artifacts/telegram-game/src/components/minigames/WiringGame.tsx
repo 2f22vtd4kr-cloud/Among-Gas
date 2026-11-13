@@ -54,7 +54,7 @@ export function WiringGame({ stepIndex, onComplete }: MinigameProps) {
               disabled={connected}
               aria-label={(language === 'en' ? WIRE_LABELS : WIRE_LABELS_RU)[i]}
               style={{
-                width: 56, height: 40, borderRadius: 8,
+                width: 56, height: 48, borderRadius: 8,
                 background: connected ? 'rgba(60,60,60,0.5)' : color,
                 border: selected ? '3px solid #fff' : '2px solid rgba(255,255,255,0.15)',
                 opacity: connected ? 0.35 : 1,
@@ -91,7 +91,7 @@ export function WiringGame({ stepIndex, onComplete }: MinigameProps) {
               disabled={connected}
               aria-label={(language === 'en' ? WIRE_LABELS : WIRE_LABELS_RU)[colorIdx]}
               style={{
-                width: 56, height: 40, borderRadius: 8,
+                width: 56, height: 48, borderRadius: 8,
                 background: connected ? 'rgba(60,60,60,0.5)' : WIRE_COLORS[colorIdx],
                 border: '2px solid rgba(255,255,255,0.15)',
                 opacity: connected ? 0.35 : 1,

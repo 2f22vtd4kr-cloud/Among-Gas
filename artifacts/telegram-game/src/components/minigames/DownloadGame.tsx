@@ -44,7 +44,7 @@ export function DownloadGame({ onComplete }: MinigameProps) {
         <button
           onClick={() => setStarted(true)}
           style={{
-            padding: '12px 32px', borderRadius: 10,
+            padding: '12px 32px', minWidth: 48, minHeight: 48, borderRadius: 10,
             background: 'rgba(52,152,219,0.85)', color: '#fff',
             border: '1px solid rgba(100,180,255,0.35)',
             fontFamily: 'sans-serif', fontSize: 14, fontWeight: 700, cursor: 'pointer',
