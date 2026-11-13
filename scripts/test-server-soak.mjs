@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { readFile } from 'node:fs/promises';
 import { setTimeout as sleep } from 'node:timers/promises';
+import { authenticateSocketBatch } from './server-soak-sockets.mjs';
 
 const require = createRequire(new URL('../artifacts/api-server/package.json', import.meta.url));
 const WebSocket = require('ws');
@@ -129,21 +130,14 @@ try {
   while (Date.now() < deadline) {
     if (monitorError) throw monitorError;
     const base = 700_000 + cycle * 4;
-    const authResults = await Promise.allSettled(
-      Array.from({ length: 4 }, (_, index) =>
-        connectAndAuthenticate(base + index, `Soak${cycle}P${index}`),
-      ),
+    const sockets = await authenticateSocketBatch(
+      connectAndAuthenticate,
+      closeSockets,
+      Array.from({ length: 4 }, (_, index) => ({
+        id: base + index,
+        username: `Soak${cycle}P${index}`,
+      })),
     );
-    const sockets = authResults
-      .filter(result => result.status === 'fulfilled')
-      .map(result => result.value);
-    const authFailure = authResults.find(result => result.status === 'rejected');
-    if (authFailure) {
-      // Promise.allSettled retains successful peers so they can be closed
-      // before the failed authentication aborts the soak process.
-      await closeSockets(sockets);
-      throw authFailure.reason;
-    }
     stats.authenticatedSockets += sockets.length;
     await sleep(1500);
     await closeSockets(sockets);
