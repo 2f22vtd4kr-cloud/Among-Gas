@@ -52,8 +52,8 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
 
   const weightedWall = shape("weighted-wall", [[0, 0], [100, 0], [100, 300]]);
   const [wallX, wallY] = getCollisionShapeGroundCentroid(weightedWall);
-  assert.equal(wallX, 75);
-  assert.equal(wallY, 75, "open-wall centroid weights each segment by its length");
+  assert.equal(wallX, 87.5);
+  assert.equal(wallY, 112.5, "open-wall centroid weights each segment by its length");
 
   const validZoneDocument = {
     shapes: [
