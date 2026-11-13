@@ -1,0 +1,32 @@
+name: Refresh patched dependency lockfile
+
+on:
+  push:
+    branches: [ci/plan2-production-dependency-audit]
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v7
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.6.5
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Resolve only the declared security patches
+        run: pnpm install --lockfile-only --no-frozen-lockfile
+      - name: Upload regenerated frozen lockfile
+        uses: actions/upload-artifact@v7
+        with:
+          name: patched-pnpm-lockfile
+          path: pnpm-lock.yaml
+          if-no-files-found: error
+          retention-days: 1
