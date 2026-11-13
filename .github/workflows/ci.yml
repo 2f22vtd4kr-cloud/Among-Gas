@@ -49,6 +49,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Validate local server soak harness syntax
         run: node --check scripts/test-server-soak.mjs
+      - name: Test partial-auth socket cleanup in the soak harness
+        run: node scripts/test-server-soak-sockets.mjs
 
       - name: Verify world-to-image source rectangles for canonical PNG and high-resolution WebP
         run: pnpm --filter @workspace/scripts run test:map-image-transform
