@@ -14,8 +14,15 @@ for (const [relative, pattern] of required) {
   const source = await fs.readFile(path.join(root, relative), "utf8");
   assert.match(source, pattern, relative + " must use the authored red-line collision world");
 }
-const generator = await fs.readFile(path.join(root, "scripts/src/buildCollisionDocument.ts"), "utf8");
+const generatorPath = path.join(root, "scripts/src/buildCollisionDocument.ts");
+const generatorBytes = await fs.readFile(generatorPath);
+const generator = generatorBytes.toString("utf8");
 assert.match(generator, /owner red-line reference|red-line reference/i);
+assert.equal(document.source.sourceFiles.generator.sha256, hash(generatorBytes),
+  "candidate source manifest must identify the exact generator bytes");
+const collisionEngineBytes = await fs.readFile(path.join(root, "lib/shared/src/collision/vectorCollision.ts"));
+assert.equal(document.source.sourceFiles.collisionEngine.sha256, hash(collisionEngineBytes),
+  "candidate source manifest must identify the exact collision engine bytes");
 assert.match(generator, /skeletonize|function thin/);
 // Vectorization must remain independent from the old fine movement/vision
 // raster, but it must preserve the two already-reviewed local movement edits.
