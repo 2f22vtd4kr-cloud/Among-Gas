@@ -1,7 +1,36 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 
+// The checked-in zone review scaffolds must remain source-backed and explicitly unapproved.
+const repositoryRoot = process.cwd();
+for (let index = 0; index < 12; index++) {
+  const zone = "Z" + String(index + 1).padStart(2, "0");
+  const reviewPath = path.join(repositoryRoot, "lib/shared/src/collision/collision.zone-" + zone + ".review.v1.json");
+  const record = JSON.parse(fs.readFileSync(reviewPath, "utf8"));
+  assert.equal(record.zone, zone);
+  assert.equal(record.status, "not-started");
+  assert.equal(record.author, null);
+  assert.equal(record.reviewer, null);
+  assert.equal(record.ownerDecision, null);
+  assert.equal(record.sourceEvidence.length, 1);
+  const evidence = record.sourceEvidence[0];
+  const sourcePath = path.resolve(repositoryRoot, evidence.sourcePath);
+  const sourceBytes = fs.readFileSync(sourcePath);
+  assert.equal(createHash("sha256").update(sourceBytes).digest("hex"), evidence.sourceSha256, zone + " source crop hash");
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  const expectedRect = [
+    column * 806 * 1652 / 3224,
+    row * (1858 / 3) * 952 / 1858,
+    (column + 1) * 806 * 1652 / 3224,
+    (row + 1) * (1858 / 3) * 952 / 1858,
+  ];
+  for (let coordinate = 0; coordinate < 4; coordinate++) {
+    assert.ok(Math.abs(evidence.sourceRect[coordinate] - expectedRect[coordinate]) < 1e-8, zone + " source crop coordinate " + coordinate);
+  }
+}
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
