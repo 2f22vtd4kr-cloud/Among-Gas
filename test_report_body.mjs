@@ -272,7 +272,7 @@ async function main() {
 
     const alivePlayers = players.filter(player => player.slot !== victim.slot);
     assert.equal(alivePlayers.length, 3);
-    const earlyVoter = alivePlayers[0];
+    const earlyVoter = reporter; // a living crewmate, so the early vote is otherwise legal
     send(earlyVoter, [0x14, impostor.slot]);
     await sleep(150);
     assert.equal(players.some(player => player.msgs.some(packet => packet[0] === 0x1C)), false,
@@ -281,7 +281,8 @@ async function main() {
     console.log('--- Wait for the authoritative 15-second discussion window, then vote to eject the impostor ---');
     await sleep(15_150);
     for (const voter of alivePlayers.filter(player => player.slot !== earlyVoter.slot)) {
-      send(voter, [0x14, impostor.slot]);
+      // The impostor votes for the reporter; the other crewmate votes for the impostor.
+      send(voter, [0x14, voter.slot === impostor.slot ? reporter.slot : impostor.slot]);
     }
     await sleep(150);
     assert.equal(players.some(player => player.msgs.some(packet => packet[0] === 0x1C)), false,
