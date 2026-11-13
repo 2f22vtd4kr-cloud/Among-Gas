@@ -1397,8 +1397,10 @@ try {
     y: dragBox.y + dragBox.height / 2,
     id: 1,
   };
+  // The action cluster is 264px wide and remains fully inside the 390px
+  // gameplay viewport. 64% is reachable; 68% would be clamped by its safe bounds.
   const touchEnd = {
-    x: previewBox.x + previewBox.width * 0.68,
+    x: previewBox.x + previewBox.width * 0.64,
     y: previewBox.y + previewBox.height * 0.62,
     id: 1,
   };
@@ -1418,7 +1420,7 @@ try {
   await layoutSettings.getByTestId('control-layout-save').click();
   let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.64) < 3,
     'dragged action bar X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
     'dragged action bar Y position must be applied to the gameplay HUD');
@@ -1435,7 +1437,7 @@ try {
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
   const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
-  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.64)) < 3,
     'saved action bar X position must hydrate after reload');
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
     'saved action bar Y position must hydrate after reload');
@@ -1468,7 +1470,7 @@ try {
   const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
   const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
-  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.64)) < 3,
     'Cancel must preserve the previously saved X position');
   assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.62)) < 3,
     'Cancel must preserve the previously saved Y position');
@@ -1657,8 +1659,8 @@ try {
     }
   }
 
-  // Move the local player from the verified, open main-lobby spawn while the
-  // camera follows. Keep this separate from task-interaction: that fixture
+  // Move the local player along the verified east-generator aisle while
+  // the camera follows. Keep this separate from task-interaction: that fixture
   // deliberately relocates the player beside task 4, where nearby geometry can
   // constrain movement and is covered by the task/collision-specific checks.
   // The character's suit centroid should remain stable near canvas center.
@@ -1738,7 +1740,7 @@ try {
   // drag. Starting the trace only after mouse.move() misses most of the walk:
   // Playwright's stepped drag can already carry the player to nearby geometry.
   await cameraPage.evaluate(() => {
-    const trace = { active: true, samples: [] };
+    const trace = { active: true, samples: [], maxSamples: 24 };
     window.__AG_CAMERA_TRACE = trace;
     const capture = () => {
       if (!trace.active) return;
@@ -1747,6 +1749,10 @@ try {
           Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY)) {
         trace.samples.push({ ...sample });
       }
+      if (trace.samples.length >= trace.maxSamples) {
+        trace.active = false;
+        return;
+      }
       requestAnimationFrame(capture);
     };
     requestAnimationFrame(capture);
@@ -1754,10 +1760,17 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
-  // Keep the pointer held for the entire trace window so the browser samples
-  // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(420);
+  // Keep the movement long enough to prove camera follow, but short
+  // enough to stay inside the viewport's camera-centering envelope.
+  await cameraPage.mouse.move(joystickX + 16, joystickY, { steps: 6 });
+  // Bound the held-pointer trace to 24 animation frames. Earlier samples
+  // establish the baseline; the final quarter must still show >30px of real
+  // movement, while the whole trace stays inside the camera-centering envelope.
+  await cameraPage.waitForFunction(
+    () => window.__AG_CAMERA_TRACE?.samples.length >= 24,
+    undefined,
+    { timeout: 5000 },
+  );
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;

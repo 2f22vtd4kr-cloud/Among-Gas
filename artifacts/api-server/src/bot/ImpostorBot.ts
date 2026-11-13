@@ -9,7 +9,7 @@
  *   COOLDOWN  → After a kill: return to FAKING while cooldown drains.
  *
  * Sabotage:
- *   Every ~60s (configurable, ±jitter), trigger a sabotage to force
+ *   Every ~30s (configurable, ±jitter), trigger a sabotage to force
  *   crewmates apart and create hunting opportunities. Only fires when
  *   FAKING or HUNTING and no sabotage is currently active.
  *
@@ -59,7 +59,7 @@ const HUNT_ACQUIRE_THRESHOLD_PX = -200; // one-variable, 50px more permissive af
  * seed 17002 is exactly at the upper acceptance boundary. See SINGLE_PLAY.md
  * §9 for the prior 300/450-tick measurements and current evidence.
  */
-const SABOTAGE_INTERVAL_TICKS = 150; // 30s recurring interval; one-variable balance retest
+const SABOTAGE_INTERVAL_TICKS = 150; // preserve the accepted 30s baseline while validating vector navigation
 // The Skeld's opening sabotage cooldown is 10 seconds. Keep the recurring
 // cooldown independent so the initial-pressure experiment changes one variable.
 const SABOTAGE_INITIAL_COOLDOWN_TICKS = 50;
@@ -70,6 +70,30 @@ const FAKE_DWELL_TICKS = 3;
 const FAKE_TASK_POSITIONS: readonly Point[] = TASK_DEFS.map(t => ({ x: t.x, y: t.y }));
 
 export class ImpostorBot extends BotAgent {
+  private readonly _simulationDiagnostics = {
+    roamingTicks: 0, huntTicks: 0, visibleHuntTicks: 0, hiddenHuntTicks: 0,
+    huntAcquisitions: 0, isolationAborts: 0, lostTargetResets: 0,
+    navigationCalls: 0, navigationReachedKillRangeTicks: 0, navigationMovementTicks: 0,
+    navigationNoMovementTicks: 0, navigationProgressPx: 0,
+    killAttempts: 0, successfulKills: 0,
+    fakeNavigationCalls: 0, fakeNavigationMovementTicks: 0,
+    fakeNavigationNoMovementTicks: 0, fakeNavigationDistancePx: 0,
+    fakeNavigationArrivals: 0, fakeTargetSelections: 0,
+    targetSearchCalls: 0, targetSearchVisibleCandidates: 0,
+    targetSearchNearVisionCandidates: 0, targetSearchNoVisibleCandidates: 0,
+    targetSearchNoNearCandidates: 0, targetSearchRejectedByIsolation: 0,
+    targetSearchBestIsolationScorePx: 0,
+    losCandidateChecks: 0, losOriginBlockedCandidates: 0,
+    losTargetBlockedCandidates: 0, losBlockedBetweenClearEndpoints: 0,
+    hiddenHuntNoLastKnown: 0, hiddenHuntExpiredLastKnown: 0,
+    hiddenHuntReachedLastKnown: 0, hiddenHuntRetargeted: 0,
+  };
+
+  /** Lightweight counters consumed only by the deterministic headless simulator. */
+  getSimulationDiagnostics() {
+    return { ...this._simulationDiagnostics };
+  }
+
   private _state: BotState = 'FAKING';
 
   /** Current fake-task target (impostor visits these to look busy). */
@@ -97,6 +121,7 @@ export class ImpostorBot extends BotAgent {
   private _ventAttemptedThisCooldown = true;
 
   override roamingTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    this._simulationDiagnostics.roamingTicks++;
     // A meeting can forcibly eject a bot from its vent. Discard that old plan.
     if (this._ventMode === 'inside' && !self.inVent) {
       this._resetVentPlan();
@@ -126,6 +151,7 @@ export class ImpostorBot extends BotAgent {
       const target = this._findIsolatedTarget(lobby, self);
       if (target !== null) {
         this._state = 'HUNTING';
+        this._simulationDiagnostics.huntAcquisitions++;
         this._huntTargetSlot = target;
         this.clearPath();
       }
@@ -181,8 +207,17 @@ export class ImpostorBot extends BotAgent {
       this._pickFakeTarget(self);
     }
 
+    this._simulationDiagnostics.fakeNavigationCalls++;
+    const beforeX = self.x;
+    const beforeY = self.y;
+    const distanceBefore = Math.hypot(this._fakeTarget!.x - self.x, this._fakeTarget!.y - self.y);
     const arrived = this.navigateTo(self, this._fakeTarget!);
+    const movementDistance = Math.hypot(self.x - beforeX, self.y - beforeY);
+    this._simulationDiagnostics.fakeNavigationDistancePx += movementDistance;
+    if (movementDistance > 0.01) this._simulationDiagnostics.fakeNavigationMovementTicks++;
+    else this._simulationDiagnostics.fakeNavigationNoMovementTicks++;
     if (arrived) {
+      this._simulationDiagnostics.fakeNavigationArrivals++;
       this._fakeDwellTicks++;
       if (this._fakeDwellTicks >= FAKE_DWELL_TICKS) {
         this._pickFakeTarget(self);
@@ -201,6 +236,7 @@ export class ImpostorBot extends BotAgent {
     // Consoles are often wall-mounted (see CrewmateBot._handleTask) — approach
     // within range rather than navigating to the exact, possibly-unwalkable pixel.
     this._fakeTarget = this.nearestApproachPoint(raw, TASK_INTERACTION_RANGE_PX - 3);
+    this._simulationDiagnostics.fakeTargetSelections++;
     this._fakeDwellTicks = 0;
     this.clearPath();
   }
@@ -208,6 +244,7 @@ export class ImpostorBot extends BotAgent {
   // ── Hunting ──────────────────────────────────────────────────────────────
 
   private _huntTick(lobby: Lobby, self: LobbyPlayer, manager: LobbyManager): void {
+    this._simulationDiagnostics.huntTicks++;
     // Validate current target
     const target = this._huntTargetSlot !== null
       ? lobby.players.get(this._huntTargetSlot)
@@ -217,6 +254,7 @@ export class ImpostorBot extends BotAgent {
       // Target gone — re-evaluate
       const newTarget = this._findIsolatedTarget(lobby, self);
       if (newTarget === null) {
+        this._simulationDiagnostics.lostTargetResets++;
         this._state = 'FAKING';
         this._huntTargetSlot = null;
         this.clearPath();
@@ -232,13 +270,18 @@ export class ImpostorBot extends BotAgent {
     const currentlyVisible = visibleCrew.some(player => player.slot === victim.slot);
 
     if (!currentlyVisible) {
+      this._simulationDiagnostics.hiddenHuntTicks++;
       // Follow only the last position this bot actually observed. Do not read
       // victim.x/y from the authoritative lobby while the victim is hidden.
       const lastKnown = this._huntLastKnownPosition;
-      if (lastKnown?.slot === victim.slot && Date.now() - lastKnown.seenAtMs <= 4_000) {
+      const lastKnownAgeMs = lastKnown?.slot === victim.slot ? Date.now() - lastKnown.seenAtMs : null;
+      if (!lastKnown || lastKnown.slot !== victim.slot) this._simulationDiagnostics.hiddenHuntNoLastKnown++;
+      else if (lastKnownAgeMs !== null && lastKnownAgeMs > 4_000) this._simulationDiagnostics.hiddenHuntExpiredLastKnown++;
+      if (lastKnown?.slot === victim.slot && lastKnownAgeMs !== null && lastKnownAgeMs <= 4_000) {
         this.navigateTo(self, { x: lastKnown.x, y: lastKnown.y });
         if (Math.hypot(self.x - lastKnown.x, self.y - lastKnown.y) <= 45 &&
             Date.now() - lastKnown.seenAtMs >= 1_500) {
+          this._simulationDiagnostics.hiddenHuntReachedLastKnown++;
           this._state = 'FAKING';
           this._huntTargetSlot = null;
           this._huntLastKnownPosition = null;
@@ -254,6 +297,7 @@ export class ImpostorBot extends BotAgent {
         this._huntLastKnownPosition = null;
         this.clearPath();
       } else if (newTarget !== this._huntTargetSlot) {
+        this._simulationDiagnostics.hiddenHuntRetargeted++;
         this._huntTargetSlot = newTarget;
         this._huntLastKnownPosition = null;
         this.clearPath();
@@ -261,6 +305,7 @@ export class ImpostorBot extends BotAgent {
       return;
     }
 
+    this._simulationDiagnostics.visibleHuntTicks++;
     this._huntLastKnownPosition = {
       slot: victim.slot,
       x: victim.x,
@@ -271,6 +316,7 @@ export class ImpostorBot extends BotAgent {
     // Re-check isolation using only crewmates currently visible to the bot.
     const score = this._isolationScore(self, victim, visibleCrew);
     if (score < -ISOLATION_THRESHOLD_PX) {
+      this._simulationDiagnostics.isolationAborts++;
       this._state = 'FAKING';
       this._huntTargetSlot = null;
       this._huntLastKnownPosition = null;
@@ -280,14 +326,27 @@ export class ImpostorBot extends BotAgent {
 
     const distanceToVictim = Math.hypot(victim.x - self.x, victim.y - self.y);
     if (distanceToVictim > KILL_RANGE_PX) {
-      this.navigateTo(self, { x: victim.x, y: victim.y });
+      this._simulationDiagnostics.navigationCalls++;
+      const beforeX = self.x;
+      const beforeY = self.y;
+      this.navigateTo(self, { x: victim.x, y: victim.y }, KILL_RANGE_PX - 2);
+      const movementDistance = Math.hypot(self.x - beforeX, self.y - beforeY);
+      const distanceAfterNavigation = Math.hypot(victim.x - self.x, victim.y - self.y);
+      if (distanceAfterNavigation <= KILL_RANGE_PX) {
+        this._simulationDiagnostics.navigationReachedKillRangeTicks++;
+      }
+      if (movementDistance > 0.01) this._simulationDiagnostics.navigationMovementTicks++;
+      else this._simulationDiagnostics.navigationNoMovementTicks++;
+      this._simulationDiagnostics.navigationProgressPx += Math.max(0, distanceToVictim - distanceAfterNavigation);
     }
 
     // A kill is attempted only while the target is currently visible and in
     // the server-authoritative interaction radius. The server revalidates.
     if (self.killCooldownMs === 0 && distanceToVictim <= KILL_RANGE_PX) {
+      this._simulationDiagnostics.killAttempts++;
       const applied = manager.applyKill(lobby, self.slot, victim.slot);
       if (applied) {
+        this._simulationDiagnostics.successfulKills++;
         this._state = 'COOLDOWN';
         this._huntTargetSlot = null;
         this._huntLastKnownPosition = null;
@@ -309,6 +368,12 @@ export class ImpostorBot extends BotAgent {
     // An impostor knows their allies, but cannot track crewmates through walls
     // or across the map. The observation is bounded by the actual impostor
     // vision radius and the same fine-grid LOS geometry used by gameplay.
+    // Target selection must use the same sight contract as the server's
+    // kill validator. The client fog/shadow mask is a presentation layer and
+    // may intentionally filter low props differently; using it here can make
+    // bots see a target that the server cannot legally kill (or miss one that
+    // is visible under the authoritative interaction sight grid).
+    const sightOriginBlocked = this.isSightPointBlocked(self);
     const observations = observeVisiblePlayers(
       self.slot,
       self.x,
@@ -323,7 +388,18 @@ export class ImpostorBot extends BotAgent {
           alive: player.alive,
         })),
       IMPOSTOR_VISION_RADIUS_PX,
-      (x, y) => this.hasLineOfSightToPoint(self, { x, y }),
+      (x, y) => {
+        const target = { x, y };
+        const targetBlocked = this.isSightPointBlocked(target);
+        const visible = this.hasLineOfSightToPoint(self, target);
+        this._simulationDiagnostics.losCandidateChecks++;
+        if (sightOriginBlocked) this._simulationDiagnostics.losOriginBlockedCandidates++;
+        if (targetBlocked) this._simulationDiagnostics.losTargetBlockedCandidates++;
+        if (!visible && !sightOriginBlocked && !targetBlocked) {
+          this._simulationDiagnostics.losBlockedBetweenClearEndpoints++;
+        }
+        return visible;
+      },
     );
     return observations
       .map(observation => lobby.players.get(observation.slot))
@@ -331,7 +407,17 @@ export class ImpostorBot extends BotAgent {
   }
 
   private _findIsolatedTarget(lobby: Lobby, self: LobbyPlayer): number | null {
+    this._simulationDiagnostics.targetSearchCalls++;
+    const eligibleCrew = Array.from(lobby.players.values()).filter(player =>
+      player.alive && player.role === 'crewmate' && !player.inVent &&
+      player.disconnectedAtMs === undefined);
+    const nearVisionCandidates = eligibleCrew.filter(player =>
+      Math.hypot(player.x - self.x, player.y - self.y) <= IMPOSTOR_VISION_RADIUS_PX).length;
     const visibleCrew = this._visibleCrewPlayers(lobby, self);
+    this._simulationDiagnostics.targetSearchNearVisionCandidates += nearVisionCandidates;
+    this._simulationDiagnostics.targetSearchVisibleCandidates += visibleCrew.length;
+    if (nearVisionCandidates === 0) this._simulationDiagnostics.targetSearchNoNearCandidates++;
+    if (visibleCrew.length === 0) this._simulationDiagnostics.targetSearchNoVisibleCandidates++;
     let bestSlot: number | null = null;
     let bestScore = -Infinity;
 
@@ -343,7 +429,11 @@ export class ImpostorBot extends BotAgent {
       }
     }
 
-    if (bestSlot === null || bestScore < HUNT_ACQUIRE_THRESHOLD_PX) return null;
+    if (Number.isFinite(bestScore)) this._simulationDiagnostics.targetSearchBestIsolationScorePx += bestScore;
+    if (bestSlot === null || bestScore < HUNT_ACQUIRE_THRESHOLD_PX) {
+      this._simulationDiagnostics.targetSearchRejectedByIsolation++;
+      return null;
+    }
     this._requestHuntTargetChoice(lobby, self, visibleCrew, bestSlot);
     return bestSlot;
   }

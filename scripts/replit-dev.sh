@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regenerate the canonical vector collision document and its fine compatibility
-# raster from the reviewed source red-line reference before either runtime starts.
+# Regenerate the canonical red-line vector collision document and alignment QA
+# overlay from the owner's reference before either runtime starts.
 pnpm --filter @workspace/scripts run build:collision
 
 # Replit exposes Vite as the public web process; the API runs privately on 8080.

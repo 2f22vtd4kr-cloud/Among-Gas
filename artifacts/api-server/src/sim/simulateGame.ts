@@ -23,7 +23,9 @@ import { CrewmateBot } from '../bot/CrewmateBot.js';
 import { ImpostorBot } from '../bot/ImpostorBot.js';
 import { getSabotageTimeoutMs, isCriticalSabotage, isSabotageSystemId } from '@workspace/shared/sabotage';
 import { TASK_DEFS } from '@workspace/shared/tasks';
-import { buildPreciseCollisionGrid, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import type { CollisionWorld } from '@workspace/shared/collision';
 import type { SimGameResult, SimWinner } from './types.js';
 import { createSeededRandom, withSeededRandom } from './seededRandom.js';
 
@@ -46,12 +48,12 @@ export interface SimBatchOptions {
   onGameResult?: (result: SimGameResult) => void;
 }
 
-const simulationCollisionGrid = buildPreciseCollisionGrid();
+const simulationCollisionGrid = getProductionCollisionWorld();
 
 /** Only an actual vent occupant is exempt from ordinary walkability checks. */
 export function isSimulationCollisionViolation(
   player: { alive: boolean; inVent?: boolean; x: number; y: number },
-  collisionGrid: Uint8Array,
+  collisionGrid: Uint8Array | CollisionWorld,
 ): boolean {
   return player.alive && player.inVent !== true &&
     !isPlayerPositionWalkable(collisionGrid, player.x, player.y);
@@ -148,6 +150,16 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
         perGameHandlers.delete(lobby.code);
         const timeoutState = winner === 'timeout' ? {
           phase: lobby.phase,
+          meeting: lobby.meeting ? {
+            reporterSlot: lobby.meeting.reporterSlot,
+            bodySlot: lobby.meeting.bodySlot,
+            startedAtMs: lobby.meeting.startedAtMs ?? null,
+            elapsedMs: Math.max(0, Date.now() - (lobby.meeting.startedAtMs ?? Date.now())),
+            votingOpen: lobby.meeting.votingOpen,
+            votes: Array.from(lobby.meeting.votes.entries()),
+            discussionTimerPending: lobby.meeting.discussionTimer !== null,
+            votingTimerPending: lobby.meeting.votingTimer !== null,
+          } : null,
           sabotage: lobby.sabotage ? {
             systemId: lobby.sabotage.systemId,
             lockedTaskIds: [...lobby.sabotage.lockedTaskIds],
@@ -195,7 +207,14 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           : winner === 'impostor' ? 'sabotage'
           : 'unknown';
         const impostorCount = playersAtEnd.filter(p => p.role === 'impostor').length;
+        const impostorDiagnostics = playersAtEnd
+          .filter(player => player.role === 'impostor' && player.botAgent instanceof ImpostorBot)
+          .map(player => ({
+            slot: player.slot,
+            ...(player.botAgent as ImpostorBot).getSimulationDiagnostics(),
+          }));
         const result: SimGameResult = {
+          impostorDiagnostics,
           gameIndex, code: lobby.code, botCount: bots, impostorCount,
           winner, winReason, aliveCrewAtEnd, aliveImpostorsAtEnd, ejectedSlot,
           durationMs: Date.now() - startedAt, kills, meetings, sabotageStarts, sabotageResolved, sabotageFixed,
@@ -274,11 +293,36 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
       }
 
       // Independently audit every living bot position throughout the real
-      // simulation loop. This catches collision/pathfinding regressions that
-      // outcome-only tests miss (e.g. a bot slowly walking through a wall).
+      // simulation loop. Poll at 10Hz so the audit cannot phase-lock ahead of
+      // the 5Hz movement timer: if a 100ms sample precedes a bot tick, the next
+      // sample observes its post-movement state. Cache the last audited state
+      // so the expensive full-footprint vector check runs only after a player
+      // moves, changes identity, enters/leaves a vent, or changes alive state.
+      const lastAuditedPlayerState = new Map<number, {
+        player: object;
+        x: number;
+        y: number;
+        alive: boolean;
+        inVent: boolean;
+      }>();
       collisionMonitor = setInterval(() => {
         if (settled) return;
         for (const player of lobby.players.values()) {
+          const previous = lastAuditedPlayerState.get(player.slot);
+          const unchanged = previous?.player === player &&
+            previous.x === player.x &&
+            previous.y === player.y &&
+            previous.alive === player.alive &&
+            previous.inVent === (player.inVent === true);
+          if (unchanged) continue;
+
+          lastAuditedPlayerState.set(player.slot, {
+            player,
+            x: player.x,
+            y: player.y,
+            alive: player.alive,
+            inVent: player.inVent === true,
+          });
           if (!isSimulationCollisionViolation(player, simulationCollisionGrid)) continue;
           collisionViolation = {
             slot: player.slot,
@@ -288,7 +332,7 @@ export async function runSimulationBatch(opts: SimBatchOptions): Promise<SimGame
           finish('timeout');
           return;
         }
-      }, 20);
+      }, 100);
     }
 
     const initialBatch = Math.min(concurrency, games);

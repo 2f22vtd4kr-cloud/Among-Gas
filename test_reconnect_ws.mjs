@@ -189,15 +189,60 @@ async function main() {
       'a late reconnect must not rebroadcast readiness and disturb connected players',
     );
 
+    // Reconnect a second client while the authoritative match is in DISCUSSION.
+    // The restored player must receive the meeting snapshot, not a stale ROAMING
+    // snapshot or a new lobby slot.
+    send(replacement, [0x13, 0xFF]);
+    await Promise.all([
+      waitFor(replacement, packet => packet[0] === 0x1B && packet[1] === 0x00 && packet[2] === 0xFF,
+        3000, 'emergency meeting on replacement host'),
+      waitFor(guest, packet => packet[0] === 0x1B && packet[1] === 0x00 && packet[2] === 0xFF,
+        3000, 'emergency meeting on connected guest'),
+    ]);
+
+    guest.ws.close();
+    await waitForClose(guest);
+    const reconnectedGuest = await connect(guestId, 'ReconnectGuest');
+    sockets.push(reconnectedGuest);
+    send(reconnectedGuest, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const rejoinedSlot = await waitFor(reconnectedGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x05,
+    );
+    assert.equal(rejoinedSlot[2], 1, 'meeting reconnect must preserve the guest slot');
+    await waitFor(reconnectedGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+    );
+    const meetingResumeFrame = await waitFor(reconnectedGuest, packet => packet[0] === 0x25);
+    assert.equal(meetingResumeFrame[1], 0x01, 'meeting resume snapshot schema version must be 1');
+    const meetingSnapshot = JSON.parse(meetingResumeFrame.subarray(2).toString('utf8'));
+    assert.equal(meetingSnapshot.phase, 'MEETING');
+    assert.equal(meetingSnapshot.mySlot, 1);
+    assert.equal(meetingSnapshot.hostSlot, 0);
+    assert.equal(meetingSnapshot.meeting.reporterSlot, 0);
+    assert.equal(meetingSnapshot.meeting.bodySlot, 0xFF);
+    assert.equal(meetingSnapshot.meeting.votingOpen, false,
+      'a reconnect during discussion must not advance the meeting into voting');
+    assert.equal(meetingSnapshot.meeting.hasVoted, false);
+    assert.ok(Array.isArray(meetingSnapshot.meeting.messages));
+
+    console.log('PASS: live WebSocket reconnect during active meeting restores same slot and authoritative discussion state');
     console.log('PASS: live active-match WebSocket reconnect, same-slot identity, 0x25/v1 snapshot, old-socket retirement and targeted readiness');
   } finally {
+    const closing = sockets.map(socket => socket.ws.readyState === WebSocket.CLOSED
+      ? Promise.resolve()
+      : new Promise(resolve => socket.ws.once('close', resolve)));
     for (const socket of sockets) {
-      try { socket.ws.close(); } catch {}
+      try { if (socket.ws.readyState !== WebSocket.CLOSED) socket.ws.close(); } catch {}
     }
+    await Promise.all(closing);
   }
 }
 
-main().catch(error => {
+main().then(() => {
+  // The server-side discussion timer is intentionally live; this standalone
+  // integration process exits after all transports have been closed.
+  process.exit(0);
+}).catch(error => {
   console.error('WEBSOCKET RECONNECT TEST FAILED:', error);
-  process.exitCode = 1;
+  process.exit(1);
 });
