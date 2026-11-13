@@ -1659,8 +1659,8 @@ try {
     }
   }
 
-  // Move the local player from the verified, open main-lobby spawn while the
-  // camera follows. Keep this separate from task-interaction: that fixture
+  // Move the local player along the verified east-generator aisle while
+  // the camera follows. Keep this separate from task-interaction: that fixture
   // deliberately relocates the player beside task 4, where nearby geometry can
   // constrain movement and is covered by the task/collision-specific checks.
   // The character's suit centroid should remain stable near canvas center.
