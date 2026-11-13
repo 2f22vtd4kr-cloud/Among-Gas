@@ -581,7 +581,6 @@ export abstract class BotAgent {
         });
         manager.sendMeetingChat(lobby, self.slot, fallback);
       }
-    });
     }).finally(() => {
       // Do not let a stale meeting request mutate the scheduling state of the
       // next meeting after a fast meeting rollover.
