@@ -11,7 +11,7 @@ export const MAP_TILE_TEX_H = MAP_TILE_WORLD_H * MAP_TILE_SCALE;
 export const MAP_TILE_PX = 1024;
 export const MAP_TILE_COLS = Math.ceil(MAP_TILE_TEX_W / MAP_TILE_PX);
 export const MAP_TILE_ROWS = Math.ceil(MAP_TILE_TEX_H / MAP_TILE_PX);
-export const MAP_TILE_PIPELINE_VERSION = 1;
+export const MAP_TILE_PIPELINE_VERSION = 2;
 
 export interface MapTileMeta {
   file: string;
@@ -19,13 +19,25 @@ export interface MapTileMeta {
   col: number;
   tex: [number, number, number, number];
   world: [number, number, number, number];
+  sha256: string;
 }
 
 export interface MapTileManifest {
   version: 1;
   pipelineVersion: number;
   sourceSha256: string;
+  masterSha256: string;
   sharpenSigma: number;
+  generator: {
+    tool: "sharp";
+    sharpVersion: string;
+    nodeVersion: string;
+    resampler: "lanczos3";
+    webpQuality: 90;
+    webpEffort: 6;
+    deterministic: true;
+    seed: null;
+  };
   worldW: number;
   worldH: number;
   scale: number;
@@ -84,20 +96,36 @@ export async function writeMapTileSet(
         const width = Math.min(MAP_TILE_PX, MAP_TILE_TEX_W - x);
         const height = Math.min(MAP_TILE_PX, MAP_TILE_TEX_H - y);
         const file = "tile_r" + row + "_c" + col + ".webp";
+        const tilePath = path.join(stagingDir, file);
         await sharp(masterPath)
           .extract({ left: x, top: y, width, height })
           .webp({ quality: 90, effort: 6 })
-          .toFile(path.join(stagingDir, file));
+          .toFile(tilePath);
         tiles.push({
           file, row, col,
           tex: [x, y, width, height],
           world: [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE],
+          sha256: await sha256File(tilePath),
         });
       }
     }
 
     const manifest: MapTileManifest = {
-      version: 1, pipelineVersion: MAP_TILE_PIPELINE_VERSION, sourceSha256, sharpenSigma,
+      version: 1,
+      pipelineVersion: MAP_TILE_PIPELINE_VERSION,
+      sourceSha256,
+      masterSha256: await sha256File(masterPath),
+      sharpenSigma,
+      generator: {
+        tool: "sharp",
+        sharpVersion: sharp.versions.sharp,
+        nodeVersion: process.versions.node,
+        resampler: "lanczos3",
+        webpQuality: 90,
+        webpEffort: 6,
+        deterministic: true,
+        seed: null,
+      },
       worldW: MAP_TILE_WORLD_W, worldH: MAP_TILE_WORLD_H, scale: MAP_TILE_SCALE,
       texW: MAP_TILE_TEX_W, texH: MAP_TILE_TEX_H, tilePx: MAP_TILE_PX,
       cols: MAP_TILE_COLS, rows: MAP_TILE_ROWS, format: "webp", tiles,
@@ -129,7 +157,15 @@ export async function tileSetIsCurrent(outputDir: string, sourceSha256: string, 
     const manifest = JSON.parse(await fs.readFile(path.join(outputDir, "manifest.json"), "utf8")) as MapTileManifest;
     if (manifest.pipelineVersion !== MAP_TILE_PIPELINE_VERSION ||
         manifest.sourceSha256 !== sourceSha256 ||
+        !/^[a-f0-9]{64}$/.test(manifest.masterSha256) ||
         manifest.sharpenSigma !== sharpenSigma ||
+        manifest.generator?.tool !== "sharp" ||
+        manifest.generator?.sharpVersion !== sharp.versions.sharp ||
+        manifest.generator?.resampler !== "lanczos3" ||
+        manifest.generator?.webpQuality !== 90 ||
+        manifest.generator?.webpEffort !== 6 ||
+        manifest.generator?.deterministic !== true ||
+        manifest.generator?.seed !== null ||
         manifest.worldW !== MAP_TILE_WORLD_W ||
         manifest.worldH !== MAP_TILE_WORLD_H ||
         manifest.scale !== MAP_TILE_SCALE ||
@@ -147,6 +183,8 @@ export async function tileSetIsCurrent(outputDir: string, sourceSha256: string, 
       if (tile.row !== row || tile.col !== col ||
           tile.tex.join(",") !== [x, y, width, height].join(",") ||
           tile.world.join(",") !== [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE].join(",")) return false;
+      if (!/^[a-f0-9]{64}$/.test(tile.sha256) ||
+          await sha256File(path.join(outputDir, tile.file)) !== tile.sha256) return false;
       const metadata = await sharp(path.join(outputDir, tile.file)).metadata();
       if (metadata.width !== width || metadata.height !== height) return false;
     }

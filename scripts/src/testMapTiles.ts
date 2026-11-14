@@ -5,6 +5,7 @@ import path from "node:path";
 import sharp from "sharp";
 import {
   MAP_TILE_COLS,
+  MAP_TILE_PIPELINE_VERSION,
   MAP_TILE_PX,
   MAP_TILE_ROWS,
   MAP_TILE_SCALE,
@@ -15,6 +16,7 @@ import {
   generateMapMaster,
   meanAbsoluteError,
   sha256File,
+  tileSetIsCurrent,
   type MapTileManifest,
 } from "./mapTilePipeline.js";
 
@@ -77,7 +79,7 @@ try {
     const manifestPath = path.join(variant.dir, "manifest.json");
     const manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as MapTileManifest;
     assert.equal(manifest.version, 1);
-    assert.equal(manifest.pipelineVersion, 1);
+    assert.equal(manifest.pipelineVersion, MAP_TILE_PIPELINE_VERSION);
     assert.equal(manifest.sharpenSigma, variant.sigma);
     assert.equal(manifest.sourceSha256, sourceSha256, `${variant.name}: source digest must match the live WebP master`);
     assert.equal(manifest.worldW, MAP_TILE_WORLD_W);
@@ -92,6 +94,16 @@ try {
 
     const masterPath = path.join(tempDir, `${variant.name}-master.png`);
     await generateMapMaster(sourcePath, variant.sigma, masterPath);
+    assert.equal(manifest.masterSha256, await sha256File(masterPath),
+      `${variant.name}: master digest must identify the exact generated pixel source`);
+    assert.equal(manifest.generator.tool, "sharp");
+    assert.equal(manifest.generator.sharpVersion, sharp.versions.sharp);
+    assert.ok(manifest.generator.nodeVersion.length > 0);
+    assert.equal(manifest.generator.resampler, "lanczos3");
+    assert.equal(manifest.generator.webpQuality, 90);
+    assert.equal(manifest.generator.webpEffort, 6);
+    assert.equal(manifest.generator.deterministic, true);
+    assert.equal(manifest.generator.seed, null);
     let totalMae = 0;
     let worstEdgeMae = 0;
 
@@ -109,6 +121,10 @@ try {
       assert.deepEqual(tile.world, [x / MAP_TILE_SCALE, y / MAP_TILE_SCALE, width / MAP_TILE_SCALE, height / MAP_TILE_SCALE]);
 
       const tilePath = path.join(variant.dir, tile.file);
+      assert.match(tile.sha256, /^[a-f0-9]{64}$/,
+        `${variant.name}: ${tile.file} must include a SHA-256 digest`);
+      assert.equal(await sha256File(tilePath), tile.sha256,
+        `${variant.name}: ${tile.file} bytes must match their provenance digest`);
       const actual = await sharp(tilePath).removeAlpha().raw().toBuffer({ resolveWithObject: true });
       const expected = await sharp(masterPath).extract({ left: x, top: y, width, height }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
       assert.equal(actual.info.width, width, `${variant.name}: ${tile.file} width`);
@@ -130,6 +146,17 @@ try {
     assert.ok(meanTileMae <= MAX_TILE_MAE, `${variant.name}: mean tile drift exceeded the QA threshold`);
     console.log(`${variant.name}: ${manifest.tiles.length} tiles, mean MAE ${meanTileMae.toFixed(3)}, worst edge MAE ${worstEdgeMae.toFixed(3)}`);
   }
+
+  // The build cache must reject a tile whose bytes no longer match its manifest.
+  const integrityCopy = path.join(tempDir, "integrity-copy");
+  await fs.cp(variants[0].dir, integrityCopy, { recursive: true });
+  assert.equal(await tileSetIsCurrent(integrityCopy, sourceSha256, 0), true,
+    "an intact tile set with matching provenance must be reusable");
+  const damagedTilePath = path.join(integrityCopy, "tile_r0_c0.webp");
+  const damagedTileBytes = await fs.readFile(damagedTilePath);
+  await fs.writeFile(damagedTilePath, Buffer.from([0, ...damagedTileBytes.subarray(1)]));
+  assert.equal(await tileSetIsCurrent(integrityCopy, sourceSha256, 0), false,
+    "a corrupted tile must invalidate the complete tile-set cache");
 
   // Exercise the checker itself: a faithful image passes; a one-pixel shift,
   // recolour and damaged tile seam all fail the same measurable fidelity gate.
