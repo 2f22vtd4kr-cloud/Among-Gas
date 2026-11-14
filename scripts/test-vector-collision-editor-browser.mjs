@@ -253,7 +253,7 @@ try {
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Draw floor region", "Draw floor hole", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
     console.log("PINCH TAKEOVER TEST:", mode);
     // Each independent pinch starts from a known zoom. Without this reset, the
@@ -331,6 +331,42 @@ try {
   assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0);
   assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
   assert.equal(Number(await canvas.getAttribute("data-draft-wall-point-count")), 0);
+
+  // Floor-region and linked-hole authoring use the same mobile polygon gesture,
+  // but they must create non-blocking, explicitly linked movement topology.
+  await page.getByRole("button", { name: "Draw floor region" }).click();
+  await page.getByLabel("Walkable region ID").fill("smoke-floor");
+  bounds = await canvas.boundingBox();
+  const floorStart = { x: bounds.x + 320, y: bounds.y + 180 };
+  await touchTap(floorStart.x, floorStart.y);
+  await touchTap(floorStart.x + 70, floorStart.y);
+  await touchTap(floorStart.x + 70, floorStart.y + 60);
+  await touchTap(floorStart.x + 2, floorStart.y + 2);
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3");
+
+  await page.getByRole("button", { name: "Draw floor hole" }).click();
+  await page.getByLabel("Walkable region ID").fill("smoke-floor");
+  bounds = await canvas.boundingBox();
+  const holeStart = { x: bounds.x + 340, y: bounds.y + 198 };
+  await touchTap(holeStart.x, holeStart.y);
+  await touchTap(holeStart.x + 24, holeStart.y);
+  await touchTap(holeStart.x + 24, holeStart.y + 24);
+  await touchTap(holeStart.x + 2, holeStart.y + 2);
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "4");
+
+  const regionDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON" }).click();
+  const regionDownload = await regionDownloadPromise;
+  const regionStream = await regionDownload.createReadStream();
+  let regionJson = "";
+  for await (const chunk of regionStream) regionJson += chunk.toString();
+  const regionDocument = JSON.parse(regionJson);
+  assert.equal(regionDocument.shapes[2].walkableRegion, true);
+  assert.equal(regionDocument.shapes[2].walkableRegionId, "smoke-floor");
+  assert.equal(regionDocument.shapes[2].blocksMove, false);
+  assert.equal(regionDocument.shapes[3].walkableRegionHole, true);
+  assert.equal(regionDocument.shapes[3].walkableRegionId, "smoke-floor");
+  assert.equal(regionDocument.shapes[3].blocksMove, false);
 
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
