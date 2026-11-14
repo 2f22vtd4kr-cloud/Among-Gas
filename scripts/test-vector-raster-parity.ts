@@ -113,9 +113,9 @@ const summary = {
   reachableVectorOnlyExamples: vectorOnlyExamples,
   reachableRasterOnlyExamples: rasterOnlyExamples,
 };
-const qaDirectory = path.resolve("artifacts/telegram-game/collision-qa-tiles");
+const qaDirectory = path.resolve("../artifacts/telegram-game/collision-qa-tiles");
 await mkdir(qaDirectory, { recursive: true });
-const baseMap = path.resolve("artifacts/telegram-game/public/map-hires.png");
+const baseMap = path.resolve("../artifacts/telegram-game/public/map-hires.png");
 await sharp(baseMap)
   .composite([{
     input: mismatchOverlay,
