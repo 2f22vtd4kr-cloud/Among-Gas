@@ -1,4 +1,8 @@
 import unittest
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 from PIL import Image
@@ -33,6 +37,12 @@ class SuperResolutionPatchTests(unittest.TestCase):
         self.assertEqual(pixels.shape, (18, 34, 3))
         self.assertTrue(np.isfinite(pixels).all())
         self.assertGreater(int(pixels[8, 16].sum()), 0)
+        full_x4 = np.repeat(np.repeat(self.source, 4, axis=0), 4, axis=1)
+        expected = Image.fromarray(full_x4).resize((34, 18), Image.Resampling.LANCZOS)
+        self.assertTrue(
+            np.array_equal(pixels, np.asarray(expected)),
+            "overlapped tile cores must stitch to the same result as one full-frame inference",
+        )
 
     def test_rejects_wrong_model_output_scale(self):
         def wrong_scale(patch):
