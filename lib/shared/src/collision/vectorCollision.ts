@@ -531,6 +531,33 @@ export class CollisionWorld {
       this.insideSolids(x, y, this.moveSolids, this.moveSolidHash);
   }
 
+  private rectangleInsideWalkableRegion(
+    minX: number, minY: number, maxX: number, maxY: number,
+  ): boolean {
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+    for (const regionIndex of this.querySolids(this.moveRegionHash, centerX, centerY, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const bounds = region.bounds;
+      if (minX < bounds[0] || minY < bounds[1] || maxX > bounds[2] || maxY > bounds[3]) continue;
+      if (!corners.every(point => pointInPolygon(point[0], point[1], region.points))) continue;
+      if (!pointInPolygon(centerX, centerY, region.points)) continue;
+      let crossesBoundary = false;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, centerX, centerY, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex === regionIndex &&
+            segmentIntersectsRect(segment, minX, minY, maxX, maxY)) {
+          crossesBoundary = true;
+          break;
+        }
+      }
+      if (!crossesBoundary) return true;
+    }
+    return false;
+  }
+
   private insideWalkableRegion(x: number, y: number, radius: number): boolean {
     for (const regionIndex of this.querySolids(this.moveRegionHash, x, y, radius)) {
       const region = this.moveRegions[regionIndex];
@@ -584,6 +611,8 @@ export class CollisionWorld {
     const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
     if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
 
+    if (this.moveRegions.length > 0 &&
+        !this.rectangleInsideWalkableRegion(minX, minY, maxX, maxY)) return false;
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
     const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
