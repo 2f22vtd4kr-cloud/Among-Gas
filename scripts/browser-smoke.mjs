@@ -618,6 +618,9 @@ try {
 
   // The emergency action and Settings must have independent tap targets on mobile.
   const emergencyButton = page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ });
+  await emergencyButton.waitFor({ state: 'visible' });
+  assert.equal(await emergencyButton.getAttribute('data-testid'), 'game-action-emergency',
+    'the emergency action must expose its stable component test hook');
   const gameplaySettingsButton = page.getByRole('button', { name: 'Настройки' });
   await emergencyButton.waitFor({ state: 'visible' });
   await gameplaySettingsButton.waitFor({ state: 'visible' });

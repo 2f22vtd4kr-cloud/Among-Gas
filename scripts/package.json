@@ -30,7 +30,8 @@
     "test:game-input": "tsx ../artifacts/telegram-game/src/game/gameInput.test.ts",
     "build:character-atlas": "tsx ./src/buildCharacterAtlas.ts",
     "test:admin-table": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameAdminTable.test.tsx",
-    "test:vent-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameVentOverlay.test.tsx"
+    "test:vent-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameVentOverlay.test.tsx",
+    "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx"
   },
   "devDependencies": {
     "@types/node": "catalog:",
