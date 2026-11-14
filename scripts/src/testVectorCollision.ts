@@ -15,8 +15,8 @@ import {
   assignMapAuthoringZonesByCentroid,
 } from "@workspace/shared/collision";
 
-const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true): CollisionShape =>
-  ({ id, points, closed, blocksMove, blocksSight });
+const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true, castsShadow?: boolean): CollisionShape =>
+  ({ id, points, closed, blocksMove, blocksSight, ...(castsShadow === undefined ? {} : { castsShadow }) });
 
 function contains(point: Point, polygon: readonly Point[]): boolean {
   let inside = false;
@@ -132,6 +132,36 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     "a target radius fully inside the solid cannot be interacted through it");
 }
 
+// Movement, interaction vision, and cast shadows are three independent authored channels.
+{
+  const shadowOnly = new CollisionWorld([{
+    id: "shadow-only-canopy",
+    points: [[90, 70], [110, 70], [110, 130], [90, 130]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    castsShadow: true,
+  }], 200, 200);
+  assert.equal(shadowOnly.isWalkable(100, 100, 4), true,
+    "a shadow-only canopy must not change movement collision");
+  assert.equal(shadowOnly.isLineOfSightClear(40, 100, 160, 100), true,
+    "a shadow-only canopy must not block interaction vision");
+  assert.equal(shadowOnly.isShadowLineOfSightClear(40, 100, 160, 100), false,
+    "a shadow-only canopy must occlude the visual shadow ray");
+  const noShadowBench = new CollisionWorld([{
+    id: "no-shadow-bench",
+    points: [[90, 70], [110, 70], [110, 130], [90, 130]],
+    closed: true,
+    blocksMove: true,
+    blocksSight: true,
+    castsShadow: false,
+  }], 200, 200);
+  assert.equal(noShadowBench.isWalkable(100, 100, 4), false);
+  assert.equal(noShadowBench.isLineOfSightClear(40, 100, 160, 100), false);
+  assert.equal(noShadowBench.isShadowLineOfSightClear(40, 100, 160, 100), true,
+    "a collision/vision blocker can explicitly opt out of casting a shadow");
+}
+
 // A closed-looking polyline boundary must not fill the walkable garden interior.
 {
   const ring = new CollisionWorld([
@@ -176,7 +206,26 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
 
 // Invalid geometry, map bounds, raster and editor utilities.
 {
-  const errors = validateCollisionDocument({ version: 1, mapW: 100, mapH: 100, shapes: [
+  const shadowSemantics = validateCollisionDocument({
+  version: 1,
+  mapW: 100,
+  mapH: 100,
+  shapes: [
+    shape("move-only-bench", [[10, 10], [30, 10], [30, 30], [10, 30]], true, true, false, false),
+    shape("sight-and-shadow-wall", [[50, 10], [50, 90]], false, false, true, true),
+  ],
+});
+assert.deepEqual(shadowSemantics, [],
+  "movement, sight and presentation-shadow flags are independently expressible");
+assert.ok(validateCollisionDocument({
+  version: 1,
+  mapW: 100,
+  mapH: 100,
+  shapes: [{ ...shape("invalid-shadow", [[10, 10], [20, 20]]), castsShadow: "yes" as unknown as boolean }],
+}).some(error => error.includes("castsShadow must be boolean")),
+"invalid shadow flags must fail closed");
+
+const errors = validateCollisionDocument({ version: 1, mapW: 100, mapH: 100, shapes: [
     shape("bad", [[10, 10], [90, 90], [10, 90], [90, 10]], true),
     shape("bad", [[1, 1], [2, 2]]),
   ] });
