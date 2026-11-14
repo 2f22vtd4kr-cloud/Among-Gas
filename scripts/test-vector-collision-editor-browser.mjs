@@ -207,8 +207,8 @@ try {
   const updatedShapeMetadata = JSON.parse(await canvas.getAttribute("data-shape-metadata") ?? "[]");
   assert.equal(updatedShapeMetadata[1]?.castsShadow, false,
     "editing the shadow flag must update candidate metadata without changing movement or sight");
-  assert.equal(await page.getByLabel("Move").isChecked(), true);
-  assert.equal(await page.getByLabel("Sight").isChecked(), true);
+  assert.equal(await page.getByRole("checkbox", { name: "Move", exact: true }).isChecked(), true);
+  assert.equal(await page.getByRole("checkbox", { name: "Sight", exact: true }).isChecked(), true);
 
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
