@@ -6,7 +6,7 @@ const observation = {
   visiblePlayers: [{ slot: 2, username: 'Blue', distancePx: 120 }],
   publicTaskProgressPct: 45,
 };
-const fallback = { targetSlot: null };
+const fallback: { targetSlot: number | null } = { targetSlot: null };
 const first = log.record(1, 'impostor-hunt', observation, fallback);
 
 observation.visiblePlayers[0].username = 'mutated after record';
