@@ -64362,11 +64362,11 @@
       },
       "generator": {
         "path": "scripts/src/buildCollisionDocument.ts",
-        "sha256": "db7fecd3a0fedda2ec5157370a4831d73436f3a6e066ae1e0b13d0ab63411c57"
+        "sha256": "349f61044269a51c404d8b7e651b45234e1bcdcc53406ec68d730abdc375d81f"
       },
       "collisionEngine": {
         "path": "lib/shared/src/collision/vectorCollision.ts",
-        "sha256": "6f9b020b31917d55c48309b783a246819491b36a7c2cf4f533636b1ee735496b"
+        "sha256": "1af9611692e57a7b94d7c9ee44b09409db813c61b05c37e8e1c96f648d0a57a5"
       },
       "collisionOverrides": {
         "path": "lib/shared/src/collisionOverrides.ts",
