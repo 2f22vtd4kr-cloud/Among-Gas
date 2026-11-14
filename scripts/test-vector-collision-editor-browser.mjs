@@ -189,7 +189,7 @@ try {
   await page.getByRole("button", { name: "Edit vertices" }).click();
   bounds = await canvas.boundingBox();
   await touchTap(bounds.x + 220, bounds.y + 95);
-  const selectedShadow = page.getByLabel("Shadow");
+  const selectedShadow = page.getByRole("checkbox", { name: "Shadow", exact: true });
   await selectedShadow.waitFor();
   assert.equal(await selectedShadow.isChecked(), true,
     "selected geometry exposes the authored shadow flag independently");
