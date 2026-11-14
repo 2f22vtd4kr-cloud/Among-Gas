@@ -83,6 +83,7 @@ import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
 import GameSabotageControls from '../components/GameSabotageControls';
 import GameAdminTable from '../components/GameAdminTable';
+import GameVentOverlay from '../components/GameVentOverlay';
 import { buildAdminTableAgents } from '../game/adminTableAgents';
 import TaskListPanel from '../components/TaskListPanel';
 import { EmergencyCallIcon } from '../components/EmergencyMeetingArtwork';
@@ -1710,45 +1711,12 @@ export default function GameMap() {
         />
       )}
 
-      {/* Vent selection covers the viewport and freezes movement while hidden. */}
-      {myVentId !== null && (() => {
-        const vent = findVent(myVentId);
-        if (!vent) return null;
-        return (
-          <div style={{
-            position: 'fixed', inset: 0, zIndex: 85,
-            display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-            gap: 12, padding: 24, background: 'rgba(4,10,15,0.96)',
-            color: '#e3fbff', fontFamily: 'sans-serif',
-          }}>
-            <div style={{ fontSize: 11, opacity: 0.65, letterSpacing: '0.2em', fontWeight: 800 }}>{en ? 'VENT SYSTEM' : 'СИСТЕМА ЛЮКОВ'}</div>
-            <div style={{ fontSize: 26, fontWeight: 900, textAlign: 'center' }}>{vent.name}</div>
-            <div style={{ width: 'min(360px, 100%)', display: 'grid', gridTemplateColumns: '1fr', gap: 10 }}>
-              {vent.connections.map(id => {
-                const nextVent = findVent(id);
-                if (!nextVent) return null;
-                return (
-                  <button key={id} onClick={() => { haptic.tap(); travelVent(id); }} style={{
-                    width: '100%', padding: '15px 18px', borderRadius: 10,
-                    color: '#e3fbff', background: '#193842',
-                    border: '1px solid rgba(130,220,230,0.6)', fontWeight: 800, fontSize: 15,
-                    touchAction: 'manipulation',
-                  }}>
-                    → {nextVent.name}
-                  </button>
-                );
-              })}
-            </div>
-            <button onClick={() => { haptic.tap(); exitVent(); }} style={{
-              width: 'min(360px, 100%)', padding: '14px 18px', borderRadius: 10,
-              color: '#fff', background: '#8b2430', border: '1px solid #ff7785',
-              fontWeight: 900, fontSize: 15, touchAction: 'manipulation',
-            }}>
-              {en ? 'EXIT VENT' : 'ВЫЛЕЗТИ ИЗ ЛЮКА'}
-            </button>
-          </div>
-        );
-      })()}
+      <GameVentOverlay
+        vent={myVentId === null ? undefined : findVent(myVentId)}
+        english={en}
+        onTravel={id => travelVent(id)}
+        onExit={exitVent}
+      />
 
       {/* Persistent Report and Use; Kill remains impostor-only. */}
       {loaded && myRole !== null && (!amIDead || myRole === 'crewmate') && meeting === null && !voteResult?.winner && (
