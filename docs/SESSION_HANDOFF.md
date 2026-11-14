@@ -106,3 +106,27 @@ Append entries using this compact format:
 - The supplied baseline and sharpened tile assets were inspected in CI context. The sharpened set is still sharpening, not regenerated detail. No Stage-1/Stage-2 super-resolution or image-to-image result has been produced here.
 - Map-art rights/source provenance and the remaining third-party asset inventory need clearance; do not state licensing is complete.
 - Live Groq provider credentials and owner choices in Plan 2 §9 remain outstanding. No credentials or owner decisions were invented.
+
+### 2026-11-14 — Plan 2 integration, HUD repair and mainline soak coverage
+
+**Done**
+- Merged PR #161 at `280afd9b74a3e03c193550056922465bc6a79119`: build-time generation of the 18-palette character atlas, preserving strict browser pixel parity with the prior renderer.
+- Merged PR #168 at `50b8f5e83aa842ea6ec2b7b0a163b32d0c7bc921`: extracted the victim-only kill-animation overlay without changing gameplay behavior.
+- Merged PR #169 at `fdc14ed01f88812e990c4d2524720b60003bb8a1`: extracted emergency-call feedback while retaining server-owned state transitions, timer behavior, English/Russian copy and accessibility selectors.
+- Merged PR #170 at `69b672623f4b27a37d5720056487578b518001ab`: added the labeled bilingual global task-progress HUD, moved the map icon beside Settings, and added 320px layout assertions for overlap, order and alignment.
+- Prepared PR #171 to run the existing 20-minute local API/WebSocket soak on pushes to `main`; aligned the soak's pnpm setup with workspace pnpm 11.13.1. This is CI coverage only, not a deployment.
+
+**Verification**
+- PR #161 exact-head run `43584519720`: 51/51 checks passed, including zero-difference browser atlas parity and all three seeded 100-game cohorts.
+- PR #168 exact-head run `43584753112`: 51/51 checks passed.
+- PR #169 exact-head run `43588183753`: 51/51 checks passed.
+- Post-#169 main run `43589950502`: 51/51 checks passed. Seeded cohorts 17001/17002/17003 produced 58%/65%/58% crewmate wins with zero timeouts.
+- PR #170 exact-head run `43590069552`: 51/51 checks passed. Its cohorts produced 59%/65%/58% crewmate wins with zero timeouts.
+- The 20-minute `plan2-soak` has not yet been proven on `main`; this PR changes the trigger so the next mainline push runs it. Do not report a soak pass until that mainline job completes successfully.
+
+**Next**
+- Finish exact-head validation of PR #171, merge it, then verify that the resulting `main` push starts and passes the full 20-minute local API/WebSocket soak.
+- Keep PR #138 draft and the production raster movement/vision runtime unchanged. Its vector candidate remains blocked by source-backed tracing/review for all 12 zones, separate movement/sight/shadow semantics, 24 route-anchor checks, five detached-region dispositions, and the known seed-17002/LOS regression.
+- Do not call the sharpened tile set super-resolution: genuine Stage-1 SR and optional Stage-2 image-to-image refinement remain outstanding.
+- Clear the creator/licence provenance of the remaining 66 `attached_assets` paths; obtain physical-device and two-real-client acceptance before release.
+- Respect issue #90: no Replit/Vercel workspace access, preview, publishing, deployment or production mutation. For operator setup, production requires `TELEGRAM_BOT_TOKEN` and `PORT`; live rooms are in-memory and must remain single-instance. Groq is optional per-session dialogue credential, not a mandatory Replit Secret.

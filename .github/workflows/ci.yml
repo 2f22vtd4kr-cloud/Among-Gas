@@ -307,7 +307,12 @@ jobs:
 
 
   plan2-soak:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline'
+    # Keep the 20-minute API/WebSocket soak on production mainline as well as
+    # the isolated vector-collision candidate. Mainline continues to exercise the
+    # reviewed raster gameplay runtime; this job does not promote candidate geometry.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -316,7 +321,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 10.6.5
+          version: 11.13.1
       - name: Set up Node.js 24
         uses: actions/setup-node@v7
         with:
