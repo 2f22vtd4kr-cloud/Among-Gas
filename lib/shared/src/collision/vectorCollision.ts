@@ -217,14 +217,35 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".id duplicates " + shape.id);
     } else ids.add(shape.id);
     if (typeof shape.closed !== "boolean") errors.push(prefix + ".closed must be boolean");
-    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
-      errors.push(prefix + ".castsShadow must be boolean when supplied");
-    }
     if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
-    if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
-      errors.push(prefix + " must block movement, sight, cast a shadow, or have at least one authored effect");
+    if (shape.strokeRadius !== undefined &&
+        (!Number.isFinite(shape.strokeRadius) || shape.strokeRadius < 0 || shape.strokeRadius > 12)) {
+      errors.push(prefix + ".strokeRadius must be finite and between 0 and 12 world pixels");
+    }
+    if (shape.strokeRadius !== undefined && shape.strokeRadius > 0 && shape.blocksMove !== true) {
+      errors.push(prefix + ".strokeRadius is only valid on movement-blocking shapes");
+    }
+    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
+      errors.push(prefix + ".castsShadow must be boolean when supplied");
+    }
+    if (shape.walkableRegion !== undefined && typeof shape.walkableRegion !== "boolean") {
+      errors.push(prefix + ".walkableRegion must be boolean when supplied");
+    }
+    if (shape.walkableRegionHole !== undefined && typeof shape.walkableRegionHole !== "boolean") {
+      errors.push(prefix + ".walkableRegionHole must be boolean when supplied");
+    }
+    if (shape.walkableRegion === true || shape.walkableRegionHole === true) {
+      if (shape.closed !== true || shape.blocksMove !== false || shape.blocksSight !== false ||
+          shape.castsShadow === true || typeof shape.walkableRegionId !== "string" || !shape.walkableRegionId.trim()) {
+        errors.push(prefix + " walkable-region boundary must be closed, linked by walkableRegionId, and non-blocking");
+      }
+      if (shape.walkableRegion === true && shape.walkableRegionHole === true) {
+        errors.push(prefix + " cannot be both a walkable region and a region hole");
+      }
+    } else if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
+      errors.push(prefix + " must block movement, sight, cast a shadow, or define a walkable region boundary");
     }
     if (!Array.isArray(shape.points)) {
       errors.push(prefix + ".points must be an array");
@@ -260,9 +281,8 @@ export function validateCollisionDocument(value: unknown): string[] {
     }
   });
   if (doc.source !== undefined) {
-    const source = doc.source as Partial<CollisionSourceManifest>;
-    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
-    if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
+    const source = doc.source;
+    if (!Number.isInteger(source.generatorVersion) || source.generatorVersion < 1) {
       errors.push("source.generatorVersion must be a positive integer");
     }
     if (!source.sourceFiles || typeof source.sourceFiles !== "object") {
@@ -274,16 +294,47 @@ export function validateCollisionDocument(value: unknown): string[] {
         }
       }
     }
-    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
-        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
-        !(source.fineGrid.cellY > 0)) {
-      errors.push("source.fineGrid must describe a positive raster grid");
-    }
-    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
-      errors.push("source.sightPipeline must describe the sight derivation");
-    }
-    if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
-      errors.push("source.shapeCounts.total must be a positive integer");
+
+    if (source.kind === "fine-grid-derived") {
+      if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
+          !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
+          !(source.fineGrid.cellY > 0)) {
+        errors.push("source.fineGrid must describe a positive raster grid");
+      }
+      if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
+        errors.push("source.sightPipeline must describe the sight derivation");
+      }
+      if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || source.shapeCounts.total < 1) {
+        errors.push("source.shapeCounts.total must be a positive integer");
+      }
+    } else if (source.kind === "redline-vector") {
+      if (!source.referenceImage || !Number.isInteger(source.referenceImage.width) ||
+          !Number.isInteger(source.referenceImage.height) || source.referenceImage.width < 100 ||
+          source.referenceImage.height < 100) {
+        errors.push("source.referenceImage must include valid dimensions");
+      }
+      if (!source.vectorization || !Number.isInteger(source.vectorization.redPixelCount) ||
+          !Number.isInteger(source.vectorization.skeletonPixelCount) ||
+          !Number.isInteger(source.vectorization.tracedPathCount) ||
+          !Number.isInteger(source.vectorization.simplifiedPointCount) ||
+          !(source.vectorization.simplificationToleranceSourcePx > 0) ||
+          !Number.isInteger(source.vectorization.closedSolidCount) ||
+          !Number.isInteger(source.vectorization.openBoundaryCount)) {
+        errors.push("source.vectorization must describe red-line extraction");
+      }
+      if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || source.shapeCounts.total < 1) {
+        errors.push("source.shapeCounts.total must be a positive integer");
+      }
+      if (source.walkableRegionExtraction !== undefined) {
+        const extraction = source.walkableRegionExtraction;
+        if (!Number.isInteger(extraction.morphologyKernelSourcePx) || extraction.morphologyKernelSourcePx < 3 ||
+            extraction.connectivity !== 8 || !Array.isArray(extraction.selectedRegions) ||
+            extraction.selectedRegions.length < 1 || !Array.isArray(extraction.excludedDetachedCandidates)) {
+          errors.push("source.walkableRegionExtraction must describe source-derived floor regions and pending detached candidates");
+        }
+      }
+    } else {
+      errors.push("source.kind must be fine-grid-derived or redline-vector");
     }
   }
   return errors;
