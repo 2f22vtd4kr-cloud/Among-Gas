@@ -229,6 +229,8 @@ try {
     const manifest = {
       gameplayDisplay: metrics.gameplayDisplay,
       sourceAssetGitBlobSha,
+      bakedAsset: metrics.bakedAsset,
+      bakedParity: metrics.bakedParity,
       width: metrics.width,
       height: metrics.height,
       cellWidth: metrics.cellWidth,
