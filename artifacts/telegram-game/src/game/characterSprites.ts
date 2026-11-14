@@ -32,6 +32,7 @@ import {
   CHARACTER_SOURCE_SHEET_COLS,
   CHARACTER_SOURCE_SHEET_WIDTH,
   GENERATED_CHARACTER_PALETTES,
+  type CharacterColor,
 } from '@workspace/shared';
 
 export {
