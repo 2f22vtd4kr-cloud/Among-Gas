@@ -1,3 +1,4 @@
+import React from 'react';
 import { MAP_W, MAP_H } from '../game/collisionMap';
 import { ADMIN_DOT_COLORS, slotColor } from '../game/mapPresentation';
 import type { AdminTableAgent } from '../game/adminTableAgents';
