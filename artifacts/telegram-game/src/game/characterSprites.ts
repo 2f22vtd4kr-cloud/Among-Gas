@@ -14,7 +14,8 @@
 // which shows stale artwork (e.g. an old shadow) that isn't actually on
 // disk anymore. Appending ?v=N forces a fresh fetch.
 const SPRITE_SHEET_VERSION = 6;
-export const CHARACTER_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
+export const CHARACTER_SOURCE_SHEET_PATH = `/sprites/characters.png?v=${SPRITE_SHEET_VERSION}`;
+export const CHARACTER_SHEET_PATH = '/sprites/characters-18.png?v=1';
 
 // The authored source atlas remains seven columns. The runtime canvas atlas
 // expands those seven columns to eighteen while preserving the original poses.
