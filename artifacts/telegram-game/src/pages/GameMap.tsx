@@ -1100,8 +1100,8 @@ export default function GameMap() {
       const ch  = canvas.height;
       const dpr = getRenderDpr();
 
-      // Camera smoothing and viewport math live in pure helpers so their
-      // frame-rate and world-boundary contracts can be tested independently.
+      // The camera controller owns follow smoothing and viewport state; its pure
+      // math helpers keep frame-rate and world-boundary contracts testable.
       const cameraFrame = cameraController.update(
         { x: px, y: py },
         dtMs,
