@@ -61,6 +61,15 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
       const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
       const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
       sourceData.copy(columnData, targetOffset, sourceOffset, sourceOffset + 4);
+      // Canvas stores drawImage pixels premultiplied; fully transparent pixels
+      // therefore read back with zero RGB even if the PNG contains hidden RGB.
+      // Normalize this case before encoding the baked atlas so getImageData()
+      // parity is byte-exact.
+      if (columnData[targetOffset + 3] === 0) {
+        columnData[targetOffset] = 0;
+        columnData[targetOffset + 1] = 0;
+        columnData[targetOffset + 2] = 0;
+      }
     }
   }
 
