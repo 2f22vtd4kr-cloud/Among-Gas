@@ -1897,6 +1897,7 @@ export default function GameMap() {
         remainingMs={sabotageRemainingMs}
         english={en}
         language={language}
+        positionStyle={customControlPositionStyle('sabotage', controlLayout, joystickSide)}
         panelOpen={showSabotagePanel}
         onPanelOpen={() => setShowSabotagePanel(true)}
         onPanelClose={() => setShowSabotagePanel(false)}

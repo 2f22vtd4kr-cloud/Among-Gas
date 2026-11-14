@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { SabotageInfo } from '../context/GameContext';
 import { SABOTAGE_DEFS, type SabotageSystemId } from '@workspace/shared/sabotage';
 import { haptic } from '../lib/haptics';
@@ -15,6 +16,7 @@ export interface GameSabotageControlsProps {
   english: boolean;
   language: 'en' | 'ru';
   panelOpen: boolean;
+  positionStyle: CSSProperties;
   onPanelOpen: () => void;
   onPanelClose: () => void;
   onTrigger: (systemId: SabotageSystemId) => void;
@@ -32,6 +34,7 @@ export default function GameSabotageControls(props: GameSabotageControlsProps) {
         !props.meetingActive && props.sabotage === null && (
         <div style={{
           position: 'fixed', bottom: 130, left: 24, zIndex: 25,
+          ...props.positionStyle,
         }}>
           <button
             type="button"
