@@ -18,6 +18,7 @@ const ref = (x: number, y: number) => ({
 export interface VentDef {
   readonly id: number;
   readonly name: string;
+  readonly nameEn: string;
   readonly x: number;
   readonly y: number;
   readonly connections: readonly number[];
@@ -26,12 +27,12 @@ export interface VentDef {
 export const VENT_INTERACTION_RANGE_PX = Math.round(50 * SX);
 
 export const VENT_DEFS: readonly VentDef[] = [
-  { id: 0, name: 'Котельная', ...ref(95, 309), connections: [1, 3] },
-  { id: 1, name: 'Атриум', ...ref(455, 199), connections: [0, 2] },
-  { id: 2, name: 'Техкомната', ...ref(785, 99), connections: [1, 4] },
-  { id: 3, name: 'Газовая станция', ...ref(135, 439), connections: [0, 5] },
-  { id: 4, name: 'Восточный офис', ...ref(865, 269), connections: [2, 5] },
-  { id: 5, name: 'Электрощитовая', ...ref(795, 479), connections: [3, 4] },
+  { id: 0, name: 'Котельная', nameEn: 'Boiler Room', ...ref(95, 309), connections: [1, 3] },
+  { id: 1, name: 'Атриум', nameEn: 'Atrium', ...ref(455, 199), connections: [0, 2] },
+  { id: 2, name: 'Техкомната', nameEn: 'Tech Room', ...ref(785, 99), connections: [1, 4] },
+  { id: 3, name: 'Газовая станция', nameEn: 'Gas Station', ...ref(135, 439), connections: [0, 5] },
+  { id: 4, name: 'Восточный офис', nameEn: 'East Office', ...ref(865, 269), connections: [2, 5] },
+  { id: 5, name: 'Электрощитовая', nameEn: 'Electrical', ...ref(795, 479), connections: [3, 4] },
 ] as const;
 
 export function findVent(ventId: number): VentDef | undefined {
