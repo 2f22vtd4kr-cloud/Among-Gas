@@ -70,9 +70,8 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
   }
 
   // Match Canvas drawImage(..., imageSmoothingEnabled=false): sample the
-  // nearest source sample at each destination pixel centre. Chromium's Canvas 2D
-  // nearest-neighbour sampler rounds source sample coordinates; flooring them
-  // shifted the 160px-wide cells one pixel left at the midpoint. Sharp's resize
+  // nearest source sample at each destination pixel centre. The exact browser
+  // sampling phase is verified separately by the browser parity probe. Sharp's resize
   // kernel uses a different phase for this 159/160→161 mapping, which made
   // the pre-baked PNG differ from the legacy runtime renderer.
   const columnData = Buffer.alloc(CHARACTER_CELL_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
@@ -80,7 +79,7 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
     for (let x = 0; x < CHARACTER_CELL_WIDTH; x++) {
       const sourceX = Math.min(
         sourceColumnWidth - 1,
-        Math.floor((x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH + 0.5),
+        Math.floor((x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH),
       );
       const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
       const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
