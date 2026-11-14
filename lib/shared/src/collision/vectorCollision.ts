@@ -725,14 +725,15 @@ export class CollisionWorld {
         if (excludedByHole) break;
       }
       if (excludedByHole) continue;
-      if (radius === 0) return true;
       let clearance = Number.POSITIVE_INFINITY;
       for (const segmentIndex of this.query(this.moveRegionSegmentHash, x, y, radius)) {
         const segment = this.moveRegionSegments[segmentIndex];
         if (segment.shapeIndex !== regionIndex) continue;
         clearance = Math.min(clearance, segmentDistance(x, y, segment));
       }
-      if (clearance >= radius - EPS) return true;
+      // Match ordinary movement barriers: a zero-radius point exactly on a
+      // floor boundary is not inside the walkable floor.
+      if (radius === 0 ? clearance > EPS : clearance >= radius - EPS) return true;
     }
     return false;
   }
