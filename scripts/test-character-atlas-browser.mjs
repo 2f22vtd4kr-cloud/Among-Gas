@@ -147,6 +147,7 @@ try {
       const observed = Array.from({ length: destinationWidth }, (_, x) => destinationPixels[x * 4]);
       const formulas = {
         floorCenter: x => Math.floor((x + 0.5) * sourceWidth / destinationWidth),
+        lowerTieCenter: x => Math.ceil((x + 0.5) * sourceWidth / destinationWidth) - 1,
         floorOrigin: x => Math.floor(x * sourceWidth / destinationWidth),
         roundCenter: x => Math.round((x + 0.5) * sourceWidth / destinationWidth - 0.5),
         roundOrigin: x => Math.round(x * sourceWidth / destinationWidth),
