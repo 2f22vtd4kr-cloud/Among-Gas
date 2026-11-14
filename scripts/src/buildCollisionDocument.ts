@@ -559,16 +559,19 @@ async function main():Promise<void> {
   const errors=validateCollisionDocument(document); if(errors.length) throw new Error("invalid red-line geometry: "+errors.join("; "));
   const world=new CollisionWorld(shapes,MAP_W,MAP_H);
   let edgeCount=0,blocked=0;
+  const unblockedSamples:Array<{id:string;walkableRegion:boolean|undefined;point:Point;radius:number}>=[];
   for(const shape of shapes) {
     const count=shape.closed?shape.points.length:shape.points.length-1;
     for(let i=0;i<count;i++) {
       const a=shape.points[i],b=shape.points[(i+1)%shape.points.length];
       edgeCount++;
       const edgeRadius=shape.walkableRegion===true?4:0;
-      if(!world.isWalkable((a[0]+b[0])/2,(a[1]+b[1])/2,edgeRadius)) blocked++;
+      const midpoint:Point=[(a[0]+b[0])/2,(a[1]+b[1])/2];
+      if(!world.isWalkable(midpoint[0],midpoint[1],edgeRadius)) blocked++;
+      else if(unblockedSamples.length<12) unblockedSamples.push({id:shape.id,walkableRegion:shape.walkableRegion,point:midpoint,radius:edgeRadius});
     }
   }
-  if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount);
+  if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount+"; unblocked="+JSON.stringify(unblockedSamples));
   await mkdir(outputDir,{recursive:true}); await mkdir(path.dirname(qaPath),{recursive:true});
   await writeFile(path.join(outputDir,"collision.v1.json"),JSON.stringify(document,null,2)+"\n");
   await writeFile(path.join(outputDir,"generatedDocument.ts"),
