@@ -10,7 +10,7 @@ import {
   MANUAL_WALKABLE_REPLACEMENT_ZONES,
 } from "../lib/shared/src/collisionMap.js";
 import { FEET_OFFSET_Y } from "../lib/shared/src/coords.js";
-import { getPrimaryMapAuthoringZone } from "../lib/shared/src/collision/mapZones.js";
+import { MAP_AUTHORING_ZONES, getPrimaryMapAuthoringZone } from "../lib/shared/src/collision/mapZones.js";
 import { isBotNavigationReachable } from "../lib/shared/src/collision/botNavigation.js";
 import { getProductionCollisionWorld } from "../lib/shared/src/collision/productionWorld.js";
 
@@ -116,13 +116,24 @@ const summary = {
 const qaDirectory = path.resolve("../artifacts/telegram-game/collision-qa-tiles");
 await mkdir(qaDirectory, { recursive: true });
 const baseMap = path.resolve("../artifacts/telegram-game/public/map-hires.png");
+const mismatchMapPath = path.join(qaDirectory, "vector-raster-parity-mismatches.png");
 await sharp(baseMap)
   .composite([{
     input: mismatchOverlay,
     raw: { width: MAP_W, height: MAP_H, channels: 4 },
   }])
   .png()
-  .toFile(path.join(qaDirectory, "vector-raster-parity-mismatches.png"));
+  .toFile(mismatchMapPath);
+for (const zone of MAP_AUTHORING_ZONES) {
+  const left = Math.max(0, Math.floor(zone.minX));
+  const top = Math.max(0, Math.floor(zone.minY));
+  const right = Math.min(MAP_W, Math.ceil(zone.maxX));
+  const bottom = Math.min(MAP_H, Math.ceil(zone.maxY));
+  await sharp(mismatchMapPath)
+    .extract({ left, top, width: right - left, height: bottom - top })
+    .png()
+    .toFile(path.join(qaDirectory, "vector-raster-parity-" + zone.id + ".png"));
+}
 await writeFile(
   path.join(qaDirectory, "vector-raster-parity.json"),
   JSON.stringify({
