@@ -29,6 +29,21 @@ for (const region of walkableRegions) {
   assert.equal(region.blocksSight, false);
   assert.equal(region.castsShadow, false);
 }
+const walkableHoles = document.shapes.filter(shape => shape.walkableRegionHole === true);
+assert.ok(walkableHoles.length > 0, "enclosed source-art object interiors must be subtracted from floor regions");
+assert.equal(document.source?.shapeCounts.walkableRegionHoles, walkableHoles.length);
+assert.equal(document.source?.walkableRegionExtraction?.holeCount, walkableHoles.length);
+for (const hole of walkableHoles) {
+  assert.equal(hole.closed, true);
+  assert.equal(hole.blocksMove, false);
+  assert.equal(hole.blocksSight, false);
+  assert.equal(hole.castsShadow, false);
+  assert.ok(hole.walkableRegionId, "each floor hole must be associated with its parent floor region");
+}
+assert.ok(walkableHoles.some(hole => hole.id.includes("C38") &&
+  hole.walkableRegionId === "main-spawn-connected-floor"),
+  "the isolated C38 floor must be subtracted from the main floor before being reintroduced as its own region");
+
 assert.equal(document.source?.walkableRegionExtraction?.morphologyKernelSourcePx, 5);
 assert.equal(document.source?.walkableRegionExtraction?.connectivity, 8);
 assert.equal(document.source?.walkableRegionExtraction?.selectedRegions.some(region =>
