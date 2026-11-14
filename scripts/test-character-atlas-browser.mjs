@@ -69,11 +69,62 @@ try {
     const bakedPixels = context.getImageData(0, 0, atlas.width, atlas.height).data;
     let differentBytes = 0;
     let maxChannelDelta = 0;
-    for (let offset = 0; offset < bakedPixels.length; offset++) {
-      const delta = Math.abs(bakedPixels[offset] - referencePixels[offset]);
-      if (delta !== 0) differentBytes++;
-      maxChannelDelta = Math.max(maxChannelDelta, delta);
+    const channelDifferences = [0, 0, 0, 0];
+    const mismatchByColumn = Array.from({ length: 18 }, () => ({
+      pixels: 0, rgbPixels: 0, alphaPixels: 0, transparentRgbPixels: 0,
+    }));
+    const mismatchByReferenceAlpha = new Map();
+    const mismatchSamples = [];
+    for (let pixelOffset = 0; pixelOffset < bakedPixels.length; pixelOffset += 4) {
+      const referenceAlpha = referencePixels[pixelOffset + 3];
+      const bakedAlpha = bakedPixels[pixelOffset + 3];
+      const pixelIndex = pixelOffset / 4;
+      const x = pixelIndex % atlas.width;
+      const y = Math.floor(pixelIndex / atlas.width);
+      const column = Math.floor(x / 161);
+      let pixelDiffers = false;
+      let rgbDiffers = false;
+      let alphaDiffers = false;
+      for (let channel = 0; channel < 4; channel++) {
+        const delta = Math.abs(bakedPixels[pixelOffset + channel] - referencePixels[pixelOffset + channel]);
+        if (delta !== 0) {
+          differentBytes++;
+          channelDifferences[channel]++;
+          pixelDiffers = true;
+          if (channel === 3) alphaDiffers = true;
+          else rgbDiffers = true;
+        }
+        maxChannelDelta = Math.max(maxChannelDelta, delta);
+      }
+      if (!pixelDiffers) continue;
+      const columnStats = mismatchByColumn[column];
+      columnStats.pixels++;
+      if (rgbDiffers) columnStats.rgbPixels++;
+      if (alphaDiffers) columnStats.alphaPixels++;
+      if (rgbDiffers && referenceAlpha === 0 && bakedAlpha === 0) columnStats.transparentRgbPixels++;
+      const alphaKey = String(referenceAlpha);
+      const alphaStats = mismatchByReferenceAlpha.get(alphaKey) ?? { pixels: 0, rgbPixels: 0, alphaPixels: 0 };
+      alphaStats.pixels++;
+      if (rgbDiffers) alphaStats.rgbPixels++;
+      if (alphaDiffers) alphaStats.alphaPixels++;
+      mismatchByReferenceAlpha.set(alphaKey, alphaStats);
+      if (mismatchSamples.length < 24) {
+        mismatchSamples.push({
+          x, y, column,
+          reference: Array.from(referencePixels.slice(pixelOffset, pixelOffset + 4)),
+          baked: Array.from(bakedPixels.slice(pixelOffset, pixelOffset + 4)),
+        });
+      }
     }
+    const bakedParityDiagnostics = {
+      differentBytes,
+      maxChannelDelta,
+      channelDifferences,
+      mismatchByColumn: mismatchByColumn.map((stats, column) => ({ column, ...stats })),
+      mismatchByReferenceAlpha: Object.fromEntries([...mismatchByReferenceAlpha.entries()]
+        .sort((a, b) => Number(a[0]) - Number(b[0]))),
+      mismatchSamples,
+    };
     const atlasMetrics = window.__AG_CHARACTER_ATLAS_METRICS ?? null;
     const cellWidth = 161;
     const colors = [
@@ -163,6 +214,7 @@ try {
       height: atlas.height,
       bakedAsset: atlasMetrics?.bakedAsset === true,
       bakedParity: { differentBytes, maxChannelDelta },
+      bakedParityDiagnostics,
       cellWidth,
       columns: atlas.width / cellWidth,
       sourceAssetGitBlobSha,
@@ -180,6 +232,7 @@ try {
     };
   }, { poseWindows, sourceAssetGitBlobSha });
 
+  console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
   assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
   assert.deepEqual(metrics.bakedParity, { differentBytes: 0, maxChannelDelta: 0 },
     'every baked RGBA byte must match the legacy in-memory renderer exactly');
