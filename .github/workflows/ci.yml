@@ -70,6 +70,8 @@ jobs:
       - name: Test extracted GameMap task and sabotage marker rendering
         run: pnpm --filter @workspace/scripts run test:map-renderer
 
+      - name: Test Admin Table player visibility and map projection
+        run: pnpm --filter @workspace/scripts run test:admin-table
       - name: Test extracted contextual HUD action selection and disable rules
         run: pnpm --filter @workspace/scripts run test:game-action-state
 
