@@ -95,8 +95,18 @@ const controllerFrame = controller.update(
 );
 near(controllerFrame.center.x, oneFrame.x, "controller preserves the existing smoothing contract");
 near(controllerFrame.center.y, oneFrame.y, "controller preserves vertical smoothing");
-near(controllerFrame.viewport.srcX, viewport.srcX, "controller viewport matches the pure helper");
-near(controllerFrame.viewport.srcY, viewport.srcY, "controller viewport matches the pure helper");
+const controllerExpectedViewport = getCameraViewport({
+  canvasWidth: 1170,
+  canvasHeight: 2532,
+  dpr: 3,
+  zoom: 0.7,
+  centerX: oneFrame.x,
+  centerY: oneFrame.y,
+  mapWidth: 3224,
+  mapHeight: 1858,
+});
+near(controllerFrame.viewport.srcX, controllerExpectedViewport.srcX, "controller viewport matches the pure helper");
+near(controllerFrame.viewport.srcY, controllerExpectedViewport.srcY, "controller viewport matches the pure helper");
 const snappedCenter = controller.snap({ x: 3210, y: 1840 });
 near(snappedCenter.x, 3210, "authoritative corrections snap camera X immediately");
 near(snappedCenter.y, 1840, "authoritative corrections snap camera Y immediately");
