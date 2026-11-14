@@ -116,8 +116,60 @@ try {
         });
       }
     }
+    // Probe Chromium's own nearest-neighbour phase independently of sprite
+    // contents. This uses a monotonic red-channel ramp so each sampled source
+    // pixel is observable in the destination byte array.
+    function probeCanvasNearestSampling(sourceWidth, destinationWidth) {
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = sourceWidth;
+      sourceCanvas.height = 1;
+      const sourceContext = sourceCanvas.getContext('2d');
+      if (!sourceContext) throw new Error('Could not allocate nearest-sampling source probe');
+      const sourceImage = sourceContext.createImageData(sourceWidth, 1);
+      for (let x = 0; x < sourceWidth; x++) {
+        sourceImage.data[x * 4] = x;
+        sourceImage.data[x * 4 + 3] = 255;
+      }
+      sourceContext.putImageData(sourceImage, 0, 0);
+
+      const destinationCanvas = document.createElement('canvas');
+      destinationCanvas.width = destinationWidth;
+      destinationCanvas.height = 1;
+      const destinationContext = destinationCanvas.getContext('2d', { willReadFrequently: true });
+      if (!destinationContext) throw new Error('Could not allocate nearest-sampling destination probe');
+      destinationContext.imageSmoothingEnabled = false;
+      destinationContext.drawImage(
+        sourceCanvas,
+        0, 0, sourceWidth, 1,
+        0, 0, destinationWidth, 1,
+      );
+      const destinationPixels = destinationContext.getImageData(0, 0, destinationWidth, 1).data;
+      const observed = Array.from({ length: destinationWidth }, (_, x) => destinationPixels[x * 4]);
+      const formulas = {
+        floorCenter: x => Math.floor((x + 0.5) * sourceWidth / destinationWidth),
+        floorOrigin: x => Math.floor(x * sourceWidth / destinationWidth),
+        roundCenter: x => Math.round((x + 0.5) * sourceWidth / destinationWidth - 0.5),
+        roundOrigin: x => Math.round(x * sourceWidth / destinationWidth),
+      };
+      const candidates = Object.fromEntries(Object.entries(formulas).map(([name, sample]) => {
+        const predicted = Array.from({ length: destinationWidth }, (_, x) =>
+          Math.max(0, Math.min(sourceWidth - 1, sample(x))),
+        );
+        return [name, {
+          mismatchCount: predicted.reduce((count, value, x) => count + (value !== observed[x] ? 1 : 0), 0),
+          predicted,
+        }];
+      }));
+      return { sourceWidth, destinationWidth, observed, candidates };
+    }
+    const canvasSamplingProbe = [
+      probeCanvasNearestSampling(160, 161),
+      probeCanvasNearestSampling(159, 161),
+    ];
+
     const bakedParityDiagnostics = {
       differentBytes,
+      canvasSamplingProbe,
       maxChannelDelta,
       channelDifferences,
       mismatchByColumn: mismatchByColumn.map((stats, column) => ({ column, ...stats })),
