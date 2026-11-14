@@ -37,7 +37,12 @@ for (const id of expected) {
 assert.equal(SOURCE_ART_ISOLATED_REGION_CANDIDATES.length, 1);
 assert.equal(SOURCE_ART_ISOLATED_REGION_CANDIDATES[0].id, "east-office-vehicle-service-bay");
 assert.match(SOURCE_ART_ISOLATED_REGION_CANDIDATES[0].entryExitMechanics, /design-owner confirmation remains pending/);
-assert.equal(document.shapes.some(shape => shape.id.includes("east-office-vehicle-service-bay")), false,
-  "C38 remains a separately reviewed isolated interior; do not invent a fill or doorway");
+assert.ok(document.shapes.some(shape =>
+  shape.walkableRegion === true && shape.walkableRegionId === "east-office-vehicle-service-bay"),
+  "C38 remains represented as a separate isolated interior region");
+assert.equal(document.shapes.some(shape =>
+  shape.id === "source-art-candidate-east-office-vehicle-service-bay"),
+  false,
+  "C38 must not be filled with a guessed movement-blocking polygon or given an invented doorway");
 
 console.log("SOURCE-ART CANDIDATE OVERRIDES PASSED: four irregular movement-only contours; C38 remains provisional and separate");
