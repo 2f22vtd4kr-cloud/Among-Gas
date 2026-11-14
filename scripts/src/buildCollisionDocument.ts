@@ -6,6 +6,7 @@ import { CollisionWorld, validateCollisionDocument, type CollisionDocument, type
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
 import { assignMapAuthoringZonesByCentroid } from "../../lib/shared/src/collision/mapZones.js";
 import {
+  CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS,
   MANUAL_BLOCKED_POLYGONS,
   MANUAL_WALKABLE_REPLACEMENT_ZONES,
 } from "../../lib/shared/src/collisionOverrides.js";
@@ -267,6 +268,16 @@ function applyWalkableReplacementZones(
       label: polygon.id,
     });
   }
+  for (const polygon of CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS) {
+    output.push({
+      id: "source-art-candidate-" + polygon.id,
+      points: polygon.points.map(([x, y]) => [x, y] as Point),
+      closed: true,
+      blocksMove: true,
+      blocksSight: false,
+      label: "provisional source-art movement contour: " + polygon.id,
+    });
+  }
   return output;
 }
 
@@ -296,7 +307,10 @@ async function main():Promise<void> {
       },
       geometryOverrides:{
         walkableReplacementZones:MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone=>({id:zone.id,bounds:zone.bounds})),
-        movementOnlyBlockedPolygons:MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
+        movementOnlyBlockedPolygons:[
+          ...MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
+          ...CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.map(polygon=>polygon.id),
+        ],
       },
       referenceImage:{width:info.width,height:info.height},
       vectorization:{redPixelCount:redCount,skeletonPixelCount:skeletonCount,tracedPathCount:paths.length,simplifiedPointCount:points,simplificationToleranceSourcePx:TOLERANCE,closedSolidCount:shapes.filter(s=>s.closed).length,openBoundaryCount:shapes.filter(s=>!s.closed).length},
@@ -306,6 +320,7 @@ async function main():Promise<void> {
         closedSolids:shapes.filter(s=>s.closed).length,
         openBoundaries:shapes.filter(s=>!s.closed).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
+        provisionalSourceArtBlockedPolygons:CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.length,
       },
       zoneShapeCounts:Object.fromEntries(Array.from({length:12},(_,index)=>{const id="Z"+String(index+1).padStart(2,"0");return [id,shapes.filter(shape=>shape.zone===id).length];})),
     },
