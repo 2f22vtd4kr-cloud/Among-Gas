@@ -13,3 +13,6 @@ export {
 export type { MapAuthoringZoneId } from "./mapZones.js";
 export { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "./zoneReview.js";
 export type { ZoneReviewStatus, ZoneSourceEvidence, ZoneReviewRecord } from "./zoneReview.js";
+
+export { validateCollisionCutoverEvidence, COLLISION_CUTOVER_REQUIRED_ANCHORS, COLLISION_CUTOVER_REQUIRED_REGIONS } from "./releaseReadiness.js";
+export type { CollisionCutoverEvidence, GameplayAnchorDisposition, DisconnectedRegionDisposition } from "./releaseReadiness.js";
