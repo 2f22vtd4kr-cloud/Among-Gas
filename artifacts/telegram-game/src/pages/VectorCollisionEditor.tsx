@@ -1461,7 +1461,7 @@ export default function VectorCollisionEditor() {
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
         {(["pan", "wall", "solid", "region", "hole", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
-          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
+          <button key={item} type="button" data-testid={"collision-tool-" + item} style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
@@ -1486,9 +1486,27 @@ export default function VectorCollisionEditor() {
           Blocks movement
         </label>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={blocksSight} onChange={event => setBlocksSight(event.target.checked)} />
+          <input type="checkbox" checked={blocksSight} disabled={tool === "region" || tool === "hole"} onChange={event => setBlocksSight(event.target.checked)} />
           Blocks sight
         </label>
+        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+          Shadow
+          <select aria-label="New shape shadow behavior" value={castsShadowMode} disabled={tool === "region" || tool === "hole"} onChange={event => setCastsShadowMode(event.target.value as "inherit" | "yes" | "no")} style={{ minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }}>
+            <option value="inherit">Follow sight</option>
+            <option value="yes">Casts</option>
+            <option value="no">No shadow</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+          Stroke radius
+          <input aria-label="New wall stroke radius" type="number" min={0} max={12} step={0.5} value={strokeRadius} disabled={tool !== "wall"} onChange={event => setStrokeRadius(Math.max(0, Math.min(12, Number(event.target.value) || 0)))} style={{ width: 62, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
+        </label>
+        {(tool === "region" || tool === "hole") && (
+          <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+            Floor region ID
+            <input aria-label="Walkable region ID" value={walkableRegionId} maxLength={64} onChange={event => setWalkableRegionId(event.target.value)} style={{ minWidth: 120, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
+          </label>
+        )}
         <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", minHeight: 48, fontSize: 12 }} />
         <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, minHeight: 48, fontSize: 12 }}>
           <option value="unassigned">Zone: unassigned</option>
@@ -1598,8 +1616,28 @@ export default function VectorCollisionEditor() {
         {selected && (
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
             <strong>{selected.label || selected.id}</strong>
-            <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
-            <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label><input type="checkbox" checked={selected.blocksMove} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
+            <label><input type="checkbox" checked={selected.blocksSight} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Shadow
+              <select aria-label="Selected shape shadow behavior" value={selected.castsShadow === undefined ? "inherit" : selected.castsShadow ? "yes" : "no"} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ castsShadow: event.target.value === "inherit" ? undefined : event.target.value === "yes" })} style={{ minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}>
+                <option value="inherit">Follow sight</option><option value="yes">Casts</option><option value="no">No shadow</option>
+              </select>
+            </label>
+            <label><input type="checkbox" checked={selected.walkableRegion === true} onChange={event => updateSelected(event.target.checked ? { walkableRegion: true, walkableRegionHole: false, walkableRegionId: walkableRegionId.trim() || "floor-main", blocksMove: false, blocksSight: false, castsShadow: false, strokeRadius: undefined } : { walkableRegion: false, blocksMove: true, blocksSight: false })} /> Floor region</label>
+            <label><input type="checkbox" checked={selected.walkableRegionHole === true} onChange={event => updateSelected(event.target.checked ? { walkableRegion: false, walkableRegionHole: true, walkableRegionId: walkableRegionId.trim() || "floor-main", blocksMove: false, blocksSight: false, castsShadow: false, strokeRadius: undefined } : { walkableRegionHole: false, blocksMove: true, blocksSight: false })} /> Floor hole</label>
+            {(selected.walkableRegion === true || selected.walkableRegionHole === true) && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                Region ID
+                <input aria-label="Selected walkable region ID" value={selected.walkableRegionId ?? ""} maxLength={64} onChange={event => updateSelected({ walkableRegionId: event.target.value })} style={{ width: 110, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }} />
+              </label>
+            )}
+            {selected.blocksMove && !selected.walkableRegion && !selected.walkableRegionHole && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                Stroke
+                <input aria-label="Selected shape stroke radius" type="number" min={0} max={12} step={0.5} value={selected.strokeRadius ?? 0} onChange={event => updateSelected({ strokeRadius: Math.max(0, Math.min(12, Number(event.target.value) || 0)) || undefined })} style={{ width: 54, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }} />
+              </label>
+            )}
             <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               Zone
               <select
