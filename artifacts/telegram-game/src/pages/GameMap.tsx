@@ -87,7 +87,6 @@ import GameVentOverlay from '../components/GameVentOverlay';
 import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton';
 import { buildAdminTableAgents } from '../game/adminTableAgents';
 import TaskListPanel from '../components/TaskListPanel';
-import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton';
 import EmergencyCallSplash from '../components/EmergencyCallSplash';
 import MeetingChatPanel from '../components/MeetingChatPanel';
 import MeetingVotingPanel from '../components/MeetingVotingPanel';
