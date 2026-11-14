@@ -426,6 +426,16 @@ export class CollisionWorld {
   private readonly moveSolidHash = new Map<string, number[]>();
   private readonly sightSolidHash = new Map<string, number[]>();
   private readonly shadowSolidHash = new Map<string, number[]>();
+  private readonly moveRegions: Solid[] = [];
+  private readonly moveRegionIds: string[] = [];
+  private readonly moveRegionHash = new Map<string, number[]>();
+  private readonly moveRegionSegments: Segment[] = [];
+  private readonly moveRegionSegmentHash = new Map<string, number[]>();
+  private readonly moveRegionHoles: Solid[] = [];
+  private readonly moveRegionHoleIds: string[] = [];
+  private readonly moveRegionHoleHash = new Map<string, number[]>();
+  private readonly moveRegionHoleSegments: Segment[] = [];
+  private readonly moveRegionHoleSegmentHash = new Map<string, number[]>();
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -446,7 +456,7 @@ export class CollisionWorld {
       const edgeCount = shape.closed ? shape.points.length : shape.points.length - 1;
       for (let i = 0; i < edgeCount; i++) {
         const a = shape.points[i], b = shape.points[(i + 1) % shape.points.length];
-        const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex };
+        const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex, strokeRadius: shape.strokeRadius ?? 0 };
         if (shape.blocksMove) {
           const index = this.moveSegments.push(segment) - 1;
           this.insert(this.moveHash, index, segment);
@@ -479,6 +489,23 @@ export class CollisionWorld {
           const index = this.shadowSolids.push(solid) - 1;
           this.insertSolid(this.shadowSolidHash, index, solid);
         }
+        if (shape.walkableRegion === true || shape.walkableRegionHole === true) {
+          const isHole = shape.walkableRegionHole === true;
+          const targetRegions = isHole ? this.moveRegionHoles : this.moveRegions;
+          const targetIds = isHole ? this.moveRegionHoleIds : this.moveRegionIds;
+          const targetHash = isHole ? this.moveRegionHoleHash : this.moveRegionHash;
+          const targetSegments = isHole ? this.moveRegionHoleSegments : this.moveRegionSegments;
+          const targetSegmentHash = isHole ? this.moveRegionHoleSegmentHash : this.moveRegionSegmentHash;
+          const regionIndex = targetRegions.push(solid) - 1;
+          targetIds.push(shape.walkableRegionId!);
+          this.insertSolid(targetHash, regionIndex, solid);
+          for (let edgeIndex = 0; edgeIndex < shape.points.length; edgeIndex++) {
+            const a = shape.points[edgeIndex], b = shape.points[(edgeIndex + 1) % shape.points.length];
+            const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: regionIndex };
+            const segmentIndex = targetSegments.push(segment) - 1;
+            this.insert(targetSegmentHash, segmentIndex, segment);
+          }
+        }
       }
     });
 
@@ -499,10 +526,11 @@ export class CollisionWorld {
   }
 
   private insert(index: Map<string, number[]>, segmentIndex: number, segment: Segment): void {
-    const minX = Math.floor(Math.min(segment.ax, segment.bx) / this.cell);
-    const maxX = Math.floor(Math.max(segment.ax, segment.bx) / this.cell);
-    const minY = Math.floor(Math.min(segment.ay, segment.by) / this.cell);
-    const maxY = Math.floor(Math.max(segment.ay, segment.by) / this.cell);
+    const padding = segment.strokeRadius ?? 0;
+    const minX = Math.floor((Math.min(segment.ax, segment.bx) - padding) / this.cell);
+    const maxX = Math.floor((Math.max(segment.ax, segment.bx) + padding) / this.cell);
+    const minY = Math.floor((Math.min(segment.ay, segment.by) - padding) / this.cell);
+    const maxY = Math.floor((Math.max(segment.ay, segment.by) + padding) / this.cell);
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         const key = this.key(x, y);
@@ -582,6 +610,79 @@ export class CollisionWorld {
   insideSolid(x: number, y: number): boolean {
     return Number.isFinite(x) && Number.isFinite(y) &&
       this.insideSolids(x, y, this.moveSolids, this.moveSolidHash);
+  }
+
+  private rectangleInsideWalkableRegion(
+    minX: number, minY: number, maxX: number, maxY: number,
+  ): boolean {
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+    for (const regionIndex of this.querySolids(this.moveRegionHash, centerX, centerY, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const bounds = region.bounds;
+      if (minX < bounds[0] || minY < bounds[1] || maxX > bounds[2] || maxY > bounds[3]) continue;
+      if (!corners.every(point => pointInPolygon(point[0], point[1], region.points))) continue;
+      if (!pointInPolygon(centerX, centerY, region.points)) continue;
+      let crossesHole = false;
+      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, centerX, centerY, radius)) {
+        if (this.moveRegionHoleIds[holeIndex] !== this.moveRegionIds[regionIndex]) continue;
+        if (polygonIntersectsRect(this.moveRegionHoles[holeIndex].points, minX, minY, maxX, maxY)) {
+          crossesHole = true;
+          break;
+        }
+      }
+      if (crossesHole) continue;
+      let crossesBoundary = false;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, centerX, centerY, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex === regionIndex &&
+            segmentIntersectsRect(segment, minX, minY, maxX, maxY)) {
+          crossesBoundary = true;
+          break;
+        }
+      }
+      if (!crossesBoundary) return true;
+    }
+    return false;
+  }
+
+  private insideWalkableRegion(x: number, y: number, radius: number): boolean {
+    for (const regionIndex of this.querySolids(this.moveRegionHash, x, y, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const regionId = this.moveRegionIds[regionIndex];
+      const [minX, minY, maxX, maxY] = region.bounds;
+      if (x - radius < minX || x + radius > maxX ||
+          y - radius < minY || y + radius > maxY) continue;
+      if (!pointInPolygon(x, y, region.points)) continue;
+      let excludedByHole = false;
+      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, x, y, radius)) {
+        if (this.moveRegionHoleIds[holeIndex] !== regionId) continue;
+        const hole = this.moveRegionHoles[holeIndex];
+        if (pointInPolygon(x, y, hole.points)) { excludedByHole = true; break; }
+        if (radius > 0) {
+          for (const segmentIndex of this.query(this.moveRegionHoleSegmentHash, x, y, radius)) {
+            const segment = this.moveRegionHoleSegments[segmentIndex];
+            if (segment.shapeIndex === holeIndex && segmentDistance(x, y, segment) < radius - EPS) {
+              excludedByHole = true;
+              break;
+            }
+          }
+        }
+        if (excludedByHole) break;
+      }
+      if (excludedByHole) continue;
+      if (radius === 0) return true;
+      let clearance = Number.POSITIVE_INFINITY;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, x, y, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex !== regionIndex) continue;
+        clearance = Math.min(clearance, segmentDistance(x, y, segment));
+      }
+      if (clearance >= radius - EPS) return true;
+    }
+    return false;
   }
 
   isWalkable(x: number, y: number, radius: number): boolean {
