@@ -254,7 +254,7 @@ jobs:
           node scripts/browser-smoke.mjs
           pnpm --filter @workspace/scripts run test:map-tiles-browser
           node scripts/test-audio-preload.mjs
-          node scripts/test-character-atlas-browser.mjs
+          pnpm --filter @workspace/scripts run test:character-atlas-browser
           node scripts/test-ingame-settings.mjs
           node scripts/test-vector-collision-editor-browser.mjs
           pnpm --filter @workspace/scripts run test:vector-collision-editor-api
