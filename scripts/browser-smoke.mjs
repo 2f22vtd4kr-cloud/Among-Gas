@@ -725,6 +725,9 @@ try {
     const kill = current.getByTestId('game-action-kill');
     assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
     assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
+    assert.equal(await kill.getAttribute('data-kill-state'), 'ready');
+    assert.equal(await kill.evaluate(element => getComputedStyle(element).animationName), 'ag-kill-ready-pulse',
+      'impostor ready: Kill gives a restrained pulse when a target is actionable');
     assert.equal(await current.getByTestId('game-action-report').isEnabled(), false);
     assert.equal(await current.getByTestId('game-action-use').isEnabled(), false);
     return { kill: 'enabled-target', report: 'disabled-no-body', use: 'disabled-no-interaction' };

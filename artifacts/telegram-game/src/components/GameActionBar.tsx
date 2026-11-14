@@ -44,6 +44,8 @@ export default function GameActionBar(props: GameActionBarProps) {
   const useDisabled = !props.useAvailable;
 
   return (
+    <>
+    <style>{`\n      @keyframes ag-kill-ready-pulse {\n        0%, 100% { box-shadow: 0 0 12px rgba(255,40,40,0.32); transform: scale(1); }\n        50% { box-shadow: 0 0 24px rgba(255,65,65,0.72); transform: scale(1.045); }\n      }\n      @media (prefers-reduced-motion: reduce) {\n        .ag-kill-ready-pulse { animation: none !important; }\n      }\n    `}</style>
     <div data-testid="game-action-bar" style={{
       position: "fixed",
       bottom: 130,
@@ -59,6 +61,8 @@ export default function GameActionBar(props: GameActionBarProps) {
         <button
           type="button"
           data-testid="game-action-kill"
+          data-kill-state={killDisabled ? "disabled" : "ready"}
+          className={!killDisabled ? "ag-kill-ready-pulse" : undefined}
           data-kill-available={String(props.killAvailable)}
           data-cooldown-ms={props.killCooldownMs}
           aria-label={props.killCooldownMs > 0
@@ -78,6 +82,7 @@ export default function GameActionBar(props: GameActionBarProps) {
               : killDisabled ? neutralSurface : "radial-gradient(circle, rgba(210,20,20,0.96), rgba(120,0,0,0.98))",
             border: killDisabled ? neutralBorder : "2px solid rgba(255,135,135,0.9)",
             boxShadow: killDisabled ? "none" : "0 0 18px rgba(255,40,40,0.45)",
+            animation: !killDisabled ? "ag-kill-ready-pulse 1.6s ease-in-out infinite" : "none",
             cursor: killDisabled ? "default" : "pointer",
           }}
         >
@@ -165,5 +170,6 @@ export default function GameActionBar(props: GameActionBarProps) {
           : props.english ? "USE" : "ИСПОЛЬЗОВАТЬ"}</span>
       </button>
     </div>
+    </>
   );
 }
