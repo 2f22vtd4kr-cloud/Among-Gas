@@ -15,8 +15,8 @@ import {
   assignMapAuthoringZonesByCentroid,
 } from "@workspace/shared/collision";
 
-const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true): CollisionShape =>
-  ({ id, points, closed, blocksMove, blocksSight });
+const shape = (id: string, points: Point[], closed = false, blocksMove = true, blocksSight = true, castsShadow?: boolean): CollisionShape =>
+  ({ id, points, closed, blocksMove, blocksSight, ...(castsShadow === undefined ? {} : { castsShadow }) });
 
 function contains(point: Point, polygon: readonly Point[]): boolean {
   let inside = false;
@@ -176,7 +176,26 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
 
 // Invalid geometry, map bounds, raster and editor utilities.
 {
-  const errors = validateCollisionDocument({ version: 1, mapW: 100, mapH: 100, shapes: [
+  const shadowSemantics = validateCollisionDocument({
+  version: 1,
+  mapW: 100,
+  mapH: 100,
+  shapes: [
+    shape("move-only-bench", [[10, 10], [30, 10], [30, 30], [10, 30]], true, true, false, false),
+    shape("sight-and-shadow-wall", [[50, 10], [50, 90]], false, false, true, true),
+  ],
+});
+assert.deepEqual(shadowSemantics, [],
+  "movement, sight and presentation-shadow flags are independently expressible");
+assert.ok(validateCollisionDocument({
+  version: 1,
+  mapW: 100,
+  mapH: 100,
+  shapes: [{ ...shape("invalid-shadow", [[10, 10], [20, 20]]), castsShadow: "yes" as unknown as boolean }],
+}).some(error => error.includes("castsShadow must be boolean")),
+"invalid shadow flags must fail closed");
+
+const errors = validateCollisionDocument({ version: 1, mapW: 100, mapH: 100, shapes: [
     shape("bad", [[10, 10], [90, 90], [10, 90], [90, 10]], true),
     shape("bad", [[1, 1], [2, 2]]),
   ] });
