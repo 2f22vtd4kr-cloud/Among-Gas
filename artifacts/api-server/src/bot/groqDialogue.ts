@@ -48,6 +48,8 @@ export interface GroqDialogueRequestOptions {
   readonly temperature?: number;
   /** Request provider-enforced JSON object output for machine decisions. */
   readonly jsonMode?: boolean;
+  /** Bounded response size for structured dialogue envelopes; ordinary replies default to 220 chars. */
+  readonly maxResponseChars?: number;
 }
 
 export async function requestGroqDialogue(
@@ -113,7 +115,10 @@ export async function requestGroqDialogue(
     const content = payload.choices?.[0]?.message?.content;
     if (typeof content !== 'string') return null;
     const clean = content.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim();
-    return clean.length > 0 ? clean.slice(0, 220) : null;
+    const maxResponseChars = Number.isInteger(options.maxResponseChars)
+      ? Math.max(1, Math.min(1_200, options.maxResponseChars!))
+      : 220;
+    return clean.length > 0 ? clean.slice(0, maxResponseChars) : null;
   } catch {
     // Provider outages, invalid keys, DNS errors and timeouts all use the
     // deterministic in-game fallback. Never expose provider details.
