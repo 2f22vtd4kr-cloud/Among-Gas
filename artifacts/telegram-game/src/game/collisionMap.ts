@@ -8,6 +8,7 @@ export {
   REPORT_RANGE_PX,
   buildCollisionGrid,
   buildPreciseCollisionGrid,
+  buildPreciseVisionGrid,
   buildFineCollisionGridFromRle,
   isPlayerPositionWalkable,
   isPlayerSpawnPositionClear,
