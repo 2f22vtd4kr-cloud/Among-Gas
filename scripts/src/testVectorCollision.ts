@@ -136,6 +136,20 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   }).some(error => error.includes("walkable-region boundary must be closed")),
   "walkable regions cannot simultaneously be movement blockers");
 
+  const orphanHole = { ...floorHole, walkableRegionId: "missing-region" };
+  assert.ok(validateCollisionDocument({
+    version: 1, mapW: 200, mapH: 200, shapes: [orphanHole],
+  }).some(error => error.includes("references missing region")),
+  "a floor hole cannot silently reference a missing floor region");
+  const outsideHole = {
+    ...floorHole,
+    points: [[160, 160], [190, 160], [190, 190], [160, 190]] as Point[],
+  };
+  assert.ok(validateCollisionDocument({
+    version: 1, mapW: 200, mapH: 200, shapes: [room, outsideHole],
+  }).some(error => error.includes("fully contained by region")),
+  "a linked hole must remain inside its authored floor polygon");
+
   const strokedWall: CollisionShape = {
     id: "traced-wall-with-width",
     points: [[100, 10], [100, 190]],
