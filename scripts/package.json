@@ -12,6 +12,7 @@
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vector-collision.json --noEmit && tsc -p tsconfig.collision-preview.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",
+    "test:character-atlas-browser": "tsx ./test-character-atlas-browser.mjs",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
     "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./test-collision-release-readiness.ts",
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
