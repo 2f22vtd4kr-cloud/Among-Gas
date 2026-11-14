@@ -162,3 +162,25 @@ The candidate's collision document remains 370 movement-only shapes (14 closed, 
 6. Complete two-real-client / real-device acceptance and the release dossier only after the owner explicitly clears the active recovery restriction. Repository CI, local server checks and Vercel preview statuses are not production deployment or physical-device acceptance.
 
 **Decision: NOT READY.** Mainline has gained meaningful Plan 2 implementation and verification, but Plan 2 is not complete and no live vector collision cut-over, deployment, Replit mutation, production database change, or external publishing is authorized by this audit.
+
+## Supplemental current-main reconciliation — 2026-11-14
+
+The earlier checkpoint above predates the latest integration round. The current mainline now also includes:
+
+| PR | Merge commit | Verified scope |
+|---|---|---|
+| #161 | `280afd9b74a3e03c193550056922465bc6a79119` | Build-time 18-palette character atlas with strict browser pixel parity. |
+| #168 | `50b8f5e83aa842ea6ec2b7b0a163b32d0c7bc921` | Behavior-preserving extraction of the victim kill-animation overlay. |
+| #169 | `fdc14ed01f88812e990c4d2524720b60003bb8a1` | Behavior-preserving extraction of emergency-call feedback. |
+| #170 | `69b672623f4b27a37d5720056487578b518001ab` | Labeled bilingual global task progress; map icon grouped beside Settings; 320px no-overlap and alignment assertions. |
+
+**Exact-head evidence**
+- PR #161 run `43584519720`: 51/51 passed.
+- PR #168 run `43584753112`: 51/51 passed.
+- PR #169 run `43588183753`: 51/51 passed.
+- PR #170 run `43590069552`: 51/51 passed; seeded crew-win rates 59%, 65%, 58%, zero timeouts.
+- Main run `43589950502` on the post-#169 base: 51/51 passed; seeded crew-win rates 58%, 65%, 58%, zero timeouts.
+
+PR #171 is the remaining safe integration PR in this pass. It moves the existing 20-minute API/WebSocket soak onto production-main pushes and pins that job to pnpm 11.13.1, matching the workspace. The PR's own run skips the soak by design; after merge, verify the new mainline soak job completes before claiming that acceptance gate passed.
+
+**Current release decision remains NOT READY.** These merges improve integration and CI coverage but do not complete source-backed tracing/review of the 12 collision zones, route/disconnected-region owner dispositions, vector move/sight/shadow parity, true map super-resolution, the retained asset provenance inventory, physical-device/two-client acceptance, or owner-authorized deployment. Keep PR #138 draft and keep the vector candidate out of production gameplay.
