@@ -81,7 +81,7 @@ try {
     const sourceProbeContext = sourceProbeCanvas.getContext('2d', { willReadFrequently: true });
     if (!sourceProbeContext) throw new Error('Could not allocate source readback probe');
     sourceProbeContext.imageSmoothingEnabled = false;
-    sourceProbeContext.drawImage(sourceImage, 0, 0, 160, 1401);
+    sourceProbeContext.drawImage(sourceImage, 0, 0, 160, 1401, 0, 0, 160, 1401);
     const browserSource = sourceProbeContext.getImageData(0, 0, 160, 1401).data;
 
     const normalizeCandidate = (channel, alpha) => {
