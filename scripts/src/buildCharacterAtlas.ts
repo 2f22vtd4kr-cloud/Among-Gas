@@ -5,19 +5,17 @@ import {
   CHARACTER_CELL_WIDTH,
   CHARACTER_COLORS,
   CHARACTER_SHEET_HEIGHT,
-  CHARACTER_SHEET_PATH,
   CHARACTER_SHEET_WIDTH,
   CHARACTER_SOURCE_SHEET_COLS,
-  CHARACTER_SOURCE_SHEET_PATH,
   CHARACTER_SOURCE_SHEET_WIDTH,
   GENERATED_CHARACTER_PALETTES,
-} from "../../artifacts/telegram-game/src/game/characterSprites.js";
-import { recolorSuitPixel } from "../../artifacts/telegram-game/src/game/characterAtlas.js";
+  recolorSuitPixel,
+} from "@workspace/shared";
 
 const root = path.resolve(import.meta.dirname, "../..");
 const publicDir = path.join(root, "artifacts/telegram-game/public");
-const sourcePath = path.join(publicDir, CHARACTER_SOURCE_SHEET_PATH.replace(/^\/+/, "").split("?")[0]);
-const outputPath = path.join(publicDir, CHARACTER_SHEET_PATH.replace(/^\/+/, "").split("?")[0]);
+const sourcePath = path.join(publicDir, "sprites/characters.png");
+const outputPath = path.join(publicDir, "sprites/characters-18.png");
 
 const sourceMetadata = await sharp(sourcePath).metadata();
 if (sourceMetadata.width !== CHARACTER_SOURCE_SHEET_WIDTH ||
