@@ -1935,8 +1935,8 @@ try {
     Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 2,
   );
   const snappedWallPoints = await editorCanvas.getAttribute('data-shape-points').then(JSON.parse);
-  assert.ok(Math.abs(snappedWallPoints[1].points[0][0] - 1200) <= 1 &&
-    Math.abs(snappedWallPoints[1].points[0][1] - 900) <= 1,
+  assert.ok(Math.abs(snappedWallPoints[1][0][0] - 1200) <= 1 &&
+    Math.abs(snappedWallPoints[1][0][1] - 900) <= 1,
     'touch snapping must attach the second wall to the first wall endpoint');
 
   await editorPage.getByRole('button', { name: 'Draw solid', exact: true }).click();
@@ -1947,8 +1947,8 @@ try {
   await editorPage.waitForFunction(() =>
     Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
   );
-  const closedLoopShapes = await editorCanvas.getAttribute('data-shape-points').then(JSON.parse);
-  assert.equal(closedLoopShapes[2].closed, true,
+  const closedLoopMetadata = await editorCanvas.getAttribute('data-shape-metadata').then(JSON.parse);
+  assert.equal(closedLoopMetadata[2].closed, true,
     'three touch vertices and Close polygon must commit a closed solid loop');
 
   await editorPage.getByRole('button', { name: 'Walk test', exact: true }).click();
