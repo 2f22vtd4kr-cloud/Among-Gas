@@ -59,3 +59,20 @@ Append entries using this compact format:
 
 **Next**
 - Remaining work and blockers.
+### 2026-11-14 — continue Plan 2 implementation from supplied v2 package
+
+**Done**
+- Merged audit reconciliation PR #155 at `7726cd52b3d8c06163583d649fa39bb9db4d6c82`.
+- PR #138: corrected editor shape metadata instrumentation (unsupported `kind` removed) and foregrounded the camera browser fixture while it waits for render-loop tile readiness. Current candidate head: `23b4e0d97cb7bf554e3023a8ba346a876118f1f3`; PR remains draft.
+- PR #156 opened for the missing ready-target Kill pulse, with reduced-motion handling and an exact browser assertion. Current head: `2e057d89c6f26a43cd763f18fcc3b8797545a142`.
+- Reconstructed both tile sets from the newly supplied Plan 2 package and ran its `tile_qa.py`: sharpened candidate passes against the faithful baseline (Lab MAD 0.4725, quarter-scale chamfer 0.145, edge F1 0.9879, worst tile colour drift 0.6686, seam step 0.0; sharpness ratio 2.648). This confirms a sharpening change, not generated new detail.
+
+**Verification**
+- PR #138 exact-head run `43556715413`: build and vector/map checks passed, but browser smoke timed out waiting for tile readiness; balance cohorts were skipped. Its 20-minute soak was cancelled when the failed verify job terminated the run.
+- Corrected PR #138 exact-head run `43558056731` is in progress. Its map tile and renderer lifecycle tests have passed; later gameplay, browser, balance and soak gates are not yet complete.
+- HUD PR #156 exact-head run `43558094694` is in progress; no pass or merge is claimed.
+
+**Next**
+- Finish both exact-head workflows; fix any remaining failures without weakening assertions or the three unchanged 100-game cohorts.
+- Keep #138 draft until source-backed 12-zone tracing, independent review, disconnected-region and anchor dispositions, full-footprint route clearance, and separate sight/shadow authoring are complete.
+- Continue the remaining Plan 2 workstreams: behavior-neutral GameMap decomposition, accepted map-art generation/gallery, sprite golden review, minigame functional acceptance, bot observation/chat evidence, provenance clearance, and owner-authorized physical-device/two-client release acceptance. Issue #90 restrictions remain controlling; no Replit/Vercel workspace operation, publishing, deployment or production mutation.
