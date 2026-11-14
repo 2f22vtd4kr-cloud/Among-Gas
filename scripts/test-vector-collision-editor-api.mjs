@@ -24,10 +24,10 @@ for (let index = 0; index < 12; index++) {
   const column = index % 4;
   const row = Math.floor(index / 4);
   const expectedRect = [
-    column * 806 * 1652 / 3224,
-    row * (1858 / 3) * 952 / 1858,
-    (column + 1) * 806 * 1652 / 3224,
-    (row + 1) * (1858 / 3) * 952 / 1858,
+    Math.max(0, column * 806 - 24) * 1652 / 3224,
+    Math.max(0, row * (1858 / 3) - 24) * 952 / 1858,
+    Math.min(3224, (column + 1) * 806 + 24) * 1652 / 3224,
+    Math.min(1858, (row + 1) * (1858 / 3) + 24) * 952 / 1858,
   ];
   for (let coordinate = 0; coordinate < 4; coordinate++) {
     assert.ok(Math.abs(evidence.sourceRect[coordinate] - expectedRect[coordinate]) < 1e-8, zone + " source crop coordinate " + coordinate);
