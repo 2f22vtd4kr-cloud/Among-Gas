@@ -18,7 +18,12 @@ const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
     sourceSha256: digest,
     sourceWidth: 1652,
     sourceHeight: 952,
-    sourceRect: [0, 0, 413, 317.33333333333337] as [number, number, number, number],
+    sourceRect: [
+      Math.max(0, zone.minX - 24) / (3224 / 1652),
+      Math.max(0, zone.minY - 24) / (1858 / 952),
+      Math.min(3224, zone.maxX + 24) / (3224 / 1652),
+      Math.min(1858, zone.maxY + 24) / (1858 / 952),
+    ] as [number, number, number, number],
     worldTransform: { scaleX: 3224 / 1652, scaleY: 1858 / 952, offsetX: 0, offsetY: 0 },
   }],
   reviewer: {
