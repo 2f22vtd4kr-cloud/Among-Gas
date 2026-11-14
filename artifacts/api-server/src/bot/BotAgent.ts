@@ -32,6 +32,7 @@ import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
+import { BotObservationLog, type BotObservationSource } from './botObservationLog.js';
 import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
 
 export { NO_TARGET };
@@ -164,6 +165,31 @@ export abstract class BotAgent {
   private lastDiscussionReplyAtMs = 0;
   private voteRequestMeeting: Lobby['meeting'] = null;
   private voteRequestPending = false;
+  private readonly observationLog = new BotObservationLog(64);
+
+  /** Record only the public/model-visible inputs for this bot's decision. */
+  protected recordObservation(
+    self: LobbyPlayer,
+    decision: string,
+    observation: Readonly<Record<string, unknown>>,
+    fallback: unknown,
+  ): number {
+    return this.observationLog.record(self.slot, decision, observation, fallback);
+  }
+
+  protected resolveObservation(
+    sequence: number,
+    source: BotObservationSource,
+    selected: unknown,
+    reason?: string,
+  ): void {
+    this.observationLog.resolve(sequence, source, selected, reason);
+  }
+
+  /** Diagnostic snapshot; entries are cloned and never include provider credentials. */
+  getObservationLog() {
+    return this.observationLog.snapshot();
+  }
 
   // ── Abstract interface ──────────────────────────────────────────────────
 
@@ -262,6 +288,10 @@ export abstract class BotAgent {
       text: message.text,
     }));
     const prompt = buildPublicBotVoteMessages(self.username, publicRoster, publicTranscript);
+    const observationId = this.recordObservation(self, 'meeting-vote', {
+      publicRoster,
+      publicTranscript,
+    }, fallback);
 
     void (async () => {
       const response = await requestGroqDialogue(sessionKey, prompt, voteDeadlineAtMs, { temperature: 0.2, jsonMode: true });
@@ -273,7 +303,10 @@ export abstract class BotAgent {
         votingOpen: meeting.votingOpen,
         alive: self.alive,
         hasVoted: meeting.votes.has(self.slot),
-      })) return;
+      })) {
+        this.resolveObservation(observationId, 'stale', fallback, 'meeting no longer accepts this decision');
+        return;
+      }
 
       const parsed = response === null
         ? null
@@ -285,8 +318,12 @@ export abstract class BotAgent {
       const legal = candidate === NO_TARGET ||
         (!!target && target.alive && target.slot !== self.slot &&
           (self.role !== 'impostor' || target.role !== 'impostor'));
-      manager.castVote(lobby, self.slot, legal ? candidate : fallback);
+      const selected = legal ? candidate : fallback;
+      this.resolveObservation(observationId, parsed !== null && legal ? 'model' : 'fallback', selected,
+        parsed === null ? 'no valid model vote' : !legal ? 'model vote failed server legality checks' : undefined);
+      manager.castVote(lobby, self.slot, selected);
     })().catch(() => {
+      this.resolveObservation(observationId, 'fallback', fallback, 'provider request failed');
       if (canCommitBotVote({
         phase: lobby.phase,
         currentMeeting: lobby.meeting,
@@ -376,6 +413,11 @@ export abstract class BotAgent {
       const player = lobby.players.get(entry.slot);
       return `${player?.username ?? 'Player'}: ${entry.text.slice(0, 220)}`;
     }).join('\n');
+    const observationId = this.recordObservation(self, 'meeting-dialogue', {
+      livingRoster: roster,
+      meetingType: hasBody ? 'body report' : 'emergency call',
+      publicTranscript: transcript,
+    }, fallback);
 
     void (async () => {
       let reply: string | null = null;
@@ -387,9 +429,16 @@ export abstract class BotAgent {
           publicTranscript: transcript,
         }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
       }
-      if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') return;
-      manager.sendMeetingChat(lobby, self.slot, reply ?? fallback);
+      if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') {
+        this.resolveObservation(observationId, 'stale', fallback, 'meeting ended before dialogue commit');
+        return;
+      }
+      const selectedReply = reply ?? fallback;
+      this.resolveObservation(observationId, reply ? 'model' : 'fallback', selectedReply,
+        reply ? undefined : 'no valid model dialogue');
+      manager.sendMeetingChat(lobby, self.slot, selectedReply);
     })().catch(() => {
+      this.resolveObservation(observationId, 'fallback', fallback, 'provider request failed');
       if (lobby.meeting === meeting && !meeting.votingOpen && lobby.phase === 'MEETING') {
         manager.sendMeetingChat(lobby, self.slot, fallback);
       }
