@@ -129,6 +129,18 @@ async function runScenario(apiKey: string, modelResponse: string, expectedTaskId
   assert.equal(calls, 1, 'the real bot dispatcher made exactly one provider request');
   assert.equal(bot.currentTargetTaskId(), expectedTaskId,
     'only a valid model-selected assigned task may replace the deterministic fallback');
+  const trace = bot.getObservationLog();
+  assert.equal(trace.length, 1, 'task planning records one bounded public observation');
+  assert.equal(trace[0].decision, 'crew-task-plan');
+  assert.equal(trace[0].botSlot, player.slot);
+  assert.equal(trace[0].fallback, fallbackTaskId);
+  assert.equal(trace[0].source, expectedTaskId === fallbackTaskId ? 'fallback' : 'model');
+  assert.deepEqual(
+    (trace[0].observation.availableTasks as Array<{ taskId: number }>).map(task => task.taskId).sort(),
+    [...player.assignedTasks].sort(),
+    'the observation trace records only the bot own unfinished task candidates');
+  assert.equal(JSON.stringify(trace).includes(apiKey), false,
+    'observation traces must never retain the provider key');
 }
 
 async function testModelMeetingDialogueDispatch(): Promise<void> {
@@ -204,6 +216,13 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
   assert.equal(replies[0].slot, player.slot, 'the reply is broadcast from the acting bot slot');
   assert.equal(replies[0].text, responseText,
     'the real meeting dispatcher broadcasts the successful model response');
+  const trace = agent.getObservationLog();
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].decision, 'meeting-dialogue');
+  assert.equal(trace[0].source, 'model');
+  assert.ok(String(trace[0].observation.publicTranscript).includes(publicObservation),
+    'the dialogue trace records only the public transcript actually supplied to the model');
+  assert.equal(JSON.stringify(trace).includes(apiKey), false);
 }
 
 class ProbeImpostorBot extends ImpostorBot {
@@ -357,6 +376,15 @@ async function testModelHuntDispatch(): Promise<void> {
   await waitForImpostorPlan(agent, 'hunt');
   assert.equal(agent.targetSlot(), modelTarget.slot,
     'a valid model hunt decision changes the target through the real impostor roaming dispatcher');
+  const trace = agent.getObservationLog();
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].decision, 'impostor-hunt-target');
+  assert.equal(trace[0].source, 'model');
+  assert.deepEqual(
+    (trace[0].observation.visibleTargets as Array<{ slot: number }>).map(target => target.slot),
+    targets.map(target => target.slot),
+    'the observation trace contains only currently visible, server-filtered targets',
+  );
   player.killCooldownMs = originalCooldown;
 }
 
@@ -394,6 +422,15 @@ async function testModelSabotageDispatch(): Promise<void> {
   assert.equal(triggered, chosen,
     'a valid model sabotage choice reaches the existing server-authoritative trigger path');
   assert.equal(broadcasts, 1, 'the accepted model choice follows the normal sabotage broadcast path');
+  const trace = agent.getObservationLog();
+  assert.equal(trace.length, 1);
+  assert.equal(trace[0].decision, 'impostor-sabotage');
+  assert.equal(trace[0].source, 'model');
+  assert.deepEqual(
+    (trace[0].observation.availableSystems as Array<{ systemId: number }>).map(system => system.systemId),
+    systems,
+    'the observation trace records only server-allowed sabotage systems',
+  );
 }
 
 try {
