@@ -1,4 +1,5 @@
 import { MAP_AUTHORING_ZONES } from "./mapZones.js";
+import { MAP_H, MAP_W } from "../coords.js";
 import { validateZoneReviewRecord } from "./zoneReview.js";
 
 export interface GameplayAnchorDisposition {
@@ -80,6 +81,30 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       }
       const record = matches[0] as Record<string, unknown>;
       errors.push(...validateZoneReviewRecord(record, zone.id).map((error) => `${zone.id}: ${error}`));
+      const hasNativeContextCrop = Array.isArray(record.sourceEvidence) &&
+        record.sourceEvidence.some((item) => {
+          if (!item || typeof item !== "object") return false;
+          const evidence = item as Record<string, unknown>;
+          const rect = evidence.sourceRect;
+          const transform = evidence.worldTransform;
+          if (!Array.isArray(rect) || rect.length !== 4 ||
+              !rect.every(Number.isFinite) || !transform || typeof transform !== "object") return false;
+          const t = transform as Record<string, unknown>;
+          if (![t.scaleX, t.scaleY, t.offsetX, t.offsetY].every(Number.isFinite)) return false;
+          const left = rect[0] * (t.scaleX as number) + (t.offsetX as number);
+          const top = rect[1] * (t.scaleY as number) + (t.offsetY as number);
+          const right = rect[2] * (t.scaleX as number) + (t.offsetX as number);
+          const bottom = rect[3] * (t.scaleY as number) + (t.offsetY as number);
+          const requiredLeft = Math.max(0, zone.minX - 24);
+          const requiredTop = Math.max(0, zone.minY - 24);
+          const requiredRight = Math.min(MAP_W, zone.maxX + 24);
+          const requiredBottom = Math.min(MAP_H, zone.maxY + 24);
+          return left <= requiredLeft + 0.5 && top <= requiredTop + 0.5 &&
+            right >= requiredRight - 0.5 && bottom >= requiredBottom - 0.5;
+        });
+      if (!hasNativeContextCrop) {
+        errors.push(`${zone.id}: source evidence must cover the complete zone plus 24 world-pixel seam context`);
+      }
       if (record.status !== "approved") errors.push(`${zone.id}: author trace, independent review and owner approval are not complete`);
     }
   }
