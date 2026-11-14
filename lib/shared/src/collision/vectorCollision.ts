@@ -25,6 +25,8 @@ export interface CollisionShape {
   readonly closed: boolean;
   readonly blocksMove: boolean;
   readonly blocksSight: boolean;
+  /** Independent authored presentation shadow flag; never inferred from movement or sight. */
+  readonly castsShadow?: boolean;
   readonly label?: string;
   readonly zone?: string;
 }
@@ -162,7 +164,7 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".id duplicates " + shape.id);
     } else ids.add(shape.id);
     if (typeof shape.closed !== "boolean") errors.push(prefix + ".closed must be boolean");
-    if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
+    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {\n      errors.push(prefix + ".castsShadow must be boolean when supplied");\n    }\n    if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
     if (shape.blocksMove !== true && shape.blocksSight !== true) {
