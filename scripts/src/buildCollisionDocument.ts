@@ -117,6 +117,7 @@ interface FreeComponent {
   readonly maxX: number;
   readonly maxY: number;
   readonly touchesBorder: boolean;
+  readonly pixels: number[];
 }
 
 function closeBinaryMask(mask: Uint8Array, w: number, h: number, kernel: number): Uint8Array {
@@ -169,8 +170,10 @@ function labelFreeComponents(barrier: Uint8Array, w: number, h: number): {
     queue[tail++] = start;
     labels[start] = id;
     let minX = w, minY = h, maxX = -1, maxY = -1, touchesBorder = false;
+    const pixels: number[] = [];
     while (head < tail) {
       const index = queue[head++];
+      pixels.push(index);
       const x = index % w, y = Math.floor(index / w);
       if (x < minX) minX = x;
       if (x > maxX) maxX = x;
@@ -186,7 +189,7 @@ function labelFreeComponents(barrier: Uint8Array, w: number, h: number): {
         queue[tail++] = next;
       }
     }
-    components.push({ id, area: tail, minX, minY, maxX, maxY, touchesBorder });
+    components.push({ id, area: tail, minX, minY, maxX, maxY, touchesBorder, pixels });
   }
   return { labels, components };
 }
@@ -200,8 +203,18 @@ function signedArea(points: readonly Point[]): number {
   return value / 2;
 }
 
+function sourcePointInPolygon(x: number, y: number, points: readonly Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const a = points[i], b = points[j];
+    if ((a[1] > y) !== (b[1] > y) &&
+        x < ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+
 function componentOuterContours(
-  labels: Int32Array, w: number, h: number, componentId: number,
+  labels: Int32Array, w: number, h: number, component: FreeComponent,
 ): Point[][] {
   type Edge = { ax: number; ay: number; bx: number; by: number; direction: number };
   const edges: Edge[] = [];
@@ -213,12 +226,12 @@ function componentOuterContours(
     const bucket = outgoing.get(key);
     if (bucket) bucket.push(index); else outgoing.set(key, [index]);
   };
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    if (labels[y * w + x] !== componentId) continue;
-    if (y === 0 || labels[(y - 1) * w + x] !== componentId) add(x, y, x + 1, y, 0);
-    if (x === w - 1 || labels[y * w + x + 1] !== componentId) add(x + 1, y, x + 1, y + 1, 1);
-    if (y === h - 1 || labels[(y + 1) * w + x] !== componentId) add(x + 1, y + 1, x, y + 1, 2);
-    if (x === 0 || labels[y * w + x - 1] !== componentId) add(x, y + 1, x, y, 3);
+  for (const pixelIndex of component.pixels) {
+    const x = pixelIndex % w, y = Math.floor(pixelIndex / w);
+    if (y === 0 || labels[(y - 1) * w + x] !== component.id) add(x, y, x + 1, y, 0);
+    if (x === w - 1 || labels[y * w + x + 1] !== component.id) add(x + 1, y, x + 1, y + 1, 1);
+    if (y === h - 1 || labels[(y + 1) * w + x] !== component.id) add(x + 1, y + 1, x, y + 1, 2);
+    if (x === 0 || labels[y * w + x - 1] !== component.id) add(x, y + 1, x, y, 3);
   }
   const used = new Uint8Array(edges.length);
   const priority = [1, 0, 3, 2];
@@ -242,12 +255,17 @@ function componentOuterContours(
       });
       edgeIndex = candidates[0];
     }
-    if (!closed || loop.length < 3) continue;
-    // With the component interior kept on the right, outer loops have positive
-    // signed area; negative loops are holes around furniture/fixtures.
-    if (signedArea(loop) > 0) loops.push(loop);
+    if (closed && loop.length >= 3 && signedArea(loop) > 0) loops.push(loop);
   }
   return loops;
+}
+
+function simplifySourceLoop(loop: Point[]): Point[] {
+  const simplified = simplify([...loop, loop[0]], TOLERANCE);
+  if (simplified.length > 1 &&
+      simplified[0][0] === simplified[simplified.length - 1][0] &&
+      simplified[0][1] === simplified[simplified.length - 1][1]) simplified.pop();
+  return simplified;
 }
 
 function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
@@ -257,7 +275,7 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
   const barrier = closeBinaryMask(mask, w, h, 5);
   const { labels, components } = labelFreeComponents(barrier, w, h);
   const interior = components.filter(component => !component.touchesBorder);
-  const main = interior.sort((a, b) => b.area - a.area)[0];
+  const main = [...interior].sort((a, b) => b.area - a.area)[0];
   if (!main || main.area < 100_000) throw new Error("red-line source did not produce a substantial spawn-connected floor region");
 
   const isolatedReference = SOURCE_ART_ISOLATED_REGION_CANDIDATES[0].islandSideReferenceImage;
@@ -281,20 +299,26 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
     throw new Error("C38 source-art reference point did not resolve to a separate enclosed floor component");
   }
 
+  const mainId = "main-spawn-connected-floor";
+  const isolatedIdName = "east-office-vehicle-service-bay";
   const selected = [
-    { component: main, id: "main-spawn-connected-floor", role: "spawn-connected-floor" as const, label: "source-derived spawn-connected playable floor" },
-    { component: isolated, id: "east-office-vehicle-service-bay", role: "isolated-interior-candidate" as const, label: "source-derived isolated bay interior; no entry authored" },
+    { component: main, id: mainId, role: "spawn-connected-floor" as const, label: "source-derived spawn-connected playable floor" },
+    { component: isolated, id: isolatedIdName, role: "isolated-interior-candidate" as const, label: "source-derived isolated bay interior; no entry authored" },
   ];
   const shapes: CollisionShape[] = [];
+  const regionLoops = new Map<string, Point[][]>();
+  const regionWorldLoops = new Map<string, Point[][]>();
+
   for (const region of selected) {
-    const loops = componentOuterContours(labels, w, h, region.component.id);
+    const loops = componentOuterContours(labels, w, h, region.component);
     if (!loops.length) throw new Error("source floor region has no closed outer contour: " + region.id);
-    loops.forEach((loop, loopIndex) => {
-      const simplified = simplify([...loop, loop[0]], TOLERANCE);
-      if (simplified.length > 1 && simplified[0][0] === simplified[simplified.length - 1][0] &&
-          simplified[0][1] === simplified[simplified.length - 1][1]) simplified.pop();
-      const points = simplified.map(([x, y]) => [(x / w) * MAP_W, (y / h) * MAP_H] as Point);
-      if (points.length < 3 || area(points) < 100) return;
+    const sourceLoops = loops.map(simplifySourceLoop).filter(loop => loop.length >= 3);
+    regionLoops.set(region.id, sourceLoops);
+    const worldLoops: Point[][] = [];
+    sourceLoops.forEach((loop, loopIndex) => {
+      const points = loop.map(([x, y]) => [(x / w) * MAP_W, (y / h) * MAP_H] as Point);
+      if (area(points) < 100) return;
+      worldLoops.push(points);
       shapes.push({
         id: "walkable-region-" + region.id + "-" + String(loopIndex + 1).padStart(2, "0"),
         points,
@@ -303,10 +327,62 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
         blocksSight: false,
         castsShadow: false,
         walkableRegion: true,
+        walkableRegionId: region.id,
         label: region.label,
       });
     });
+    regionWorldLoops.set(region.id, worldLoops);
   }
+
+  // C38 is a separate interior region, not an extension of the spawn-connected
+  // floor. Explicitly subtract it from the main region while preserving its
+  // internal floor as a separately reviewable walkable island.
+  for (const [loopIndex, loop] of (regionLoops.get(isolatedIdName) ?? []).entries()) {
+    const points = loop.map(([x, y]) => [(x / w) * MAP_W, (y / h) * MAP_H] as Point);
+    if (area(points) < 100) continue;
+    shapes.push({
+      id: "walkable-hole-" + mainId + "-C38-" + String(loopIndex + 1).padStart(2, "0"),
+      points,
+      closed: true,
+      blocksMove: false,
+      blocksSight: false,
+      castsShadow: false,
+      walkableRegionHole: true,
+      walkableRegionId: mainId,
+      label: "C38 isolated interior excluded from spawn-connected floor",
+    });
+  }
+
+  let holeCount = regionLoops.get(isolatedIdName)?.length ?? 0;
+  for (const component of interior) {
+    if (component.id === main.id || component.id === isolated.id || component.area < 16) continue;
+    const centerX = (component.minX + component.maxX + 1) / 2;
+    const centerY = (component.minY + component.maxY + 1) / 2;
+    const inIsolated = (regionLoops.get(isolatedIdName) ?? []).some(loop => sourcePointInPolygon(centerX, centerY, loop));
+    const inMain = (regionLoops.get(mainId) ?? []).some(loop => sourcePointInPolygon(centerX, centerY, loop));
+    const parentRegionId = inIsolated ? isolatedIdName : inMain ? mainId : null;
+    if (!parentRegionId) continue;
+    const loops = componentOuterContours(labels, w, h, component);
+    for (const [loopIndex, loop] of loops.entries()) {
+      const simplified = simplifySourceLoop(loop);
+      if (simplified.length < 3) continue;
+      const points = simplified.map(([x, y]) => [(x / w) * MAP_W, (y / h) * MAP_H] as Point);
+      if (area(points) < 100) continue;
+      shapes.push({
+        id: "walkable-hole-" + parentRegionId + "-component-" + component.id + "-" + String(loopIndex + 1).padStart(2, "0"),
+        points,
+        closed: true,
+        blocksMove: false,
+        blocksSight: false,
+        castsShadow: false,
+        walkableRegionHole: true,
+        walkableRegionId: parentRegionId,
+        label: "source-derived enclosed non-walkable object/fixture interior",
+      });
+      holeCount++;
+    }
+  }
+
   return {
     shapes,
     metadata: {
@@ -320,6 +396,8 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
         ownerDecisionRequired: region.role === "isolated-interior-candidate",
       })),
       excludedDetachedCandidates: SOURCE_ART_SEALED_REGION_CANDIDATES.map(candidate => candidate.id),
+      holeCount,
+      excludedComponentCount: interior.length - selected.length,
     },
   };
 }
