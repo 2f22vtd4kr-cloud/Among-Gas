@@ -14,6 +14,16 @@ const browser = await chromium.launch({
 });
 const failures = [];
 
+// Bound every Playwright wait, including waitForFunction (whose Playwright
+// default is otherwise unbounded). A failed UI condition should identify its
+// test step instead of leaving the entire CI job running indefinitely.
+async function createPage(options) {
+  const page = await browser.newPage(options);
+  page.setDefaultTimeout(30_000);
+  page.setDefaultNavigationTimeout(30_000);
+  return page;
+}
+
 // Playing fixtures trigger the same 3.2-second role reveal as a real match.
 // Do not capture screenshots or judge gameplay controls through that overlay.
 async function waitForRoleRevealToFinish(page) {
@@ -28,7 +38,7 @@ async function waitForRoleRevealToFinish(page) {
   await roleLabel.waitFor({ state: 'hidden', timeout: 6_000 });
 }
 try {
-  const page = await browser.newPage({
+  const page = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -135,7 +145,7 @@ try {
     ['lobby-solo', 'SOLO01', 'lobby-solo.png'],
     ['lobby-guest', 'ABC123', 'lobby-guest.png'],
   ]) {
-    const lobbyPage = await browser.newPage({
+    const lobbyPage = await createPage({
       viewport: { width: 390, height: 844 },
       deviceScaleFactor: 2,
       isMobile: true,
@@ -471,7 +481,7 @@ try {
 
   // A player may be within the numeric task radius but still be separated by
   // a wall. The client must not expose the task action in that state.
-  const blockedTaskPage = await browser.newPage({
+  const blockedTaskPage = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -509,7 +519,7 @@ try {
 
   // Ghosts are intentionally exempt from task LOS checks on the server and
   // must retain the same through-wall task prompt on the client.
-  const ghostBlockedTaskPage = await browser.newPage({
+  const ghostBlockedTaskPage = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1312,7 +1322,7 @@ try {
   }
   // The editor preview must switch to a landscape aspect ratio and keep
   // every default control below the fixed HUD and inside the available screen.
-  const landscapePage = await browser.newPage({
+  const landscapePage = await createPage({
     viewport: { width: 844, height: 390 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1358,7 +1368,7 @@ try {
 
   // A compact portrait viewport must keep the preview proportional and all
   // controls within bounds without overlap.
-  const smallPhonePage = await browser.newPage({
+  const smallPhonePage = await createPage({
     viewport: { width: 320, height: 568 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1490,7 +1500,7 @@ try {
 
   // The loading overlay must remain until both the map and character atlas have
   // completed image decoding, not merely until their network load events fire.
-  const decodePage = await browser.newPage({
+  const decodePage = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1531,7 +1541,7 @@ try {
   await decodePage.close();
 
   // If optional detail tiles fail, the canonical overview still renders and unlocks play.
-  const fallbackPage = await browser.newPage({
+  const fallbackPage = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
@@ -1620,7 +1630,7 @@ try {
   ];
   for (const [fixture, filename] of visualStateCases) {
     for (const viewport of visualViewports) {
-      const statePage = await browser.newPage({
+      const statePage = await createPage({
         viewport: viewport.viewport,
         deviceScaleFactor: viewport.isMobile ? 2 : 1,
         isMobile: viewport.isMobile,
@@ -1675,7 +1685,7 @@ try {
   // deliberately relocates the player beside task 4, where nearby geometry can
   // constrain movement and is covered by the task/collision-specific checks.
   // The character's suit centroid should remain stable near canvas center.
-  const cameraPage = await browser.newPage({
+  const cameraPage = await createPage({
     viewport: { width: 390, height: 844 },
     deviceScaleFactor: 2,
     isMobile: true,
