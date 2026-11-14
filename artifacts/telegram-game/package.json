@@ -8,8 +8,8 @@
     "build": "vite build --config vite.config.ts",
     "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "predev": "pnpm --filter @workspace/scripts run build:collision && pnpm --filter @workspace/scripts run build:map-tiles",
-    "prebuild": "pnpm --filter @workspace/scripts run build:collision && pnpm --filter @workspace/scripts run build:map-tiles"
+    "predev": "pnpm --filter @workspace/scripts run build:character-atlas",
+    "prebuild": "pnpm --filter @workspace/scripts run build:character-atlas"
   },
   "dependencies": {
     "@workspace/shared": "workspace:*"
