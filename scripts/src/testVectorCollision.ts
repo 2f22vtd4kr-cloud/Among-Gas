@@ -132,6 +132,36 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     "a target radius fully inside the solid cannot be interacted through it");
 }
 
+// Movement, interaction vision, and cast shadows are three independent authored channels.
+{
+  const shadowOnly = new CollisionWorld([{
+    id: "shadow-only-canopy",
+    points: [[90, 70], [110, 70], [110, 130], [90, 130]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    castsShadow: true,
+  }], 200, 200);
+  assert.equal(shadowOnly.isWalkable(100, 100, 4), true,
+    "a shadow-only canopy must not change movement collision");
+  assert.equal(shadowOnly.isLineOfSightClear(40, 100, 160, 100), true,
+    "a shadow-only canopy must not block interaction vision");
+  assert.equal(shadowOnly.isShadowLineOfSightClear(40, 100, 160, 100), false,
+    "a shadow-only canopy must occlude the visual shadow ray");
+  const noShadowBench = new CollisionWorld([{
+    id: "no-shadow-bench",
+    points: [[90, 70], [110, 70], [110, 130], [90, 130]],
+    closed: true,
+    blocksMove: true,
+    blocksSight: true,
+    castsShadow: false,
+  }], 200, 200);
+  assert.equal(noShadowBench.isWalkable(100, 100, 4), false);
+  assert.equal(noShadowBench.isLineOfSightClear(40, 100, 160, 100), false);
+  assert.equal(noShadowBench.isShadowLineOfSightClear(40, 100, 160, 100), true,
+    "a collision/vision blocker can explicitly opt out of casting a shadow");
+}
+
 // A closed-looking polyline boundary must not fill the walkable garden interior.
 {
   const ring = new CollisionWorld([
