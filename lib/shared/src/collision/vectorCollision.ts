@@ -326,6 +326,9 @@ export class CollisionWorld {
   private readonly moveSolids: Solid[] = [];
   private readonly sightSolids: Solid[] = [];
   private readonly shadowSolids: Solid[] = [];
+  private readonly moveSolidHash = new Map<string, number[]>();
+  private readonly sightSolidHash = new Map<string, number[]>();
+  private readonly shadowSolidHash = new Map<string, number[]>();
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -367,9 +370,18 @@ export class CollisionWorld {
           points: shape.points,
           bounds: [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)],
         };
-        if (shape.blocksMove) this.moveSolids.push(solid);
-        if (shape.blocksSight) this.sightSolids.push(solid);
-        if (shape.castsShadow ?? shape.blocksSight) this.shadowSolids.push(solid);
+        if (shape.blocksMove) {
+          const index = this.moveSolids.push(solid) - 1;
+          this.insertSolid(this.moveSolidHash, index, solid);
+        }
+        if (shape.blocksSight) {
+          const index = this.sightSolids.push(solid) - 1;
+          this.insertSolid(this.sightSolidHash, index, solid);
+        }
+        if (shape.castsShadow ?? shape.blocksSight) {
+          const index = this.shadowSolids.push(solid) - 1;
+          this.insertSolid(this.shadowSolidHash, index, solid);
+        }
       }
     });
 
@@ -419,8 +431,50 @@ export class CollisionWorld {
     return result;
   }
 
-  private insideSolids(x: number, y: number, solids: readonly Solid[]): boolean {
-    for (const solid of solids) {
+  private insertSolid(index: Map<string, number[]>, solidIndex: number, solid: Solid): void {
+    const [minX, minY, maxX, maxY] = solid.bounds;
+    const firstX = Math.floor(minX / this.cell);
+    const lastX = Math.floor(maxX / this.cell);
+    const firstY = Math.floor(minY / this.cell);
+    const lastY = Math.floor(maxY / this.cell);
+    for (let x = firstX; x <= lastX; x++) {
+      for (let y = firstY; y <= lastY; y++) {
+        const key = this.key(x, y);
+        const bucket = index.get(key);
+        if (bucket) bucket.push(solidIndex);
+        else index.set(key, [solidIndex]);
+      }
+    }
+  }
+
+  private querySolids(
+    index: Map<string, number[]>,
+    x: number,
+    y: number,
+    radius: number,
+  ): Set<number> {
+    const result = new Set<number>();
+    const minX = Math.floor((x - radius) / this.cell);
+    const maxX = Math.floor((x + radius) / this.cell);
+    const minY = Math.floor((y - radius) / this.cell);
+    const maxY = Math.floor((y + radius) / this.cell);
+    for (let cx = minX; cx <= maxX; cx++) {
+      for (let cy = minY; cy <= maxY; cy++) {
+        const bucket = index.get(this.key(cx, cy));
+        if (bucket) for (const solidIndex of bucket) result.add(solidIndex);
+      }
+    }
+    return result;
+  }
+
+  private insideSolids(
+    x: number,
+    y: number,
+    solids: readonly Solid[],
+    index: Map<string, number[]>,
+  ): boolean {
+    for (const solidIndex of this.querySolids(index, x, y, 0)) {
+      const solid = solids[solidIndex];
       const b = solid.bounds;
       if (x < b[0] || x > b[2] || y < b[1] || y > b[3]) continue;
       if (pointInPolygon(x, y, solid.points)) return true;
@@ -429,13 +483,14 @@ export class CollisionWorld {
   }
 
   insideSolid(x: number, y: number): boolean {
-    return Number.isFinite(x) && Number.isFinite(y) && this.insideSolids(x, y, this.moveSolids);
+    return Number.isFinite(x) && Number.isFinite(y) &&
+      this.insideSolids(x, y, this.moveSolids, this.moveSolidHash);
   }
 
   isWalkable(x: number, y: number, radius: number): boolean {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
-    if (this.insideSolids(x, y, this.moveSolids)) return false;
+    if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
       const nearest = segmentDistance(x, y, this.moveSegments[index]);
       if (radius === 0 ? nearest <= EPS : nearest < radius - EPS) return false;
@@ -465,15 +520,15 @@ export class CollisionWorld {
     const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
     if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
 
-    for (const solid of this.moveSolids) {
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    for (const solidIndex of this.querySolids(this.moveSolidHash, centerX, centerY, radius)) {
+      const solid = this.moveSolids[solidIndex];
       const bounds = solid.bounds;
       if (bounds[2] < minX || bounds[0] > maxX || bounds[3] < minY || bounds[1] > maxY) continue;
       if (polygonIntersectsRect(solid.points, minX, minY, maxX, maxY)) return false;
     }
-
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
     for (const index of this.query(this.moveHash, centerX, centerY, radius)) {
       if (segmentIntersectsRect(this.moveSegments[index], minX, minY, maxX, maxY)) return false;
     }
@@ -485,8 +540,8 @@ export class CollisionWorld {
     if (![ax, ay, bx, by].every(Number.isFinite) ||
         ax < 0 || ay < 0 || bx < 0 || by < 0 ||
         ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
-    if (this.insideSolids(ax, ay, this.sightSolids) ||
-        this.insideSolids(bx, by, this.sightSolids)) return false;
+    if (this.insideSolids(ax, ay, this.sightSolids, this.sightSolidHash) ||
+        this.insideSolids(bx, by, this.sightSolids, this.sightSolidHash)) return false;
     const dx = bx - ax, dy = by - ay;
     const length = magnitude(dx, dy);
     if (length <= EPS) return true;
@@ -505,8 +560,8 @@ export class CollisionWorld {
     if (![ax, ay, bx, by].every(Number.isFinite) ||
         ax < 0 || ay < 0 || bx < 0 || by < 0 ||
         ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
-    if (this.insideSolids(ax, ay, this.shadowSolids) ||
-        this.insideSolids(bx, by, this.shadowSolids)) return false;
+    if (this.insideSolids(ax, ay, this.shadowSolids, this.shadowSolidHash) ||
+        this.insideSolids(bx, by, this.shadowSolids, this.shadowSolidHash)) return false;
     const dx = bx - ax, dy = by - ay;
     const length = magnitude(dx, dy);
     if (length <= EPS) return true;
@@ -626,7 +681,7 @@ export class CollisionWorld {
   visibility(x: number, y: number, radius: number): Point[] {
     if (![x, y, radius].every(Number.isFinite) || radius <= 0 ||
         x < 0 || y < 0 || x > this.w || y > this.h ||
-        this.insideSolids(x, y, this.sightSolids)) return [];
+        this.insideSolids(x, y, this.sightSolids, this.sightSolidHash)) return [];
     const candidates = this.query(this.sightHash, x, y, radius + this.cell);
     const angles = new Set<number>();
     const addAngle = (value: number): void => {
