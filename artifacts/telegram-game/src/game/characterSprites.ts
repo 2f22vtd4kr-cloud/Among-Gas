@@ -21,70 +21,38 @@ export const CHARACTER_SHEET_PATH = `/sprites/characters-18.png?v=${BAKED_ATLAS_
 
 // The authored source atlas remains seven columns. The runtime canvas atlas
 // expands those seven columns to eighteen while preserving the original poses.
-export const CHARACTER_SOURCE_SHEET_COLS = 7;
-export const CHARACTER_SOURCE_SHEET_WIDTH = 1123;
-export const CHARACTER_SHEET_COLS = 18;
-export const CHARACTER_SHEET_ROWS = 9;
-export const CHARACTER_SHEET_WIDTH = 2898; // 18 × 161px integer columns
-export const CHARACTER_SHEET_HEIGHT = 1401;
-export const CHARACTER_CELL_WIDTH = 161;
-export const CHARACTER_CELL_HEIGHT = CHARACTER_SHEET_HEIGHT / CHARACTER_SHEET_ROWS;
+import {
+  CHARACTER_CELL_HEIGHT,
+  CHARACTER_CELL_WIDTH,
+  CHARACTER_COLORS,
+  CHARACTER_SHEET_COLS,
+  CHARACTER_SHEET_HEIGHT,
+  CHARACTER_SHEET_ROWS,
+  CHARACTER_SHEET_WIDTH,
+  CHARACTER_SOURCE_SHEET_COLS,
+  CHARACTER_SOURCE_SHEET_WIDTH,
+  GENERATED_CHARACTER_PALETTES,
+} from '@workspace/shared';
 
-export const CHARACTER_COLORS = [
-  "teal",
-  "maroon",
-  "navy",
-  "purple",
-  "brown",
-  "dark-gray",
-  "magenta",
-  "red",
-  "blue",
-  "green",
-  "pink",
-  "orange",
-  "yellow",
-  "black",
-  "white",
-  "lime",
-  "cyan",
-  "rose",
-] as const;
-export type CharacterColor = (typeof CHARACTER_COLORS)[number];
+export {
+  CHARACTER_CELL_HEIGHT,
+  CHARACTER_CELL_WIDTH,
+  CHARACTER_COLORS,
+  CHARACTER_SHEET_COLS,
+  CHARACTER_SHEET_HEIGHT,
+  CHARACTER_SHEET_ROWS,
+  CHARACTER_SHEET_WIDTH,
+  CHARACTER_SOURCE_SHEET_COLS,
+  CHARACTER_SOURCE_SHEET_WIDTH,
+  GENERATED_CHARACTER_PALETTES,
+} from '@workspace/shared';
+export type { CharacterColor, GeneratedCharacterPalette } from '@workspace/shared';
 
 /** One deterministic palette lookup shared by lobby, HUD, and gameplay renderers. */
 export function getCharacterColorForSlot(slot: number): CharacterColor {
   const safeSlot = Number.isFinite(slot) ? Math.trunc(slot) : 0;
   return CHARACTER_COLORS[Math.abs(safeSlot) % CHARACTER_COLORS.length];
 }
-
-export interface GeneratedCharacterPalette {
-  readonly color: CharacterColor;
-  /** Target suit hue in degrees; all original shading and alpha are retained. */
-  readonly hue: number;
-  readonly saturationScale?: number;
-  readonly lightnessScale?: number;
-  readonly lightnessOffset?: number;
-}
-
-/**
- * Additional palettes are generated from the authored teal suit column.
- * Only saturated teal suit pixels are hue-shifted; the balaclava, visor,
- * filter, dark outlines, highlights and transparent pixels remain intact.
- */
-export const GENERATED_CHARACTER_PALETTES: readonly GeneratedCharacterPalette[] = [
-  { color: "red", hue: 4, lightnessScale: 1.15, lightnessOffset: 0.04 },
-  { color: "blue", hue: 218, lightnessScale: 1.18, lightnessOffset: 0.04 },
-  { color: "green", hue: 132, lightnessScale: 1.08, lightnessOffset: 0.02 },
-  { color: "pink", hue: 330, saturationScale: 0.85, lightnessScale: 1.15, lightnessOffset: 0.05 },
-  { color: "orange", hue: 28, lightnessScale: 1.15, lightnessOffset: 0.05 },
-  { color: "yellow", hue: 50, saturationScale: 0.85, lightnessScale: 1.2, lightnessOffset: 0.08 },
-  { color: "black", hue: 220, saturationScale: 0.24, lightnessScale: 0.55, lightnessOffset: -0.02 },
-  { color: "white", hue: 210, saturationScale: 0.12, lightnessScale: 0.35, lightnessOffset: 0.58 },
-  { color: "lime", hue: 95, lightnessScale: 1.1, lightnessOffset: 0.04 },
-  { color: "cyan", hue: 190, lightnessScale: 1.08, lightnessOffset: 0.03 },
-  { color: "rose", hue: 345, saturationScale: 0.82, lightnessScale: 1.16, lightnessOffset: 0.05 },
-];
 
 export const CHARACTER_POSES = [
   "idle",
