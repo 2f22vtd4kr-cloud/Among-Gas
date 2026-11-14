@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import GameAdminTable from '../artifacts/telegram-game/src/components/GameAdminTable';
-import { buildAdminTableAgents } from '../artifacts/telegram-game/src/game/adminTableAgents';
+import GameAdminTable from './GameAdminTable';
+import { buildAdminTableAgents } from '../game/adminTableAgents';
 
 const players = [
   { slot: 0, username: 'Local' },
