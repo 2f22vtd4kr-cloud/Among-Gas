@@ -1677,6 +1677,9 @@ try {
     return route.abort();
   });
   await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  // Keep the camera fixture foregrounded: background tabs may throttle rAF,
+  // while tile readiness is published from the gameplay render loop.
+  await cameraPage.bringToFront();
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   // The camera's base image is intentionally the 0.5× overview; native 2×
