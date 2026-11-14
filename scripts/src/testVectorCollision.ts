@@ -87,6 +87,95 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(migrated.shapes.length, 3, "migration preserves shape count and order");
 }
 
+// Authored floor regions constrain movement; linked holes and traced stroke widths stay explicit.
+{
+  const room: CollisionShape = {
+    id: "walkable-room",
+    points: [[20, 20], [180, 20], [180, 180], [20, 180]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    walkableRegion: true,
+    walkableRegionId: "room-a",
+  };
+  const floorHole: CollisionShape = {
+    id: "walkable-room-hole",
+    points: [[80, 80], [120, 80], [120, 120], [80, 120]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    walkableRegionHole: true,
+    walkableRegionId: "room-a",
+  };
+  const regionDocument = {
+    version: 1 as const,
+    mapW: 200,
+    mapH: 200,
+    shapes: [room, floorHole],
+  };
+  assert.deepEqual(validateCollisionDocument(regionDocument), [],
+    "closed non-blocking region and linked-hole shapes are valid geometry");
+  const floor = new CollisionWorld([room, floorHole], 200, 200);
+  assert.equal(floor.isWalkable(50, 50, 8), true,
+    "a player footprint fully inside an authored floor region remains walkable");
+  assert.equal(floor.isWalkable(10, 50, 0), false,
+    "points outside every authored floor region are not implicitly walkable");
+  assert.equal(floor.isWalkable(100, 100, 0), false,
+    "a linked hole excludes its interior from the floor region");
+  assert.equal(floor.isWalkable(74, 100, 8), false,
+    "the player radius cannot overlap the boundary of a linked floor hole");
+  assert.equal(floor.isWalkable(68, 100, 8), true,
+    "the player can approach a hole while preserving the full radius clearance");
+  const [stoppedX] = floor.move(50, 100, 100, 0, 4);
+  assert.ok(stoppedX <= 76.01,
+    "swept movement must stop at the authored floor hole instead of crossing it");
+
+  const invalidRegion = { ...room, blocksMove: true };
+  assert.ok(validateCollisionDocument({
+    version: 1, mapW: 200, mapH: 200, shapes: [invalidRegion],
+  }).some(error => error.includes("walkable-region boundary must be closed")),
+  "walkable regions cannot simultaneously be movement blockers");
+
+  const strokedWall: CollisionShape = {
+    id: "traced-wall-with-width",
+    points: [[100, 10], [100, 190]],
+    closed: false,
+    blocksMove: true,
+    blocksSight: false,
+    strokeRadius: 5,
+  };
+  const strokeWorld = new CollisionWorld([strokedWall], 200, 200);
+  assert.equal(strokeWorld.isWalkable(104, 100, 0), false,
+    "the source-derived stroke radius expands the movement barrier");
+  assert.equal(strokeWorld.isWalkable(106, 100, 0), true,
+    "stroke width must not grow beyond its authored half-width");
+
+  const redlineDocument = {
+    version: 1,
+    mapW: 200,
+    mapH: 200,
+    shapes: [strokedWall],
+    source: {
+      kind: "redline-vector",
+      generatorVersion: 1,
+      sourceFiles: { reference: { path: "reference/redline.jpeg", sha256: "a".repeat(64) } },
+      referenceImage: { width: 1359, height: 784 },
+      vectorization: {
+        redPixelCount: 100,
+        skeletonPixelCount: 80,
+        tracedPathCount: 1,
+        simplifiedPointCount: 2,
+        simplificationToleranceSourcePx: 1.5,
+        closedSolidCount: 0,
+        openBoundaryCount: 1,
+      },
+      shapeCounts: { total: 1 },
+    },
+  };
+  assert.deepEqual(validateCollisionDocument(redlineDocument), [],
+    "red-line vector source manifests must validate alongside fine-grid manifests");
+}
+
 // Diagonal wall slide and fast thin-wall rejection.
 {
   const world = new CollisionWorld([shape("diagonal", [[500, 1000], [1500, 1577]])]);
