@@ -27,11 +27,18 @@ export interface CollisionShape {
   readonly blocksSight: boolean;
   /** Independent authored presentation shadow flag; never inferred from movement or sight. */
   readonly castsShadow?: boolean;
+  /** Closed, non-blocking floor boundary. If any are present, movement is constrained to their union. */
+  readonly walkableRegion?: boolean;
+  /** A closed, non-blocking hole excluded from its linked walkable region. */
+  readonly walkableRegionHole?: boolean;
+  readonly walkableRegionId?: string;
+  /** Source-derived half-width of a traced movement stroke, in world pixels. */
+  readonly strokeRadius?: number;
   readonly label?: string;
   readonly zone?: string;
 }
 
-export interface CollisionSourceManifest {
+export interface FineGridCollisionSourceManifest {
   readonly kind: "fine-grid-derived";
   readonly generatorVersion: number;
   readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
@@ -50,6 +57,51 @@ export interface CollisionSourceManifest {
   readonly shapeCounts: Readonly<Record<string, number>>;
 }
 
+export interface RedlineVectorCollisionSourceManifest {
+  readonly kind: "redline-vector";
+  readonly generatorVersion: number;
+  readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
+  readonly referenceImage: { readonly width: number; readonly height: number };
+  readonly vectorization: {
+    readonly redPixelCount: number;
+    readonly skeletonPixelCount: number;
+    readonly tracedPathCount: number;
+    readonly simplifiedPointCount: number;
+    readonly simplificationToleranceSourcePx: number;
+    readonly closedSolidCount: number;
+    readonly openBoundaryCount: number;
+    readonly strokeRadiusMedianWorldPx?: number;
+    readonly strokeRadiusMaxWorldPx?: number;
+  };
+  readonly shapeCounts: Readonly<Record<string, number>>;
+  readonly walkableRegionExtraction?: {
+    readonly morphologyKernelSourcePx: number;
+    readonly connectivity: 8;
+    readonly selectedRegions: readonly {
+      readonly id: string;
+      readonly role: "spawn-connected-floor" | "isolated-interior-candidate";
+      readonly pixelArea: number;
+      readonly sourceBounds: readonly [number, number, number, number];
+      readonly ownerDecisionRequired: boolean;
+    }[];
+    readonly excludedDetachedCandidates: readonly string[];
+    readonly holeCount: number;
+    readonly excludedComponentCount: number;
+  };
+  readonly zoneShapeCounts?: Readonly<Record<string, number>>;
+  readonly geometryOverrides?: {
+    readonly walkableReplacementZones: readonly {
+      readonly id: string;
+      readonly bounds: readonly [number, number, number, number];
+    }[];
+    readonly movementOnlyBlockedPolygons: readonly string[];
+  };
+}
+
+export type CollisionSourceManifest =
+  | FineGridCollisionSourceManifest
+  | RedlineVectorCollisionSourceManifest;
+
 export interface CollisionDocument {
   readonly version: 1;
   readonly mapW: number;
@@ -64,6 +116,7 @@ interface Segment {
   readonly bx: number;
   readonly by: number;
   readonly shapeIndex: number;
+  readonly strokeRadius?: number;
 }
 
 interface Solid {
@@ -150,6 +203,8 @@ export function validateCollisionDocument(value: unknown): string[] {
   const width = Number.isFinite(doc.mapW) ? doc.mapW! : DEFAULT_W;
   const height = Number.isFinite(doc.mapH) ? doc.mapH! : DEFAULT_H;
   const ids = new Set<string>();
+  const walkableRegions: CollisionShape[] = [];
+  const walkableHoles: CollisionShape[] = [];
 
   doc.shapes.forEach((raw, index) => {
     const prefix = "shapes[" + index + "]";
@@ -164,14 +219,35 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".id duplicates " + shape.id);
     } else ids.add(shape.id);
     if (typeof shape.closed !== "boolean") errors.push(prefix + ".closed must be boolean");
-    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
-      errors.push(prefix + ".castsShadow must be boolean when supplied");
-    }
     if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
-    if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
-      errors.push(prefix + " must block movement, sight, cast a shadow, or have at least one authored effect");
+    if (shape.strokeRadius !== undefined &&
+        (!Number.isFinite(shape.strokeRadius) || shape.strokeRadius < 0 || shape.strokeRadius > 12)) {
+      errors.push(prefix + ".strokeRadius must be finite and between 0 and 12 world pixels");
+    }
+    if (shape.strokeRadius !== undefined && shape.strokeRadius > 0 && shape.blocksMove !== true) {
+      errors.push(prefix + ".strokeRadius is only valid on movement-blocking shapes");
+    }
+    if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
+      errors.push(prefix + ".castsShadow must be boolean when supplied");
+    }
+    if (shape.walkableRegion !== undefined && typeof shape.walkableRegion !== "boolean") {
+      errors.push(prefix + ".walkableRegion must be boolean when supplied");
+    }
+    if (shape.walkableRegionHole !== undefined && typeof shape.walkableRegionHole !== "boolean") {
+      errors.push(prefix + ".walkableRegionHole must be boolean when supplied");
+    }
+    if (shape.walkableRegion === true || shape.walkableRegionHole === true) {
+      if (shape.closed !== true || shape.blocksMove !== false || shape.blocksSight !== false ||
+          shape.castsShadow === true || typeof shape.walkableRegionId !== "string" || !shape.walkableRegionId.trim()) {
+        errors.push(prefix + " walkable-region boundary must be closed, linked by walkableRegionId, and non-blocking");
+      }
+      if (shape.walkableRegion === true && shape.walkableRegionHole === true) {
+        errors.push(prefix + " cannot be both a walkable region and a region hole");
+      }
+    } else if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
+      errors.push(prefix + " must block movement, sight, cast a shadow, or define a walkable region boundary");
     }
     if (!Array.isArray(shape.points)) {
       errors.push(prefix + ".points must be an array");
@@ -199,6 +275,12 @@ export function validateCollisionDocument(value: unknown): string[] {
       if (Math.abs(area2(points)) < 1e-6) errors.push(prefix + " polygon has zero area");
       if (selfIntersects(points)) errors.push(prefix + " polygon self-intersects");
     }
+    if (shape.walkableRegion === true && shape.closed === true && points.every(finitePoint)) {
+      walkableRegions.push(shape as CollisionShape);
+    }
+    if (shape.walkableRegionHole === true && shape.closed === true && points.every(finitePoint)) {
+      walkableHoles.push(shape as CollisionShape);
+    }
     if (shape.label !== undefined && typeof shape.label !== "string") {
       errors.push(prefix + ".label must be a string");
     }
@@ -206,10 +288,48 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".zone must be a string up to 64 characters");
     }
   });
+
+  const regionsById = new Map<string, CollisionShape>();
+  for (const region of walkableRegions) {
+    const regionId = region.walkableRegionId!;
+    if (regionsById.has(regionId)) {
+      errors.push("walkableRegionId " + regionId + " must identify exactly one floor polygon");
+    } else {
+      regionsById.set(regionId, region);
+    }
+  }
+  for (const hole of walkableHoles) {
+    const regionId = hole.walkableRegionId!;
+    const region = regionsById.get(regionId);
+    if (!region) {
+      errors.push("walkable region hole " + hole.id + " references missing region " + regionId);
+      continue;
+    }
+    const holePoints = hole.points;
+    const regionPoints = region.points;
+    if (!holePoints.every(point => pointInPolygon(point[0], point[1], regionPoints))) {
+      errors.push("walkable region hole " + hole.id + " must be fully contained by region " + regionId);
+      continue;
+    }
+    let crossesBoundary = false;
+    for (let holeEdge = 0; holeEdge < holePoints.length && !crossesBoundary; holeEdge++) {
+      const a = holePoints[holeEdge], b = holePoints[(holeEdge + 1) % holePoints.length];
+      for (let regionEdge = 0; regionEdge < regionPoints.length; regionEdge++) {
+        const c = regionPoints[regionEdge], d = regionPoints[(regionEdge + 1) % regionPoints.length];
+        if (segmentsIntersect(a, b, c, d)) {
+          crossesBoundary = true;
+          break;
+        }
+      }
+    }
+    if (crossesBoundary) {
+      errors.push("walkable region hole " + hole.id + " must not cross or touch region " + regionId + " boundary");
+    }
+  }
+
   if (doc.source !== undefined) {
-    const source = doc.source as Partial<CollisionSourceManifest>;
-    if (source.kind !== "fine-grid-derived") errors.push("source.kind must be fine-grid-derived");
-    if (!Number.isInteger(source.generatorVersion) || (source.generatorVersion ?? 0) < 1) {
+    const source = doc.source;
+    if (!Number.isInteger(source.generatorVersion) || source.generatorVersion < 1) {
       errors.push("source.generatorVersion must be a positive integer");
     }
     if (!source.sourceFiles || typeof source.sourceFiles !== "object") {
@@ -221,16 +341,47 @@ export function validateCollisionDocument(value: unknown): string[] {
         }
       }
     }
-    if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
-        !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
-        !(source.fineGrid.cellY > 0)) {
-      errors.push("source.fineGrid must describe a positive raster grid");
-    }
-    if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
-      errors.push("source.sightPipeline must describe the sight derivation");
-    }
-    if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
-      errors.push("source.shapeCounts.total must be a positive integer");
+
+    if (source.kind === "fine-grid-derived") {
+      if (!source.fineGrid || !Number.isInteger(source.fineGrid.cols) ||
+          !Number.isInteger(source.fineGrid.rows) || !(source.fineGrid.cellX > 0) ||
+          !(source.fineGrid.cellY > 0)) {
+        errors.push("source.fineGrid must describe a positive raster grid");
+      }
+      if (!source.sightPipeline || typeof source.sightPipeline.obsoleteStatueCircleExcluded !== "boolean") {
+        errors.push("source.sightPipeline must describe the sight derivation");
+      }
+      if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || source.shapeCounts.total < 1) {
+        errors.push("source.shapeCounts.total must be a positive integer");
+      }
+    } else if (source.kind === "redline-vector") {
+      if (!source.referenceImage || !Number.isInteger(source.referenceImage.width) ||
+          !Number.isInteger(source.referenceImage.height) || source.referenceImage.width < 100 ||
+          source.referenceImage.height < 100) {
+        errors.push("source.referenceImage must include valid dimensions");
+      }
+      if (!source.vectorization || !Number.isInteger(source.vectorization.redPixelCount) ||
+          !Number.isInteger(source.vectorization.skeletonPixelCount) ||
+          !Number.isInteger(source.vectorization.tracedPathCount) ||
+          !Number.isInteger(source.vectorization.simplifiedPointCount) ||
+          !(source.vectorization.simplificationToleranceSourcePx > 0) ||
+          !Number.isInteger(source.vectorization.closedSolidCount) ||
+          !Number.isInteger(source.vectorization.openBoundaryCount)) {
+        errors.push("source.vectorization must describe red-line extraction");
+      }
+      if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || source.shapeCounts.total < 1) {
+        errors.push("source.shapeCounts.total must be a positive integer");
+      }
+      if (source.walkableRegionExtraction !== undefined) {
+        const extraction = source.walkableRegionExtraction;
+        if (!Number.isInteger(extraction.morphologyKernelSourcePx) || extraction.morphologyKernelSourcePx < 3 ||
+            extraction.connectivity !== 8 || !Array.isArray(extraction.selectedRegions) ||
+            extraction.selectedRegions.length < 1 || !Array.isArray(extraction.excludedDetachedCandidates)) {
+          errors.push("source.walkableRegionExtraction must describe source-derived floor regions and pending detached candidates");
+        }
+      }
+    } else {
+      errors.push("source.kind must be fine-grid-derived or redline-vector");
     }
   }
   return errors;
@@ -255,6 +406,11 @@ function segmentIntersectsRect(
   segment: Segment,
   minX: number, minY: number, maxX: number, maxY: number,
 ): boolean {
+  const padding = segment.strokeRadius ?? 0;
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
   const a: Point = [segment.ax, segment.ay];
   const b: Point = [segment.bx, segment.by];
   if (pointInRect(a, minX, minY, maxX, maxY) || pointInRect(b, minX, minY, maxX, maxY)) return true;
@@ -322,6 +478,16 @@ export class CollisionWorld {
   private readonly moveSolidHash = new Map<string, number[]>();
   private readonly sightSolidHash = new Map<string, number[]>();
   private readonly shadowSolidHash = new Map<string, number[]>();
+  private readonly moveRegions: Solid[] = [];
+  private readonly moveRegionIds: string[] = [];
+  private readonly moveRegionHash = new Map<string, number[]>();
+  private readonly moveRegionSegments: Segment[] = [];
+  private readonly moveRegionSegmentHash = new Map<string, number[]>();
+  private readonly moveRegionHoles: Solid[] = [];
+  private readonly moveRegionHoleIds: string[] = [];
+  private readonly moveRegionHoleHash = new Map<string, number[]>();
+  private readonly moveRegionHoleSegments: Segment[] = [];
+  private readonly moveRegionHoleSegmentHash = new Map<string, number[]>();
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -342,7 +508,7 @@ export class CollisionWorld {
       const edgeCount = shape.closed ? shape.points.length : shape.points.length - 1;
       for (let i = 0; i < edgeCount; i++) {
         const a = shape.points[i], b = shape.points[(i + 1) % shape.points.length];
-        const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex };
+        const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex, strokeRadius: shape.strokeRadius ?? 0 };
         if (shape.blocksMove) {
           const index = this.moveSegments.push(segment) - 1;
           this.insert(this.moveHash, index, segment);
@@ -375,6 +541,23 @@ export class CollisionWorld {
           const index = this.shadowSolids.push(solid) - 1;
           this.insertSolid(this.shadowSolidHash, index, solid);
         }
+        if (shape.walkableRegion === true || shape.walkableRegionHole === true) {
+          const isHole = shape.walkableRegionHole === true;
+          const targetRegions = isHole ? this.moveRegionHoles : this.moveRegions;
+          const targetIds = isHole ? this.moveRegionHoleIds : this.moveRegionIds;
+          const targetHash = isHole ? this.moveRegionHoleHash : this.moveRegionHash;
+          const targetSegments = isHole ? this.moveRegionHoleSegments : this.moveRegionSegments;
+          const targetSegmentHash = isHole ? this.moveRegionHoleSegmentHash : this.moveRegionSegmentHash;
+          const regionIndex = targetRegions.push(solid) - 1;
+          targetIds.push(shape.walkableRegionId!);
+          this.insertSolid(targetHash, regionIndex, solid);
+          for (let edgeIndex = 0; edgeIndex < shape.points.length; edgeIndex++) {
+            const a = shape.points[edgeIndex], b = shape.points[(edgeIndex + 1) % shape.points.length];
+            const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: regionIndex };
+            const segmentIndex = targetSegments.push(segment) - 1;
+            this.insert(targetSegmentHash, segmentIndex, segment);
+          }
+        }
       }
     });
 
@@ -395,10 +578,11 @@ export class CollisionWorld {
   }
 
   private insert(index: Map<string, number[]>, segmentIndex: number, segment: Segment): void {
-    const minX = Math.floor(Math.min(segment.ax, segment.bx) / this.cell);
-    const maxX = Math.floor(Math.max(segment.ax, segment.bx) / this.cell);
-    const minY = Math.floor(Math.min(segment.ay, segment.by) / this.cell);
-    const maxY = Math.floor(Math.max(segment.ay, segment.by) / this.cell);
+    const padding = segment.strokeRadius ?? 0;
+    const minX = Math.floor((Math.min(segment.ax, segment.bx) - padding) / this.cell);
+    const maxX = Math.floor((Math.max(segment.ax, segment.bx) + padding) / this.cell);
+    const minY = Math.floor((Math.min(segment.ay, segment.by) - padding) / this.cell);
+    const maxY = Math.floor((Math.max(segment.ay, segment.by) + padding) / this.cell);
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         const key = this.key(x, y);
@@ -480,13 +664,89 @@ export class CollisionWorld {
       this.insideSolids(x, y, this.moveSolids, this.moveSolidHash);
   }
 
+  private rectangleInsideWalkableRegion(
+    minX: number, minY: number, maxX: number, maxY: number,
+  ): boolean {
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
+    for (const regionIndex of this.querySolids(this.moveRegionHash, centerX, centerY, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const bounds = region.bounds;
+      if (minX < bounds[0] || minY < bounds[1] || maxX > bounds[2] || maxY > bounds[3]) continue;
+      if (!corners.every(point => pointInPolygon(point[0], point[1], region.points))) continue;
+      if (!pointInPolygon(centerX, centerY, region.points)) continue;
+      let crossesHole = false;
+      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, centerX, centerY, radius)) {
+        if (this.moveRegionHoleIds[holeIndex] !== this.moveRegionIds[regionIndex]) continue;
+        if (polygonIntersectsRect(this.moveRegionHoles[holeIndex].points, minX, minY, maxX, maxY)) {
+          crossesHole = true;
+          break;
+        }
+      }
+      if (crossesHole) continue;
+      let crossesBoundary = false;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, centerX, centerY, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex === regionIndex &&
+            segmentIntersectsRect(segment, minX, minY, maxX, maxY)) {
+          crossesBoundary = true;
+          break;
+        }
+      }
+      if (!crossesBoundary) return true;
+    }
+    return false;
+  }
+
+  private insideWalkableRegion(x: number, y: number, radius: number): boolean {
+    for (const regionIndex of this.querySolids(this.moveRegionHash, x, y, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const regionId = this.moveRegionIds[regionIndex];
+      const [minX, minY, maxX, maxY] = region.bounds;
+      if (x - radius < minX || x + radius > maxX ||
+          y - radius < minY || y + radius > maxY) continue;
+      if (!pointInPolygon(x, y, region.points)) continue;
+      let excludedByHole = false;
+      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, x, y, radius)) {
+        if (this.moveRegionHoleIds[holeIndex] !== regionId) continue;
+        const hole = this.moveRegionHoles[holeIndex];
+        if (pointInPolygon(x, y, hole.points)) { excludedByHole = true; break; }
+        if (radius > 0) {
+          for (const segmentIndex of this.query(this.moveRegionHoleSegmentHash, x, y, radius)) {
+            const segment = this.moveRegionHoleSegments[segmentIndex];
+            if (segment.shapeIndex === holeIndex && segmentDistance(x, y, segment) < radius - EPS) {
+              excludedByHole = true;
+              break;
+            }
+          }
+        }
+        if (excludedByHole) break;
+      }
+      if (excludedByHole) continue;
+      if (radius === 0) return true;
+      let clearance = Number.POSITIVE_INFINITY;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, x, y, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex !== regionIndex) continue;
+        clearance = Math.min(clearance, segmentDistance(x, y, segment));
+      }
+      if (clearance >= radius - EPS) return true;
+    }
+    return false;
+  }
+
   isWalkable(x: number, y: number, radius: number): boolean {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
+    if (this.moveRegions.length > 0 && !this.insideWalkableRegion(x, y, radius)) return false;
     if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
-      const nearest = segmentDistance(x, y, this.moveSegments[index]);
-      if (radius === 0 ? nearest <= EPS : nearest < radius - EPS) return false;
+      const segment = this.moveSegments[index];
+      const nearest = segmentDistance(x, y, segment);
+      const clearance = radius + (segment.strokeRadius ?? 0);
+      if (clearance === 0 ? nearest <= EPS : nearest < clearance - EPS) return false;
     }
     return true;
   }
@@ -512,6 +772,8 @@ export class CollisionWorld {
     const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX - PLAYER_SPAWN_CLEARANCE_PX;
     const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
     if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
+    if (this.moveRegions.length > 0 &&
+        !this.rectangleInsideWalkableRegion(minX, minY, maxX, maxY)) return false;
 
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;

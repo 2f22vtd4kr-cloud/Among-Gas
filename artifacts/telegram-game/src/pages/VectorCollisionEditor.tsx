@@ -25,7 +25,7 @@ import {
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision" | "loupe";
+type Tool = "pan" | "wall" | "solid" | "region" | "hole" | "edit" | "erase" | "walk" | "vision" | "loupe";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
@@ -58,6 +58,8 @@ const TOOL_LABELS: Record<Tool, string> = {
   pan: "Pan / zoom",
   wall: "Draw wall",
   solid: "Draw solid",
+  region: "Draw floor region",
+  hole: "Draw floor hole",
   edit: "Edit vertices",
   erase: "Delete shape",
   walk: "Walk test",
@@ -304,6 +306,9 @@ export default function VectorCollisionEditor() {
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
   const [blocksSight, setBlocksSight] = useState(true);
+  const [castsShadowMode, setCastsShadowMode] = useState<"inherit" | "yes" | "no">("inherit");
+  const [strokeRadius, setStrokeRadius] = useState(0);
+  const [walkableRegionId, setWalkableRegionId] = useState("floor-main");
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
   const [zoneReviewJson, setZoneReviewJson] = useState("");
@@ -388,18 +393,26 @@ export default function VectorCollisionEditor() {
       });
       if (shape.closed) context.closePath();
       if (shape.closed) {
-        context.fillStyle = shape.blocksMove
-          ? "rgba(255,75,85,0.22)"
-          : "rgba(60,220,190,0.16)";
+        context.fillStyle = shape.walkableRegion === true
+          ? "rgba(65,145,255,0.18)"
+          : shape.walkableRegionHole === true
+            ? "rgba(185,115,255,0.22)"
+            : shape.blocksMove
+              ? "rgba(255,75,85,0.22)"
+              : "rgba(60,220,190,0.16)";
         context.fill();
       }
       context.strokeStyle = isSelected
         ? "#ffe079"
-        : shape.blocksMove && shape.blocksSight
-          ? "#ff5c68"
-          : shape.blocksMove
-            ? "#e79a45"
-            : "#55d9cd";
+        : shape.walkableRegion === true
+          ? "#65a9ff"
+          : shape.walkableRegionHole === true
+            ? "#c18cff"
+            : shape.blocksMove && shape.blocksSight
+              ? "#ff5c68"
+              : shape.blocksMove
+                ? "#e79a45"
+                : "#55d9cd";
       context.lineWidth = (isSelected ? 4 : 2.5) / camera.zoom;
       context.lineJoin = "round";
       context.lineCap = "round";
@@ -741,13 +754,23 @@ export default function VectorCollisionEditor() {
   const finishPolygon = () => {
     if (draftPoints.length < 3) return;
     const points = draftPoints;
+    const isRegion = tool === "region";
+    const isHole = tool === "hole";
+    const regionId = walkableRegionId.trim();
+    if ((isRegion || isHole) && !regionId) {
+      setStatus("A floor region ID is required to link walkable floor and hole contours.");
+      return;
+    }
     addShape({
-      id: newShapeId("solid"),
+      id: newShapeId(isRegion ? "floor" : isHole ? "hole" : "solid"),
       points,
       closed: true,
-      blocksMove,
-      blocksSight,
-      label: shapeLabel.trim() || "Solid obstacle",
+      blocksMove: isRegion || isHole ? false : blocksMove,
+      blocksSight: isRegion || isHole ? false : blocksSight,
+      castsShadow: isRegion || isHole ? false : castsShadowMode === "inherit" ? undefined : castsShadowMode === "yes",
+      ...(isRegion ? { walkableRegion: true, walkableRegionId: regionId } : {}),
+      ...(isHole ? { walkableRegionHole: true, walkableRegionId: regionId } : {}),
+      label: shapeLabel.trim() || (isRegion ? "Walkable floor region" : isHole ? "Walkable floor hole" : "Solid obstacle"),
       zone,
     });
   };
@@ -762,6 +785,8 @@ export default function VectorCollisionEditor() {
       closed: false,
       blocksMove,
       blocksSight,
+      castsShadow: castsShadowMode === "inherit" ? undefined : castsShadowMode === "yes",
+      ...(blocksMove && strokeRadius > 0 ? { strokeRadius } : {}),
       label: shapeLabel.trim() || "Wall chain",
       zone,
     });
@@ -864,7 +889,7 @@ export default function VectorCollisionEditor() {
       setPreviewPoint(start);
       return;
     }
-    if (tool === "solid") {
+    if (tool === "solid" || tool === "region" || tool === "hole") {
       const camera = cameraRef.current;
       const snapped = snapPoint(docRef.current.shapes, point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 12));
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
@@ -888,10 +913,25 @@ export default function VectorCollisionEditor() {
       }
       if (best) {
         setSelectedId(best.shapeId);
+        const selectedShape = docRef.current.shapes.find(shape => shape.id === best.shapeId);
+        if (selectedShape?.walkableRegionId) setWalkableRegionId(selectedShape.walkableRegionId);
+        if (selectedShape) {
+          setBlocksMove(selectedShape.blocksMove);
+          setBlocksSight(selectedShape.blocksSight);
+          setCastsShadowMode(selectedShape.castsShadow === undefined ? "inherit" : selectedShape.castsShadow ? "yes" : "no");
+          setStrokeRadius(selectedShape.strokeRadius ?? 0);
+        }
         gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
       } else {
         const target = nearestShape(point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 18));
         setSelectedId(target?.id ?? null);
+        if (target?.walkableRegionId) setWalkableRegionId(target.walkableRegionId);
+        if (target) {
+          setBlocksMove(target.blocksMove);
+          setBlocksSight(target.blocksSight);
+          setCastsShadowMode(target.castsShadow === undefined ? "inherit" : target.castsShadow ? "yes" : "no");
+          setStrokeRadius(target.strokeRadius ?? 0);
+        }
       }
       return;
     }
@@ -936,7 +976,7 @@ export default function VectorCollisionEditor() {
       return;
     }
     if (!gesture) {
-      if (tool === "wall" || tool === "solid") setPreviewPoint(worldPoint(event));
+      if (tool === "wall" || tool === "solid" || tool === "region" || tool === "hole") setPreviewPoint(worldPoint(event));
       return;
     }
     if (gesture.kind === "pan") {
@@ -1443,8 +1483,8 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
-          <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
+        {(["pan", "wall", "solid", "region", "hole", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
+          <button key={item} type="button" data-testid={"collision-tool-" + item} style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
@@ -1465,13 +1505,31 @@ export default function VectorCollisionEditor() {
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={blocksMove} onChange={event => setBlocksMove(event.target.checked)} />
+          <input type="checkbox" checked={blocksMove} disabled={tool === "region" || tool === "hole"} onChange={event => setBlocksMove(event.target.checked)} />
           Blocks movement
         </label>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={blocksSight} onChange={event => setBlocksSight(event.target.checked)} />
+          <input type="checkbox" checked={blocksSight} disabled={tool === "region" || tool === "hole"} onChange={event => setBlocksSight(event.target.checked)} />
           Blocks sight
         </label>
+        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+          Shadow
+          <select aria-label="New shape shadow behavior" value={castsShadowMode} disabled={tool === "region" || tool === "hole"} onChange={event => setCastsShadowMode(event.target.value as "inherit" | "yes" | "no")} style={{ minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }}>
+            <option value="inherit">Follow sight</option>
+            <option value="yes">Casts</option>
+            <option value="no">No shadow</option>
+          </select>
+        </label>
+        <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+          Stroke radius
+          <input aria-label="New wall stroke radius" type="number" min={0} max={12} step={0.5} value={strokeRadius} disabled={tool !== "wall" || !blocksMove} onChange={event => setStrokeRadius(Math.max(0, Math.min(12, Number(event.target.value) || 0)))} style={{ width: 62, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
+        </label>
+        {(tool === "region" || tool === "hole") && (
+          <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
+            Floor region ID
+            <input aria-label="Walkable region ID" value={walkableRegionId} maxLength={64} onChange={event => setWalkableRegionId(event.target.value)} style={{ minWidth: 120, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
+          </label>
+        )}
         <input value={shapeLabel} onChange={event => setShapeLabel(event.target.value)} maxLength={80} placeholder="Shape label" aria-label="Shape label" style={{ minWidth: 110, flex: 1, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "7px 9px", minHeight: 48, fontSize: 12 }} />
         <select value={zone} onChange={event => setZone(event.target.value)} aria-label="Map zone" style={{ background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: 7, minHeight: 48, fontSize: 12 }}>
           <option value="unassigned">Zone: unassigned</option>
@@ -1581,8 +1639,28 @@ export default function VectorCollisionEditor() {
         {selected && (
           <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
             <strong>{selected.label || selected.id}</strong>
-            <label><input type="checkbox" checked={selected.blocksMove} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
-            <label><input type="checkbox" checked={selected.blocksSight} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label><input type="checkbox" checked={selected.blocksMove} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
+            <label><input type="checkbox" checked={selected.blocksSight} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+              Shadow
+              <select aria-label="Selected shape shadow behavior" value={selected.castsShadow === undefined ? "inherit" : selected.castsShadow ? "yes" : "no"} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ castsShadow: event.target.value === "inherit" ? undefined : event.target.value === "yes" })} style={{ minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }}>
+                <option value="inherit">Follow sight</option><option value="yes">Casts</option><option value="no">No shadow</option>
+              </select>
+            </label>
+            <label><input type="checkbox" checked={selected.walkableRegion === true} onChange={event => updateSelected(event.target.checked ? { walkableRegion: true, walkableRegionHole: false, walkableRegionId: walkableRegionId.trim() || "floor-main", blocksMove: false, blocksSight: false, castsShadow: false, strokeRadius: undefined } : { walkableRegion: false, blocksMove: true, blocksSight: false })} /> Floor region</label>
+            <label><input type="checkbox" checked={selected.walkableRegionHole === true} onChange={event => updateSelected(event.target.checked ? { walkableRegion: false, walkableRegionHole: true, walkableRegionId: walkableRegionId.trim() || "floor-main", blocksMove: false, blocksSight: false, castsShadow: false, strokeRadius: undefined } : { walkableRegionHole: false, blocksMove: true, blocksSight: false })} /> Floor hole</label>
+            {(selected.walkableRegion === true || selected.walkableRegionHole === true) && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                Region ID
+                <input aria-label="Selected walkable region ID" value={selected.walkableRegionId ?? ""} maxLength={64} onChange={event => updateSelected({ walkableRegionId: event.target.value })} style={{ width: 110, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }} />
+              </label>
+            )}
+            {selected.blocksMove && !selected.walkableRegion && !selected.walkableRegionHole && (
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+                Stroke
+                <input aria-label="Selected shape stroke radius" type="number" min={0} max={12} step={0.5} value={selected.strokeRadius ?? 0} onChange={event => updateSelected({ strokeRadius: Math.max(0, Math.min(12, Number(event.target.value) || 0)) || undefined })} style={{ width: 54, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px", fontSize: 11 }} />
+              </label>
+            )}
             <label style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
               Zone
               <select

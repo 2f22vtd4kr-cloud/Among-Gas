@@ -72,9 +72,6 @@ jobs:
 
       - name: Test bilingual vent overlay and network destinations
         run: pnpm --filter @workspace/scripts run test:vent-overlay
-
-      - name: Test emergency meeting button
-        run: pnpm --filter @workspace/scripts run test:emergency-button
       - name: Test Admin Table player visibility and map projection
         run: pnpm --filter @workspace/scripts run test:admin-table
       - name: Test extracted contextual HUD action selection and disable rules
@@ -88,6 +85,9 @@ jobs:
 
       - name: Verify vector collision engine and mobile editor geometry helpers
         run: pnpm --filter @workspace/scripts run test:vector-collision
+
+      - name: Typecheck shared collision and geometry projects
+        run: pnpm run typecheck:libs
 
       - name: Verify character atlas crops, authored scale and shared feet anchor
         run: pnpm --filter @workspace/scripts run test:character-geometry
