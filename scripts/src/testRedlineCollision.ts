@@ -19,6 +19,26 @@ import { MAP_AUTHORING_ZONES } from "@workspace/shared/collision";
 const document = getProductionCollisionDocument();
 const world = getProductionCollisionWorld();
 assert.equal(document.source?.kind, "redline-vector");
+const walkableRegions = document.shapes.filter(shape => shape.walkableRegion === true);
+assert.ok(walkableRegions.length >= 2, "source-derived main floor and isolated C38 interior regions must be present");
+assert.ok(walkableRegions.some(shape => shape.id.startsWith("walkable-region-main-spawn-connected-floor")));
+assert.ok(walkableRegions.some(shape => shape.id.startsWith("walkable-region-east-office-vehicle-service-bay")));
+for (const region of walkableRegions) {
+  assert.equal(region.closed, true);
+  assert.equal(region.blocksMove, false);
+  assert.equal(region.blocksSight, false);
+  assert.equal(region.castsShadow, false);
+}
+assert.equal(document.source?.walkableRegionExtraction?.morphologyKernelSourcePx, 5);
+assert.equal(document.source?.walkableRegionExtraction?.connectivity, 8);
+assert.equal(document.source?.walkableRegionExtraction?.selectedRegions.some(region =>
+  region.id === "east-office-vehicle-service-bay" && region.ownerDecisionRequired,
+), true);
+assert.deepEqual(
+  [...(document.source?.walkableRegionExtraction?.excludedDetachedCandidates ?? [])].sort(),
+  ["C0", "C20", "C27", "C56"],
+);
+
 assert.ok(document.shapes.length >= 80);
 assert.equal(world.shapes.length, document.shapes.length);
 assert.ok(document.shapes.every(shape => !shape.blocksSight),
