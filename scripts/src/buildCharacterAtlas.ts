@@ -37,27 +37,43 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
   const sourceColumnWidth = sourceRight - sourceLeft;
   if (sourceColumnWidth <= 0) throw new Error(`Invalid source column ${sourceColumn}`);
 
-  const { data, info } = await sharp(sourcePath)
+  const { data: sourceData, info } = await sharp(sourcePath)
     .extract({ left: sourceLeft, top: 0, width: sourceColumnWidth, height: CHARACTER_SHEET_HEIGHT })
-    .resize(CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT, { fit: "fill", kernel: "nearest" })
     .ensureAlpha()
     .raw()
     .toBuffer({ resolveWithObject: true });
 
-  if (info.width !== CHARACTER_CELL_WIDTH || info.height !== CHARACTER_SHEET_HEIGHT || info.channels !== 4) {
-    throw new Error(`Unexpected generated ${color} column shape: ${info.width}×${info.height}×${info.channels}`);
+  if (info.width !== sourceColumnWidth || info.height !== CHARACTER_SHEET_HEIGHT || info.channels !== 4) {
+    throw new Error(`Unexpected source ${color} column shape: ${info.width}×${info.height}×${info.channels}`);
+  }
+
+  // Match Canvas drawImage(..., imageSmoothingEnabled=false): sample the
+  // nearest source pixel at each destination pixel centre. Sharp's resize
+  // kernel uses a different phase for this 159/160→161 mapping, which made
+  // the pre-baked PNG differ from the legacy runtime renderer.
+  const columnData = Buffer.alloc(CHARACTER_CELL_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
+  for (let row = 0; row < CHARACTER_SHEET_HEIGHT; row++) {
+    for (let x = 0; x < CHARACTER_CELL_WIDTH; x++) {
+      const sourceX = Math.min(
+        sourceColumnWidth - 1,
+        Math.floor((x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH),
+      );
+      const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
+      const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
+      sourceData.copy(columnData, targetOffset, sourceOffset, sourceOffset + 4);
+    }
   }
 
   const palette = paletteByColor.get(color);
   if (palette) {
-    for (let offset = 0; offset < data.length; offset += 4) {
+    for (let offset = 0; offset < columnData.length; offset += 4) {
       const [red, green, blue, alpha] = recolorSuitPixel(
-        data[offset], data[offset + 1], data[offset + 2], data[offset + 3], palette,
+        columnData[offset], columnData[offset + 1], columnData[offset + 2], columnData[offset + 3], palette,
       );
-      data[offset] = red;
-      data[offset + 1] = green;
-      data[offset + 2] = blue;
-      data[offset + 3] = alpha;
+      columnData[offset] = red;
+      columnData[offset + 1] = green;
+      columnData[offset + 2] = blue;
+      columnData[offset + 3] = alpha;
     }
   }
 
@@ -65,7 +81,7 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
   for (let row = 0; row < CHARACTER_SHEET_HEIGHT; row++) {
     const sourceOffset = row * columnBytes;
     const targetOffset = (row * CHARACTER_SHEET_WIDTH + column * CHARACTER_CELL_WIDTH) * 4;
-    data.copy(atlas, targetOffset, sourceOffset, sourceOffset + columnBytes);
+    columnData.copy(atlas, targetOffset, sourceOffset, sourceOffset + columnBytes);
   }
 }
 
