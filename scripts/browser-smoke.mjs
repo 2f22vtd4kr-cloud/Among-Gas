@@ -437,6 +437,16 @@ try {
     bodyText: document.body.innerText.slice(-1200),
   }));
   console.log('Task interaction fixture diagnostics:', JSON.stringify(taskDiagnostics));
+  const expandedTaskListToggle = page.getByTestId('task-list-toggle');
+  assert.equal(await expandedTaskListToggle.isVisible(), true, 'living crewmates must have a persistent task-list toggle');
+  await expandedTaskListToggle.click();
+  const expandedTaskListPanel = page.getByTestId('task-list-panel');
+  await expandedTaskListPanel.waitFor({ state: 'visible' });
+  assert.match(await expandedTaskListPanel.innerText(), /CREW TASKS|ЗАДАНИЯ ЭКИПАЖА/);
+  assert.ok(await expandedTaskListPanel.locator('button').count() >= 2,
+    'the expanded task list must expose the close control and assigned task rows');
+  await expandedTaskListToggle.click();
+  await expandedTaskListPanel.waitFor({ state: 'hidden' });
   const taskButton = page.getByTestId('game-action-use');
   assert.equal(await taskButton.getAttribute('data-use-action'), 'task',
     'the persistent Use control must expose the nearby actionable task');

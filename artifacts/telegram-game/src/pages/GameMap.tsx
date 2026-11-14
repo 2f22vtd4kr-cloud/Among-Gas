@@ -80,6 +80,7 @@ import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../g
 import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
+import TaskListPanel from '../components/TaskListPanel';
 import { EmergencyCallIcon, EmergencyMeetingArtwork } from '../components/EmergencyMeetingArtwork';
 import MeetingChatPanel from '../components/MeetingChatPanel';
 import MeetingVotingPanel from '../components/MeetingVotingPanel';
@@ -1581,103 +1582,48 @@ export default function GameMap() {
         }}
       />
 
-      {/* Task list and selected-task tracking, adapted for small Telegram screens. */}
-      {loaded && myRole === 'crewmate' && meeting === null && (
-        <>
-          <div style={{
-            position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 60px)', left: 12, zIndex: 35,
-          }}>
-            <button
-              onClick={() => { haptic.tap(); setShowTaskList(value => !value); setShowMiniMap(false); setShowAdminTable(false); }}
-              aria-expanded={showTaskList}
-              style={{
-                display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#f5f0d5',
-                background: showTaskList ? 'rgba(106,79,18,0.96)' : 'rgba(10,22,34,0.92)',
-                border: '1px solid rgba(241,196,15,0.62)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
-                fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
-                touchAction: 'manipulation',
-              }}
-            >
-              {showTaskList ? (en ? '✕ CLOSE TASKS' : '✕ ЗАКРЫТЬ ЗАДАНИЯ') : <><svg aria-hidden="true" width="15" height="15" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle' }}><path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>{en ? 'TASKS' : 'ЗАДАНИЯ'}</>}
-            </button>
-          </div>
-
-          {showTaskList && (
-            <div role="region" aria-label={en ? 'Task list' : 'Список заданий'} style={{
-              position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 106px)', left: 12,
-              width: 'min(330px, calc(100vw - 24px))', maxHeight: 'min(55vh, 420px)',
-              overflowY: 'auto', zIndex: 52, padding: 10, borderRadius: 12,
-              background: 'rgba(6,16,24,0.97)', border: '1px solid rgba(241,196,15,0.42)',
-              boxShadow: '0 12px 32px rgba(0,0,0,0.45)', color: '#e8f2f6',
-              fontFamily: 'sans-serif', backdropFilter: 'blur(10px)',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '2px 2px 8px' }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 950, letterSpacing: '0.08em' }}>{en ? 'CREW TASKS' : 'ЗАДАНИЯ ЭКИПАЖА'}</div>
-                  <div style={{ marginTop: 3, color: 'rgba(220,239,242,0.58)', fontSize: 10 }}>
-                    {myTasks.filter(task => {
-                      const def = TASK_DEFS.find(item => item.id === task.taskId);
-                      return def && task.completedSteps >= def.steps;
-                    }).length} / {myTasks.length} {en ? 'completed' : 'выполнено'}
-                  </div>
-                </div>
-                <button onClick={() => setShowTaskList(false)} aria-label={en ? 'Close tasks' : 'Закрыть задания'} style={{
-                  width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(220,240,240,0.18)',
-                  background: 'rgba(255,255,255,0.06)', color: '#fff', fontSize: 19, touchAction: 'manipulation',
-                }}>×</button>
-              </div>
-
-              {sabotage?.systemId === SABOTAGE_COMMS ? (
-                <div style={{
-                  marginTop: 4, padding: 12, borderRadius: 8, background: 'rgba(155,48,39,0.18)',
-                  border: '1px solid rgba(255,90,80,0.26)', fontSize: 12, lineHeight: 1.4,
-                }}>
-                  <strong>{en ? 'Communications disrupted.' : 'Связь нарушена.'}</strong> {en ? 'The task list is unavailable until communications are restored.' : 'Список заданий временно недоступен до восстановления связи.'}
-                </div>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-                  {myTasks.map(task => {
-                    const def = TASK_DEFS.find(item => item.id === task.taskId);
-                    if (!def) return null;
-                    const done = task.completedSteps >= def.steps;
-                    const locked = sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(task.taskId);
-                    const tracked = (trackedTaskId ?? myTasks.find(item => {
-                      const taskDef = TASK_DEFS.find(candidate => candidate.id === item.taskId);
-                      return taskDef && item.completedSteps < taskDef.steps &&
-                        !(sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(item.taskId));
-                    })?.taskId) === task.taskId;
-                    return (
-                      <button key={task.taskId} disabled={done || locked}
-                        onClick={() => { haptic.tap(); setTrackedTaskId(task.taskId); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 9, width: '100%', textAlign: 'left',
-                          padding: '8px 9px', borderRadius: 8, cursor: done || locked ? 'default' : 'pointer',
-                          color: done ? 'rgba(170,235,190,0.75)' : locked ? 'rgba(255,140,140,0.68)' : '#f3f6fb',
-                          background: tracked ? 'rgba(60,145,125,0.2)' : done ? 'rgba(40,100,60,0.08)' : 'rgba(255,255,255,0.035)',
-                          border: `1px solid ${tracked ? 'rgba(112,223,193,0.55)' : 'rgba(160,195,205,0.12)'}`,
-                          fontFamily: 'inherit', fontSize: 12, touchAction: 'manipulation',
-                        }}>
-                        <span style={{ width: 21, height: 21, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center',
-                          background: done ? 'rgba(57,170,100,0.22)' : locked ? 'rgba(170,45,45,0.22)' : 'rgba(241,196,15,0.16)',
-                          border: `1px solid ${done ? 'rgba(80,220,130,0.45)' : locked ? 'rgba(250,90,90,0.4)' : 'rgba(241,196,15,0.5)'}`,
-                          color: done ? '#7fe3a3' : locked ? '#ff9999' : '#f1c40f', fontWeight: 950,
-                        }}>{done ? '✓' : locked ? '×' : '!'}</span>
-                        <span style={{ flex: 1, minWidth: 0, lineHeight: 1.25 }}>{taskRu(def.name, language)}</span>
-                        <span style={{ color: 'rgba(220,239,242,0.6)', fontVariantNumeric: 'tabular-nums', fontSize: 10 }}>
-                          {Math.min(task.completedSteps, def.steps)} / {def.steps}
-                        </span>
-                      </button>
-                    );
-                  })}
-                  <div style={{ padding: '5px 3px 0', fontSize: 10, color: 'rgba(220,239,242,0.55)' }}>
-                    {en ? 'Choose a task; the compass will point toward it.' : 'Выберите задание: компас укажет направление к цели.'}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </>
-      )}
+      <TaskListPanel
+        visible={loaded && myRole === 'crewmate' && meeting === null}
+        expanded={showTaskList}
+        english={en}
+        completedCount={myTasks.filter(task => {
+          const def = TASK_DEFS.find(item => item.id === task.taskId);
+          return def && task.completedSteps >= def.steps;
+        }).length}
+        totalCount={myTasks.length}
+        commsDisrupted={sabotage?.systemId === SABOTAGE_COMMS}
+        tasks={myTasks.flatMap(task => {
+          const def = TASK_DEFS.find(item => item.id === task.taskId);
+          if (!def) return [];
+          const done = task.completedSteps >= def.steps;
+          const locked = sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(task.taskId);
+          const tracked = (trackedTaskId ?? myTasks.find(item => {
+            const taskDef = TASK_DEFS.find(candidate => candidate.id === item.taskId);
+            return taskDef && item.completedSteps < taskDef.steps &&
+              !(sabotage?.systemId === SABOTAGE_DOORS && sabotage.lockedTaskIds.includes(item.taskId));
+          })?.taskId) === task.taskId;
+          return [{
+            id: task.taskId,
+            name: taskRu(def.name, language),
+            completedSteps: Math.min(task.completedSteps, def.steps),
+            steps: def.steps,
+            done,
+            locked,
+            tracked,
+          }];
+        })}
+        onToggle={() => {
+          haptic.tap();
+          setShowTaskList(value => !value);
+          setShowMiniMap(false);
+          setShowAdminTable(false);
+        }}
+        onClose={() => setShowTaskList(false)}
+        onTrackTask={taskId => {
+          haptic.tap();
+          setTrackedTaskId(taskId);
+        }}
+      />
 
       {/* Mini-map toggle — top-left and safe-area aware for Telegram mobile. */}
       {loaded && myRole !== null && meeting === null && (
