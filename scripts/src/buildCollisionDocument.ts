@@ -117,11 +117,13 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const unique=loop?simple.slice(0,-1):simple; if(unique.length<(loop?3:2)) continue;
     const cx=unique.reduce((s,p)=>s+p[0],0)/unique.length,cy=unique.reduce((s,p)=>s+p[1],0)/unique.length;
     const statueRing=Math.abs(cx/w-.54)<.09&&Math.abs(cy/h-.27)<.10;
-    const closed=loop&&area(unique)>=20&&area(unique)<=8000&&!statueRing;
+    // The closed red-line loop around the statue planter is a source-traced movement solid.
+    // Keep it separate from the untraced pedestal: no sight or shadow semantics are inferred.
+    const closed=loop&&area(unique)>=20&&(area(unique)<=8000||statueRing);
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary"});
+    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:statueRing&&closed?"red-line statue planter footprint":closed?"red-line solid footprint":"red-line boundary"});
   }
   // The red-line reference does not author a statue-pedestal contour.
   // Do not promote the old estimated rectangle as production movement geometry;
