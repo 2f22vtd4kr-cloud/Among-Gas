@@ -204,7 +204,10 @@ async function testModelMeetingDialogueDispatch(): Promise<void> {
     // Return a successful provider result first; assert against the captured
     // prompt below so assertion failures cannot be swallowed by the fallback.
     return new Response(JSON.stringify({
-      choices: [{ message: { content: responseText } }],
+      choices: [{ message: { content: JSON.stringify({
+        reply: responseText,
+        evidence: [{ speaker: 'Human host', quote: publicObservation }],
+      }) } }],
     }), { status: 200, headers: { 'content-type': 'application/json' } });
   }) as typeof fetch;
 
