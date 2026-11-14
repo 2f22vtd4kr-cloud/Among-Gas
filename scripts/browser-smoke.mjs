@@ -363,6 +363,14 @@ try {
   assert.equal(await movementJoystick.getAttribute('aria-label'), 'Джойстик движения',
     'the joystick accessible label must follow the selected Russian language');
   await page.getByRole('button', { name: /КАРТА/ }).waitFor({ state: 'visible', timeout: 30_000 });
+  const crewProgress = page.getByRole('progressbar', { name: 'Всего заданий выполнено' });
+  await crewProgress.waitFor({ state: 'visible' });
+  assert.equal(await crewProgress.getAttribute('aria-valuemin'), '0');
+  assert.equal(await crewProgress.getAttribute('aria-valuemax'), '100');
+  assert.equal(await crewProgress.getAttribute('aria-valuenow'), '0');
+  assert.match(await crewProgress.innerText(), /ЗАДАНИЯ ВЫПОЛНЕНЫ/,
+    'the Russian total-task label must be visible, not only announced to assistive technology');
+  assert.equal(await page.getByTestId('global-task-progress-value').innerText(), '0%');
 
   // Pointer capture plus pointer-up must return the joystick to neutral. A lost
   // touch must never leave a movement key held and keep nudging the player.
@@ -390,6 +398,21 @@ try {
     page.getByRole('button', { name: /Созвать экстренное собрание|Call emergency meeting/ }),
     page.getByRole('button', { name: 'Настройки' }),
   ];
+  const compactProgress = page.getByRole('progressbar', { name: 'Всего заданий выполнено' });
+  const compactProgressBox = await compactProgress.boundingBox();
+  const compactMapBox = await hudSelectors[0].boundingBox();
+  const compactSettingsBox = await hudSelectors[3].boundingBox();
+  assert.ok(compactProgressBox && compactMapBox && compactSettingsBox,
+    'task progress, map and settings controls must remain visible at 320px');
+  assert.ok(compactProgressBox.x + compactProgressBox.width + 8 < compactMapBox.x,
+    'the compact task progress panel must not overlap the right-aligned map/settings controls');
+  assert.ok(compactMapBox.x + compactMapBox.width <= compactSettingsBox.x,
+    'map icon must sit immediately to the left of the settings gear');
+  assert.ok(Math.abs(compactMapBox.y - compactSettingsBox.y) <= 1,
+    'map and settings controls must share a top alignment');
+  const compactTaskToggleBox = await hudSelectors[1].boundingBox();
+  assert.ok(compactTaskToggleBox && compactProgressBox.y + compactProgressBox.height < compactTaskToggleBox.y,
+    'the task progress panel must remain above the collapsible task list control');
   assert.equal(await page.getByRole('button', { name: 'Покинуть матч' }).count(), 0,
     'Leave Match must not occupy a permanent, high-emphasis gameplay HUD slot');
   const hudBoxes = await Promise.all(hudSelectors.map(button => button.boundingBox()));
@@ -1010,7 +1033,13 @@ try {
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
   await page.waitForSelector('canvas', { timeout: 30_000 });
-  await page.getByRole('button', { name: /MAP/ }).waitFor({ state: 'visible', timeout: 10_000 });
+  await page.getByRole('button', { name: 'MAP', exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+  const englishProgress = page.getByRole('progressbar', { name: 'Total tasks completed' });
+  await englishProgress.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await englishProgress.getAttribute('aria-valuenow'), '0');
+  assert.match(await englishProgress.innerText(), /TOTAL TASKS COMPLETED/,
+    'the English total-task label must remain visible in gameplay');
+  assert.equal(await page.getByTestId('global-task-progress-value').innerText(), '0%');
   await page.getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
   await page.goto(`${origin}/?mock=meeting-discussion`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
