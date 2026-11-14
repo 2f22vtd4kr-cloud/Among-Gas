@@ -10,9 +10,9 @@
       "sourceWidth": 1652,
       "sourceHeight": 952,
       "sourceRect": [
-        826,
-        634.6666666666667,
-        1239,
+        813.7022332506203,
+        622.3695730175817,
+        1251.2977667493797,
         952
       ],
       "worldTransform": {
@@ -25,6 +25,6 @@
   ],
   "reviewer": null,
   "ownerDecision": null,
-  "notes": "Evidence scaffold only. This record stores the original map-art crop and independent X/Y world transform for tracing. No geometry has been author-traced, independently reviewed, or approved. Do not treat this record as a collision disposition or production sign-off.",
+  "notes": "Evidence scaffold only. This record stores the original map-art crop with 24 world-pixel seam context and independent X/Y world transform for tracing. No geometry has been author-traced, independently reviewed, or approved. Do not treat this record as a collision disposition or production sign-off.",
   "updatedAt": null
 }
