@@ -9,10 +9,18 @@ import {
 import { FEET_OFFSET_Y } from "../lib/shared/src/coords.js";
 import { getPrimaryMapAuthoringZone } from "../lib/shared/src/collision/mapZones.js";
 import { isBotNavigationReachable } from "../lib/shared/src/collision/botNavigation.js";
-import { getProductionCollisionWorld } from "../lib/shared/src/collision/productionWorld.js";
+import { getProductionCollisionDocument, getProductionCollisionWorld } from "../lib/shared/src/collision/productionWorld.js";
 
 const raster = buildPreciseCollisionGrid();
 const vector = getProductionCollisionWorld();
+const document = getProductionCollisionDocument();
+assert.equal(document.source?.rasterConstraint?.kind, "fine-grid-blocked-cell-union",
+  "candidate movement geometry must carry an explicit fine-grid topology constraint");
+assert.equal(document.source?.rasterConstraint?.cols, 680);
+assert.equal(document.source?.rasterConstraint?.rows, 392);
+assert.ok((document.source?.rasterConstraint?.mergedRectangles ?? 0) > 1000,
+  "candidate must preserve the blocked-cell union as indexed vector solids");
+
 const SAMPLE_STEP_PX = 8;
 const MAX_REACHABLE_DIRECTIONAL_MISMATCH_PCT = 2;
 
