@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
 const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
@@ -36,6 +37,16 @@ try {
   assert.equal(sourceAssetGitBlobSha, '5e2562defd86b956d6a75dc1136c8298443f93c4',
     'character source art changed: review the new authored asset before updating its golden baseline');
 
+  // Compare Sharp's straight-alpha decode with Chromium's exact drawImage ->
+  // getImageData result before attempting to reproduce the browser conversion.
+  const { data: sharpSourceData, info: sharpSourceInfo } = await sharp(sourceAsset)
+    .extract({ left: 0, top: 0, width: 160, height: 1401 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(sharpSourceInfo.channels, 4);
+  const sourceRawBase64 = sharpSourceData.toString('base64');
+
   const poseWindows = [
     { pose: 'idle', top: 0, bottom: 136 },
     { pose: 'walk-1', top: 172, bottom: 310 },
@@ -47,7 +58,7 @@ try {
     { pose: 'dead-body', top: 1067, bottom: 1160 },
     { pose: 'sit-crouch', top: 1198, bottom: 1326 },
   ];
-  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha }) => {
+  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha, sourceRawBase64 }) => {
     const atlas = window.__AG_CHARACTER_ATLAS;
     if (!atlas) throw new Error('Runtime character atlas was not exposed in the development build');
     const context = atlas.getContext('2d');
@@ -62,6 +73,42 @@ try {
     const sourceImage = new Image();
     sourceImage.src = spriteModule.CHARACTER_SOURCE_SHEET_PATH;
     await sourceImage.decode();
+
+    const sharpSource = Uint8Array.from(atob(sourceRawBase64), character => character.charCodeAt(0));
+    const sourceProbeCanvas = document.createElement('canvas');
+    sourceProbeCanvas.width = 160;
+    sourceProbeCanvas.height = 1401;
+    const sourceProbeContext = sourceProbeCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sourceProbeContext) throw new Error('Could not allocate source readback probe');
+    sourceProbeContext.imageSmoothingEnabled = false;
+    sourceProbeContext.drawImage(sourceImage, 0, 0, 160, 1401);
+    const browserSource = sourceProbeContext.getImageData(0, 0, 160, 1401).data;
+
+    const normalizeCandidate = (channel, alpha) => {
+      if (alpha === 0) return 0;
+      const premultiplied = Math.floor((channel * alpha + 127) / 255);
+      return Math.min(255, Math.floor((premultiplied * 255 + alpha / 2) / alpha));
+    };
+    const sourceDecodeCandidates = {
+      sharpRaw: { mismatchBytes: 0, maxDelta: 0 },
+      currentRoundTrip: { mismatchBytes: 0, maxDelta: 0 },
+    };
+    for (let offset = 0; offset < browserSource.length; offset += 4) {
+      for (let channel = 0; channel < 4; channel++) {
+        const raw = sharpSource[offset + channel];
+        const observed = browserSource[offset + channel];
+        const rawDelta = Math.abs(raw - observed);
+        if (rawDelta) sourceDecodeCandidates.sharpRaw.mismatchBytes++;
+        sourceDecodeCandidates.sharpRaw.maxDelta = Math.max(sourceDecodeCandidates.sharpRaw.maxDelta, rawDelta);
+        const candidate = channel === 3 ? raw : normalizeCandidate(raw, sharpSource[offset + 3]);
+        const candidateDelta = Math.abs(candidate - observed);
+        if (candidateDelta) sourceDecodeCandidates.currentRoundTrip.mismatchBytes++;
+        sourceDecodeCandidates.currentRoundTrip.maxDelta = Math.max(
+          sourceDecodeCandidates.currentRoundTrip.maxDelta, candidateDelta,
+        );
+      }
+    }
+
     const referenceAtlas = atlasModule.createCharacterAtlas(sourceImage);
     const referenceContext = referenceAtlas.getContext('2d');
     if (!referenceContext) throw new Error('Reference atlas has no readable 2D context');
@@ -170,6 +217,7 @@ try {
 
     const bakedParityDiagnostics = {
       differentBytes,
+      sourceDecodeCandidates,
       canvasSamplingProbe,
       maxChannelDelta,
       channelDifferences,
@@ -283,7 +331,7 @@ try {
       gameplayMatrixDataUrl: gameplayMatrix.toDataURL('image/png'),
       matrixDataUrl: matrix.toDataURL('image/png'),
     };
-  }, { poseWindows, sourceAssetGitBlobSha });
+  }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64 });
 
   console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
   assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
