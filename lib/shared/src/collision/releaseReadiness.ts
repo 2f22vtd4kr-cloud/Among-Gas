@@ -112,6 +112,15 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   if (!Array.isArray(input.gameplayAnchors)) {
     errors.push("All 24 gameplay-anchor dispositions are required");
   } else {
+    if (input.gameplayAnchors.length !== REQUIRED_ANCHORS.length) {
+      errors.push(`Exactly ${REQUIRED_ANCHORS.length} gameplay-anchor dispositions are required`);
+    }
+    const requiredAnchorIds = new Set<string>(REQUIRED_ANCHORS);
+    for (const anchor of input.gameplayAnchors) {
+      if (!anchor || !requiredAnchorIds.has(anchor.id)) {
+        errors.push("Unknown gameplay-anchor disposition");
+      }
+    }
     for (const id of REQUIRED_ANCHORS) {
       const matches = input.gameplayAnchors.filter((anchor) => anchor?.id === id);
       if (matches.length !== 1) {
@@ -133,6 +142,15 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   if (!Array.isArray(input.disconnectedRegions)) {
     errors.push("All five disconnected-region dispositions are required");
   } else {
+    if (input.disconnectedRegions.length !== REQUIRED_REGIONS.length) {
+      errors.push(`Exactly ${REQUIRED_REGIONS.length} disconnected-region dispositions are required`);
+    }
+    const requiredRegionIds = new Set<string>(REQUIRED_REGIONS);
+    for (const region of input.disconnectedRegions) {
+      if (!region || !requiredRegionIds.has(region.id)) {
+        errors.push("Unknown disconnected-region disposition");
+      }
+    }
     for (const id of REQUIRED_REGIONS) {
       const matches = input.disconnectedRegions.filter((region) => region?.id === id);
       if (matches.length !== 1) {
