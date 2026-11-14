@@ -414,7 +414,48 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
   };
 }
 
-function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
+function distanceToBackground(mask: Uint8Array, w: number, h: number): Float32Array {
+  const distance = new Float32Array(mask.length);
+  const infinity = 1_000_000;
+  for (let index = 0; index < mask.length; index++) {
+    distance[index] = mask[index] ? infinity : 0;
+  }
+  const diagonal = Math.SQRT2;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const index = y * w + x;
+      if (!mask[index]) continue;
+      let best = distance[index];
+      if (x > 0) best = Math.min(best, distance[index - 1] + 1);
+      if (y > 0) best = Math.min(best, distance[index - w] + 1);
+      if (x > 0 && y > 0) best = Math.min(best, distance[index - w - 1] + diagonal);
+      if (x + 1 < w && y > 0) best = Math.min(best, distance[index - w + 1] + diagonal);
+      distance[index] = best;
+    }
+  }
+  for (let y = h - 1; y >= 0; y--) {
+    for (let x = w - 1; x >= 0; x--) {
+      const index = y * w + x;
+      if (!mask[index]) continue;
+      let best = distance[index];
+      if (x + 1 < w) best = Math.min(best, distance[index + 1] + 1);
+      if (y + 1 < h) best = Math.min(best, distance[index + w] + 1);
+      if (x + 1 < w && y + 1 < h) best = Math.min(best, distance[index + w + 1] + diagonal);
+      if (x > 0 && y + 1 < h) best = Math.min(best, distance[index + w - 1] + diagonal);
+      distance[index] = best;
+    }
+  }
+  return distance;
+}
+
+function median(values: number[]): number {
+  if (!values.length) return 0;
+  values.sort((a, b) => a - b);
+  const middle = Math.floor(values.length / 2);
+  return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
+}
+
+function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Array):CollisionShape[] {
   const shapes:CollisionShape[]=[];
   for(const path of paths) {
     if(path.length<4) continue;
@@ -429,7 +470,18 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
     const selected=closed?unique:simple;
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
-    shapes.push({id:"redline-"+String(shapes.length+1).padStart(4,"0"),points,closed,blocksMove:true,blocksSight:false,label:closed?"red-line solid footprint":"red-line boundary"});
+    const scale = (MAP_W / w + MAP_H / h) / 2;
+    const sourceHalfWidth = median(path.map(index => strokeDistance[index]).filter(Number.isFinite));
+    // The raster source blocks the full authored red stroke. Preserve its
+    // measured half-width around the skeleton rather than treating a thick
+    // wall marking as a zero-width mathematical line.
+    const strokeRadius = closed ? 0 : Math.min(6, Math.max(0, sourceHalfWidth - 0.25) * scale);
+    shapes.push({
+      id:"redline-"+String(shapes.length+1).padStart(4,"0"),
+      points,closed,blocksMove:true,blocksSight:false,
+      ...(strokeRadius > 0 ? { strokeRadius } : {}),
+      label:closed?"red-line solid footprint":"red-line boundary",
+    });
   }
   // The red-line reference does not author a statue-pedestal contour.
   // Do not promote the old estimated rectangle as production movement geometry;
@@ -595,11 +647,12 @@ async function main():Promise<void> {
   for(let i=0;i<mask.length;i++) if(red(data,i*info.channels)){mask[i]=1;redCount++;}
   if(redCount<1500) throw new Error("too few red reference pixels: "+redCount);
   const walkableRegionExtraction=extractSourceWalkableRegions(mask.slice(),info.width,info.height);
+  const strokeDistance=distanceToBackground(mask,info.width,info.height);
   const skeleton=thin(mask,info.width,info.height); let skeletonCount=0;
   for(const v of skeleton) skeletonCount+=v;
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
-  const tracedShapes=makeShapes(paths,info.width,info.height);
+  const tracedShapes=makeShapes(paths,info.width,info.height,strokeDistance);
   const clippedShapes=applyWalkableReplacementZones(tracedShapes);
   const shapes=assignMapAuthoringZonesByCentroid({
     shapes:[...clippedShapes,...walkableRegionExtraction.shapes],
@@ -609,7 +662,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:8,
+      kind:"redline-vector",generatorVersion:9,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -633,6 +686,8 @@ async function main():Promise<void> {
         simplificationToleranceSourcePx:TOLERANCE,
         closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
+        strokeRadiusMedianWorldPx:median(shapes.map(s=>s.strokeRadius ?? 0).filter(v=>v>0)),
+        strokeRadiusMaxWorldPx:Math.max(0,...shapes.map(s=>s.strokeRadius ?? 0)),
       },
       shapeCounts:{
         total:shapes.length,

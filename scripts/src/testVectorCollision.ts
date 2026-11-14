@@ -313,6 +313,23 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(floorWorld.isShadowLineOfSightClear(10, 100, 190, 100), true,
     "movement-only floor regions must not silently become shadow occluders");
 
+  const measuredWall = new CollisionWorld([
+    { ...shape("measured-stroke-wall", [[50, 64], [150, 64]], false, true, false), strokeRadius: 2 },
+  ], 200, 200);
+  assert.equal(measuredWall.isWalkable(100, 69.9, 4), false,
+    "the measured red stroke half-width must be added to the player's physical radius");
+  assert.equal(measuredWall.isWalkable(100, 70.1, 4), true,
+    "a player footprint outside the measured wall stroke remains walkable");
+  assert.throws(() => new CollisionWorld([
+    { ...shape("negative-stroke", [[50, 64], [150, 64]], false, true, false), strokeRadius: -1 },
+  ], 200, 200), /strokeRadius/,
+  "negative source stroke widths must be rejected");
+  const edgeIndexedStroke = new CollisionWorld([
+    { ...shape("cell-edge-stroke", [[64, 20], [64, 180]], false, true, false), strokeRadius: 3 },
+  ], 200, 200);
+  assert.equal(edgeIndexedStroke.isWalkable(59, 100, 3), false,
+    "the spatial hash must find stroke width across a cell boundary");
+
   const corridor = new CollisionWorld([
     shape("corridor-lower", [[0, 100], [200, 100]], false, true, false),
     shape("corridor-upper", [[0, 115], [200, 115]], false, true, false),

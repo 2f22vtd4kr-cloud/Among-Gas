@@ -32,6 +32,8 @@ export interface CollisionShape {
   readonly walkableRegionId?: string;
   readonly label?: string;
   readonly zone?: string;
+  /** Source-derived half-width of a traced movement stroke, in world pixels. */
+  readonly strokeRadius?: number;
 }
 
 export interface CollisionSourceManifest {
@@ -84,6 +86,7 @@ interface Segment {
   readonly bx: number;
   readonly by: number;
   readonly shapeIndex: number;
+  readonly strokeRadius?: number;
 }
 
 interface Solid {
@@ -186,6 +189,13 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (typeof shape.closed !== "boolean") errors.push(prefix + ".closed must be boolean");
     if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
+    }
+    if (shape.strokeRadius !== undefined &&
+        (!Number.isFinite(shape.strokeRadius) || shape.strokeRadius < 0 || shape.strokeRadius > 12)) {
+      errors.push(prefix + ".strokeRadius must be finite and between 0 and 12 world pixels");
+    }
+    if (shape.strokeRadius !== undefined && shape.strokeRadius > 0 && shape.blocksMove !== true) {
+      errors.push(prefix + ".strokeRadius is only valid on movement-blocking shapes");
     }
     if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
       errors.push(prefix + ".castsShadow must be boolean when provided");
@@ -301,6 +311,11 @@ function segmentIntersectsRect(
   segment: Segment,
   minX: number, minY: number, maxX: number, maxY: number,
 ): boolean {
+  const padding = segment.strokeRadius ?? 0;
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
   const a: Point = [segment.ax, segment.ay];
   const b: Point = [segment.bx, segment.by];
   if (pointInRect(a, minX, minY, maxX, maxY) || pointInRect(b, minX, minY, maxX, maxY)) return true;
@@ -398,7 +413,10 @@ export class CollisionWorld {
       const edgeCount = shape.closed ? shape.points.length : shape.points.length - 1;
       for (let i = 0; i < edgeCount; i++) {
         const a = shape.points[i], b = shape.points[(i + 1) % shape.points.length];
-        const segment: Segment = { ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex };
+        const segment: Segment = {
+          ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex,
+          strokeRadius: shape.strokeRadius ?? 0,
+        };
         if (shape.blocksMove) {
           const index = this.moveSegments.push(segment) - 1;
           this.insert(this.moveHash, index, segment);
@@ -470,10 +488,11 @@ export class CollisionWorld {
   }
 
   private insert(index: Map<string, number[]>, segmentIndex: number, segment: Segment): void {
-    const minX = Math.floor(Math.min(segment.ax, segment.bx) / this.cell);
-    const maxX = Math.floor(Math.max(segment.ax, segment.bx) / this.cell);
-    const minY = Math.floor(Math.min(segment.ay, segment.by) / this.cell);
-    const maxY = Math.floor(Math.max(segment.ay, segment.by) / this.cell);
+    const padding = segment.strokeRadius ?? 0;
+    const minX = Math.floor((Math.min(segment.ax, segment.bx) - padding) / this.cell);
+    const maxX = Math.floor((Math.max(segment.ax, segment.bx) + padding) / this.cell);
+    const minY = Math.floor((Math.min(segment.ay, segment.by) - padding) / this.cell);
+    const maxY = Math.floor((Math.max(segment.ay, segment.by) + padding) / this.cell);
     for (let x = minX; x <= maxX; x++) {
       for (let y = minY; y <= maxY; y++) {
         const key = this.key(x, y);
@@ -634,8 +653,10 @@ export class CollisionWorld {
     if (this.moveRegions.length > 0 && !this.insideWalkableRegion(x, y, radius)) return false;
     if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
-      const nearest = segmentDistance(x, y, this.moveSegments[index]);
-      if (radius === 0 ? nearest <= EPS : nearest < radius - EPS) return false;
+      const segment = this.moveSegments[index];
+      const nearest = segmentDistance(x, y, segment);
+      const clearance = radius + (segment.strokeRadius ?? 0);
+      if (clearance === 0 ? nearest <= EPS : nearest < clearance - EPS) return false;
     }
     return true;
   }
