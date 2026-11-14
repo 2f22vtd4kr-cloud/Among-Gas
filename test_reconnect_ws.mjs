@@ -141,7 +141,7 @@ async function main() {
     assert.equal(resumedSlot[2], 0, 'reconnected identity must retain its original slot');
 
     const resumedRoster = await waitFor(replacement, packet =>
-      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
     );
     assert.equal(parseRoomCode(resumedRoster), roomCode, 'reattachment must remain in the original room');
 
