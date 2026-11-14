@@ -1498,7 +1498,7 @@ try {
     const pendingByImage = new WeakMap();
     HTMLImageElement.prototype.decode = function () {
       const source = this.currentSrc || this.src;
-      if (!source.includes('map-overview.webp') && !source.includes('characters.png')) {
+      if (!source.includes('map-overview.webp') && !source.includes('characters.png') && !source.includes('characters-18.png')) {
         return originalDecode.call(this);
       }
       if (!pendingByImage.has(this)) {
