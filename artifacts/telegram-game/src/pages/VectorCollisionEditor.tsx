@@ -1441,7 +1441,7 @@ export default function VectorCollisionEditor() {
           data-analysis-vent-count={analysis?.vents.length ?? ""}
           data-analysis-unreachable-count={analysis ? analysis.tasks.filter(t => !t.reachable).length + analysis.vents.filter(v => !v.reachable).length : ""}
           data-shape-points={JSON.stringify(document.shapes.map(shape => shape.points))}
-          data-shape-metadata={JSON.stringify(document.shapes.map(shape => ({ closed: shape.closed, kind: shape.kind })))}
+          data-shape-metadata={JSON.stringify(document.shapes.map(shape => ({ closed: shape.closed })))}
           data-draft-wall-points={JSON.stringify(draftWallPoints)}
           data-camera-x={cameraRef.current.x}
           data-camera-y={cameraRef.current.y}
