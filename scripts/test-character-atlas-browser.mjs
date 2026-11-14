@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { GENERATED_CHARACTER_PALETTES, recolorSuitPixel } from '@workspace/shared';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
 const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
@@ -46,6 +47,24 @@ try {
     .toBuffer({ resolveWithObject: true });
   assert.equal(sharpSourceInfo.channels, 4);
   const sourceRawBase64 = sharpSourceData.toString('base64');
+  const probeSourceOffset = (20 * 160 + 79) * 4;
+  const probeAlpha = sharpSourceData[probeSourceOffset + 3];
+  const normalizeProbeChannel = channel => {
+    if (probeAlpha === 0) return 0;
+    const premultiplied = Math.floor((channel * probeAlpha + 127) / 255);
+    return Math.min(255, Math.floor((premultiplied * 255 + probeAlpha / 2) / probeAlpha));
+  };
+  const nodeProbeInput = [
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset]),
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset + 1]),
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset + 2]),
+    probeAlpha,
+  ];
+  const nodePaletteProbe = GENERATED_CHARACTER_PALETTES.map(palette => ({
+    color: palette.color,
+    palette,
+    output: recolorSuitPixel(...nodeProbeInput, palette),
+  }));
 
   const poseWindows = [
     { pose: 'idle', top: 0, bottom: 136 },
@@ -58,7 +77,7 @@ try {
     { pose: 'dead-body', top: 1067, bottom: 1160 },
     { pose: 'sit-crouch', top: 1198, bottom: 1326 },
   ];
-  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha, sourceRawBase64 }) => {
+  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe }) => {
     const atlas = window.__AG_CHARACTER_ATLAS;
     if (!atlas) throw new Error('Runtime character atlas was not exposed in the development build');
     const context = atlas.getContext('2d');
@@ -144,6 +163,19 @@ try {
         }
       }
     }
+
+    const browserProbeOffset = (20 * 161 + 80) * 4;
+    const browserProbeInput = Array.from(browserScaledSource.slice(browserProbeOffset, browserProbeOffset + 4));
+    const browserPaletteProbe = spriteModule.GENERATED_CHARACTER_PALETTES.map(palette => ({
+      color: palette.color,
+      output: atlasModule.recolorSuitPixel(...browserProbeInput, palette),
+    }));
+    const paletteImplementationProbe = {
+      nodeInput: nodeProbeInput,
+      browserInput: browserProbeInput,
+      node: nodePaletteProbe.map(({ color, palette, output }) => ({ color, palette, output })),
+      browser: browserPaletteProbe,
+    };
 
     const referenceAtlas = atlasModule.createCharacterAtlas(sourceImage);
     const referenceContext = referenceAtlas.getContext('2d');
@@ -254,6 +286,7 @@ try {
     const bakedParityDiagnostics = {
       differentBytes,
       sourceDecodeCandidates,
+      paletteImplementationProbe,
       canvasSamplingProbe,
       maxChannelDelta,
       channelDifferences,
@@ -367,7 +400,7 @@ try {
       gameplayMatrixDataUrl: gameplayMatrix.toDataURL('image/png'),
       matrixDataUrl: matrix.toDataURL('image/png'),
     };
-  }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64 });
+  }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe });
 
   console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
   assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
