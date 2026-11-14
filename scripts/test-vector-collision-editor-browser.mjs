@@ -129,6 +129,12 @@ try {
   // the independent polygon so its vertices remain inside the authored map.
   await page.getByRole("button", { name: "Fit map" }).click();
 
+  // Cast-shadow is authored independently from movement and sight. New
+  // geometry must preserve the explicit flag through the editor document.
+  const newShapeCastsShadow = page.getByLabel("Casts shadow");
+  await newShapeCastsShadow.check();
+  assert.equal(await newShapeCastsShadow.isChecked(), true);
+
   // Draw and close a solid polygon using four real finger taps. The fourth
   // tap lands back on the first vertex and must close the loop without a mouse
   // event or the toolbar's Close polygon shortcut.
@@ -142,6 +148,10 @@ try {
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "2");
   assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0,
     "touching the starting vertex must close and commit the polygon loop");
+  const shapeMetadata = JSON.parse(await canvas.getAttribute("data-shape-metadata") ?? "[]");
+  assert.equal(shapeMetadata[1]?.castsShadow, true,
+    "the new polygon must preserve its independent castsShadow authoring flag");
+
 
   // Verify the full 48 CSS px touch target: a finger-down 20 CSS px from
   // the existing vertex remains inside its 24 px snap radius and must align.
@@ -179,6 +189,17 @@ try {
   await page.getByRole("button", { name: "Edit vertices" }).click();
   bounds = await canvas.boundingBox();
   await touchTap(bounds.x + 220, bounds.y + 95);
+  const selectedShadow = page.getByLabel("Shadow");
+  await selectedShadow.waitFor();
+  assert.equal(await selectedShadow.isChecked(), true,
+    "selected geometry exposes the authored shadow flag independently");
+  await selectedShadow.uncheck();
+  const updatedShapeMetadata = JSON.parse(await canvas.getAttribute("data-shape-metadata") ?? "[]");
+  assert.equal(updatedShapeMetadata[1]?.castsShadow, false,
+    "editing the shadow flag must update candidate metadata without changing movement or sight");
+  assert.equal(await page.getByLabel("Move").isChecked(), true);
+  assert.equal(await page.getByLabel("Sight").isChecked(), true);
+
   const selectedZone = page.getByLabel("Selected shape zone");
   await selectedZone.waitFor();
   await selectedZone.selectOption("Z02");
