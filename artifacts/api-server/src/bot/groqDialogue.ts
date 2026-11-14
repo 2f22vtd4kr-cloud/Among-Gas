@@ -235,6 +235,8 @@ export function validatePublicBotDialogueResponse(
   const roster = new Set(context.livingRoster.split(',').map(name =>
     sanitizePublicDialogueText(name, 32).toLocaleLowerCase(),
   ).filter(Boolean));
+  // Match against the same flattened/sanitized transcript the prompt builder sent.
+  const publicTranscript = sanitizePublicDialogueText(context.publicTranscript, 2_400);
   const evidenceTexts: string[] = [];
   for (const item of object.evidence) {
     if (!item || typeof item !== 'object' || Array.isArray(item)) {
@@ -250,13 +252,13 @@ export function validatePublicBotDialogueResponse(
     if (!roster.has(speaker.toLocaleLowerCase())) {
       return { reply: null, reason: 'evidence speaker was not in the living public roster' };
     }
-    if (!context.publicTranscript.includes(`${speaker}: ${quote}`)) {
+    if (!publicTranscript.includes(`${speaker}: ${quote}`)) {
       return { reply: null, reason: 'evidence quote was not an exact public transcript excerpt' };
     }
     evidenceTexts.push(quote);
   }
 
-  const factualVerb = /\b(?:saw|went|left|entered|killed|fixed|repaired|vented|sabotaged|completed|used|walked|stood|came|found|accused|voted|was|were|is|are|has|have)\b/i;
+  const factualVerb = /\b(?:saw|went|left|entered|killed|fixed|repaired|vented|sabotaged|completed|used|walked|stood|came|found|accused|voted|said|says|claimed|claims|told|was|were|is|are|has|have)\b/i;
   const factualSentences = reply.split(/(?<=[.!?])\s+/u).filter(sentence =>
     factualVerb.test(sentence) && !sentence.trim().endsWith('?'),
   );
