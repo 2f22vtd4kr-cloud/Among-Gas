@@ -6,11 +6,12 @@ import type { AdminTableAgent } from '../game/adminTableAgents';
 export interface GameAdminTableProps {
   agents: readonly AdminTableAgent[];
   english: boolean;
+  mapImageSrc: string;
   onClose: () => void;
 }
 
 /** Presentation-only live Admin Table; player visibility is prepared by the game scene. */
-export default function GameAdminTable({ agents, english, onClose }: GameAdminTableProps) {
+export default function GameAdminTable({ agents, english, mapImageSrc, onClose }: GameAdminTableProps) {
   return (
     <div
       data-testid="game-admin-table"
@@ -67,7 +68,7 @@ export default function GameAdminTable({ agents, english, onClose }: GameAdminTa
           }}
         >
           <img
-            src={`${import.meta.env.BASE_URL}map-overview.webp`}
+            src={mapImageSrc}
             alt={english ? 'Among Gas map' : 'Карта Among Gas'}
             draggable={false}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'fill', userSelect: 'none' }}

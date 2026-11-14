@@ -36,7 +36,7 @@ const hiddenLocal = buildAdminTableAgents({
 assert.deepEqual(hiddenLocal.map(agent => agent.slot), [1], 'the local player is hidden while inside a vent');
 
 const html = renderToStaticMarkup(
-  <GameAdminTable agents={agents} english onClose={() => undefined} />,
+  <GameAdminTable agents={agents} english mapImageSrc="/map-overview.webp" onClose={() => undefined} />,
 );
 assert.match(html, /data-testid="game-admin-table"/);
 assert.match(html, /data-testid="game-admin-table-map"/);
@@ -45,7 +45,7 @@ assert.match(html, /left:50%;top:50%/, 'the world centre maps to the visual map 
 assert.match(html, /Visible remote, dead/);
 assert.match(html, /Close Admin Table/);
 const russian = renderToStaticMarkup(
-  <GameAdminTable agents={agents} english={false} onClose={() => undefined} />,
+  <GameAdminTable agents={agents} english={false} mapImageSrc="/map-overview.webp" onClose={() => undefined} />,
 );
 assert.match(russian, /ПЛАНШЕТ АДМИНИСТРАТОРА/);
 assert.match(russian, /Visible remote, мёртв/);

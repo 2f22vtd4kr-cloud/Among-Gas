@@ -1705,6 +1705,7 @@ export default function GameMap() {
         <GameAdminTable
           agents={adminTableAgents}
           english={en}
+          mapImageSrc={`${import.meta.env.BASE_URL}map-overview.webp`}
           onClose={() => setShowAdminTable(false)}
         />
       )}
