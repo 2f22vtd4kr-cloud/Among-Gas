@@ -476,7 +476,7 @@ export class ImpostorBot extends BotAgent {
       username: self.username,
       availableSystems,
       visibleCrewCount: visibleCrew.length,
-      visiblePairsWithin350Px: visiblePairsWithin350Px,
+      visibleCrewPairsWithin350Px: visiblePairsWithin350Px,
       publicTaskProgressPct,
       killCooldownMs: self.killCooldownMs,
     });
@@ -484,7 +484,7 @@ export class ImpostorBot extends BotAgent {
     const observationId = this.recordObservation(self, 'impostor-sabotage', {
       availableSystems,
       visibleCrewCount: visibleCrew.length,
-      visibleCrewPairsWithin350Px,
+      visibleCrewPairsWithin350Px: visiblePairsWithin350Px,
       publicTaskProgressPct: Math.round(publicTaskProgressPct * 10) / 10,
       killCooldownMs: self.killCooldownMs,
     }, fallback);
