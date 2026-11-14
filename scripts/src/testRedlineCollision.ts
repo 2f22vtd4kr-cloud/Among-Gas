@@ -27,15 +27,6 @@ assert.ok(world.isPlayerSpawnPositionClear(PLAYER_SPAWN_X, PLAYER_SPAWN_Y),
   "the real player spawn must be clear under the same red-line geometry used at runtime");
 assert.equal(document.shapes.some(shape => shape.id === "statue-pedestal"), false,
   "the red-line source does not define a reviewed statue-pedestal contour; never promote the old estimated rectangle");
-const statuePlanter = document.shapes.find(shape => shape.label === "red-line statue planter footprint");
-assert.ok(statuePlanter, "the closed red-line statue planter loop must be retained as a source-traced solid");
-assert.equal(statuePlanter.closed, true);
-assert.equal(statuePlanter.blocksMove, true);
-assert.equal(statuePlanter.blocksSight, false, "movement-only planter geometry must not silently become an interaction occluder");
-assert.equal(statuePlanter.castsShadow, undefined, "the planter trace must not invent a presentation-shadow decision");
-assert.equal(world.insideSolid(1736.25, 504.33), true,
-  "the source-traced planter interior must remain movement-blocked");
-
 const editorZones = new Set(document.shapes.map(shape => shape.zone));
 assert.deepEqual([...editorZones].sort(), MAP_AUTHORING_ZONES.map(zone => zone.id).sort(),
   "the production seed must use the canonical twelve-zone authoring partition");

@@ -9843,12 +9843,16 @@
         [
           1699.840942562592,
           379.66794380587487
+        ],
+        [
+          1728.3298969072164,
+          353.5657726692209
         ]
       ],
-      "closed": true,
+      "closed": false,
       "blocksMove": true,
       "blocksSight": false,
-      "label": "red-line statue planter footprint",
+      "label": "red-line boundary",
       "zone": "Z03"
     },
     {
@@ -10478,7 +10482,7 @@
   ],
   "source": {
     "kind": "redline-vector",
-    "generatorVersion": 8,
+    "generatorVersion": 7,
     "sourceFiles": {
       "redlineReference": {
         "path": "attached_assets/IMG_2907_1783590932507.jpeg",
@@ -10486,7 +10490,7 @@
       },
       "generator": {
         "path": "scripts/src/buildCollisionDocument.ts",
-        "sha256": "73d9fe1d1f588fa2c6f4187abb8c2de57561718a10f76907e5cb9b9b2e3d9458"
+        "sha256": "db7fecd3a0fedda2ec5157370a4831d73436f3a6e066ae1e0b13d0ab63411c57"
       },
       "collisionEngine": {
         "path": "lib/shared/src/collision/vectorCollision.ts",
@@ -10532,14 +10536,14 @@
       "tracedPathCount": 820,
       "simplifiedPointCount": 1694,
       "simplificationToleranceSourcePx": 1.25,
-      "closedSolidCount": 15,
-      "openBoundaryCount": 355
+      "closedSolidCount": 14,
+      "openBoundaryCount": 356
     },
     "shapeCounts": {
       "total": 370,
       "tracedAfterReplacementClipping": 369,
-      "closedSolids": 15,
-      "openBoundaries": 355,
+      "closedSolids": 14,
+      "openBoundaries": 356,
       "manualBlockedPolygons": 1
     },
     "zoneShapeCounts": {
