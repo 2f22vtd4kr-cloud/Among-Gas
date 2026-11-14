@@ -674,7 +674,7 @@ export class CollisionWorld {
   visibility(x: number, y: number, radius: number): Point[] {
     if (![x, y, radius].every(Number.isFinite) || radius <= 0 ||
         x < 0 || y < 0 || x > this.w || y > this.h ||
-        this.insideSolids(x, y, this.sightSolids)) return [];
+        this.insideSolids(x, y, this.sightSolids, this.sightSolidHash)) return [];
     const candidates = this.query(this.sightHash, x, y, radius + this.cell);
     const angles = new Set<number>();
     const addAngle = (value: number): void => {
