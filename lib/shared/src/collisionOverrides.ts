@@ -74,10 +74,34 @@ export const CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS: readonly {
   },
 ];
 
+export const SOURCE_ART_SEALED_REGION_CANDIDATES = [
+  {
+    id: "C0",
+    description: "Upper cafeteria furniture and bench strip behind the continuous partition",
+    islandSideReferenceImage: [613,43] as const,
+  },
+  {
+    id: "C20",
+    description: "Northwest tank and pipe machinery enclosure",
+    islandSideReferenceImage: [299,215] as const,
+  },
+  {
+    id: "C27",
+    description: "South-central playground and service-fixture enclosure",
+    islandSideReferenceImage: [684,365] as const,
+  },
+  {
+    id: "C56",
+    description: "Southwest shelving and canister display interior",
+    islandSideReferenceImage: [137,615] as const,
+  },
+] as const;
+
 export const SOURCE_ART_ISOLATED_REGION_CANDIDATES = [
   {
     id: 'east-office-vehicle-service-bay',
     worldBounds: [1821,801,2589,1327] as const,
+    islandSideReferenceImage: [1016,357] as const,
     entryExitMechanics: 'No entry/exit is currently authored; design-owner confirmation remains pending.',
     rationale: 'The source reference shows a continuous perimeter with no doorway, while the internal floor and van clearance remain preserved.',
   },
