@@ -123,3 +123,42 @@ Issue #90 remains controlling: no Replit/Vercel access, publishing, deployment, 
 ## Update after provenance merge — 2026-11-13
 
 PR #144 merged as `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. This is the current main SHA at this checkpoint. PR #144 added source/provenance/review documentation and the asset inventory only; it did not change runtime geometry, map assets, collision behavior, or gameplay. The previously audited runtime baseline `925a465458e8462cef8b6112daff90a0edc239b3` therefore remains the relevant code baseline. Mainline CI run `43375367783` is verifying the documentation merge; the exact-head PR #144 run `43372802248` passed all checks, including the three seeded balance cohorts.
+
+
+## Current-main reconciliation — 2026-11-14
+
+This addendum supersedes the 2026-11-13 checkpoint above where later merges changed the repository. It does not waive geometry, provenance, balance, or release acceptance gates.
+
+### Merged since the prior checkpoint
+
+| PR | Mainline result | Verified scope |
+|---|---|---|
+| #145 | `5b82d981bfab51f4e30e2bbfee0d53a9e5f62139` | Patched and audited the production and full-workspace dependency advisory set; pnpm 11 lockfile/package-manager alignment. |
+| #146 | `f7a8d2409756aedec2e1b5fa9427e5c7ff30097e` | Added opt-in 20-minute local API/WebSocket soak gate and partial-auth-safe socket cleanup tests. |
+| #149 | `014bc434d213dc3f1b5614d0334b9986eccf4c12` | Canonical 12-zone Z01–Z12 authoring partition, editor selector/API ownership checks, and metadata-only centroid migration. This is authoring infrastructure, not completed source tracing. |
+| #150 | `a529ed0cc5693e656d5dabd6d1f6d26119c22a36` | Extracted GameMap presentation constants and helpers. |
+| #151 | `4b0953f6429c34cec7e4ae63763c21257e870bd9` | Added evidence-backed per-zone source review records, source path/hash/transform validation, server-stamped review timestamps, and editor controls. Seeded review scaffolds are not completed author/reviewer sign-offs. |
+| #154 | `5500f1c244230a9a15cad2c22770053d0d78dbce` | Recorded reproducible map master and per-tile SHA-256 provenance. |
+| #152 | `4a783918619362b66b4131a76752b317334cc11f` | Extracted meeting chat, voting, game-over and role-reveal panels. Exact-head CI passed, including API/frontend build, browser smoke and all three 100-game balance cohorts. |
+| #153 | `d558e857768a6fc7d779ba9b6a46690f3e32adb3` | Enforced hard decoded tile residency budgets (6 mobile / 12 desktop), center-priority selection, stale-image eviction and deferred-tile browser readiness. Exact-head CI passed. |
+
+Current main at this checkpoint is `d558e857768a6fc7d779ba9b6a46690f3e32adb3`.
+
+### Current vector runtime candidate — PR #138
+
+PR #138 remains a draft and is not merged or production-approved. The latest candidate head is `2a60aa2eec3cf2141e2d92540e136782cf767791`. Its prior exact-head run `43550952218` completed the 20-minute local API/WebSocket soak and collision/vision QA, but the mobile browser smoke failed in the new vector-editor acceptance assertions: the test treated the editor's `data-shape-points` (an array of point arrays) as an array of shape objects. The same test also incorrectly expected polygon metadata in the points-only attribute.
+
+The candidate branch now exposes a separate test-only `data-shape-metadata` attribute and checks point arrays and closed-polygon metadata using their actual contracts. Exact-head run `43553509513` is in progress; do not carry forward the previous run or infer success before it completes. Its prior failure also caused the three 100-game balance cohorts to be skipped, so those cohorts must complete on the corrected head.
+
+The candidate's collision document remains 370 movement-only shapes (14 closed, 356 open); zone-centroid assignment does not constitute tracing or independent review. All 12 zone source traces, reviewer evidence/dispositions, five disconnected-region decisions, gameplay-anchor routes, full-footprint clearance, and separate sight/shadow review remain mandatory. PR #138 must remain unmerged until those source-backed design gates are actually satisfied, in addition to exact-head CI, all balance cohorts and movement/client/server/bot parity.
+
+### Remaining Plan 2 / release blockers
+
+1. Complete and independently review the 12 source-backed map zones. The current 12-zone editor and review records are scaffolding and workflow support; they do not substitute for author-traced contours or recorded approvals.
+2. Record evidence-backed dispositions for every gameplay anchor and disconnected component; verify full player-footprint routes, task/vent approaches, generator passages, vehicle clearance and the disputed planter/pedestal geometry.
+3. Keep movement collision, interaction line-of-sight, presentation shadow and vision semantics independently authored and tested. No candidate movement boundary should silently become a sight/shadow occluder.
+4. Complete corrected-head PR #138 CI, including the unchanged three 100-game cohorts, then repeat parity and visual review on the same candidate revision. No acceptance thresholds may be weakened to obtain green CI.
+5. Finish remaining behavior-preserving GameMap decomposition and any outstanding UI/mobile acceptance that is still required by the original Plan 2, while preserving the newly merged panel and tile-residency behavior.
+6. Complete two-real-client / real-device acceptance and the release dossier only after the owner explicitly clears the active recovery restriction. Repository CI, local server checks and Vercel preview statuses are not production deployment or physical-device acceptance.
+
+**Decision: NOT READY.** Mainline has gained meaningful Plan 2 implementation and verification, but Plan 2 is not complete and no live vector collision cut-over, deployment, Replit mutation, production database change, or external publishing is authorized by this audit.
