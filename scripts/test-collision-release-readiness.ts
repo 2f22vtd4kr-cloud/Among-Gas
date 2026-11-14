@@ -116,4 +116,55 @@ noSightParity.parity.interactionLineOfSight = false;
 assert.ok(validateCollisionCutoverEvidence(noSightParity).some((error) => error.includes("line-of-sight parity")),
   "movement acceptance cannot stand in for interaction sight acceptance");
 
+const reviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
+(reviewChronology.zoneReviews[0] as Record<string, unknown>).ownerDecision = {
+  name: "Design Owner",
+  decidedAt: "2026-11-14T08:05:00.000Z",
+  decision: "approved",
+  notes: "This decision must not predate the independent review.",
+};
+assert.ok(validateCollisionCutoverEvidence(reviewChronology).some((error) =>
+  error.includes("Design-owner decision cannot predate the independent review")),
+  "an owner approval timestamp must not predate the independent review");
+
+const authorChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
+(authorChronology.zoneReviews[0] as Record<string, unknown>).author = {
+  name: "Map Author",
+  completedAt: "2026-11-14T08:15:00.000Z",
+};
+assert.ok(validateCollisionCutoverEvidence(authorChronology).some((error) =>
+  error.includes("Independent review cannot predate the author's completed trace")),
+  "an independent review timestamp must not predate the author's completed trace");
+
+const extraAnchor: CollisionCutoverEvidence = structuredClone(completeEvidence);
+extraAnchor.gameplayAnchors.push({
+  id: "task-extra",
+  authorName: "Map Author",
+  reviewerName: "Independent Reviewer",
+  disposition: "accepted",
+  evidenceSha256: digest,
+  movementRoutePassed: true,
+  sightApproachPassed: true,
+});
+assert.ok(validateCollisionCutoverEvidence(extraAnchor).some((error) =>
+  error.includes("Exactly 24 gameplay-anchor dispositions")),
+  "unexpected anchor entries must not silently expand the release evidence set");
+assert.ok(validateCollisionCutoverEvidence(extraAnchor).some((error) =>
+  error.includes("Unknown gameplay-anchor disposition")),
+  "unexpected gameplay-anchor identifiers must be rejected");
+
+const extraRegion: CollisionCutoverEvidence = structuredClone(completeEvidence);
+extraRegion.disconnectedRegions.push({
+  id: "C0",
+  reviewerName: "Independent Reviewer",
+  ownerName: "Design Owner",
+  decision: "intentionally-sealed",
+  evidenceSha256: digest,
+  routeEvidenceComplete: true,
+  notes: "Duplicate entries are not valid release evidence.",
+});
+assert.ok(validateCollisionCutoverEvidence(extraRegion).some((error) =>
+  error.includes("Exactly 5 disconnected-region dispositions")),
+  "duplicate region entries must not silently expand the release evidence set");
+
 console.log("COLLISION CUTOVER READINESS TESTS PASSED: 12 zones, 24 anchors, 5 disconnected regions, independent approvals and separate movement/sight/shadow evidence");
