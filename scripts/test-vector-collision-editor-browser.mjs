@@ -368,6 +368,25 @@ try {
   assert.equal(regionDocument.shapes[3].walkableRegionId, "smoke-floor");
   assert.equal(regionDocument.shapes[3].blocksMove, false);
 
+  // A movement stroke can carry its own width and independently opt out of
+  // presentation shadows without changing sight or movement flags.
+  await page.getByRole("button", { name: "Draw wall" }).click();
+  await page.getByLabel("New wall stroke radius").fill("4");
+  await page.getByLabel("New shape shadow behavior").selectOption("no");
+  bounds = await canvas.boundingBox();
+  await touchDrag(bounds.x + 440, bounds.y + 260, bounds.x + 485, bounds.y + 260, 5);
+  await page.getByRole("button", { name: "Finish chain" }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "5");
+  const strokeDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON" }).click();
+  const strokeDownload = await strokeDownloadPromise;
+  const strokeStream = await strokeDownload.createReadStream();
+  let strokeJson = "";
+  for await (const chunk of strokeStream) strokeJson += chunk.toString();
+  const strokeDocument = JSON.parse(strokeJson);
+  assert.equal(strokeDocument.shapes[4].strokeRadius, 4);
+  assert.equal(strokeDocument.shapes[4].castsShadow, false);
+
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
 } finally {
