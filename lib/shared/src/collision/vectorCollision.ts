@@ -203,6 +203,8 @@ export function validateCollisionDocument(value: unknown): string[] {
   const width = Number.isFinite(doc.mapW) ? doc.mapW! : DEFAULT_W;
   const height = Number.isFinite(doc.mapH) ? doc.mapH! : DEFAULT_H;
   const ids = new Set<string>();
+  const walkableRegions: CollisionShape[] = [];
+  const walkableHoles: CollisionShape[] = [];
 
   doc.shapes.forEach((raw, index) => {
     const prefix = "shapes[" + index + "]";
@@ -273,6 +275,12 @@ export function validateCollisionDocument(value: unknown): string[] {
       if (Math.abs(area2(points)) < 1e-6) errors.push(prefix + " polygon has zero area");
       if (selfIntersects(points)) errors.push(prefix + " polygon self-intersects");
     }
+    if (shape.walkableRegion === true && shape.closed === true && points.every(finitePoint)) {
+      walkableRegions.push(shape as CollisionShape);
+    }
+    if (shape.walkableRegionHole === true && shape.closed === true && points.every(finitePoint)) {
+      walkableHoles.push(shape as CollisionShape);
+    }
     if (shape.label !== undefined && typeof shape.label !== "string") {
       errors.push(prefix + ".label must be a string");
     }
@@ -280,6 +288,45 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + ".zone must be a string up to 64 characters");
     }
   });
+
+  const regionsById = new Map<string, CollisionShape>();
+  for (const region of walkableRegions) {
+    const regionId = region.walkableRegionId!;
+    if (regionsById.has(regionId)) {
+      errors.push("walkableRegionId " + regionId + " must identify exactly one floor polygon");
+    } else {
+      regionsById.set(regionId, region);
+    }
+  }
+  for (const hole of walkableHoles) {
+    const regionId = hole.walkableRegionId!;
+    const region = regionsById.get(regionId);
+    if (!region) {
+      errors.push("walkable region hole " + hole.id + " references missing region " + regionId);
+      continue;
+    }
+    const holePoints = hole.points;
+    const regionPoints = region.points;
+    if (!holePoints.every(point => pointInPolygon(point[0], point[1], regionPoints))) {
+      errors.push("walkable region hole " + hole.id + " must be fully contained by region " + regionId);
+      continue;
+    }
+    let crossesBoundary = false;
+    for (let holeEdge = 0; holeEdge < holePoints.length && !crossesBoundary; holeEdge++) {
+      const a = holePoints[holeEdge], b = holePoints[(holeEdge + 1) % holePoints.length];
+      for (let regionEdge = 0; regionEdge < regionPoints.length; regionEdge++) {
+        const c = regionPoints[regionEdge], d = regionPoints[(regionEdge + 1) % regionPoints.length];
+        if (segmentsIntersect(a, b, c, d)) {
+          crossesBoundary = true;
+          break;
+        }
+      }
+    }
+    if (crossesBoundary) {
+      errors.push("walkable region hole " + hole.id + " must not cross or touch region " + regionId + " boundary");
+    }
+  }
+
   if (doc.source !== undefined) {
     const source = doc.source;
     if (!Number.isInteger(source.generatorVersion) || source.generatorVersion < 1) {
