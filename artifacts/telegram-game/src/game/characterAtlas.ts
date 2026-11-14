@@ -7,95 +7,9 @@ import {
   CHARACTER_SHEET_WIDTH,
   CHARACTER_SOURCE_SHEET_COLS,
   CHARACTER_SOURCE_SHEET_WIDTH,
-  type GeneratedCharacterPalette,
 } from './characterSprites';
-
-type Hsl = readonly [hue: number, saturation: number, lightness: number];
-type Rgba = readonly [red: number, green: number, blue: number, alpha: number];
-
-const SUIT_HUE_MIN = 155;
-const SUIT_HUE_MAX = 186;
-const SUIT_MIN_SATURATION = 0.3;
-
-export function rgbToHsl(red: number, green: number, blue: number): Hsl {
-  const r = red / 255;
-  const g = green / 255;
-  const b = blue / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  const lightness = (max + min) / 2;
-
-  if (delta === 0) return [0, 0, lightness];
-
-  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
-  let hue: number;
-  if (max === r) hue = 60 * (((g - b) / delta) % 6);
-  else if (max === g) hue = 60 * ((b - r) / delta + 2);
-  else hue = 60 * ((r - g) / delta + 4);
-  if (hue < 0) hue += 360;
-  return [hue, saturation, lightness];
-}
-
-function hslToRgb(hue: number, saturation: number, lightness: number): readonly [number, number, number] {
-  const h = ((hue % 360) + 360) % 360;
-  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
-  const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = lightness - chroma / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (h < 60) [r, g, b] = [chroma, x, 0];
-  else if (h < 120) [r, g, b] = [x, chroma, 0];
-  else if (h < 180) [r, g, b] = [0, chroma, x];
-  else if (h < 240) [r, g, b] = [0, x, chroma];
-  else if (h < 300) [r, g, b] = [x, 0, chroma];
-  else [r, g, b] = [chroma, 0, x];
-
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255),
-  ];
-}
-
-function isRecolorableSuitHsl(hue: number, saturation: number, lightness: number, alpha: number): boolean {
-  if (alpha === 0) return false;
-  // The pale breathing/filter disk shares a cyan hue with the suit but is
-  // both much lighter and more neutral. Keep that hardware untouched.
-  const filterLike = hue >= 174 && hue <= 183 && lightness >= 0.72;
-  return !filterLike && hue >= SUIT_HUE_MIN && hue <= SUIT_HUE_MAX &&
-    saturation >= SUIT_MIN_SATURATION && lightness >= 0.1 && lightness <= 0.95;
-}
-
-/** True only for the saturated teal suit material, not visor/filter/outline pixels. */
-export function isRecolorableSuitPixel(red: number, green: number, blue: number, alpha: number): boolean {
-  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
-  return isRecolorableSuitHsl(hue, saturation, lightness, alpha);
-}
-
-/**
- * Hue-shift one suit pixel while preserving its authored per-pixel shading.
- * Low-saturation outline/filter pixels and the blue visor are returned unchanged.
- */
-export function recolorSuitPixel(
-  red: number,
-  green: number,
-  blue: number,
-  alpha: number,
-  palette: GeneratedCharacterPalette,
-): Rgba {
-  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
-  if (!isRecolorableSuitHsl(hue, saturation, lightness, alpha)) return [red, green, blue, alpha];
-  const nextSaturation = Math.max(0, Math.min(1, saturation * (palette.saturationScale ?? 1)));
-  const nextLightness = Math.max(0.04, Math.min(
-    0.96,
-    lightness * (palette.lightnessScale ?? 1) + (palette.lightnessOffset ?? 0),
-  ));
-  const [nextRed, nextGreen, nextBlue] = hslToRgb(palette.hue, nextSaturation, nextLightness);
-  return [nextRed, nextGreen, nextBlue, alpha];
-}
+import { recolorSuitPixel } from '@workspace/shared';
+export { isRecolorableSuitPixel, recolorSuitPixel, rgbToHsl } from '@workspace/shared';
 
 /**
  * Build an in-memory 18-column atlas from the original seven-column PNG.
