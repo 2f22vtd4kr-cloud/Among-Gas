@@ -77,9 +77,13 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
   const columnData = Buffer.alloc(CHARACTER_CELL_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
   for (let row = 0; row < CHARACTER_SHEET_HEIGHT; row++) {
     for (let x = 0; x < CHARACTER_CELL_WIDTH; x++) {
-      const sourceX = Math.min(
-        sourceColumnWidth - 1,
-        Math.floor((x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH),
+      const samplePosition = (x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH;
+      // Chromium resolves an exact nearest-neighbour boundary toward the
+      // lower source pixel. `ceil(position) - 1` matches both
+      // 160→161 (including its exact midpoint) and 159→161 sampling.
+      const sourceX = Math.max(
+        0,
+        Math.min(sourceColumnWidth - 1, Math.ceil(samplePosition) - 1),
       );
       const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
       const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
