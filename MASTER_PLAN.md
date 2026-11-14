@@ -1,93 +1,192 @@
-# Among Gas — Master Engineering & Release Plan (revised 2026-11-02)
+# AMONG GAS — MASTER PLAN v2 (after audit of `Among-Gas-main_2.zip`)
 
-> This is the execution contract for the existing Among Gas product, not a rewrite. Preserve the proprietary gas-station/industrial map, balaclava crew, exposed-bone corpse art, Telegram Mini App protocol, and server-authoritative match model. This plan supersedes the ZIP's unreviewed assumptions where they conflict with evidence from the live repository.
+> Replaces root `MASTER_PLAN.md`. Every agent reads **§0, §1, §7 and your squad's section**.
+> **Rule zero (new):** the plan is not re-reviewed. If you think a line is wrong, post ≤ 10 lines of evidence in the squad issue; the conductor rules within 24 h; **everyone keeps shipping code meanwhile**. (Last round produced a 10 KB `PLAN_REVIEW.md` and a root plan stuffed with CI run IDs, but no vector map and no art fix.)
 
-## 0. Mission and current release status
+---
 
-Deliver a genuinely playable, visually coherent, secure Telegram HTML5 game. Work in gated waves with one integration owner and specialist workstreams; "100 agents" means 100 review/implementation workstreams, not a claim that 100 independent workers or simultaneous code editors exist.
+## 0. VERDICT ON THE LAST ROUND
 
-**Release status: NOT READY.** Main remains at `ac19a0a437dce8512245c1c8a25ea928a534c96e`; baseline CI run [41416954313](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41416954313) passed. Draft PR [#106](https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/106) has a current 2.2s task-dwell retest at head `262f5f602ef36406b92989f09ccab209779cb33c), with exact-head CI run [41454209699](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454209699) in progress. The preceding 2.0s 3×100 run [41449987137](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41449987137) produced 63%, 57%, 70% crew wins with zero timeouts; the 70% cohort exceeded the per-seed 65% ceiling. The earlier 60%, 56%, 60% run [41442990577](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41442990577) is historical evidence, not current release proof. The retest now records win reasons and includes the task-reachability regression. Draft PR [#107](https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/107) has current head `6870b2424beaa9d83328f88567c8654a304f61fb`; exact-head CI run [41454994178](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/41454994178) is pending. No vector geometry is used by live gameplay. Target Replit verification is unavailable in this pass; active recovery issue #90 prohibits Replit/Vercel access and publishing during repository recovery. Current Vercel status checks are failing from the account's deployment daily-limit response, not from GitHub Actions.
+**Good, keep:**
+- `lib/shared/src/collision/{vectorCollision,editorGeometry}.ts` is merged, validated and tested. The review caught three real defects in my prototype and fixed them: `radius=0` made the substep count infinite, visibility used a square 1.5×r perimeter instead of a circle, and sight segments crossing the radius with both endpoints outside it were missed. (The "XOR hash aliasing" point is true but only costs speed, never correctness.) I accept those corrections.
+- `VectorCollisionEditor.tsx` (979 lines): pointer-based pinch zoom, coalesced events, RDP simplification, localStorage draft/restore, active chain, import/export. A real start.
+- `scripts/src/buildCollisionDocument.ts`: seeds vector shapes from the red-line reference and hard-codes the statue planter ring + pedestal (pedestal 1700–1790 × 464–531, matching my estimate).
+- `ASSETS.md` is honest about the third-party risk. Seeded bot simulation (`seededRandom.ts`, `strategicPolicy.ts`) improves reproducibility.
 
-## 1. Non-negotiable engineering rules
+**Not done — and these are the user's top complaints:**
 
-1. No visual change is accepted without before/after screenshots from a running browser at the affected viewport. A mock fixture is labelled as mock; it is not live multiplayer proof.
-2. One authoritative representation per concept. Collision/visibility geometry must ultimately share authored boundaries and independent `blocksMove`/`blocksSight` flags. No guessed geometry is promoted.
-3. Keep movement, collision, visibility contracts shared by client and server. Retain speed budgets, anti-cheat validation, prediction acknowledgements, and server authority.
-4. Floor paint, parking lines, cracks, baked lighting, decals, and floor shadows are not collision geometry.
-5. Do not change the map, balaclava models, suit identity, corpse design, or authored art direction without grounded visual evidence and owner approval.
-6. Small, scoped PRs; CI on the exact head; no direct main commits, no force-push, no weakened tests.
-7. Never commit secrets or put Groq credentials in client bundles, logs, screenshots, or repository content.
-8. Preserve source assets needed by CI and generation scripts until their dependencies and provenance are replaced.
-9. Follow the active recovery-room restrictions: no Replit/Vercel operations or publishing until the repository recovery gate explicitly permits them.
-
-## 2. Verified architecture (corrected from the ZIP's static review)
-
-- World coordinates are 3224×1858. The source map, transforms and gameplay anchors must stay calibrated to that coordinate space.
-- There are multiple raster layers today: a legacy 104×58 collision/navigation grid; a 680×392 fine movement mask; a 208×116 clearance-aware navigation grid derived by bot code from the fine mask; and independent vision/shadow derivations. The bot runtime is **not** simply using the 104×58 grid as claimed in the ZIP.
-- The current in-app CollisionEditor paints the 104×58 legacy data and therefore does not edit the fine movement mask used by players. The Vite dev endpoint writes `lib/shared/src/collisionData.ts`; this is not a production fine-grid/vector editor.
-- Player movement currently uses the shared fine mask and an asymmetric feet footprint (three circles of radius 4px, with horizontal offsets ±10px). Do not replace it with a 12–14px circle until all critical doorways, corners, and client/server route probes prove equivalent or improved clearance.
-- Bot navigation builds a 208×116 grid from the fine mask and validates live steps against the fine player footprint. New vector navigation must preserve that safety contract.
-- Vision is not just a single collision-grid lookup: it combines fine/coarse masks, manually measured narrow occluders, extracted shadow segments and region heuristics. The statue offset example is a concrete defect candidate; its replacement contour still requires measurement against the map image.
-- The player atlas is currently expanded from seven authored source colours to 18 runtime palettes. The ZIP's extraction contact sheet proves only 7×9 source frames (63), not 18×9 generated frames.
-- Audio is already lazy-loaded on demand and the footstep cue is procedural. Do not reintroduce eager audio preloads while auditing missing/late cues.
-
-## 3. Revised phases and gates
-
-| Phase | Scope | Gate |
+| # | Fact (verified in the zip) | Consequence |
 |---|---|---|
-| 0 — baseline & architecture | Exact-main audit, reproducible local/CI baseline, source/provenance inventory, stable render/input extraction boundaries; audit the existing 25-capture browser smoke and full-map + 4×3 collision/shadow/vision QA tiles before extending them; add deterministic camera/teleport/scenario controls where missing | Main CI green; baseline visual set; no behaviour change from refactors; all existing artifacts reproducible |
-| 1 — collision foundation/editor | Validated vector model, shared movement/visibility engine, property tests, phone-first dev editor with coalesced freehand/RDP, active chains, endpoint snap/loupe, vertex/segment editing, vision/analyzer overlays, per-zone import/export, autosave/restore, 8× zoom and 48px touch targets; secure dev-only save/import/export | Engine tests and CI green; all editor gesture tests pass; do not cut over without reviewed map geometry |
-| 2 — map tracing & review | 12 map zones, independent tracer/reviewer, authored wall/prop silhouettes and explicit door gaps | All critical routes/anchors pass full-footprint probes; component dispositions approved; before/after zone screenshots |
-| 3 — runtime cut-over | Client prediction, server validation, bots and visibility consume one reviewed world; delete raster paths only after all consumers migrate | Client/server parity, 50+ deterministic games, no regression, complete map geometry |
-| 4 — product polish | Sprite pipeline, 18-palette baked atlas, minigame modularization, contextual bot social behavior, original/licensed assets, Telegram/device performance | Visual and functional test matrix, actual server-backed multi-client flows, asset provenance complete |
-| 5 — hardening/release | Clean install, security/dependency audit, 20-minute soak, multi-seed balance, release dossier | Exact-main CI and target-platform acceptance; no unreviewed PRs; owner sign-off |
+| V1 | `productionWorld.ts` imports `./generatedDocument.js`, **which does not exist in the repo**; `collision.v1.json` is also absent (only generated by a script that reads `attached_assets/IMG_2907…jpeg`). Nothing in client, server, bots or vision imports the vector world. The root plan itself says "No vector geometry is used by live gameplay". | The game still runs on the raster. Statue shadow and parking-line collision are **not fixed**. |
+| V2 | `visibility.ts` still contains `{ x: 1735, y: 556, radius: 26 }` (line 308): the wrong-place statue occluder. | The offset shadow bug is unchanged. |
+| V3 | `GameMap.tsx` still 3186 lines, `handoff.md` still ~191 KB, `lobby.ts`, `TaskMinigame.tsx` unsplit. | Phase 0 of v1 skipped; conflicts continue. |
+| V4 | Map art untouched; HUD untouched (kill/report/sabotage = CSS gradient circles, `au-assets` icons). | "Temu look" remains. |
+| V5 | The editor's mobile smoke test uses **mouse** events in a mobile viewport. Walk-test, vision preview, analyzer, loupe, per-zone save, backups: missing (the review itself lists them). | Can't claim phone-ready. |
+| V6 | Recovery issue #90 **prohibits Replit/Vercel access**. | Contradicts your plan to run on Replit. **Your decision needed (§9).** |
+| V7 | Effort drifted into process: root plan now cites PRs #106/#107 and CI run IDs, "Release status: NOT READY", win-rate tuning to 56–70 % crew wins. | Meta-work crowded out the visible fixes. |
 
-**Human/device gate note:** issue #90 currently prohibits Replit/Vercel operations. Complete all local/CI and asset work possible under that restriction; real-phone Replit acceptance is a deferred external gate, not something to fake or silently waive.
+**Net:** foundation 25 %, visible user-facing fixes ≈ 0 %. v2 is therefore ordered by **what you can see on your phone**.
 
-## 4. Canonical vector geometry contract
+---
 
-The target document is `collision.v1.json` with world size, version, stable shape IDs, point arrays, closed/open semantics, zone/label metadata, and independent `blocksMove` and `blocksSight` booleans.
+## 1. WHY IT LOOKS LIKE "TEMU AMONG US" — MEASURED, NOT GUESSED
 
-- Open polylines represent thin walls/edges. Closed polygons represent filled props/solids.
-- Walls, tall props and the statue pedestal may block both; low benches/curbs/planter rings can block movement only; foliage can block sight only. Painted lines and baked art create no shape.
-- Trace object ground footprints, not sprite overhangs. Trace on the visible base boundary; collider radius provides clearance. Never globally shrink or expand all obstacles to solve a local path.
-- Validate finite in-bounds points, unique IDs, non-degenerate edges, closed polygon area and self-intersections before loading or saving.
-- Vector nav rasterization is a derived pathfinding artifact, not an independent source of movement truth. It must use the production three-circle feet footprint (radius 4px at horizontal offsets −10/0/+10px) and align with the existing 208×116 bot grid; do not substitute a 12px circular proxy.
-- The vector engine is foundation-only until all map zones are author-traced, reviewed and route-tested. Do not instantiate an empty or automatically vectorized guess as the production map.
+**1.1 The map's true detail is far below its pixel count.**
+I downsampled the shipped `map-hires.webp` (6608×3808) and re-upsampled it. Error stays tiny down to ÷2 (mean 0.34 of 255) and is still small at ÷3 (0.84): the image carries real information equivalent to roughly **2200–3300 px wide**, not 6608. Look at the statue crop in `map_tiles_before_after.png`: soft ink lines, JPEG-style hatch patterns in the planters, mushy highlights.
 
-## 5. Editor requirements
+**1.2 You are on a phone, so the texture is magnified.** The in-game screenshot shows ~650 world-px across a 402 css-px screen ≈ 0.62 css px / world px ≈ **1.85 device px per world px at 3× DPR**. To look crisp, the map needs real detail at **≥ 2 texels per world px (6448×3716)**. We have maybe 1×. So the map must gain ~3–4× more genuine information: only a generative/SR pass or redrawing can provide that. Sharpening filters cannot (§4.3 proves it).
 
-Dev-only `/dev/collision`, excluded from production routing and bundles. One-thumb modes: Move, Draw, Points, Edit, Magnet, close loop, Undo/Redo, Delete, Layers, Flags, Walk test, Vision preview, Analyzer. Pointer events must support capture, coalesced events, two-finger pan/zoom, clean stroke cancellation, constant screen-space handles, autosave/restore, JSON import/export and safe dev-only repo save. Save validates schema, same-origin/custom header, size and zone; write atomically with rotating backups. The tool must exercise the exact runtime movement/visibility implementation.
+**1.3 Two different map files.** `map-hires.png` (3224×1858) is **not** a downsample of the webp: it is a different, flatter render (the statue's face loses the moustache). The game loads the webp and falls back to the png, so devices that fall back look different. The webp is 2.0496× the world, a non-integer scale; the earlier render/world misregistration bug came from exactly this class of mismatch.
 
-## 6. Vision, sprites, product systems
+**1.4 HUD language.** Your screenshot (the real game) shows: top-left "TOTAL TASKS COMPLETED" bar; left-edge collapsible "Tasks"; top-right **gear** and **map** icon buttons; bottom-right **REPORT** and **USE**, both **greyed** when unavailable. Ours: dim-red translucent circles, no persistent USE/REPORT, emoji-ish map entry. Details in §6.
 
-- Replace independent manual vision/shadow approximations only after the shared geometry is traced and verified from multiple origins. Keep low props move-only; prove open-area vision is circular and not corridor-shaped; profile on a mid-range phone.
-- Map asset memory: the runtime currently loads `map-hires.webp` at 6608×3808 (about 100.7 MB decoded as RGBA). Keep the hi-res file as a QA/source asset until every consumer is migrated; produce a 3224×1858 WebP or viewport tiles, preserve world-to-image transform tests, and measure decoded memory and first-frame time on target mobile devices. Compressed download size is not decoded-memory size.
-- Sprite extraction is a proposed pipeline, not approved output. Review all 63 source crops and compare the generated 18-colour runtime atlas against the current balaclava models, including visor/filter, suit shading, feet anchor, walk poses and corpse bone. Bake palettes only after golden-image QA; keep runtime API stable.
-- Split the 11 minigames from the monolith with no behaviour drift before redesigning each game.
-- Bot movement uses the same world and footprint as humans. Social assertions must be grounded in observed/public facts. LLM decisions are optional, bounded, asynchronously requested and fail closed to deterministic local logic.
-- Audit all visual assets for provenance and actual use. Do not label an asset infringing merely from its filename; replace assets with unclear/unlicensed provenance using original work before commercial handoff, preserving the user's proprietary character/map designs.
-- Keep Telegram auth, HMAC, WebSocket isolation, reconnect, payload limits and Replit single-instance constraints intact.
+---
 
-## 7. Specialist workstreams (100)
+## 2. KEY DECISION: REGENERATING THE MAP IN TILES — EVALUATION
 
-S0 release/docs (3); S1 architecture/refactors (6); S2 vector engine (6); S3 mobile editor (8); S4 map tracers (12); S5 independent geometry QA (6); S6 vision/shadows (5); S7 sprites/animation (6); S8 minigames (11); S9 bot navigation/behaviour (6); S10 social AI/Groq/voting (7); S11 Telegram/performance (5); S12 UI/UX (6); S13 server/security/test infrastructure (4); S14 asset provenance/original art/audio (3); S15 visual QA (6). Work may run in parallel only on disjoint owned files and reviewed interfaces. One integration owner controls shared geometry, protocol and mainline merges.
+**Verdict: yes, tile it, but as *locked refinement*, never free generation.** Tiles solve three real problems at once: (a) generator quality (a model given a 1024² area produces far more detail than one given a 6448×3716 canvas), (b) parallelism (28 tiles → 100 agents), (c) mobile memory (only visible tiles resident instead of one ~100 MB decode).
 
-## 8. Mandatory acceptance
+| Option | Quality | Risk | Verdict |
+|---|---|---|---|
+| A. Dedicated super-resolution model, tile-wise (an anime/cartoon-trained 4× SR, then downscale to 2×) | Real sharp edges, removes JPEG hatching, **almost no hallucination** | Adds little *new* detail; needs a GPU runner (not on Replit) | **Stage 1** |
+| B. Image-to-image refinement per tile at low denoise (≈ 0.25–0.4) with edge/structure lock | Adds texture, material detail, crisp lines | Style drift between tiles, invented objects, colour shifts, seams | **Stage 2, gated by `tile_qa.py`** |
+| C. Free generation per tile from a prompt | Prettiest in isolation | Will not fit the collision, glow or neighbours | **Rejected** |
+| D. Redraw by an illustrator | Best | Cost/time | Fallback for hero areas (statue, lobby, parking) |
 
-- Real player traverses all intended corridors; no invisible wall, paint collision, corner clipping, doorway snag or out-of-bounds movement.
-- Vision/shadows begin at measured object contours; statue and parking tests from at least eight relevant viewpoints; no square artifacts/light leaks.
-- Full map route matrix and every task/vent/button/spawn interaction pass full-footprint path tests.
-- Emergency/report/meeting/discussion/voting/ejection proven with two live WebSocket clients, not only mocks.
-- Bots navigate without getting stuck, react only to seen events, perform tasks and sabotage, and have grounded contextual dialogue with a deterministic fallback. Live Groq is only claimed after a valid-key end-to-end test.
-- 18×9 sprite QA confirms no crop/limb/feet/balaclava/corpse regressions; 11 minigames have independent functional tests.
-- Telegram auth/reconnect/safe areas and mobile touch controls pass; mobile performance and memory are measured, not guessed.
-- Asset provenance documented; secrets excluded; clean install and security checks pass.
-- Exact final main SHA has full CI, seeded balance, visual artifacts, no pending/unreviewed PRs, target Replit acceptance after restrictions are lifted, and an explicit release dossier/go-no-go.
+**Why "everything still fits" is enforceable:** world stays 3224×1858 and the texture scale becomes **exactly 2.0** (6448×3716). Every candidate must pass `reference/tile_qa.py` against the faithful baseline: size exact; Lab low-frequency drift ≤ 3.5; ink-outline edge maps within chamfer ≤ 1.5 px (at ¼ scale) and F1 ≥ 0.80; every tile's mean colour within 2.5 of reference; **no brightness step on any tile border** (median step ≤ 1 level); sharpness is reported, never a gate. I validated the checker with controls: the baseline and sharpened sets pass; a map shifted by 4 world px fails (chamfer 3.2); a recoloured tile fails (drift 7.2); a 7-level step on a border fails (seam 7.0).
 
-## 9. Active references
+**Delivered now (this response):**
+- `map_tiles_baseline_faithful.zip`: the map the game shows today (from the webp, which has more detail than the png) as 28 WebP tiles at the exact 2.0× grid with `manifest.json`. **Visually identical to today by design. It is the geometry reference and the integration target, not an upgrade.**
+- `map_tiles_sharpened_optional.zip`: same grid, chroma denoise + restrained unsharp. Crisper outlines, more acutance, same information; there is some halo risk. I include it so you can judge on your phone. **It is not "regenerated". I have no image-generation model in this environment, so I cannot honestly claim a regenerated map.** The 100 agents' image tools must do Stage 1/2 and must pass the gate.
+- Pipeline: `map_tiles.py` (baseline/cut/stitch, round-trip lossless test passes), `tile_qa.py`, `TiledMap.ts` (reference renderer, **not yet browser-tested**).
 
-- Active acceptance tracker: [issue #71](https://github.com/2f22vtd4kr-cloud/Among-Gas/issues/71)
-- 100-workstream execution/evidence room: [issue #90](https://github.com/2f22vtd4kr-cloud/Among-Gas/issues/90)
-- Current strategic bot/balance candidate: [PR #106](https://github.com/2f22vtd4kr-cloud/Among-Gas/pull/106)
-- ZIP original SHA-256: `2e6840b90b8a27983780f2f03388ae6ff921e6b70c034088ebc0a36407bd66b3` (see `docs/master-plan/reference/README.md` for the full attachment inventory).
+**Grid:** 1024 px tiles = 512 world px; 7 cols × 4 rows = 28 tiles (right column 304 px wide, bottom row 644 px high). Payload today ≈ 1.5 MB for the whole map as WebP q90; regenerated detail may raise it to ~6–10 MB: fine because tiles load lazily.
+
+---
+
+## 3. SQUAD S16 — MAP ART REGENERATION (10 agents)
+
+Roles: **S16-AD** art director (style bible, final say), **S16-G1…G6** tile generators (each owns ~4–5 tiles), **S16-Q1/Q2** QA + stitcher, **S16-R** renderer integrator.
+
+### 3.1 Pipeline per tile (r,c)
+1. **Input:** crop `master_baseline.png` for the tile **plus 64 px context on all sides** (1152² for interior tiles). Also give the model the 4 neighbouring crops' edge strips as reference when the tool allows.
+2. **Stage 1 (SR):** clean the input with an SR/denoise pass (removes the hatch patterns and JPEG ringing).
+3. **Stage 2 (refine):** image-to-image at low strength with this brief:
+   > *"Restore this top-down game-map tile at higher fidelity. Keep every object, outline, position, colour and lighting exactly where they are. Make the ink outlines crisp and consistent in thickness, remove compression noise and cross-hatch artefacts, add subtle material texture (metal, concrete, foliage, ice). Do NOT add, remove, move or resize any object. Do NOT add text, characters, people or new light sources. Keep the cold night palette. Style: hand-inked, painted, same as the reference."*
+   Negative: *new objects, text, watermarks, different perspective, different colour grade, blur, plastic/airbrushed look*.
+4. **Output:** exactly 1024² (or the tile's size); the 64 px context ring is only for blending.
+5. **Stitch** with 64 px feathered blends into one 6448×3716 master (`map_tiles.py cut` then reassembles; blending script by S16-Q).
+6. **Gate:** `tile_qa.py candidate.png master_baseline.png`. Fail → regenerate **that tile** with lower strength. Max 3 attempts, then escalate to S16-AD (hero areas may go to option D).
+7. **Human gate (you, on a phone):** a 6-image gallery per round: statue, parking, gas station, boiler room, lobby corridor, electrical. Look for: invented objects, melted lines, colour drift, repeated texture.
+
+### 3.2 Hero areas that need extra care
+Statue plaza (face, planter plants, the painted statue shadow: ask the owner whether to keep it), the cars with white parking lines (lines must stay painted-on, flat, never raised), gas station glass/kiosk, ice on pipes, boiler pipes, van, cable room.
+
+### 3.3 Integration (S16-R, with S11)
+- Replace the single-image draw in `GameMap.tsx` with `TiledMap` (reference provided); keep a **1612×929 overview** as the instant placeholder and for the editor at low zoom.
+- Remove the png/webp dual path; one manifest, one scale. Add a transform test that maps world→texture = ×2 exactly.
+- Draw tiles snapped to device pixels with 1 px bleed (already in the reference).
+- Measure on a real device: first frame < 2.5 s, memory flat while panning, no hairlines between tiles at any zoom.
+- Collision, tasks, spawn: **no change**. They are traced against the baseline, and the gate guarantees regenerated art does not move.
+
+### 3.4 Honest expectations
+Option A+B can make lines crisp, remove artefacts and add believable texture. It cannot recreate fine detail that isn't there (e.g. text on signs) without inventing it; gate G3 limits invention. Expect "clearly better and consistent", not "hand-redrawn AAA". For the single most visible area (lobby + statue) consider an illustrator pass (D).
+
+---
+
+## 4. COLLISION — WHAT STILL HAS TO HAPPEN (priority 1 for gameplay)
+
+Foundation exists. The remaining work is **authoring and cut-over**. Sequence (each step has a screenshot gate, §7):
+
+1. **Make the build real (S2, day 1).** Commit `collision.v1.json` and `generatedDocument.ts` (generated by `buildCollisionDocument.ts`) so `productionWorld.ts` compiles; add CI that fails if they are missing or stale. Note the script derives geometry by skeleton-tracing a 1359×784 phone reference (≈ 2.4× upscale, ±3 world px) and stores wall **centrelines**. Treat the result as a **seed**, not truth.
+2. **Review the seed visually (S4/S5).** Overlay seed shapes on the baseline tiles, per zone. Fix in the editor: centreline → true wall face; paint lines removed; every car/prop a closed footprint; doors ≥ 70 px.
+3. **Finish the editor to the v1 checklist** (S3): walk-test with real `CollisionWorld.move`, vision preview (long-press), analyzer (unreachable tasks, narrow corridors, gaps, self-intersections), loupe, magnet priority, 48 px targets, per-zone save with 20 backups, **genuine touch/pinch tests** (Playwright `touchscreen` or CDP `Input.dispatchTouchEvent`), not mouse.
+4. **Cut over** (S2/S13/S6/S9) in this order, one PR each, with before/after shots: (a) vision, (b) client prediction, (c) server authority, (d) bots (`rasterizeNav`+A*+string-pulling), (e) delete raster files and `MANUAL_*`, `NON_OCCLUDING_REGIONS`, `MANUAL_NARROW_OCCLUDERS`.
+5. **Feet collider change is a gameplay change.** Today: radius 4 circles at −10/0/+10 px. Keep that footprint (as the review rightly insisted) until walk-tests on doors prove a circle of 12–14 px passes every door with ≥ 6 px slack; then switch in its own PR.
+6. **Independent flags** per shape (`blocksMove`, `blocksSight`, plus optional `castsShadow`) so the statue-plaza bench keeps movement collision but casts no shadow (your explicit example).
+7. Classification table and tracing rules from v1 §4.7 are unchanged and still binding. Floor paint, lines, cracks, glows, baked shadows never collide.
+
+Acceptance: statue shadow starts exactly at the pedestal polygon from 8 compass points; walking across every parking line works; cars block; zero analyzer errors; flood-fill reaches every task/vent/button.
+
+---
+
+## 5. SPRITES, MINIGAMES, BOTS (unchanged priorities, sharper guidance)
+
+- **Sprites (S7):** the review is right that my extractor is a *candidate*, not a drop-in: alpha threshold 24 and a 5 px opening can eat anti-aliased edges, and centring by pixel mass shifts the torso between frames; it also emits only 7 palettes. Do: keep the current renderer; run the extractor to produce side-by-side diffs vs current crops for all 63 source frames; adopt per-frame anchors from the **feet/torso**, not mass centre; bake 18 palettes; golden-image tests; only then swap.
+- **Minigames (S8):** unchanged: one file each, shared kit, 3+1 screenshots, 48 px targets, originality.
+- **Bots (S9/S10):** keep the seeded sim and strategic policy; add the observation log + grounded chat validator from v1 §12; stop tuning win-rate until navigation runs on the vector world (changing collision will move the balance).
+
+---
+
+## 6. HUD / UI — MATCH THE ORIGINAL'S *BEHAVIOUR* WITH ORIGINAL ART (S12 + S14)
+
+From your screenshot of the real game (Switch build; glyphs "ZL/L/A/Y" are console prompts we do **not** copy):
+
+| Control | Original behaviour | Ours today | Target |
+|---|---|---|---|
+| **Kill** | Impostor only. **Hidden for crewmates.** Greyed/desaturated while on cooldown (number shown) or no target in range; lit when a target is in range | Impostor only (correct). Disabled state = dim red tint, not grey | Neutral grey + 45 % opacity + radial cooldown sweep + number; full colour + pulse when target in range. **No kill button for crew, ever** |
+| **Report** | Crew **and** impostor; always visible, greyed until a body is in range | Appears only when a body is near | Always visible when alive, grey until in range |
+| **Use** | Always visible bottom-right; greyed until something usable is in range; shows the contextual icon | A text pill appears near a task (crew only) | Persistent round button, greyed/lit, contextual icon, ≥ 56 px |
+| **Vent / Sabotage** | Impostor: vent when on a vent, sabotage always (cooldown) | Sabotage button exists; vent logic server-side | Add vent button; same grey/lit logic |
+| **Map** | Top-right icon opens the full map overlay with task markers | Overlay exists; icon style differs | Original-looking icon set, same top-right slot |
+| **Settings** | Gear, top-right | Exists | Match slot and size |
+| **Tasks** | Left collapsible list | Check | Collapsible list + total-tasks bar (top-left) |
+| **Dead player** | Greyed-out action cluster; ghost can only task | Hidden when dead | Keep ghost-task UI consistent |
+
+Rules: all icons **original** (S14), single stroke weight, 2-state design (enabled/disabled) in one SVG set; safe-area aware; thumb-reachable (bottom-right cluster, mirror for left-handed setting that already exists). The reference screenshot itself is third-party: remove `attached_assets/IMG_2885…` from the repo; keep it only locally.
+
+---
+
+## 7. PROCESS (fixes the failure pattern)
+
+1. **Phase 0 is mandatory and short (≤ 1 day):** archive `handoff.md`; split `GameMap.tsx` (render / input / hud / camera) with **zero behaviour change** and snapshot tests; stop writing CI run IDs into plans (put them in issue #90 only).
+2. **Visible-first ordering:** every phase ends with a phone-viewable gallery (§8). If a PR has no image, it is not "done".
+3. **No more plan reviews** (Rule zero). Disagreement = short evidence comment.
+4. **One owner per file** (v1 §11.3 table still applies) + per-zone collision files + per-tile art files.
+5. **Squad communication** unchanged (v1 §11): per-squad issues, message formats, throttle.
+
+**New allocation (sum = 100):**
+
+| Squad | Agents | | Squad | Agents |
+|---|---:|---|---|---:|
+| S0 Conductor | 3 | | S9 Bot movement | 5 |
+| S1 Refactor | 6 | | S10 Bot chat/Groq | 6 |
+| S2 Vector core finish | 3 | | S11 Telegram/perf | 4 |
+| S3 Editor v2 | 7 | | S12 UI/HUD | 7 |
+| S4 Tracers | 10 | | S13 Server/netcode | 3 |
+| S5 Collision review | 6 | | S14 Assets/audio/legal | 4 |
+| S6 Vision | 4 | | S15 Visual QA | 6 |
+| S7 Sprites | 5 | | **S16 Map art (new)** | **10** |
+| S8 Minigames | 11 | | **Total** | **100** |
+
+**Phases:** P0 stabilize → **P1 (parallel):** editor finish (S3), seed review (S4/S5), **map art Stage 1 (S16)** → **P2:** tracing complete + art Stage 2 + HUD (S12) → P3 cut-over → P4 content (sprites, minigames, bots, chat) → P5 hardening/device gate.
+Map art and collision are independent because world coordinates and the 2.0× scale are frozen by the gate.
+
+---
+
+## 8. VISUAL QA (reuse what exists)
+
+Existing: `scripts/browser-smoke.mjs` (25 shots), `scripts/renderCollisionQa.ts` (full-map + 4×3 region tiles with collision/shadow/vision layers). **Extend, don't rebuild.** Required new shots: the 28 art tiles at 1:1 before/after; phone-viewport (390×844 @3×) crops of statue, parking, gas station; HUD in 6 states (crew idle, crew near task, crew near body, impostor ready, impostor cooldown, dead); editor on a **touch-emulated** device with a drawn stroke, a closed loop, a snap, the walk-test trail and the vision preview. Daily gallery of 6 images to the owner.
+
+---
+
+## 9. DECISIONS ONLY YOU CAN MAKE
+
+1. **Lift or keep issue #90's "no Replit/Vercel" rule?** Your goal is running on Replit and judging on your phone. Suggest: permit Replit for **read-only preview of the dev branch**, no publishing, so phone gates become possible.
+2. Keep or remove the **painted statue shadow** baked into the map art (it's art, separate from the dynamic vision shadow).
+3. Accept **Stage-1 SR only** (safe, crisper) or also **Stage-2 refinement** (richer, riskier) after seeing the first gallery.
+4. Budget an **illustrator pass** for the lobby/statue hero area? (Highest visible payoff.)
+5. Which of the two delivered tile sets looks better on your phone (baseline vs sharpened)?
+
+---
+
+## 10. RELEASE-LEVEL ACCEPTANCE (additions to v1 §15)
+- [ ] Map: 28 tiles pass `tile_qa.py`; no hairlines; memory flat; first frame < 2.5 s on mid Android.
+- [ ] HUD states match §6 table; kill hidden for crew; Report/Use always present and grey/lit.
+- [ ] `collision.v1.json` committed; live game uses it; raster files deleted; statue/parking fixed with screenshots.
+- [ ] No third-party art/audio/screenshots in the repo (`ASSETS.md` complete).
+- [ ] Phone gate on the real target (needs decision 1).
+
+## 11. APPENDIX — files in this package (`docs/master-plan/reference/`)
+`map_tiles.py` · `tile_qa.py` · `TiledMap.ts` (untested in browser) · `map_tiles_baseline_faithful.zip` · `map_tiles_sharpened_optional.zip` · `map_tiles_before_after.png` · `map_tile_grid_overlay.jpg`.
+Commands: `python3 map_tiles.py baseline <webp|png> out/` · `python3 map_tiles.py cut master.png out/tiles` · `python3 tile_qa.py candidate.png master_baseline.png` (exit 1 = rejected). Needs `pillow numpy scipy scikit-image`.

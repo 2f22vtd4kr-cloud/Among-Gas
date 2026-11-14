@@ -77,3 +77,32 @@ Append entries using this compact format:
 - Keep #138 draft until source-backed 12-zone tracing, independent review, disconnected-region and anchor dispositions, full-footprint route clearance, and separate sight/shadow authoring are complete.
 - Continue the remaining Plan 2 workstreams: behavior-neutral GameMap decomposition, accepted map-art generation/gallery, sprite golden review, minigame functional acceptance, bot observation/chat evidence, provenance clearance, and owner-authorized physical-device/two-client release acceptance. Issue #90 restrictions remain controlling; no Replit/Vercel workspace operation, publishing, deployment or production mutation.
 - Reconciled stale geometry docs: the current #138 candidate now has Z01–Z12 centroid ownership metadata (26/32/22/16/22/72/40/30/14/36/44/16 shapes), replacing the obsolete A–E sector description. This is not tracing or sign-off; all 12 author/reviewer/owner approvals remain open. Updated `docs/map-zone-review-register.md` and `docs/map-geometry-source-manifest.md` accordingly.
+
+
+## 2026-11-14 — Plan 2 adoption and exact-head repairs
+
+**Plan authority**
+- Replaced root `MASTER_PLAN.md` with the supplied `MASTER_PLAN_v2.md` verbatim (content checksum was compared after the GitHub write). This replaces the stale 2026-11-02 plan and is not a rewrite or a plan-review exercise.
+- The v2 §9 restriction is retained: no Replit/Vercel workspace access, preview, publish, deployment or production mutation without the owner's explicit decision. No such operation was performed.
+
+**Verified main baseline**
+- `main` at start of this pass: `3705404777e030cb2172a41840c06e0109884f81`.
+- Exact-main Actions run `43573841087` passed. This includes the server/gameplay/browser contracts and the three seeded 100-game cohorts. The optional 20-minute soak was skipped, so no soak pass is claimed.
+- The live repository already contains several later integrations than the Plan 2 audit: persistent Report/Use HUD, impostor Kill pulse and reduced-motion handling, extracted task list and camera, independent shadow semantics, validated bot observation/chat evidence, deferred map-tile readiness and fallback, and a fail-closed collision cutover readiness gate. Do not reimplement these based on stale audit notes.
+- The dedicated `CREATE_SOLO` integration test is present and included in server gameplay tests; older issue #71 notes saying it was absent are superseded by current code.
+
+**PR #161 — build-time character atlas**
+- Head `5a542e9b941f1979cc69883abbf1109d8655f23e` failed exact byte parity (29,279 differing RGBA bytes; maximum channel delta 254).
+- Attempt to reproduce Canvas premultiplied-alpha round trips committed as `ffda465af22c6a55d1ba6abfe28c85f4b2f28d47`; it reduced the count but did not resolve the strict golden assertion (27,514 bytes remained different).
+- Added diagnostics, without relaxing the zero-difference assertion, in `0fac7477853cdcff5d67db5f9805151b462c89c0`: per-channel, per-palette-column, source-alpha distribution and representative pixel samples. Exact-head run `43576826044` is in progress at the mobile browser smoke step; do not merge unless the exact current head passes all required checks, including the unchanged balance cohorts.
+
+**PR #138 — vector collision runtime**
+- Corrected a Playwright strict-selector defect in `scripts/test-vector-collision-editor-browser.mjs`: `getByLabel("Move")` matched both “Blocks movement” and “Move”. Exact role/name selectors now disambiguate `Move` and `Sight`. Commit `9a74d390637bced4e4d54a1cabeaa6e15779103e`.
+- Exact-head run `43576973723` is in progress at the mobile browser smoke step after passing the prior editor, map-renderer, API and gameplay checks.
+- PR remains draft and must not be merged or connected to live gameplay on CI success alone. Twelve source-backed zones still require visual tracing and independent author/reviewer/owner approval; 24 gameplay anchors, five detached-region dispositions, full-footprint routes and move/sight/shadow parity remain release gates. Keep the current fine-grid raster movement/vision path in production until all gates are actually satisfied.
+
+**Release posture**
+- Main CI captures mobile-sized browser views and six HUD states, but this is not a physical-device approval. The real target-phone gate remains open.
+- The supplied baseline and sharpened tile assets were inspected in CI context. The sharpened set is still sharpening, not regenerated detail. No Stage-1/Stage-2 super-resolution or image-to-image result has been produced here.
+- Map-art rights/source provenance and the remaining third-party asset inventory need clearance; do not state licensing is complete.
+- Live Groq provider credentials and owner choices in Plan 2 §9 remain outstanding. No credentials or owner decisions were invented.
