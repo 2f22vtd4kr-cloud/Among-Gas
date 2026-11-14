@@ -307,7 +307,12 @@ jobs:
 
 
   plan2-soak:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline'
+    # Keep the 20-minute API/WebSocket soak on the production mainline as well as
+    # the isolated vector-collision candidate. The mainline soak must exercise
+    # the reviewed raster runtime; it does not promote candidate vector geometry.
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.ref == 'work/redline-vector-collision-runtime-mainline')
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
