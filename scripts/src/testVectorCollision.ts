@@ -118,6 +118,10 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   const floor = new CollisionWorld([room, floorHole], 200, 200);
   assert.equal(floor.isWalkable(50, 50, 8), true,
     "a player footprint fully inside an authored floor region remains walkable");
+  assert.equal(floor.isWalkable(20, 100, 0), false,
+    "a zero-radius point exactly on a floor boundary is blocked, like a point on an ordinary wall");
+  assert.equal(floor.isWalkable(20.01, 100, 0), true,
+    "a zero-radius point just inside the floor remains walkable");
   assert.equal(floor.isWalkable(10, 50, 0), false,
     "points outside every authored floor region are not implicitly walkable");
   assert.equal(floor.isWalkable(100, 100, 0), false,
