@@ -25,7 +25,7 @@ import {
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from "@workspace/shared/tasks";
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX } from "@workspace/shared/vents";
 
-type Tool = "pan" | "wall" | "solid" | "edit" | "erase" | "walk" | "vision" | "loupe";
+type Tool = "pan" | "wall" | "solid" | "region" | "hole" | "edit" | "erase" | "walk" | "vision" | "loupe";
 type EditableShape = Omit<CollisionShape, "points"> & { points: Point[] };
 type EditableDocument = Omit<CollisionDocument, "shapes"> & { shapes: EditableShape[] };
 type Gesture =
@@ -58,6 +58,8 @@ const TOOL_LABELS: Record<Tool, string> = {
   pan: "Pan / zoom",
   wall: "Draw wall",
   solid: "Draw solid",
+  region: "Draw floor region",
+  hole: "Draw floor hole",
   edit: "Edit vertices",
   erase: "Delete shape",
   walk: "Walk test",
@@ -304,6 +306,9 @@ export default function VectorCollisionEditor() {
   const [status, setStatus] = useState("Loading vector workspace…");
   const [blocksMove, setBlocksMove] = useState(true);
   const [blocksSight, setBlocksSight] = useState(true);
+  const [castsShadowMode, setCastsShadowMode] = useState<"inherit" | "yes" | "no">("inherit");
+  const [strokeRadius, setStrokeRadius] = useState(0);
+  const [walkableRegionId, setWalkableRegionId] = useState("floor-main");
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
   const [zoneReviewJson, setZoneReviewJson] = useState("");
@@ -741,13 +746,23 @@ export default function VectorCollisionEditor() {
   const finishPolygon = () => {
     if (draftPoints.length < 3) return;
     const points = draftPoints;
+    const isRegion = tool === "region";
+    const isHole = tool === "hole";
+    const regionId = walkableRegionId.trim();
+    if ((isRegion || isHole) && !regionId) {
+      setStatus("A floor region ID is required to link walkable floor and hole contours.");
+      return;
+    }
     addShape({
-      id: newShapeId("solid"),
+      id: newShapeId(isRegion ? "floor" : isHole ? "hole" : "solid"),
       points,
       closed: true,
-      blocksMove,
-      blocksSight,
-      label: shapeLabel.trim() || "Solid obstacle",
+      blocksMove: isRegion || isHole ? false : blocksMove,
+      blocksSight: isRegion || isHole ? false : blocksSight,
+      castsShadow: isRegion || isHole ? false : castsShadowMode === "inherit" ? undefined : castsShadowMode === "yes",
+      ...(isRegion ? { walkableRegion: true, walkableRegionId: regionId } : {}),
+      ...(isHole ? { walkableRegionHole: true, walkableRegionId: regionId } : {}),
+      label: shapeLabel.trim() || (isRegion ? "Walkable floor region" : isHole ? "Walkable floor hole" : "Solid obstacle"),
       zone,
     });
   };
@@ -762,6 +777,8 @@ export default function VectorCollisionEditor() {
       closed: false,
       blocksMove,
       blocksSight,
+      castsShadow: castsShadowMode === "inherit" ? undefined : castsShadowMode === "yes",
+      ...(strokeRadius > 0 ? { strokeRadius } : {}),
       label: shapeLabel.trim() || "Wall chain",
       zone,
     });
@@ -864,7 +881,7 @@ export default function VectorCollisionEditor() {
       setPreviewPoint(start);
       return;
     }
-    if (tool === "solid") {
+    if (tool === "solid" || tool === "region" || tool === "hole") {
       const camera = cameraRef.current;
       const snapped = snapPoint(docRef.current.shapes, point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 12));
       const nextPoint = snapped.kind === "none" ? point : snapped.point;
@@ -936,7 +953,7 @@ export default function VectorCollisionEditor() {
       return;
     }
     if (!gesture) {
-      if (tool === "wall" || tool === "solid") setPreviewPoint(worldPoint(event));
+      if (tool === "wall" || tool === "solid" || tool === "region" || tool === "hole") setPreviewPoint(worldPoint(event));
       return;
     }
     if (gesture.kind === "pan") {
@@ -1443,7 +1460,7 @@ export default function VectorCollisionEditor() {
       </header>
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
-        {(["pan", "wall", "solid", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
+        {(["pan", "wall", "solid", "region", "hole", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
           <button key={item} type="button" style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
