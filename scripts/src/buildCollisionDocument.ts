@@ -475,7 +475,7 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
     // The raster source blocks the full authored red stroke. Preserve its
     // measured half-width around the skeleton rather than treating a thick
     // wall marking as a zero-width mathematical line.
-    const strokeRadius = closed ? 0 : Math.min(6, Math.max(0, sourceHalfWidth - 0.25) * scale);
+    const strokeRadius = closed ? 0 : Math.min(12, Math.max(0, sourceHalfWidth - 0.25) * scale);
     shapes.push({
       id:"redline-"+String(shapes.length+1).padStart(4,"0"),
       points,closed,blocksMove:true,blocksSight:false,
