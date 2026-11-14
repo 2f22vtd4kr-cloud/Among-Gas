@@ -277,8 +277,19 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     blocksSight: false,
     castsShadow: false,
     walkableRegion: true,
+    walkableRegionId: "floor",
   };
-  const floorWorld = new CollisionWorld([floorRegion], 200, 200);
+  const floorHole: CollisionShape = {
+    id: "walkable-floor-object-hole",
+    points: [[80, 80], [120, 80], [120, 120], [80, 120]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    castsShadow: false,
+    walkableRegionHole: true,
+    walkableRegionId: "floor",
+  };
+  const floorWorld = new CollisionWorld([floorRegion, floorHole], 200, 200);
   assert.equal(floorWorld.isWalkable(100, 100, 4), true,
     "a point and its full radius must fit inside an authored floor region");
   assert.equal(floorWorld.isWalkable(10, 100, 0), false,
@@ -287,6 +298,12 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     "the player radius must remain inside the floor boundary");
   assert.equal(floorWorld.isWalkable(24, 100, 4), true,
     "a player circle tangent to the floor boundary remains valid");
+  assert.equal(floorWorld.isWalkable(100, 100, 0), false,
+    "an enclosed object hole must be excluded from its parent floor region");
+  assert.equal(floorWorld.isWalkable(76, 100, 4), true,
+    "a player circle tangent to an object-hole boundary remains valid");
+  assert.equal(floorWorld.isWalkable(77, 100, 4), false,
+    "the player radius must not overlap an enclosed object hole");
   assert.equal(floorWorld.isWalkable(20, 100, 4), false,
     "the floor-region boundary itself must reject a player footprint");
   assert.equal(floorWorld.isWalkable(100, 20, 4), false,
