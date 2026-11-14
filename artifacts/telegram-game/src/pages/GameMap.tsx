@@ -61,7 +61,8 @@ import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/share
 import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
-import SettingsDialog, { SettingsButton } from '../components/SettingsDialog';
+import SettingsDialog from '../components/SettingsDialog';
+import GameTopHud from '../components/GameTopHud';
 import { useLanguage } from '../lib/language';
 import { customControlPositionStyle, useGameSettings } from '../lib/gameSettings';
 import { classifyMovementEcho } from '../game/movementReconciliation';
@@ -1494,26 +1495,22 @@ export default function GameMap() {
         }}
       />
 
-      {/* Mini-map toggle — top-left and safe-area aware for Telegram mobile. */}
-      {loaded && myRole !== null && meeting === null && (
-        <div style={{
-          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 12px)', left: 12, zIndex: 35,
-        }}>
-          <button
-            onClick={() => { haptic.tap(); setShowMiniMap(value => !value); if (!showMiniMap) setShowAdminTable(false); }}
-            aria-expanded={showMiniMap}
-            style={{
-              display: 'inline-flex', alignItems: 'center', gap: 5, width: 'max-content', maxWidth: 'none', flexShrink: 0, whiteSpace: 'nowrap', padding: '9px 12px', borderRadius: 9, color: '#e4f5ff',
-              background: showMiniMap ? 'rgba(24,95,103,0.96)' : 'rgba(10,22,34,0.92)',
-              border: '1px solid rgba(105,205,220,0.65)', boxShadow: '0 3px 12px rgba(0,0,0,0.35)',
-              fontFamily: 'sans-serif', fontSize: 12, fontWeight: 900, backdropFilter: 'blur(8px)',
-              touchAction: 'manipulation',
-            }}
-          >
-            {showMiniMap ? (en ? '✕ CLOSE MAP' : '✕ ЗАКРЫТЬ КАРТУ') : <><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ verticalAlign: 'middle', marginRight: 5 }}><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round"/><path d="M9 3v15m6-12v15" stroke="currentColor" strokeWidth="1.5"/></svg>{en ? 'MAP' : 'КАРТА'}</>}
-          </button>
-        </div>
-      )}
+
+
+      <GameTopHud
+        english={en}
+        taskProgress={globalTaskProgress}
+        showProgress={loaded && myRole !== null && meeting === null}
+        showMap={loaded && myRole !== null && meeting === null}
+        mapOpen={showMiniMap}
+        showSettings={loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable}
+        onToggleMap={() => {
+          haptic.tap();
+          setShowMiniMap(value => !value);
+          if (!showMiniMap) setShowAdminTable(false);
+        }}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {showMiniMap && loaded && myRole !== null && meeting === null && (
         <div ref={mapDialogRef} data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
@@ -1584,18 +1581,7 @@ export default function GameMap() {
 
       {loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && activeTaskId === null && !showSabotagePanel && !killAnimation && !voteResult?.winner && <Joystick keysRef={keysRef} />}
 
-      {loaded && meeting === null && !killAnimation && !showMiniMap && !showTaskList && !showAdminTable && (
-        <SettingsButton
-          label={en ? 'Settings' : 'Настройки'}
-          onClick={() => setSettingsOpen(true)}
-          style={{
-            position: 'fixed',
-            top: 'calc(env(safe-area-inset-top, 0px) + 12px)',
-            right: 'max(12px, env(safe-area-inset-right, 0px))',
-            zIndex: 35,
-          }}
-        />
-      )}
+
       <SettingsDialog
         open={settingsOpen && !killAnimation}
         onClose={() => setSettingsOpen(false)}
@@ -1663,22 +1649,7 @@ export default function GameMap() {
         </div>
       )}
 
-      {/* ── Task progress bar — thin strip at top of screen (Phase 7) ──────── */}
-      {loaded && myRole !== null && meeting === null && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, height: 5, zIndex: 30,
-          background: 'rgba(0,0,0,0.35)', pointerEvents: 'none',
-        }}>
-          <div style={{
-            height: '100%', width: `${globalTaskProgress}%`,
-            background: globalTaskProgress >= 100
-              ? '#2ecc71'
-              : 'linear-gradient(90deg, #f1c40f, #2ecc71)',
-            transition: 'width 0.6s ease',
-            borderRadius: '0 3px 3px 0',
-          }} />
-        </div>
-      )}
+
 
       {loaded && (
         <div style={{
