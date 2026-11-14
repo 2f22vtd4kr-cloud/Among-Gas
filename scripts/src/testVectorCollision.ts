@@ -131,7 +131,21 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
       false,
     ));
   }
+  solids.push(shape(
+    "indexed-solid-cross-cell",
+    [[60, 60], [72, 60], [72, 72], [60, 72]],
+    true,
+    true,
+    false,
+    false,
+  ));
   const dense = new CollisionWorld(solids);
+  assert.equal(dense.insideSolid(68, 68), true,
+    "a solid spanning multiple hash cells must be indexed in every overlapped cell");
+  assert.equal(dense.isWalkable(68, 68, 2), false,
+    "queries from the neighbouring hash cell must still reject a solid interior");
+  assert.equal(dense.isWalkable(76, 68, 2), true,
+    "the spatial index must not enlarge a solid beyond its authored boundary");
   for (const index of [0, 1, 99, 100, 511, 1024, 1536, 2047]) {
     const column = index % 100;
     const row = Math.floor(index / 100);
