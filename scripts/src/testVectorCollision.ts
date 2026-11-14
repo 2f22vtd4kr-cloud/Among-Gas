@@ -290,7 +290,7 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     walkableRegionId: "floor",
   };
   const floorWorld = new CollisionWorld([floorRegion, floorHole], 200, 200);
-  assert.equal(floorWorld.isWalkable(100, 100, 4), true,
+  assert.equal(floorWorld.isWalkable(50, 50, 4), true,
     "a point and its full radius must fit inside an authored floor region");
   assert.equal(floorWorld.isWalkable(10, 100, 0), false,
     "movement outside every authored floor region must be rejected");
