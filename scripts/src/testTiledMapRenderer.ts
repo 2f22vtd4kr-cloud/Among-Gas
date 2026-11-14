@@ -150,7 +150,8 @@ try {
   assert.equal(boundedMap.getStatus().deferred, 22);
   assert.equal(boundedMap.getStatus().cached, 6);
   await flushImages();
-  assert.equal(boundedMap.draw(fullMapContext, fullMapCamera, 0.2, 1), false);
+  assert.equal(boundedMap.draw(fullMapContext, fullMapCamera, 0.2, 1), true,
+    "loaded resident tiles plus the overview fallback make intentionally deferred regions ready");
   assert.equal(boundedMap.getStatus().visibleLoaded, 6);
   assert.equal(boundedMap.getStatus().deferred, 22);
   assert.equal(boundedMap.getStatus().cached, 6,
