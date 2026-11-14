@@ -476,7 +476,7 @@ export class ImpostorBot extends BotAgent {
       username: self.username,
       availableSystems,
       visibleCrewCount: visibleCrew.length,
-      visibleCrewPairsWithin350Px: visiblePairsWithin350Px,
+      visiblePairsWithin350Px: visiblePairsWithin350Px,
       publicTaskProgressPct,
       killCooldownMs: self.killCooldownMs,
     });
