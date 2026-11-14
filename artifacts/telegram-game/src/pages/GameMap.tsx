@@ -84,9 +84,10 @@ import GameActionBar from '../components/GameActionBar';
 import GameSabotageControls from '../components/GameSabotageControls';
 import GameAdminTable from '../components/GameAdminTable';
 import GameVentOverlay from '../components/GameVentOverlay';
+import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton';
 import { buildAdminTableAgents } from '../game/adminTableAgents';
 import TaskListPanel from '../components/TaskListPanel';
-import { EmergencyCallIcon } from '../components/EmergencyMeetingArtwork';
+import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton';
 import EmergencyCallSplash from '../components/EmergencyCallSplash';
 import MeetingChatPanel from '../components/MeetingChatPanel';
 import MeetingVotingPanel from '../components/MeetingVotingPanel';
@@ -1778,48 +1779,24 @@ export default function GameMap() {
         onTrigger={triggerSabotage}
       />
 
-      {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
-      {loaded && !amIDead && meeting === null && sabotage === null && (
-        <div style={{
-          position: 'fixed',
-          // Place the movable Emergency action below the fixed top HUD, even on narrow phones.
-          top: 'max(calc(env(safe-area-inset-top, 0px) + 144px), 25dvh)',
-          right: 'max(12px, env(safe-area-inset-right, 0px))',
-          zIndex: 35,
-          ...customControlPositionStyle('emergency', controlLayout, joystickSide),
-        }}>
-          <button
-            aria-label={emergencyMeetingUsed
-              ? (en ? 'Emergency meeting already used' : 'Экстренное собрание уже использовано')
-              : (en ? 'Call emergency meeting' : 'Созвать экстренное собрание')}
-            disabled={emergencyMeetingUsed}
-            onClick={() => {
-              if (emergencyMeetingUsed || emergencyCallStatus === 'calling') return;
-              haptic.tap();
-              sfx('uiSelect', 0.3);
-              setEmergencyCallStatus('calling');
-              if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
-              callEmergencyMeeting();
-              emergencyCallTimerRef.current = setTimeout(() => {
-                setEmergencyCallStatus(current => current === 'calling' ? 'failed' : current);
-                emergencyCallTimerRef.current = setTimeout(() => setEmergencyCallStatus(null), 2200);
-              }, 4000);
-            }}
-            style={{
-              width: 92, height: 92, padding: 8, borderRadius: '50%',
-              display: 'grid', placeItems: 'center',
-              background: emergencyMeetingUsed ? 'rgba(55,60,65,0.75)' : 'rgba(160,40,20,0.85)',
-              color: emergencyMeetingUsed ? 'rgba(255,255,255,0.35)' : '#ffe4d0',
-              border: '1px solid rgba(255,120,80,0.4)', fontFamily: 'sans-serif',
-              fontWeight: 800, fontSize: 14, letterSpacing: '0.04em',
-              textTransform: 'uppercase', cursor: emergencyMeetingUsed ? 'default' : 'pointer',
-              backdropFilter: 'blur(6px)', touchAction: 'manipulation',
-            }}
-          >
-            {emergencyMeetingUsed ? '✓' : <EmergencyCallIcon size={70} />}
-          </button>
-        </div>
-      )}
+      <GameEmergencyMeetingButton
+        visible={loaded && !amIDead && meeting === null && sabotage === null}
+        used={emergencyMeetingUsed}
+        english={en}
+        positionStyle={customControlPositionStyle('emergency', controlLayout, joystickSide)}
+        onCall={() => {
+          if (emergencyMeetingUsed || emergencyCallStatus === 'calling') return;
+          haptic.tap();
+          sfx('uiSelect', 0.3);
+          setEmergencyCallStatus('calling');
+          if (emergencyCallTimerRef.current) clearTimeout(emergencyCallTimerRef.current);
+          callEmergencyMeeting();
+          emergencyCallTimerRef.current = setTimeout(() => {
+            setEmergencyCallStatus(current => current === 'calling' ? 'failed' : current);
+            emergencyCallTimerRef.current = setTimeout(() => setEmergencyCallStatus(null), 2200);
+          }, 4000);
+        }}
+      />
 
       {emergencyCallStatus && (
         <EmergencyCallSplash status={emergencyCallStatus} english={en} />
