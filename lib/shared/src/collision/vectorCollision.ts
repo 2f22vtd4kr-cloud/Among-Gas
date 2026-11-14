@@ -27,6 +27,7 @@ export interface CollisionShape {
   readonly blocksSight: boolean;
   /** Visual shadow occlusion is independent from movement and line-of-sight blocking. */
   readonly castsShadow?: boolean;
+  readonly walkableRegion?: boolean;
   readonly label?: string;
   readonly zone?: string;
 }
@@ -43,6 +44,18 @@ export interface CollisionSourceManifest {
     readonly closedSolidCount: number; readonly openBoundaryCount: number;
   };
   readonly shapeCounts: Readonly<Record<string, number>>;
+  readonly walkableRegionExtraction?: {
+    readonly morphologyKernelSourcePx: number;
+    readonly connectivity: 8;
+    readonly selectedRegions: readonly {
+      readonly id: string;
+      readonly role: "spawn-connected-floor" | "isolated-interior-candidate";
+      readonly pixelArea: number;
+      readonly sourceBounds: readonly [number, number, number, number];
+      readonly ownerDecisionRequired: boolean;
+    }[];
+    readonly excludedDetachedCandidates: readonly string[];
+  };
   readonly zoneShapeCounts?: Readonly<Record<string, number>>;
   readonly geometryOverrides?: {
     readonly walkableReplacementZones: readonly {
@@ -173,8 +186,15 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
       errors.push(prefix + ".castsShadow must be boolean when provided");
     }
-    if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
-      errors.push(prefix + " must block movement, sight, or cast a shadow");
+    if (shape.walkableRegion !== undefined && typeof shape.walkableRegion !== "boolean") {
+      errors.push(prefix + ".walkableRegion must be boolean when provided");
+    }
+    if (shape.walkableRegion === true) {
+      if (shape.closed !== true || shape.blocksMove !== false || shape.blocksSight !== false || shape.castsShadow === true) {
+        errors.push(prefix + " walkableRegion must be closed and must not block movement/sight or cast shadows");
+      }
+    } else if (shape.blocksMove !== true && shape.blocksSight !== true && shape.castsShadow !== true) {
+      errors.push(prefix + " must block movement, sight, cast a shadow, or define a walkable region");
     }
     if (!Array.isArray(shape.points)) {
       errors.push(prefix + ".points must be an array");
@@ -238,6 +258,14 @@ export function validateCollisionDocument(value: unknown): string[] {
     }
     if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
       errors.push("source.shapeCounts.total must be a positive integer");
+    }
+    if (source.walkableRegionExtraction !== undefined) {
+      const extraction = source.walkableRegionExtraction;
+      if (!Number.isInteger(extraction.morphologyKernelSourcePx) || extraction.morphologyKernelSourcePx < 3 ||
+          extraction.connectivity !== 8 || !Array.isArray(extraction.selectedRegions) ||
+          extraction.selectedRegions.length < 1 || !Array.isArray(extraction.excludedDetachedCandidates)) {
+        errors.push("source.walkableRegionExtraction must describe source-derived floor regions and pending detached candidates");
+      }
     }
   }
   return errors;
