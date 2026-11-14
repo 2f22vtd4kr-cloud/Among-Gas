@@ -20,9 +20,13 @@ const generator = generatorBytes.toString("utf8");
 assert.match(generator, /owner red-line reference|red-line reference/i);
 
 assert.match(generator, /skeletonize|function thin/);
-// Vectorization must remain independent from the old fine movement/vision
-// raster, but it must preserve the two already-reviewed local movement edits.
-assert.doesNotMatch(generator, /buildPreciseCollisionGrid|FINE_RLE_BASE64/);
+// The red-line trace remains the authored geometry source. The existing
+// fine movement grid is included only as an explicit conservative parity
+// constraint until all source-traced zones are reviewed; runtime consumers
+// must still use the vector world rather than importing the raster.
+assert.match(generator, /buildPreciseCollisionGrid/);
+assert.match(generator, /FINE_COLS/);
+assert.match(generator, /rasterConstraint/);
 assert.match(generator, /MANUAL_BLOCKED_POLYGONS/);
 assert.match(generator, /MANUAL_WALKABLE_REPLACEMENT_ZONES/);
 
@@ -45,6 +49,18 @@ const overridesPath = path.join(root, "lib/shared/src/collisionOverrides.ts");
 const overrides = await fs.readFile(overridesPath);
 assert.equal(document.source.sourceFiles.collisionOverrides.sha256, hash(overrides),
   "vector output must record the exact manual-override source revision");
+const fineGridData = await fs.readFile(path.join(root, "lib/shared/src/collisionDataFine.ts"));
+const fineGridRuntime = await fs.readFile(path.join(root, "lib/shared/src/collisionMap.ts"));
+assert.equal(document.source.sourceFiles.fineGridData.sha256, hash(fineGridData),
+  "the parity constraint must identify the exact fine-grid payload bytes");
+assert.equal(document.source.sourceFiles.fineGridRuntime.sha256, hash(fineGridRuntime),
+  "the parity constraint must identify the exact fine-grid decoding/override logic");
+assert.equal(document.source.rasterConstraint.kind, "fine-grid-blocked-cell-union");
+assert.equal(document.source.rasterConstraint.cols, 680);
+assert.equal(document.source.rasterConstraint.rows, 392);
+assert.ok(document.source.rasterConstraint.blockedCells > 100_000);
+assert.equal(document.source.shapeCounts.fineGridSolidRectangles,
+  document.source.rasterConstraint.mergedRectangles);
 assert.match(overrides.toString("utf8"), /id: 'green-service-van-bay'/);
 assert.match(overrides.toString("utf8"), /id: 'east-generator-approach-aisle'/);
 
