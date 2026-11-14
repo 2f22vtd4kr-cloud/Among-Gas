@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { BotAgent, isBotNavigationReachable } from './BotAgent.js';
-import { buildPreciseCollisionGrid, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
+import { buildPreciseCollisionGrid, buildPreciseVisionGrid, isLineOfSightClear, isLineOfSightToInteractionTarget, isPlayerPositionWalkable } from '@workspace/shared/collisionMap';
 import { FEET_OFFSET_Y, NO_TARGET, PLAYER_SPAWN_X, PLAYER_SPAWN_Y } from '@workspace/shared/coords';
 import { TASK_DEFS, TASK_INTERACTION_RANGE_PX } from '@workspace/shared/tasks';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
@@ -14,10 +14,33 @@ class NavigationProbe extends BotAgent {
   moveTo(self: LobbyPlayer, goal: {x:number;y:number}, arrivalTolerancePx = 25) {
     return this.navigateTo(self, goal, arrivalTolerancePx);
   }
+  visible(from: {x:number;y:number}, to: {x:number;y:number}) {
+    return this.hasLineOfSightToPoint(from, to);
+  }
 }
 
 const grid = buildPreciseCollisionGrid();
+const movementSightGrid = buildPreciseCollisionGrid();
+const sightGrid = buildPreciseVisionGrid();
 const probe = new NavigationProbe();
+
+// Movement-only silhouettes must not become vision occluders. The service-van
+// body remains solid to movement, while the dedicated sight mask preserves the
+// reviewed clear sight line through its bay, matching client/server visibility.
+{
+  const from = { x: 2000, y: 1150 };
+  const to = { x: 2250, y: 1150 };
+  assert.equal(isPlayerPositionWalkable(grid, from.x, from.y), true);
+  assert.equal(isPlayerPositionWalkable(grid, to.x, to.y), true);
+  assert.equal(isLineOfSightClear(
+    sightGrid, from.x, from.y + FEET_OFFSET_Y, to.x, to.y + FEET_OFFSET_Y,
+  ), true, 'vision grid must omit the movement-only service-van silhouette');
+  assert.equal(isLineOfSightClear(
+    movementSightGrid, from.x, from.y + FEET_OFFSET_Y, to.x, to.y + FEET_OFFSET_Y,
+  ), false, 'movement grid must continue to block the service-van body');
+  assert.equal(probe.visible(from, to), true,
+    'bot target observation must use the same independent vision grid as the client and server');
+}
 for (const task of TASK_DEFS) {
   const approach = probe.approach(task, TASK_INTERACTION_RANGE_PX - 8, task.interactionTargetRadiusPx ?? 24);
   const distance = Math.hypot(approach.x - task.x, approach.y - task.y);
