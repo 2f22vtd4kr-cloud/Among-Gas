@@ -1,0 +1,82 @@
+name: Map super-resolution candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      core_size:
+        description: "Source-pixel core size for overlapped model inference"
+        required: true
+        default: "192"
+        type: string
+      context:
+        description: "Reflected source-pixel context around each core"
+        required: true
+        default: "64"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  super-resolution:
+    name: Generate and QA a learned 2x map candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: scripts/map-tiles/requirements-sr.txt
+
+      - name: Install offline map and ONNX inference dependencies
+        run: python -m pip install -r scripts/map-tiles/requirements-sr.txt
+
+      - name: Download pinned Real-ESRGAN x4plus Anime 6B ONNX model
+        run: |
+          mkdir -p /tmp/among-gas-map-sr
+          curl -L --fail --retry 3 \
+            https://huggingface.co/skillsafe-ai/realesrgan-x4plus-anime-6b/resolve/c001be5/model.onnx \
+            -o /tmp/among-gas-map-sr/model.onnx
+          echo "9a029dae374b2cd4c3eb2dbbed857e22e6d785687c767aa12828e7356b9fb378  /tmp/among-gas-map-sr/model.onnx" \
+            | sha256sum --check
+
+      - name: Generate faithful 2x baseline
+        run: |
+          python scripts/map-tiles/map_tiles.py baseline \
+            artifacts/telegram-game/public/map-hires.webp \
+            /tmp/among-gas-map-sr/baseline --format png
+
+      - name: Run learned super-resolution and produce provenance manifest
+        run: |
+          python scripts/map-tiles/super_resolution.py \
+            --input artifacts/telegram-game/public/map-hires.webp \
+            --output /tmp/among-gas-map-sr/candidate-2x.png \
+            --model /tmp/among-gas-map-sr/model.onnx \
+            --manifest /tmp/among-gas-map-sr/candidate.manifest.json \
+            --core-size "${{ inputs.core_size }}" \
+            --context "${{ inputs.context }}"
+
+      - name: Compare candidate against faithful baseline
+        run: |
+          python scripts/map-tiles/tile_qa.py \
+            /tmp/among-gas-map-sr/candidate-2x.png \
+            /tmp/among-gas-map-sr/baseline/master_baseline.png \
+            --report /tmp/among-gas-map-sr/qa.json
+
+      - name: Upload candidate, baseline, manifest and QA report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: among-gas-map-super-resolution-candidate
+          path: |
+            /tmp/among-gas-map-sr/candidate-2x.png
+            /tmp/among-gas-map-sr/candidate.manifest.json
+            /tmp/among-gas-map-sr/qa.json
+            /tmp/among-gas-map-sr/baseline/master_baseline.png
+          if-no-files-found: error
+          retention-days: 14

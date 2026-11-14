@@ -82,3 +82,54 @@ The overlap stitch currently accumulates floating-point full-master buffers; pea
 (offline workstation/GPU-runner only). It is not intended for Replit or the browser. Keep generated
 assets out of the tracked public directory until the user approves the visual gallery and the
 candidate passes both this gate and manual review.
+
+
+## Stage 1 — model-based super-resolution candidate
+
+The baseline above remains a faithful resampling reference. It is not the Stage 1
+super-resolution result. A separate, offline model runner now uses the pinned
+Real-ESRGAN x4plus Anime 6B ONNX checkpoint to generate a genuine learned 4×
+restoration, then downsamples that result to the canonical 2× texture size.
+The map's logical world dimensions, source crop and tile layout are unchanged.
+
+The model is suited to illustration/line-art content. It is pinned by immutable
+model revision and SHA-256; its upstream weights and RRDBNet architecture are
+BSD-3-Clause licensed. See [MODEL_NOTICES.md](MODEL_NOTICES.md) for provenance
+and attribution. The model is not bundled in the repository or game runtime.
+
+Install the optional inference dependency and fetch the exact model:
+
+```bash
+python -m pip install -r scripts/map-tiles/requirements-sr.txt
+mkdir -p /tmp/map-sr
+curl -L --fail --retry 3 \
+  https://huggingface.co/skillsafe-ai/realesrgan-x4plus-anime-6b/resolve/c001be5/model.onnx \
+  -o /tmp/map-sr/model.onnx
+echo "9a029dae374b2cd4c3eb2dbbed857e22e6d785687c767aa12828e7356b9fb378  /tmp/map-sr/model.onnx" | sha256sum --check
+python scripts/map-tiles/super_resolution.py \
+  --input artifacts/telegram-game/public/map-hires.webp \
+  --output /tmp/map-sr/candidate-2x.png \
+  --model /tmp/map-sr/model.onnx \
+  --core-size 192 --context 64
+```
+
+The runner uses overlapping context around each core, performs x4 model inference,
+downsamples to x2, and writes only to the requested work directory. It records
+source/model/output hashes, model revision, inference provider, tile geometry and
+resampling details in a sidecar manifest. It never modifies tracked public assets.
+
+Compare the learned candidate against the faithful baseline:
+
+```bash
+python scripts/map-tiles/map_tiles.py baseline \
+  artifacts/telegram-game/public/map-hires.webp /tmp/map-sr/baseline --format png
+python scripts/map-tiles/tile_qa.py \
+  /tmp/map-sr/candidate-2x.png /tmp/map-sr/baseline/master_baseline.png \
+  --report /tmp/map-sr/qa.json
+```
+
+A failed QA gate is a rejected candidate, not permission to relax geometry or colour
+thresholds. The manual GitHub Actions workflow `Map super-resolution candidate`
+runs this exact process and uploads the candidate, baseline, manifest and QA report
+for visual review. Nothing is copied into `public/` or integrated into gameplay
+without a passing gate and explicit asset review.
