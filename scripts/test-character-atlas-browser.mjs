@@ -92,6 +92,7 @@ try {
     const sourceDecodeCandidates = {
       sharpRaw: { mismatchBytes: 0, maxDelta: 0 },
       currentRoundTrip: { mismatchBytes: 0, maxDelta: 0 },
+      sampledRoundTrip: { mismatchBytes: 0, maxDelta: 0, samples: [] },
     };
     for (let offset = 0; offset < browserSource.length; offset += 4) {
       for (let channel = 0; channel < 4; channel++) {
@@ -106,6 +107,41 @@ try {
         sourceDecodeCandidates.currentRoundTrip.maxDelta = Math.max(
           sourceDecodeCandidates.currentRoundTrip.maxDelta, candidateDelta,
         );
+      }
+    }
+
+    // Compare the exact scaled source-cell draw used by the legacy atlas with
+    // the builder's Sharp -> nearest-sample -> alpha-readback projection.
+    const scaledSourceCanvas = document.createElement('canvas');
+    scaledSourceCanvas.width = 161;
+    scaledSourceCanvas.height = 1401;
+    const scaledSourceContext = scaledSourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!scaledSourceContext) throw new Error('Could not allocate scaled source-cell probe');
+    scaledSourceContext.imageSmoothingEnabled = false;
+    scaledSourceContext.drawImage(sourceImage, 0, 0, 160, 1401, 0, 0, 161, 1401);
+    const browserScaledSource = scaledSourceContext.getImageData(0, 0, 161, 1401).data;
+    for (let y = 0; y < 1401; y++) {
+      for (let x = 0; x < 161; x++) {
+        const sourceX = Math.max(0, Math.min(159, Math.ceil((x + 0.5) * 160 / 161) - 1));
+        const sourceOffset = (y * 160 + sourceX) * 4;
+        const destinationOffset = (y * 161 + x) * 4;
+        for (let channel = 0; channel < 4; channel++) {
+          const raw = sharpSource[sourceOffset + channel];
+          const candidate = channel === 3 ? raw : normalizeCandidate(raw, sharpSource[sourceOffset + 3]);
+          const observed = browserScaledSource[destinationOffset + channel];
+          const delta = Math.abs(candidate - observed);
+          if (delta) {
+            sourceDecodeCandidates.sampledRoundTrip.mismatchBytes++;
+            sourceDecodeCandidates.sampledRoundTrip.maxDelta = Math.max(
+              sourceDecodeCandidates.sampledRoundTrip.maxDelta, delta,
+            );
+            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 12) {
+              sourceDecodeCandidates.sampledRoundTrip.samples.push({
+                x, y, sourceX, channel, candidate, observed, alpha: sharpSource[sourceOffset + 3],
+              });
+            }
+          }
+        }
       }
     }
 
