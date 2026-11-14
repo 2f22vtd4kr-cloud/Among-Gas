@@ -3,6 +3,7 @@ import { haptic } from '../lib/haptics';
 import { sfx, unlockSfx } from '../lib/sfx';
 import {
   buildPreciseCollisionGrid,
+  buildPreciseVisionGrid,
   isPlayerPositionWalkable,
   MAP_W, MAP_H,
   KILL_RANGE_PX,
