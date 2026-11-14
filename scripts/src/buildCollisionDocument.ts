@@ -647,7 +647,7 @@ async function main():Promise<void> {
       const edgeRadius=shape.walkableRegion===true||shape.walkableRegionHole===true?4:0;
       const midpoint:Point=[(a[0]+b[0])/2,(a[1]+b[1])/2];
       if(!world.isWalkable(midpoint[0],midpoint[1],edgeRadius)) blocked++;
-      else if(unblockedSamples.length<12) unblockedSamples.push({id:shape.id,walkableRegion:shape.walkableRegion,point:midpoint,radius:edgeRadius});
+      else if(unblockedSamples.length<50) unblockedSamples.push({id:shape.id,walkableRegion:shape.walkableRegion,walkableRegionHole:shape.walkableRegionHole,walkableRegionId:shape.walkableRegionId,point:midpoint,radius:edgeRadius});
     }
   }
   if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount+"; unblocked="+JSON.stringify(unblockedSamples));
