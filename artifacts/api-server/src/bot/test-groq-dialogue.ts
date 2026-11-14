@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildPublicBotDialogueMessages, isValidGroqApiKey, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, isValidGroqApiKey, requestGroqDialogue, validatePublicBotDialogueResponse } from './groqDialogue.js';
 
 const validKey = 'gsk_' + 'A'.repeat(48);
 assert.equal(isValidGroqApiKey(validKey), true);
@@ -15,6 +15,39 @@ const publicPrompt = buildPublicBotDialogueMessages({
 const promptText = publicPrompt.map(message => message.content).join(' ');
 assert.match(promptText, /Nova/);
 assert.match(promptText, /public meeting transcript/);
+assert.match(promptText, /JSON object with exactly the fields reply and evidence/);
+const groundedContext = {
+  username: 'Nova',
+  livingRoster: 'Nova, Player2',
+  meetingType: 'body report' as const,
+  publicTranscript: 'Player2: I saw Blue leave the west hall after the lights failed.',
+};
+assert.equal(validatePublicBotDialogueResponse(JSON.stringify({
+  reply: 'Blue left the west hall after the lights failed.',
+  evidence: [{ speaker: 'Player2', quote: 'I saw Blue leave the west hall after the lights failed.' }],
+}), groundedContext).reply, 'Blue left the west hall after the lights failed.',
+'facts that lexically match an exact public transcript quote are accepted');
+assert.equal(validatePublicBotDialogueResponse(JSON.stringify({
+  reply: 'Blue killed Nova in the reactor.',
+  evidence: [{ speaker: 'Player2', quote: 'I saw Blue leave the west hall after the lights failed.' }],
+}), groundedContext).reply, null,
+'claims that do not match the cited transcript quote are rejected');
+assert.equal(validatePublicBotDialogueResponse(JSON.stringify({
+  reply: 'I saw Nova near Reactor.',
+  evidence: [],
+}), groundedContext).reply, null,
+'factual assertions without an exact public quote are rejected');
+assert.equal(validatePublicBotDialogueResponse(JSON.stringify({
+  reply: 'Can anyone confirm the west hall timeline?',
+  evidence: [],
+}), groundedContext).reply, 'Can anyone confirm the west hall timeline?',
+'questions requesting corroboration may be sent without evidence');
+assert.equal(validatePublicBotDialogueResponse(JSON.stringify({
+  reply: 'Blue left the west hall.',
+  evidence: [{ speaker: 'Player9', quote: 'I saw Blue leave the west hall.' }],
+}), groundedContext).reply, null,
+'evidence attributed to a non-living or unknown speaker is rejected');
+
 assert.doesNotMatch(promptText, /secret role is|impostor role|crewmate role/i,
   'the provider prompt must not include any hidden role, including the bot own role');
 
@@ -87,6 +120,18 @@ try {
     'machine decisions use provider-enforced JSON object mode');
   assert.equal(structuredBody.reasoning_effort, 'low');
   assert.equal(structuredBody.include_reasoning, false);
+
+  const longEnvelopeKey = 'gsk_' + 'L'.repeat(48);
+  const longEnvelope = JSON.stringify({ reply: 'A'.repeat(180), evidence: [{ speaker: 'Player2', quote: 'B'.repeat(220) }] });
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{ message: { content: longEnvelope } }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+  const retainedEnvelope = await requestGroqDialogue(longEnvelopeKey, [], undefined, {
+    jsonMode: true,
+    maxResponseChars: 700,
+  });
+  assert.equal(retainedEnvelope, longEnvelope,
+    'structured dialogue evidence must not be truncated by the ordinary 220-character text limit');
   assert.equal(structuredBody.max_completion_tokens, 256);
 
   // A lobby key may be shared by several bots. Reserve starts in FIFO order,

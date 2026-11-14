@@ -266,24 +266,40 @@ export class CrewmateBot extends BotAgent {
     });
     const generation = ++this._taskPlanningGeneration;
     const roundStartedAtMs = lobby.startedAtMs;
+    const observationId = this.recordObservation(self, 'crew-task-plan', {
+      availableTasks: options,
+      visiblePlayers: nearbyPlayers,
+      visionRadiusPx,
+    }, fallbackTaskId);
     this._taskPlanningPending = true;
 
     void requestGroqDialogue(apiKey, messages, Date.now() + 8_000, { temperature: 0.2, jsonMode: true })
       .then(response => {
         if (!response || lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self ||
             !self.alive || lobby.startedAtMs !== roundStartedAtMs ||
-            this._targetTaskId !== fallbackTaskId) return;
+            this._targetTaskId !== fallbackTaskId) {
+          this.resolveObservation(observationId, 'stale', fallbackTaskId, 'round or task target changed before model response');
+          return;
+        }
 
         const choice = parseCrewTaskChoice(response, options.map(option => option.taskId));
-        if (choice === null || choice === fallbackTaskId) return;
+        if (choice === null || choice === fallbackTaskId) {
+          this.resolveObservation(observationId, 'fallback', fallbackTaskId, 'model returned no valid alternative task');
+          return;
+        }
         const chosenOption = options.find(option => option.taskId === choice);
-        if (!chosenOption || this._nextStep(lobby, self, choice) === null || this.isDoorLockedTask(lobby, choice)) return;
+        if (!chosenOption || this._nextStep(lobby, self, choice) === null || this.isDoorLockedTask(lobby, choice)) {
+          this.resolveObservation(observationId, 'fallback', fallbackTaskId, 'model task failed current reachability or lock checks');
+          return;
+        }
 
         this._targetTaskId = choice;
         this._dwellTicks = 0;
         this.clearPath();
+        this.resolveObservation(observationId, 'model', choice);
       })
       .catch(() => {
+        this.resolveObservation(observationId, 'fallback', fallbackTaskId, 'provider request failed');
         // The local nearest-task policy remains authoritative on provider errors.
       })
       .finally(() => {
