@@ -312,10 +312,13 @@ export class CollisionWorld {
   private readonly cell: number;
   private readonly moveSegments: Segment[] = [];
   private readonly sightSegments: Segment[] = [];
+  private readonly shadowSegments: Segment[] = [];
   private readonly moveHash = new Map<string, number[]>();
   private readonly sightHash = new Map<string, number[]>();
+  private readonly shadowHash = new Map<string, number[]>();
   private readonly moveSolids: Solid[] = [];
   private readonly sightSolids: Solid[] = [];
+  private readonly shadowSolids: Solid[] = [];
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -345,6 +348,10 @@ export class CollisionWorld {
           const index = this.sightSegments.push(segment) - 1;
           this.insert(this.sightHash, index, segment);
         }
+        if (shape.castsShadow ?? shape.blocksSight) {
+          const index = this.shadowSegments.push(segment) - 1;
+          this.insert(this.shadowHash, index, segment);
+        }
       }
       if (shape.closed) {
         const xs = shape.points.map(point => point[0]);
@@ -355,6 +362,7 @@ export class CollisionWorld {
         };
         if (shape.blocksMove) this.moveSolids.push(solid);
         if (shape.blocksSight) this.sightSolids.push(solid);
+        if (shape.castsShadow ?? shape.blocksSight) this.shadowSolids.push(solid);
       }
     });
 
@@ -480,6 +488,24 @@ export class CollisionWorld {
       const hit = raySegmentDistance(ax, ay, ux, uy, this.sightSegments[index]);
       // Ignore contacts at the observer/target endpoint. A target placed on
       // a solid is handled by the perimeter-aware interaction helper below.
+      if (hit > 0.75 && hit < length - 0.75) return false;
+    }
+    return true;
+  }
+
+  /** True when the open segment is not occluded by geometry marked castsShadow. */
+  isShadowLineOfSightClear(ax: number, ay: number, bx: number, by: number): boolean {
+    if (![ax, ay, bx, by].every(Number.isFinite) ||
+        ax < 0 || ay < 0 || bx < 0 || by < 0 ||
+        ax > this.w || bx > this.w || ay > this.h || by > this.h) return false;
+    if (this.insideSolids(ax, ay, this.shadowSolids) ||
+        this.insideSolids(bx, by, this.shadowSolids)) return false;
+    const dx = bx - ax, dy = by - ay;
+    const length = magnitude(dx, dy);
+    if (length <= EPS) return true;
+    const ux = dx / length, uy = dy / length;
+    for (const index of this.query(this.shadowHash, ax, ay, length)) {
+      const hit = raySegmentDistance(ax, ay, ux, uy, this.shadowSegments[index]);
       if (hit > 0.75 && hit < length - 0.75) return false;
     }
     return true;
