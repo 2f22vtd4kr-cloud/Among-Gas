@@ -287,6 +287,10 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     "the player radius must remain inside the floor boundary");
   assert.equal(floorWorld.isWalkable(24, 100, 4), true,
     "a player circle tangent to the floor boundary remains valid");
+  assert.equal(floorWorld.isWalkable(20, 100, 4), false,
+    "the floor-region boundary itself must reject a player footprint");
+  assert.equal(floorWorld.isWalkable(100, 20, 4), false,
+    "horizontal floor-region boundaries must also enforce the player radius");
   assert.equal(floorWorld.isLineOfSightClear(10, 100, 190, 100), true,
     "movement-only floor regions must not silently become sight blockers");
   assert.equal(floorWorld.isShadowLineOfSightClear(10, 100, 190, 100), true,
