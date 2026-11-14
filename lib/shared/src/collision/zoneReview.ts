@@ -160,6 +160,20 @@ export function validateZoneReviewRecord(value: unknown, expectedZone: unknown):
   const authorName = author && typeof author === "object" && nonEmpty(author.name) ? author.name : null;
   const reviewerName = reviewer && typeof reviewer === "object" && nonEmpty(reviewer.name) ? reviewer.name : null;
   const ownerName = owner && typeof owner === "object" && nonEmpty(owner.name) ? owner.name : null;
+  const authorCompletedAt = author && typeof author === "object" && validDate(author.completedAt)
+    ? Date.parse(author.completedAt) : null;
+  const reviewerReviewedAt = reviewer && typeof reviewer === "object" && validDate(reviewer.reviewedAt)
+    ? Date.parse(reviewer.reviewedAt) : null;
+  const ownerDecidedAt = owner && typeof owner === "object" && validDate(owner.decidedAt)
+    ? Date.parse(owner.decidedAt) : null;
+  if (authorCompletedAt !== null && reviewerReviewedAt !== null &&
+      reviewerReviewedAt < authorCompletedAt) {
+    errors.push("Independent review cannot predate the author's completed trace");
+  }
+  if (reviewerReviewedAt !== null && ownerDecidedAt !== null &&
+      ownerDecidedAt < reviewerReviewedAt) {
+    errors.push("Design-owner decision cannot predate the independent review");
+  }
   if (reviewerName && !distinctName(reviewerName, authorName)) {
     errors.push("Independent reviewer must be different from the author");
   }
