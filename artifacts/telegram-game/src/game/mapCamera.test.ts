@@ -80,9 +80,6 @@ assert.throws(
   RangeError,
 );
 
-console.log("MAP CAMERA TESTS PASSED: frame-rate-independent easing, DPR scaling, viewport bounds and invalid input");
-
-
 const controller = new MapCameraController({ x: 0, y: 0 });
 const controllerFrame = controller.update(
   { x: 100, y: 50 },
@@ -117,3 +114,5 @@ const exposedCenter = controller.getCenter();
 exposedCenter.x = -999;
 near(controller.getCenter().x, 3210, "controller never exposes mutable internal center state");
 assert.throws(() => controller.snap({ x: Number.NaN, y: 0 }), RangeError);
+
+console.log("MAP CAMERA TESTS PASSED: frame-rate-independent easing, DPR scaling, viewport bounds, correction snaps and immutable camera state");
