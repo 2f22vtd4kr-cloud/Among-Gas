@@ -85,6 +85,9 @@ export class ImpostorBot extends BotAgent {
     targetSearchBestIsolationScorePx: 0,
     losCandidateChecks: 0, losOriginBlockedCandidates: 0,
     losTargetBlockedCandidates: 0, losBlockedBetweenClearEndpoints: 0,
+    // Keep only two coordinate-level examples per impostor/game. The cohort
+    // summary aggregates these so reviewers can inspect the actual blockers.
+    losBlockedSamples: [] as Array<{ from: Point; to: Point; blockerFeet: Point }>,
     hiddenHuntNoLastKnown: 0, hiddenHuntExpiredLastKnown: 0,
     hiddenHuntReachedLastKnown: 0, hiddenHuntRetargeted: 0,
   };
@@ -397,6 +400,16 @@ export class ImpostorBot extends BotAgent {
         if (targetBlocked) this._simulationDiagnostics.losTargetBlockedCandidates++;
         if (!visible && !sightOriginBlocked && !targetBlocked) {
           this._simulationDiagnostics.losBlockedBetweenClearEndpoints++;
+          if (this._simulationDiagnostics.losBlockedSamples.length < 2) {
+            const blockerFeet = this.firstSightBlocker(self, target);
+            if (blockerFeet) {
+              this._simulationDiagnostics.losBlockedSamples.push({
+                from: { x: self.x, y: self.y },
+                to: { x: target.x, y: target.y },
+                blockerFeet,
+              });
+            }
+          }
         }
         return visible;
       },

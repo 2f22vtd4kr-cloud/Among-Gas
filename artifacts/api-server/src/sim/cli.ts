@@ -124,6 +124,9 @@ function summarize(results: SimGameResult[], wallMs: number) {
     ? Number((value / diagnosticRows.length).toFixed(2)) : 0;
   const impostorDiagnostics = {
     trackedImpostors: diagnosticRows.length,
+    // Bounded coordinate traces make high LOS rejection rates actionable
+    // without flooding logs with every blocked pair from every simulated game.
+    losBlockedSamples: diagnosticRows.flatMap(row => row.losBlockedSamples).slice(0, 24),
     totals: diagnosticTotals,
     perImpostorAverage: {
       huntAcquisitions: diagnosticAverage(diagnosticTotals.huntAcquisitions),

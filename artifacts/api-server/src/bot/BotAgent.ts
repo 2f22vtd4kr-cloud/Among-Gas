@@ -830,6 +830,29 @@ export abstract class BotAgent {
   }
 
   /**
+   * Return the first fine-grid obstruction along the exact authoritative bot
+   * LOS ray. Diagnostic only: it deliberately mirrors the 2px sampling used
+   * by isLineOfSightClear and never changes the visibility decision.
+   */
+  protected firstSightBlocker(from: Point, to: Point): Point | null {
+    const fromX = from.x;
+    const fromY = from.y + FEET_OFFSET_Y;
+    const toX = to.x;
+    const toY = to.y + FEET_OFFSET_Y;
+    const distance = Math.hypot(toX - fromX, toY - fromY);
+    const steps = Math.max(1, Math.ceil(distance / 2));
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps;
+      const x = fromX + (toX - fromX) * t;
+      const y = fromY + (toY - fromY) * t;
+      if (isBlocked(sightGrid, x, y)) {
+        return { x: Number(x.toFixed(1)), y: Number(y.toFixed(1)) };
+      }
+    }
+    return null;
+  }
+
+  /**
    * Find a spawn-reachable, vector-collision-safe approach point that can
    * actually see the interaction target. Movement uses the authored red-line
    * vector world; visibility uses the same fine-grid occlusion model as the

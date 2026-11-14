@@ -23,6 +23,9 @@ class NavigationProbe extends BotAgent {
   visible(from: {x:number;y:number}, to: {x:number;y:number}) {
     return this.hasLineOfSightToPoint(from, to);
   }
+  blocker(from: {x:number;y:number}, to: {x:number;y:number}) {
+    return this.firstSightBlocker(from, to);
+  }
 }
 
 const grid = getProductionCollisionWorld();
@@ -62,6 +65,8 @@ for (let x = 2820; x <= 3060; x += 8) {
   ), false, "movement grid must continue to block the service-van body");
   assert.equal(probe.visible(from, to), true,
     "bot target observation must use the same independent vision grid as the client");
+  assert.equal(probe.blocker(from, to), null,
+    "diagnostic blocker trace must agree with a clear authoritative LOS ray");
 }
 
 for (const task of TASK_DEFS) {
