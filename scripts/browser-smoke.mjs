@@ -1696,7 +1696,8 @@ try {
   await cameraPage.waitForFunction(() => {
     const status = window.__AG_TILE_DEBUG;
     return !!status && status.ready === true && status.visibleTotal > 0 &&
-      status.visibleLoaded === status.visibleTotal && status.failed === 0;
+      status.visibleLoaded + status.deferred === status.visibleTotal &&
+      status.loading === 0 && status.failed === 0;
   }, undefined, { timeout: 20_000 });
   const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
   const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {

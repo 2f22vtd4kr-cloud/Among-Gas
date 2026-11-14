@@ -151,7 +151,7 @@ export class TiledMap {
       typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement
         ? total + entry.naturalWidth * entry.naturalHeight * 4 : total, 0);
     this.status = { visibleTotal, visibleLoaded, loading, failed, deferred, cached: this.cache.size, decodedBytes };
-    return visibleTotal > 0 && deferred === 0 && visibleLoaded === visibleTotal;
+    return visibleTotal > 0 && visibleLoaded === selectedTiles.length && loading === 0 && failed === 0;
   }
 
   getStatus(): Readonly<typeof this.status> {
