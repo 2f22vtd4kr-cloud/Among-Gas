@@ -175,7 +175,7 @@ function getTaskInteractionMockTaskId(mode: string | null): number | null {
 
 export default function GameMap() {
   const taskInteractionGrid = useMemo(() => getProductionCollisionWorld(), []);
-  const taskInteractionSightGrid = useMemo(() => buildPreciseCollisionGrid(), []);
+  const taskInteractionSightGrid = useMemo(() => buildPreciseVisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
