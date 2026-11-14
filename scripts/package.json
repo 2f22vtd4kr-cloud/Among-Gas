@@ -12,6 +12,7 @@
     "test:browser-smoke": "node ./browser-smoke.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vector-collision.json --noEmit && tsc -p tsconfig.collision-preview.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",
+    "test:character-atlas-browser": "tsx ./test-character-atlas-browser.mjs",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
     "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./test-collision-release-readiness.ts",
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
@@ -26,7 +27,9 @@
     "test:map-camera": "tsx ../artifacts/telegram-game/src/game/mapCamera.test.ts",
     "test:remote-player-animation": "tsx ../artifacts/telegram-game/src/game/remotePlayerAnimation.test.ts",
     "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts",
-    "test:game-input": "tsx ../artifacts/telegram-game/src/game/gameInput.test.ts"
+    "test:game-input": "tsx ../artifacts/telegram-game/src/game/gameInput.test.ts",
+    "build:character-atlas": "tsx ./src/buildCharacterAtlas.ts",
+    "test:character-atlas": "tsx ./test-character-atlas.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

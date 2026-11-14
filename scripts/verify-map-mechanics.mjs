@@ -338,8 +338,10 @@ assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(raw
 assert.match(gameMapSource, /stepPlayer\(\s*fineGrid,/, 'Client prediction must use the canonical fine collision grid');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(worldDetailsSource, /getFrameRect\(getSlotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
-assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
-  'Runtime character art must remain the measured balaclava PNG atlas');
+assert.match(characterSpritesSource, /CHARACTER_SOURCE_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
+  'The measured balaclava PNG remains the committed character source');
+assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters-18\.png\?v=/,
+  'Runtime character art must load the reproducibly baked 18-palette PNG atlas');
 assert.match(characterSpritesSource, /POSE_ROW_WINDOWS/,
   'Original measured per-pose crop windows must remain in use');
 assert.doesNotMatch(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.svg/,
