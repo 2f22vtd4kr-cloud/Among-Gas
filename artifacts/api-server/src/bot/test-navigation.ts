@@ -51,7 +51,7 @@ for (const task of TASK_DEFS) {
   assert.equal(isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y), true,
     task.name + ' bot approach must be in the spawn-connected navigation component');
   assert.equal(isLineOfSightToInteractionTarget(
-    grid, approach.x, approach.y + FEET_OFFSET_Y,
+    sightGrid, approach.x, approach.y + FEET_OFFSET_Y,
     task.x, task.y + FEET_OFFSET_Y, task.interactionTargetRadiusPx ?? 24,
   ), true, task.name + ' bot approach must satisfy server-authoritative line of sight');
 }
