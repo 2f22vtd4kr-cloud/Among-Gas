@@ -27,11 +27,18 @@ export interface CollisionShape {
   readonly blocksSight: boolean;
   /** Independent authored presentation shadow flag; never inferred from movement or sight. */
   readonly castsShadow?: boolean;
+  /** Closed, non-blocking floor boundary. If any are present, movement is constrained to their union. */
+  readonly walkableRegion?: boolean;
+  /** A closed, non-blocking hole excluded from its linked walkable region. */
+  readonly walkableRegionHole?: boolean;
+  readonly walkableRegionId?: string;
+  /** Source-derived half-width of a traced movement stroke, in world pixels. */
+  readonly strokeRadius?: number;
   readonly label?: string;
   readonly zone?: string;
 }
 
-export interface CollisionSourceManifest {
+export interface FineGridCollisionSourceManifest {
   readonly kind: "fine-grid-derived";
   readonly generatorVersion: number;
   readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
@@ -50,6 +57,51 @@ export interface CollisionSourceManifest {
   readonly shapeCounts: Readonly<Record<string, number>>;
 }
 
+export interface RedlineVectorCollisionSourceManifest {
+  readonly kind: "redline-vector";
+  readonly generatorVersion: number;
+  readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
+  readonly referenceImage: { readonly width: number; readonly height: number };
+  readonly vectorization: {
+    readonly redPixelCount: number;
+    readonly skeletonPixelCount: number;
+    readonly tracedPathCount: number;
+    readonly simplifiedPointCount: number;
+    readonly simplificationToleranceSourcePx: number;
+    readonly closedSolidCount: number;
+    readonly openBoundaryCount: number;
+    readonly strokeRadiusMedianWorldPx?: number;
+    readonly strokeRadiusMaxWorldPx?: number;
+  };
+  readonly shapeCounts: Readonly<Record<string, number>>;
+  readonly walkableRegionExtraction?: {
+    readonly morphologyKernelSourcePx: number;
+    readonly connectivity: 8;
+    readonly selectedRegions: readonly {
+      readonly id: string;
+      readonly role: "spawn-connected-floor" | "isolated-interior-candidate";
+      readonly pixelArea: number;
+      readonly sourceBounds: readonly [number, number, number, number];
+      readonly ownerDecisionRequired: boolean;
+    }[];
+    readonly excludedDetachedCandidates: readonly string[];
+    readonly holeCount: number;
+    readonly excludedComponentCount: number;
+  };
+  readonly zoneShapeCounts?: Readonly<Record<string, number>>;
+  readonly geometryOverrides?: {
+    readonly walkableReplacementZones: readonly {
+      readonly id: string;
+      readonly bounds: readonly [number, number, number, number];
+    }[];
+    readonly movementOnlyBlockedPolygons: readonly string[];
+  };
+}
+
+export type CollisionSourceManifest =
+  | FineGridCollisionSourceManifest
+  | RedlineVectorCollisionSourceManifest;
+
 export interface CollisionDocument {
   readonly version: 1;
   readonly mapW: number;
@@ -64,6 +116,7 @@ interface Segment {
   readonly bx: number;
   readonly by: number;
   readonly shapeIndex: number;
+  readonly strokeRadius?: number;
 }
 
 interface Solid {
