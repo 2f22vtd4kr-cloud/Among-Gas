@@ -504,18 +504,22 @@ async function main():Promise<void> {
   const mask=new Uint8Array(info.width*info.height); let redCount=0;
   for(let i=0;i<mask.length;i++) if(red(data,i*info.channels)){mask[i]=1;redCount++;}
   if(redCount<1500) throw new Error("too few red reference pixels: "+redCount);
+  const walkableRegionExtraction=extractSourceWalkableRegions(mask.slice(),info.width,info.height);
   const skeleton=thin(mask,info.width,info.height); let skeletonCount=0;
   for(const v of skeleton) skeletonCount+=v;
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
   const tracedShapes=makeShapes(paths,info.width,info.height);
-  const shapes=assignMapAuthoringZonesByCentroid({shapes:applyWalkableReplacementZones(tracedShapes)}).shapes;
+  const clippedShapes=applyWalkableReplacementZones(tracedShapes);
+  const shapes=assignMapAuthoringZonesByCentroid({
+    shapes:[...clippedShapes,...walkableRegionExtraction.shapes],
+  }).shapes;
   const points=shapes.reduce((n,s)=>n+s.points.length,0);
   if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:7,
+      kind:"redline-vector",generatorVersion:8,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -530,12 +534,22 @@ async function main():Promise<void> {
         ],
       },
       referenceImage:{width:info.width,height:info.height},
-      vectorization:{redPixelCount:redCount,skeletonPixelCount:skeletonCount,tracedPathCount:paths.length,simplifiedPointCount:points,simplificationToleranceSourcePx:TOLERANCE,closedSolidCount:shapes.filter(s=>s.closed).length,openBoundaryCount:shapes.filter(s=>!s.closed).length},
+      walkableRegionExtraction:walkableRegionExtraction.metadata,
+      vectorization:{
+        redPixelCount:redCount,
+        skeletonPixelCount:skeletonCount,
+        tracedPathCount:paths.length,
+        simplifiedPointCount:points,
+        simplificationToleranceSourcePx:TOLERANCE,
+        closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
+        openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
+      },
       shapeCounts:{
         total:shapes.length,
-        tracedAfterReplacementClipping:tracedShapes.length,
-        closedSolids:shapes.filter(s=>s.closed).length,
-        openBoundaries:shapes.filter(s=>!s.closed).length,
+        tracedAfterReplacementClipping:clippedShapes.length,
+        closedSolids:shapes.filter(s=>s.closed&&s.blocksMove).length,
+        openBoundaries:shapes.filter(s=>!s.closed&&s.blocksMove).length,
+        walkableRegions:shapes.filter(s=>s.walkableRegion===true).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
         provisionalSourceArtBlockedPolygons:CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.length,
       },
@@ -549,7 +563,9 @@ async function main():Promise<void> {
     const count=shape.closed?shape.points.length:shape.points.length-1;
     for(let i=0;i<count;i++) {
       const a=shape.points[i],b=shape.points[(i+1)%shape.points.length];
-      edgeCount++; if(!world.isWalkable((a[0]+b[0])/2,(a[1]+b[1])/2,0)) blocked++;
+      edgeCount++;
+      const edgeRadius=shape.walkableRegion===true?4:0;
+      if(!world.isWalkable((a[0]+b[0])/2,(a[1]+b[1])/2,edgeRadius)) blocked++;
     }
   }
   if(edgeCount<500||blocked/edgeCount<.995) throw new Error("red-line edge self-check failed: "+blocked+"/"+edgeCount);
@@ -561,7 +577,9 @@ async function main():Promise<void> {
     "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n");
   const svgPaths=shapes.map(s=>{
     const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ")+(s.closed?" Z":"");
-    return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
+    const stroke=s.walkableRegion===true?"#00d7ff":"#00ff68";
+    const strokeWidth=s.walkableRegion===true?2.4:1.4;
+    return '<path d="'+d+'" fill="none" stroke="'+stroke+'" stroke-width="'+strokeWidth+'" stroke-linecap="round" stroke-linejoin="round"/>';
   }).join("");
   const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="'+info.width+'" height="'+info.height+'" viewBox="0 0 '+info.width+" "+info.height+'">'+svgPaths+"</svg>");
   await sharp(referencePath).composite([{input:svg}]).png().toFile(qaPath);
