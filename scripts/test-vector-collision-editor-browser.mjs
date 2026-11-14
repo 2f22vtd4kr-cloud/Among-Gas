@@ -43,12 +43,11 @@ try {
   // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
   const touch = await page.context().newCDPSession(page);
   const touchTap = async (x, y) => {
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchStart", touchPoints: [{ id: 1, x, y }],
-    });
-    await page.waitForTimeout(35);
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForTimeout(35);
+    // Use Playwright's single-touch API for taps so Chromium completes the full
+    // touch/pointer lifecycle before the next tap. Raw CDP remains in use for
+    // multi-step drags and pinch gestures where per-frame control is required.
+    await page.touchscreen.tap(x, y);
+    await page.waitForTimeout(60);
   };
   const touchDrag = async (startX, startY, endX, endY, steps = 5) => {
     await touch.send("Input.dispatchTouchEvent", {
@@ -231,7 +230,9 @@ try {
 
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
+  await page.getByRole("button", { name: "Clear route test" }).click();
   bounds = await canvas.boundingBox();
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "walk preview canvas remains usable after candidate analysis");
   await touchTap(bounds.x + 40, bounds.y + 40);
   await page.waitForFunction(
     () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
@@ -239,16 +240,29 @@ try {
     { timeout: 10000 },
   );
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await touchTap(bounds.x + 100, bounds.y + 40);
-  await page.waitForFunction(
-    () => {
-      const canvas = document.querySelector("canvas");
-      return canvas?.getAttribute("data-walk-point-count") === "2" &&
-        Boolean(canvas.getAttribute("data-walk-status"));
-    },
-    null,
-    { timeout: 10000 },
-  );
+  // Re-read the canvas bounds after the first point/status render; responsive
+  // footer wrapping can resize the flex canvas between the two real touch taps.
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + Math.min(100, bounds.width - 20), bounds.y + 40);
+  try {
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector("canvas");
+        return canvas?.getAttribute("data-walk-point-count") === "2" &&
+          Boolean(canvas.getAttribute("data-walk-status"));
+      },
+      null,
+      { timeout: 10000 },
+    );
+  } catch (error) {
+    const diagnostic = {
+      pointCount: await canvas.getAttribute("data-walk-point-count"),
+      status: await canvas.getAttribute("data-walk-status"),
+      bounds: await canvas.boundingBox(),
+      pageErrors: [...errors],
+    };
+    throw new Error("Mobile walk preview did not record its destination: " + JSON.stringify(diagnostic), { cause: error });
+  }
 
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
