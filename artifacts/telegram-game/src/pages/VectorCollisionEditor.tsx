@@ -393,18 +393,26 @@ export default function VectorCollisionEditor() {
       });
       if (shape.closed) context.closePath();
       if (shape.closed) {
-        context.fillStyle = shape.blocksMove
-          ? "rgba(255,75,85,0.22)"
-          : "rgba(60,220,190,0.16)";
+        context.fillStyle = shape.walkableRegion === true
+          ? "rgba(65,145,255,0.18)"
+          : shape.walkableRegionHole === true
+            ? "rgba(185,115,255,0.22)"
+            : shape.blocksMove
+              ? "rgba(255,75,85,0.22)"
+              : "rgba(60,220,190,0.16)";
         context.fill();
       }
       context.strokeStyle = isSelected
         ? "#ffe079"
-        : shape.blocksMove && shape.blocksSight
-          ? "#ff5c68"
-          : shape.blocksMove
-            ? "#e79a45"
-            : "#55d9cd";
+        : shape.walkableRegion === true
+          ? "#65a9ff"
+          : shape.walkableRegionHole === true
+            ? "#c18cff"
+            : shape.blocksMove && shape.blocksSight
+              ? "#ff5c68"
+              : shape.blocksMove
+                ? "#e79a45"
+                : "#55d9cd";
       context.lineWidth = (isSelected ? 4 : 2.5) / camera.zoom;
       context.lineJoin = "round";
       context.lineCap = "round";
@@ -905,10 +913,25 @@ export default function VectorCollisionEditor() {
       }
       if (best) {
         setSelectedId(best.shapeId);
+        const selectedShape = docRef.current.shapes.find(shape => shape.id === best.shapeId);
+        if (selectedShape?.walkableRegionId) setWalkableRegionId(selectedShape.walkableRegionId);
+        if (selectedShape) {
+          setBlocksMove(selectedShape.blocksMove);
+          setBlocksSight(selectedShape.blocksSight);
+          setCastsShadowMode(selectedShape.castsShadow === undefined ? "inherit" : selectedShape.castsShadow ? "yes" : "no");
+          setStrokeRadius(selectedShape.strokeRadius ?? 0);
+        }
         gestureRef.current = { kind: "vertex", shapeId: best.shapeId, index: best.index };
       } else {
         const target = nearestShape(point, EDITOR_HIT_RADIUS_WORLD(event.pointerType, camera.zoom, 18));
         setSelectedId(target?.id ?? null);
+        if (target?.walkableRegionId) setWalkableRegionId(target.walkableRegionId);
+        if (target) {
+          setBlocksMove(target.blocksMove);
+          setBlocksSight(target.blocksSight);
+          setCastsShadowMode(target.castsShadow === undefined ? "inherit" : target.castsShadow ? "yes" : "no");
+          setStrokeRadius(target.strokeRadius ?? 0);
+        }
       }
       return;
     }
