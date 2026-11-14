@@ -13,7 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.vector-collision.json --noEmit && tsc -p tsconfig.collision-preview.json --noEmit",
     "test:character-atlas": "tsx ./test-character-atlas.ts",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
-    "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./src/testCollisionReleaseReadiness.ts",
+    "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./src/testCollisionReleaseReadiness.ts && tsx ../lib/shared/src/collision/releaseReadiness.test.ts",
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
     "build:map-tiles": "tsx src/buildMapTiles.ts",
     "test:map-tiles": "tsx src/testMapTiles.ts",
