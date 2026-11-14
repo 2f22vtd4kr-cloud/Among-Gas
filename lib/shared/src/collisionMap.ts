@@ -147,6 +147,7 @@ export const ZONES: Zone[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 let _cached: Grid | null = null;
 let _fineCached: Grid | null = null;
+let _visionCached: Grid | null = null;
 
 interface GridGeometry {
   cols: number;
@@ -331,6 +332,38 @@ export function buildPreciseCollisionGridFromRle(encoded: string): Grid {
   const grid = decodeFineRuns(encoded);
   applyManualWalkableReplacementZones(grid);
   return grid;
+}
+
+function clearManualWalkableReplacementZones(grid: Grid): void {
+  for (const zone of MANUAL_WALKABLE_REPLACEMENT_ZONES) {
+    const [minX, minY, maxX, maxY] = zone.bounds;
+    const minCol = Math.max(0, Math.floor(minX / FINE_CELL_X));
+    const maxCol = Math.min(FINE_COLS - 1, Math.ceil(maxX / FINE_CELL_X));
+    const minRow = Math.max(0, Math.floor(minY / FINE_CELL_Y));
+    const maxRow = Math.min(FINE_ROWS - 1, Math.ceil(maxY / FINE_CELL_Y));
+    for (let row = minRow; row <= maxRow; row++) {
+      for (let col = minCol; col <= maxCol; col++) {
+        const x = (col + 0.5) * FINE_CELL_X;
+        const y = (row + 0.5) * FINE_CELL_Y;
+        if (x >= minX && x <= maxX && y >= minY && y <= maxY) {
+          grid[row * FINE_COLS + col] = 0;
+        }
+      }
+    }
+  }
+}
+
+/** Vision mask clears movement-only replacement silhouettes; movement geometry remains unchanged. */
+export function buildPreciseVisionGridFromRle(encoded: string): Grid {
+  const grid = decodeFineRuns(encoded);
+  clearManualWalkableReplacementZones(grid);
+  return grid;
+}
+
+export function buildPreciseVisionGrid(): Grid {
+  if (_visionCached) return _visionCached;
+  _visionCached = buildPreciseVisionGridFromRle(FINE_RLE_BASE64);
+  return _visionCached;
 }
 
 function applyManualWalkableReplacementZones(grid: Grid): void {
