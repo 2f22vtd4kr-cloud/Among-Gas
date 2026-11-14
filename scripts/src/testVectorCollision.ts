@@ -128,7 +128,6 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
       true,
       true,
       false,
-      false,
     ));
   }
   solids.push(shape(
@@ -136,7 +135,6 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     [[60, 60], [72, 60], [72, 72], [60, 72]],
     true,
     true,
-    false,
     false,
   ));
   const dense = new CollisionWorld(solids);
