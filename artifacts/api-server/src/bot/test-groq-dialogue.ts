@@ -120,6 +120,18 @@ try {
     'machine decisions use provider-enforced JSON object mode');
   assert.equal(structuredBody.reasoning_effort, 'low');
   assert.equal(structuredBody.include_reasoning, false);
+
+  const longEnvelopeKey = 'gsk_' + 'L'.repeat(48);
+  const longEnvelope = JSON.stringify({ reply: 'A'.repeat(180), evidence: [{ speaker: 'Player2', quote: 'B'.repeat(220) }] });
+  globalThis.fetch = (async () => new Response(JSON.stringify({
+    choices: [{ message: { content: longEnvelope } }],
+  }), { status: 200, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+  const retainedEnvelope = await requestGroqDialogue(longEnvelopeKey, [], undefined, {
+    jsonMode: true,
+    maxResponseChars: 700,
+  });
+  assert.equal(retainedEnvelope, longEnvelope,
+    'structured dialogue evidence must not be truncated by the ordinary 220-character text limit');
   assert.equal(structuredBody.max_completion_tokens, 256);
 
   // A lobby key may be shared by several bots. Reserve starts in FIFO order,
