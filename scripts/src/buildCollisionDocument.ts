@@ -628,6 +628,7 @@ async function main():Promise<void> {
         closedSolids:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaries:shapes.filter(s=>!s.closed&&s.blocksMove).length,
         walkableRegions:shapes.filter(s=>s.walkableRegion===true).length,
+        walkableRegionHoles:shapes.filter(s=>s.walkableRegionHole===true).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
         provisionalSourceArtBlockedPolygons:CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.length,
       },
@@ -643,7 +644,7 @@ async function main():Promise<void> {
     for(let i=0;i<count;i++) {
       const a=shape.points[i],b=shape.points[(i+1)%shape.points.length];
       edgeCount++;
-      const edgeRadius=shape.walkableRegion===true?4:0;
+      const edgeRadius=shape.walkableRegion===true||shape.walkableRegionHole===true?4:0;
       const midpoint:Point=[(a[0]+b[0])/2,(a[1]+b[1])/2];
       if(!world.isWalkable(midpoint[0],midpoint[1],edgeRadius)) blocked++;
       else if(unblockedSamples.length<12) unblockedSamples.push({id:shape.id,walkableRegion:shape.walkableRegion,point:midpoint,radius:edgeRadius});
