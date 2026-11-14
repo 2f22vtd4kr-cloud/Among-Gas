@@ -428,7 +428,7 @@ export abstract class BotAgent {
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
-        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS, { temperature: 0.65, jsonMode: true, maxResponseChars: 700 });
+        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS, { temperature: 0.65, jsonMode: true, maxResponseChars: 1_000 });
         if (rawResponse) {
           const validation = validatePublicBotDialogueResponse(rawResponse, {
             username: self.username,
