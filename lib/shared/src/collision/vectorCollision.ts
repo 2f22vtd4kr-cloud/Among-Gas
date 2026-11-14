@@ -398,6 +398,35 @@ function pointInPolygon(x: number, y: number, points: readonly Point[]): boolean
   return inside;
 }
 
+/** Return every interior split parameter where two segments meet or overlap. */
+function segmentIntersectionParameters(first: Segment, second: Segment): number[] {
+  const rx = first.bx - first.ax, ry = first.by - first.ay;
+  const sx = second.bx - second.ax, sy = second.by - second.ay;
+  const qx = second.ax - first.ax, qy = second.ay - first.ay;
+  const denominator = cross(rx, ry, sx, sy);
+  const result: number[] = [];
+  const firstLengthSquared = rx * rx + ry * ry;
+  if (firstLengthSquared <= EPS * EPS) return result;
+
+  if (Math.abs(denominator) > EPS) {
+    const t = cross(qx, qy, sx, sy) / denominator;
+    const u = cross(qx, qy, rx, ry) / denominator;
+    if (t > EPS && t < 1 - EPS && u >= -EPS && u <= 1 + EPS) result.push(t);
+    return result;
+  }
+
+  // Collinear overlaps need both overlap endpoints so an internal shared seam
+  // does not hide an exposed portion of the same authored edge.
+  if (Math.abs(cross(qx, qy, rx, ry)) > EPS) return result;
+  const t0 = (qx * rx + qy * ry) / firstLengthSquared;
+  const q2x = second.bx - first.ax, q2y = second.by - first.ay;
+  const t1 = (q2x * rx + q2y * ry) / firstLengthSquared;
+  for (const t of [t0, t1]) {
+    if (t > EPS && t < 1 - EPS) result.push(t);
+  }
+  return result;
+}
+
 function pointInRect(point: Point, minX: number, minY: number, maxX: number, maxY: number): boolean {
   return point[0] >= minX && point[0] <= maxX && point[1] >= minY && point[1] <= maxY;
 }
@@ -483,6 +512,9 @@ export class CollisionWorld {
   private readonly moveRegionHash = new Map<string, number[]>();
   private readonly moveRegionSegments: Segment[] = [];
   private readonly moveRegionSegmentHash = new Map<string, number[]>();
+  /** Exterior boundary of the union of all authored floor regions and linked holes. */
+  private readonly moveRegionUnionSegments: Segment[] = [];
+  private readonly moveRegionUnionSegmentHash = new Map<string, number[]>();
   private readonly moveRegionHoles: Solid[] = [];
   private readonly moveRegionHoleIds: string[] = [];
   private readonly moveRegionHoleHash = new Map<string, number[]>();
@@ -560,6 +592,11 @@ export class CollisionWorld {
         }
       }
     });
+
+    // Shared edges between adjacent/overlapping floor polygons are internal to
+    // their union, not invisible walls. Keep only the actual union perimeter,
+    // including the exposed boundaries of linked holes.
+    this.buildWalkableUnionBoundaryIndex();
 
     // A permanent map edge is not an editable shape and always blocks movement.
     const edge: Point[] = [[0, 0], [w, 0], [w, h], [0, h]];
@@ -644,6 +681,72 @@ export class CollisionWorld {
     return result;
   }
 
+  private pointInsideWalkableUnion(x: number, y: number): boolean {
+    for (let regionIndex = 0; regionIndex < this.moveRegions.length; regionIndex++) {
+      const region = this.moveRegions[regionIndex];
+      if (!pointInPolygon(x, y, region.points)) continue;
+      const regionId = this.moveRegionIds[regionIndex];
+      let excludedByLinkedHole = false;
+      for (let holeIndex = 0; holeIndex < this.moveRegionHoles.length; holeIndex++) {
+        if (this.moveRegionHoleIds[holeIndex] !== regionId) continue;
+        if (pointInPolygon(x, y, this.moveRegionHoles[holeIndex].points)) {
+          excludedByLinkedHole = true;
+          break;
+        }
+      }
+      if (!excludedByLinkedHole) return true;
+    }
+    return false;
+  }
+
+  private buildWalkableUnionBoundaryIndex(): void {
+    const sourceSegments = [...this.moveRegionSegments, ...this.moveRegionHoleSegments];
+    const sampleOffset = 0.0001;
+    for (let sourceIndex = 0; sourceIndex < sourceSegments.length; sourceIndex++) {
+      const source = sourceSegments[sourceIndex];
+      const splitParameters = [0, 1];
+      const sourceMinX = Math.min(source.ax, source.bx) - EPS;
+      const sourceMaxX = Math.max(source.ax, source.bx) + EPS;
+      const sourceMinY = Math.min(source.ay, source.by) - EPS;
+      const sourceMaxY = Math.max(source.ay, source.by) + EPS;
+
+      for (let otherIndex = 0; otherIndex < sourceSegments.length; otherIndex++) {
+        if (otherIndex === sourceIndex) continue;
+        const other = sourceSegments[otherIndex];
+        if (Math.max(other.ax, other.bx) < sourceMinX ||
+            Math.min(other.ax, other.bx) > sourceMaxX ||
+            Math.max(other.ay, other.by) < sourceMinY ||
+            Math.min(other.ay, other.by) > sourceMaxY) continue;
+        splitParameters.push(...segmentIntersectionParameters(source, other));
+      }
+
+      splitParameters.sort((a, b) => a - b);
+      const uniqueParameters = splitParameters.filter((value, index, values) =>
+        index === 0 || value - values[index - 1] > 1e-9,
+      );
+      const dx = source.bx - source.ax, dy = source.by - source.ay;
+      const length = Math.hypot(dx, dy);
+      if (length <= EPS) continue;
+      const nx = -dy / length * sampleOffset;
+      const ny = dx / length * sampleOffset;
+
+      for (let part = 0; part < uniqueParameters.length - 1; part++) {
+        const start = uniqueParameters[part], end = uniqueParameters[part + 1];
+        if (end - start <= 1e-9) continue;
+        const ax = source.ax + dx * start, ay = source.ay + dy * start;
+        const bx = source.ax + dx * end, by = source.ay + dy * end;
+        const midpointX = (ax + bx) / 2, midpointY = (ay + by) / 2;
+        const insidePositiveSide = this.pointInsideWalkableUnion(midpointX + nx, midpointY + ny);
+        const insideNegativeSide = this.pointInsideWalkableUnion(midpointX - nx, midpointY - ny);
+        if (insidePositiveSide && insideNegativeSide) continue;
+
+        const boundary: Segment = { ax, ay, bx, by, shapeIndex: source.shapeIndex };
+        const index = this.moveRegionUnionSegments.push(boundary) - 1;
+        this.insert(this.moveRegionUnionSegmentHash, index, boundary);
+      }
+    }
+  }
+
   private insideSolids(
     x: number,
     y: number,
@@ -669,73 +772,28 @@ export class CollisionWorld {
   ): boolean {
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
-    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
     const corners: Point[] = [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]];
-    for (const regionIndex of this.querySolids(this.moveRegionHash, centerX, centerY, radius)) {
-      const region = this.moveRegions[regionIndex];
-      const bounds = region.bounds;
-      if (minX < bounds[0] || minY < bounds[1] || maxX > bounds[2] || maxY > bounds[3]) continue;
-      if (!corners.every(point => pointInPolygon(point[0], point[1], region.points))) continue;
-      if (!pointInPolygon(centerX, centerY, region.points)) continue;
-      let crossesHole = false;
-      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, centerX, centerY, radius)) {
-        if (this.moveRegionHoleIds[holeIndex] !== this.moveRegionIds[regionIndex]) continue;
-        if (polygonIntersectsRect(this.moveRegionHoles[holeIndex].points, minX, minY, maxX, maxY)) {
-          crossesHole = true;
-          break;
-        }
+    if (!corners.every(point => this.pointInsideWalkableUnion(point[0], point[1])) ||
+        !this.pointInsideWalkableUnion(centerX, centerY)) return false;
+
+    const radius = Math.hypot(maxX - minX, maxY - minY) / 2;
+    for (const segmentIndex of this.query(this.moveRegionUnionSegmentHash, centerX, centerY, radius)) {
+      if (segmentIntersectsRect(this.moveRegionUnionSegments[segmentIndex], minX, minY, maxX, maxY)) {
+        return false;
       }
-      if (crossesHole) continue;
-      let crossesBoundary = false;
-      for (const segmentIndex of this.query(this.moveRegionSegmentHash, centerX, centerY, radius)) {
-        const segment = this.moveRegionSegments[segmentIndex];
-        if (segment.shapeIndex === regionIndex &&
-            segmentIntersectsRect(segment, minX, minY, maxX, maxY)) {
-          crossesBoundary = true;
-          break;
-        }
-      }
-      if (!crossesBoundary) return true;
     }
-    return false;
+    return true;
   }
 
   private insideWalkableRegion(x: number, y: number, radius: number): boolean {
-    for (const regionIndex of this.querySolids(this.moveRegionHash, x, y, radius)) {
-      const region = this.moveRegions[regionIndex];
-      const regionId = this.moveRegionIds[regionIndex];
-      const [minX, minY, maxX, maxY] = region.bounds;
-      if (x - radius < minX || x + radius > maxX ||
-          y - radius < minY || y + radius > maxY) continue;
-      if (!pointInPolygon(x, y, region.points)) continue;
-      let excludedByHole = false;
-      for (const holeIndex of this.querySolids(this.moveRegionHoleHash, x, y, radius)) {
-        if (this.moveRegionHoleIds[holeIndex] !== regionId) continue;
-        const hole = this.moveRegionHoles[holeIndex];
-        if (pointInPolygon(x, y, hole.points)) { excludedByHole = true; break; }
-        if (radius > 0) {
-          for (const segmentIndex of this.query(this.moveRegionHoleSegmentHash, x, y, radius)) {
-            const segment = this.moveRegionHoleSegments[segmentIndex];
-            if (segment.shapeIndex === holeIndex && segmentDistance(x, y, segment) < radius - EPS) {
-              excludedByHole = true;
-              break;
-            }
-          }
-        }
-        if (excludedByHole) break;
-      }
-      if (excludedByHole) continue;
-      let clearance = Number.POSITIVE_INFINITY;
-      for (const segmentIndex of this.query(this.moveRegionSegmentHash, x, y, radius)) {
-        const segment = this.moveRegionSegments[segmentIndex];
-        if (segment.shapeIndex !== regionIndex) continue;
-        clearance = Math.min(clearance, segmentDistance(x, y, segment));
-      }
-      // Match ordinary movement barriers: a zero-radius point exactly on a
-      // floor boundary is not inside the walkable floor.
-      if (radius === 0 ? clearance > EPS : clearance >= radius - EPS) return true;
+    if (!this.pointInsideWalkableUnion(x, y)) return false;
+    for (const segmentIndex of this.query(this.moveRegionUnionSegmentHash, x, y, radius)) {
+      const clearance = segmentDistance(x, y, this.moveRegionUnionSegments[segmentIndex]);
+      // Match ordinary movement barriers: a zero-radius point on the actual
+      // exterior union boundary is blocked, while an internal shared seam is not.
+      if (radius === 0 ? clearance <= EPS : clearance < radius - EPS) return false;
     }
-    return false;
+    return true;
   }
 
   isWalkable(x: number, y: number, radius: number): boolean {
