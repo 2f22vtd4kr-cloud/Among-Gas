@@ -1482,7 +1482,7 @@ export default function VectorCollisionEditor() {
 
       <section style={{ display: "flex", gap: 8, padding: 8, alignItems: "center", flexWrap: "wrap", background: "#182633", borderBottom: "1px solid #334c5e" }}>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
-          <input type="checkbox" checked={blocksMove} onChange={event => setBlocksMove(event.target.checked)} />
+          <input type="checkbox" checked={blocksMove} disabled={tool === "region" || tool === "hole"} onChange={event => setBlocksMove(event.target.checked)} />
           Blocks movement
         </label>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
