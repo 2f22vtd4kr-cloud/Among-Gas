@@ -9,7 +9,7 @@
  */
 import {
   buildCollisionGrid,
-  buildPreciseVisionGrid,
+  buildPreciseCollisionGrid,
   isPlayerPositionWalkable,
   isBlocked,
   isLineOfSightClear,
@@ -45,10 +45,11 @@ export { NO_TARGET };
 /** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
 const movementGrid: CollisionWorld = getProductionCollisionWorld();
-// The red-line reference authors movement barriers, not vision occluders.
-// Match the server's independent vision grid so bots never choose a task point
-// that the authoritative interaction-visibility check will reject.
-const sightGrid = buildPreciseVisionGrid();
+// Until independently authored sight geometry is approved and wired into
+// the authoritative server interaction checks, bots must use the exact same
+// fine-grid LOS source as wsServer. Using the separate preview vision grid here
+// made bot observations stricter than server-visible interactions.
+const sightGrid = buildPreciseCollisionGrid();
 const NAV_COLS = BOT_NAVIGATION_GEOMETRY.cols;
 const NAV_ROWS = BOT_NAVIGATION_GEOMETRY.rows;
 const NAV_CELL_X = BOT_NAVIGATION_GEOMETRY.cellX;
