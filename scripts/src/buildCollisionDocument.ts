@@ -221,7 +221,7 @@ function componentOuterContours(
     if (x === 0 || labels[y * w + x - 1] !== componentId) add(x, y + 1, x, y, 3);
   }
   const used = new Uint8Array(edges.length);
-  const priority = [1, 3, 2, 0];
+  const priority = [1, 0, 3, 2];
   const loops: Point[][] = [];
   for (let start = 0; start < edges.length; start++) {
     if (used[start]) continue;
