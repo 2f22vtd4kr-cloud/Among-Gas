@@ -359,6 +359,11 @@ function segmentIntersectsRect(
   segment: Segment,
   minX: number, minY: number, maxX: number, maxY: number,
 ): boolean {
+  const padding = segment.strokeRadius ?? 0;
+  minX -= padding;
+  minY -= padding;
+  maxX += padding;
+  maxY += padding;
   const a: Point = [segment.ax, segment.ay];
   const b: Point = [segment.bx, segment.by];
   if (pointInRect(a, minX, minY, maxX, maxY) || pointInRect(b, minX, minY, maxX, maxY)) return true;
@@ -688,10 +693,13 @@ export class CollisionWorld {
   isWalkable(x: number, y: number, radius: number): boolean {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
+    if (this.moveRegions.length > 0 && !this.insideWalkableRegion(x, y, radius)) return false;
     if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
-      const nearest = segmentDistance(x, y, this.moveSegments[index]);
-      if (radius === 0 ? nearest <= EPS : nearest < radius - EPS) return false;
+      const segment = this.moveSegments[index];
+      const nearest = segmentDistance(x, y, segment);
+      const clearance = radius + (segment.strokeRadius ?? 0);
+      if (clearance === 0 ? nearest <= EPS : nearest < clearance - EPS) return false;
     }
     return true;
   }
@@ -717,6 +725,8 @@ export class CollisionWorld {
     const minY = y - PLAYER_SPRITE_HALF_HEIGHT_PX - PLAYER_SPAWN_CLEARANCE_PX;
     const maxY = y + PLAYER_SPRITE_HALF_HEIGHT_PX + PLAYER_SPAWN_CLEARANCE_PX;
     if (minX < 0 || maxX > this.w || minY < 0 || maxY > this.h) return false;
+    if (this.moveRegions.length > 0 &&
+        !this.rectangleInsideWalkableRegion(minX, minY, maxX, maxY)) return false;
 
     const centerX = (minX + maxX) / 2;
     const centerY = (minY + maxY) / 2;
