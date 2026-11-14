@@ -356,13 +356,25 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
   let holeCount = regionLoops.get(isolatedIdName)?.length ?? 0;
   for (const component of interior) {
     if (component.id === main.id || component.id === isolated.id || component.area < 16) continue;
-    const centerX = (component.minX + component.maxX + 1) / 2;
-    const centerY = (component.minY + component.maxY + 1) / 2;
-    const inIsolated = (regionLoops.get(isolatedIdName) ?? []).some(loop => sourcePointInPolygon(centerX, centerY, loop));
-    const inMain = (regionLoops.get(mainId) ?? []).some(loop => sourcePointInPolygon(centerX, centerY, loop));
+
+    // A component's bounding-box centre is not proof that its whole contour is
+    // enclosed by a walkable region. Long/concave components can straddle a
+    // region boundary while their centre remains inside it; assigning those
+    // components as holes can leave part of the alleged obstacle walkable.
+    // Only subtract a component when every source contour point is contained
+    // by one of the selected parent region contours.
+    const loops = componentOuterContours(labels, w, h, component);
+    const isContainedBy = (parentLoops: readonly Point[][]) =>
+      loops.length > 0 && loops.every(loop =>
+        parentLoops.some(parentLoop =>
+          loop.every(point => sourcePointInPolygon(point[0], point[1], parentLoop)),
+        ),
+      );
+    const inIsolated = isContainedBy(regionLoops.get(isolatedIdName) ?? []);
+    const inMain = isContainedBy(regionLoops.get(mainId) ?? []);
     const parentRegionId = inIsolated ? isolatedIdName : inMain ? mainId : null;
     if (!parentRegionId) continue;
-    const loops = componentOuterContours(labels, w, h, component);
+
     for (const [loopIndex, loop] of loops.entries()) {
       const simplified = simplifySourceLoop(loop);
       if (simplified.length < 3) continue;
