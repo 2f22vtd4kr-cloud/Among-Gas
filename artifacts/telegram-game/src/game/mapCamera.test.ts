@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { getCameraViewport, stepCameraCenter } from "./mapCamera";
+import { getCameraViewport, MapCameraController, stepCameraCenter } from "./mapCamera";
 
 const near = (actual: number, expected: number, message: string) => {
   assert.ok(Math.abs(actual - expected) < 1e-9, message + ": " + actual + " !== " + expected);
@@ -80,4 +80,49 @@ assert.throws(
   RangeError,
 );
 
-console.log("MAP CAMERA TESTS PASSED: frame-rate-independent easing, DPR scaling, viewport bounds and invalid input");
+const controller = new MapCameraController({ x: 0, y: 0 });
+const controllerFrame = controller.update(
+  { x: 100, y: 50 },
+  16,
+  {
+    canvasWidth: 1170,
+    canvasHeight: 2532,
+    dpr: 3,
+    zoom: 0.7,
+    mapWidth: 3224,
+    mapHeight: 1858,
+  },
+);
+near(controllerFrame.center.x, oneFrame.x, "controller preserves the existing smoothing contract");
+near(controllerFrame.center.y, oneFrame.y, "controller preserves vertical smoothing");
+const controllerExpectedViewport = getCameraViewport({
+  canvasWidth: 1170,
+  canvasHeight: 2532,
+  dpr: 3,
+  zoom: 0.7,
+  centerX: oneFrame.x,
+  centerY: oneFrame.y,
+  mapWidth: 3224,
+  mapHeight: 1858,
+});
+near(controllerFrame.viewport.srcX, controllerExpectedViewport.srcX, "controller viewport matches the pure helper");
+near(controllerFrame.viewport.srcY, controllerExpectedViewport.srcY, "controller viewport matches the pure helper");
+const snappedCenter = controller.snap({ x: 3210, y: 1840 });
+near(snappedCenter.x, 3210, "authoritative corrections snap camera X immediately");
+near(snappedCenter.y, 1840, "authoritative corrections snap camera Y immediately");
+const clampedAfterSnap = controller.getViewport({
+  canvasWidth: 390,
+  canvasHeight: 844,
+  dpr: 1,
+  zoom: 1,
+  mapWidth: 3224,
+  mapHeight: 1858,
+});
+near(clampedAfterSnap.srcX, 3224 - 390, "controller clamps snapped camera at right edge");
+near(clampedAfterSnap.srcY, 1858 - 844, "controller clamps snapped camera at bottom edge");
+const exposedCenter = controller.getCenter();
+exposedCenter.x = -999;
+near(controller.getCenter().x, 3210, "controller never exposes mutable internal center state");
+assert.throws(() => controller.snap({ x: Number.NaN, y: 0 }), RangeError);
+
+console.log("MAP CAMERA TESTS PASSED: frame-rate-independent easing, DPR scaling, viewport bounds, correction snaps and immutable camera state");

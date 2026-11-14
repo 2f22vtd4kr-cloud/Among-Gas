@@ -73,3 +73,67 @@ export function getCameraViewport(input: CameraViewportInput): CameraViewport {
     scale: zoom * dpr,
   };
 }
+
+
+export interface CameraFrameInput {
+  canvasWidth: number;
+  canvasHeight: number;
+  dpr: number;
+  zoom: number;
+  mapWidth: number;
+  mapHeight: number;
+}
+
+export interface CameraFrame {
+  center: CameraPoint;
+  viewport: CameraViewport;
+}
+
+/** Stateful camera boundary around the pure smoothing and viewport functions. */
+export class MapCameraController {
+  private center: CameraPoint;
+
+  constructor(initialCenter: CameraPoint) {
+    this.assertPoint(initialCenter);
+    this.center = { ...initialCenter };
+  }
+
+  /** Snap only for an authoritative correction or an explicit fixture position. */
+  snap(center: CameraPoint): CameraPoint {
+    this.assertPoint(center);
+    this.center = { ...center };
+    return this.getCenter();
+  }
+
+  /** Smoothly follow the locally predicted player position. */
+  follow(target: CameraPoint, deltaMs: number): CameraPoint {
+    this.center = stepCameraCenter(this.center, target, deltaMs);
+    return this.getCenter();
+  }
+
+  getCenter(): CameraPoint {
+    return { ...this.center };
+  }
+
+  getViewport(input: CameraFrameInput): CameraViewport {
+    return getCameraViewport({
+      ...input,
+      centerX: this.center.x,
+      centerY: this.center.y,
+    });
+  }
+
+  update(target: CameraPoint, deltaMs: number, input: CameraFrameInput): CameraFrame {
+    const center = this.follow(target, deltaMs);
+    return {
+      center,
+      viewport: this.getViewport(input),
+    };
+  }
+
+  private assertPoint(point: CameraPoint): void {
+    if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      throw new RangeError("Camera center coordinates must be finite");
+    }
+  }
+}

@@ -77,7 +77,7 @@ import { getCharacterGhostMotion } from '../game/characterGhostMotion';
 import { getPlayerVisionRadius } from '../game/mapVisionPolicy';
 import { getLocalPlayerCanvasPosition, getRemotePlayerCanvasPosition } from '../game/mapPlayerCanvasPosition';
 import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../game/remotePlayerAnimation';
-import { getCameraViewport, stepCameraCenter } from '../game/mapCamera';
+import { MapCameraController } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
 import TaskListPanel from '../components/TaskListPanel';
@@ -1017,8 +1017,10 @@ export default function GameMap() {
     /** Wire-space position at last send (for delta filtering). */
     let lastSentWireX = -1;
     let lastSentWireY = -1;
-    let cameraX = playerStateRef.current.x;
-    let cameraY = playerStateRef.current.y;
+    const cameraController = new MapCameraController({
+      x: playerStateRef.current.x,
+      y: playerStateRef.current.y,
+    });
     let hasAuthoritativePosition = false;
 
     const frame = (ts: number) => {
@@ -1038,8 +1040,7 @@ export default function GameMap() {
           const correctedX = fromWire(incoming.wireX, MAP_W);
           const correctedY = fromWire(incoming.wireY, MAP_H);
           playerStateRef.current = { ...playerStateRef.current, x: correctedX, y: correctedY };
-          cameraX = correctedX;
-          cameraY = correctedY;
+          cameraController.snap({ x: correctedX, y: correctedY });
           hasAuthoritativePosition = true;
           pending.length = 0;
         } else if (classification.kind === 'acknowledgement') {
@@ -1063,8 +1064,7 @@ export default function GameMap() {
         const fixture = (window as Window & { __AG_TASK_FIXTURE_POSITION?: { x: number; y: number } }).__AG_TASK_FIXTURE_POSITION;
         if (fixture) {
           playerStateRef.current = { ...playerStateRef.current, x: fixture.x, y: fixture.y };
-          cameraX = fixture.x;
-          cameraY = fixture.y;
+          cameraController.snap({ x: fixture.x, y: fixture.y });
         }
       }
       const { x: px, y: py, pose, facingLeft } = playerStateRef.current;
@@ -1100,25 +1100,23 @@ export default function GameMap() {
       const ch  = canvas.height;
       const dpr = getRenderDpr();
 
-      // Camera smoothing and viewport math live in pure helpers so their
-      // frame-rate and world-boundary contracts can be tested independently.
-      const cameraCenter = stepCameraCenter(
-        { x: cameraX, y: cameraY },
+      // The camera controller owns follow smoothing and viewport state; its pure
+      // math helpers keep frame-rate and world-boundary contracts testable.
+      const cameraFrame = cameraController.update(
         { x: px, y: py },
         dtMs,
+        {
+          canvasWidth: cw,
+          canvasHeight: ch,
+          dpr,
+          zoom: ZOOM,
+          mapWidth: MAP_W,
+          mapHeight: MAP_H,
+        },
       );
-      cameraX = cameraCenter.x;
-      cameraY = cameraCenter.y;
-      const viewport = getCameraViewport({
-        canvasWidth: cw,
-        canvasHeight: ch,
-        dpr,
-        zoom: ZOOM,
-        centerX: cameraX,
-        centerY: cameraY,
-        mapWidth: MAP_W,
-        mapHeight: MAP_H,
-      });
+      const cameraX = cameraFrame.center.x;
+      const cameraY = cameraFrame.center.y;
+      const viewport = cameraFrame.viewport;
       const { srcX, srcY, srcW, srcH, scale } = viewport;
       // Camera/collision coordinates use canonical world pixels. The loaded
       // PNG and higher-resolution WebP do not share the same source-pixel scale.
