@@ -156,16 +156,16 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
   return atlas;
 }
 
-let cachedSourceUrl: string | null = null;
+let cachedAtlasUrl: string | null = null;
 let cachedAtlasPromise: Promise<HTMLCanvasElement> | null = null;
 
-/** Load and palette-expand the source once per application session. */
+/** Load the build-time baked 18-palette atlas; no palette generation runs on mobile. */
 export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const sourceUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\/+/, '')}`;
+  const atlasUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\/+/, '')}`;
 
-  if (cachedSourceUrl === sourceUrl && cachedAtlasPromise) return cachedAtlasPromise;
-  cachedSourceUrl = sourceUrl;
+  if (cachedAtlasUrl === atlasUrl && cachedAtlasPromise) return cachedAtlasPromise;
+  cachedAtlasUrl = atlasUrl;
   cachedAtlasPromise = new Promise<HTMLCanvasElement>((resolve, reject) => {
     const loadStartedAt = performance.now();
     const image = new Image();
@@ -174,7 +174,7 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
     const fail = () => {
       if (processing) return;
       processing = true;
-      reject(new Error(`Unable to load character atlas: ${sourceUrl}`));
+      reject(new Error(`Unable to load baked character atlas: ${atlasUrl}`));
     };
     const ready = async () => {
       if (processing || !image.complete || image.naturalWidth <= 0) return;
@@ -183,8 +183,16 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
         if (typeof image.decode === 'function') {
           try { await image.decode(); } catch { /* a successful load remains a usable decode fallback */ }
         }
-        const sourceReadyAt = performance.now();
-        const atlas = createCharacterAtlas(image);
+        if (image.naturalWidth !== CHARACTER_SHEET_WIDTH || image.naturalHeight !== CHARACTER_SHEET_HEIGHT) {
+          throw new Error(`Unexpected baked character atlas dimensions: ${image.naturalWidth}×${image.naturalHeight}`);
+        }
+        const atlas = document.createElement('canvas');
+        atlas.width = CHARACTER_SHEET_WIDTH;
+        atlas.height = CHARACTER_SHEET_HEIGHT;
+        const context = atlas.getContext('2d');
+        if (!context) throw new Error('Could not allocate the baked character atlas canvas');
+        context.imageSmoothingEnabled = false;
+        context.drawImage(image, 0, 0);
         const atlasReadyAt = performance.now();
         if (import.meta.env.DEV) {
           (window as Window & {
@@ -197,16 +205,18 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
               atlasWidth: number;
               atlasHeight: number;
               generatedPaletteCount: number;
+              bakedAsset: boolean;
             };
           }).__AG_CHARACTER_ATLAS_METRICS = {
-            sourceLoadMs: sourceReadyAt - loadStartedAt,
-            generationMs: atlasReadyAt - sourceReadyAt,
+            sourceLoadMs: atlasReadyAt - loadStartedAt,
+            generationMs: 0,
             totalMs: atlasReadyAt - loadStartedAt,
             sourceWidth: image.naturalWidth,
             sourceHeight: image.naturalHeight,
             atlasWidth: atlas.width,
             atlasHeight: atlas.height,
             generatedPaletteCount: GENERATED_CHARACTER_PALETTES.length,
+            bakedAsset: true,
           };
         }
         resolve(atlas);
@@ -217,13 +227,13 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
 
     image.onload = () => { void ready(); };
     image.onerror = fail;
-    image.src = sourceUrl;
+    image.src = atlasUrl;
     if (image.complete && image.naturalWidth > 0) void ready();
   });
 
   cachedAtlasPromise.catch(() => {
-    if (cachedSourceUrl === sourceUrl) {
-      cachedSourceUrl = null;
+    if (cachedAtlasUrl === atlasUrl) {
+      cachedAtlasUrl = null;
       cachedAtlasPromise = null;
     }
   });
