@@ -67,3 +67,6 @@ Thumbs.db
 
 # Generated production vector collision artifacts (reproducibly rebuilt before dev/build)
 /lib/shared/src/collision/generatedDocument.ts
+
+# Build-time generated character atlas (source remains committed)
+artifacts/telegram-game/public/sprites/characters-18.png
