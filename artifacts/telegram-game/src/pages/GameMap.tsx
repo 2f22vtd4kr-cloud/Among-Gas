@@ -123,6 +123,7 @@ function getTaskInteractionMockTaskId(mode: string | null): number | null {
 
 export default function GameMap() {
   const taskInteractionGrid = useMemo(() => buildPreciseCollisionGrid(), []);
+  const taskInteractionSightGrid = useMemo(() => buildPreciseVisionGrid(), []);
   const { language } = useLanguage();
   const { joystickSide, controlLayout } = useGameSettings();
   const languageRef = useRef(language);
@@ -377,7 +378,7 @@ export default function GameMap() {
         const dy = pad.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           pad.x, pad.y + FEET_OFFSET_Y,
           24,
@@ -430,7 +431,7 @@ export default function GameMap() {
         const dy = body.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           body.x, body.y + FEET_OFFSET_Y,
         );
@@ -487,7 +488,7 @@ export default function GameMap() {
         const dy = rp.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightClear(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           rp.x, rp.y + FEET_OFFSET_Y,
         );
@@ -578,7 +579,7 @@ export default function GameMap() {
         const distSq = dx * dx + dy * dy;
         // Ghosts intentionally keep through-wall task access on both client and server.
         const hasLineOfSight = amIDead || isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x,
           myPos.y + FEET_OFFSET_Y,
           def.x,
@@ -927,7 +928,7 @@ export default function GameMap() {
         const dy = vent.y - myPos.y;
         const distSq = dx * dx + dy * dy;
         const hasLineOfSight = isLineOfSightToInteractionTarget(
-          taskInteractionGrid,
+          taskInteractionSightGrid,
           myPos.x, myPos.y + FEET_OFFSET_Y,
           vent.x, vent.y + FEET_OFFSET_Y,
           20,
@@ -965,8 +966,8 @@ export default function GameMap() {
     const fogCtx = fogCanvas.getContext('2d');
     if (!fogCtx) return;
 
-    const grid = taskInteractionGrid;
-    const fineGrid = grid;
+    const fineGrid = taskInteractionGrid;
+    const visionGrid = taskInteractionSightGrid;
     const taskMockMode = new URLSearchParams(window.location.search).get('mock');
     const taskMockTaskId = import.meta.env.VITE_ENABLE_GAME_MOCKS === 'true'
       ? getTaskInteractionMockTaskId(taskMockMode)
@@ -986,7 +987,7 @@ export default function GameMap() {
           if (distanceSq > range * range || (nearest && distanceSq >= nearest.distanceSq)) continue;
           if (!isPlayerPositionWalkable(fineGrid, x, y)) continue;
           const hasLineOfSight = isLineOfSightToInteractionTarget(
-            fineGrid, x, y + FEET_OFFSET_Y,
+            visionGrid, x, y + FEET_OFFSET_Y,
             fixtureTask.x, fixtureTask.y + FEET_OFFSET_Y,
             fixtureTask.interactionTargetRadiusPx ?? 24,
           );
@@ -1002,9 +1003,9 @@ export default function GameMap() {
     }
     // Player prediction and visual occlusion share the canonical fine grid.
     // Compact geometry remains available to navigation consumers that need A*.
-    const shadowGrid = buildShadowGrid(fineGrid);
-    const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
-    const narrowSegments = buildFineShadowSegments(fineGrid);
+    const shadowGrid = buildShadowGrid(visionGrid);
+    const narrowOccluders = buildNarrowShadowOccluders(visionGrid, true);
+    const narrowSegments = buildFineShadowSegments(visionGrid);
     if (!isSpawnWalkable(fineGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
