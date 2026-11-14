@@ -1685,11 +1685,24 @@ try {
   // The camera's base image is intentionally the 0.5× overview; native 2×
   // detail is rendered from the independently loaded visible tile set above it.
   // Wait for the tile overlay as well, so this test cannot pass on the overview alone.
-  await cameraPage.waitForFunction(() => {
-    const status = window.__AG_TILE_DEBUG;
-    return !!status && status.ready === true && status.visibleTotal > 0 &&
-      status.visibleLoaded === status.visibleTotal && status.failed === 0;
-  }, undefined, { timeout: 20_000 });
+  try {
+    await cameraPage.waitForFunction(() => {
+      const status = window.__AG_TILE_DEBUG;
+      return !!status && status.ready === true && status.visibleTotal > 0 &&
+        status.visibleLoaded === status.visibleTotal && status.failed === 0;
+    }, undefined, { timeout: 20_000 });
+  } catch (error) {
+    const tileDiagnostics = await cameraPage.evaluate(() => ({
+      visibilityState: document.visibilityState,
+      tileStatus: window.__AG_TILE_DEBUG ?? null,
+      camera: window.__AG_CAMERA_DEBUG ?? null,
+      mapRequests: performance.getEntriesByType('resource')
+        .map(entry => entry.name)
+        .filter(name => /map-overview|map-tiles/.test(name)),
+    }));
+    console.error('Camera tile readiness diagnostics:', JSON.stringify(tileDiagnostics));
+    throw error;
+  }
   const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
   const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
     const context = canvas.getContext('2d');
