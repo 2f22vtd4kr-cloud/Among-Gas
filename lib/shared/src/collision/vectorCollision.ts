@@ -166,7 +166,8 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (typeof shape.closed !== "boolean") errors.push(prefix + ".closed must be boolean");
     if (shape.castsShadow !== undefined && typeof shape.castsShadow !== "boolean") {
       errors.push(prefix + ".castsShadow must be boolean when supplied");
-    }\n    if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
+    }
+    if (typeof shape.blocksMove !== "boolean" || typeof shape.blocksSight !== "boolean") {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
     if (shape.blocksMove !== true && shape.blocksSight !== true) {
