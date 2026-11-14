@@ -52,6 +52,29 @@ try {
     if (!atlas) throw new Error('Runtime character atlas was not exposed in the development build');
     const context = atlas.getContext('2d');
     if (!context) throw new Error('Runtime character atlas has no readable 2D context');
+
+    // Compare the build-time baked asset against the exact legacy in-memory
+    // renderer. The baked PNG is accepted only when every RGBA byte matches.
+    const [spriteModule, atlasModule] = await Promise.all([
+      import('/src/game/characterSprites.ts'),
+      import('/src/game/characterAtlas.ts'),
+    ]);
+    const sourceImage = new Image();
+    sourceImage.src = spriteModule.CHARACTER_SOURCE_SHEET_PATH;
+    await sourceImage.decode();
+    const referenceAtlas = atlasModule.createCharacterAtlas(sourceImage);
+    const referenceContext = referenceAtlas.getContext('2d');
+    if (!referenceContext) throw new Error('Reference atlas has no readable 2D context');
+    const referencePixels = referenceContext.getImageData(0, 0, atlas.width, atlas.height).data;
+    const bakedPixels = context.getImageData(0, 0, atlas.width, atlas.height).data;
+    let differentBytes = 0;
+    let maxChannelDelta = 0;
+    for (let offset = 0; offset < bakedPixels.length; offset++) {
+      const delta = Math.abs(bakedPixels[offset] - referencePixels[offset]);
+      if (delta !== 0) differentBytes++;
+      maxChannelDelta = Math.max(maxChannelDelta, delta);
+    }
+    const atlasMetrics = window.__AG_CHARACTER_ATLAS_METRICS ?? null;
     const cellWidth = 161;
     const colors = [
       'teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta', 'red', 'blue',
@@ -138,6 +161,8 @@ try {
     return {
       width: atlas.width,
       height: atlas.height,
+      bakedAsset: atlasMetrics?.bakedAsset === true,
+      bakedParity: { differentBytes, maxChannelDelta },
       cellWidth,
       columns: atlas.width / cellWidth,
       sourceAssetGitBlobSha,
@@ -155,6 +180,9 @@ try {
     };
   }, { poseWindows, sourceAssetGitBlobSha });
 
+  assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
+  assert.deepEqual(metrics.bakedParity, { differentBytes: 0, maxChannelDelta: 0 },
+    'every baked RGBA byte must match the legacy in-memory renderer exactly');
   assert.equal(metrics.width, 2898, 'runtime atlas width must be 18 × 161px');
   assert.equal(metrics.height, 1401, 'runtime atlas must preserve the authored source height');
   assert.equal(metrics.columns, 18, 'runtime canvas must contain eighteen palette columns');
