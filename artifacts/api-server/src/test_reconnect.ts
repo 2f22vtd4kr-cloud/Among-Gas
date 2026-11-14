@@ -249,4 +249,83 @@ function wait(ms: number): Promise<void> {
   manager.disposeLobby(lobby);
 }
 
+// Reconnecting during the discussion window restores the same meeting and
+// does not restart either server-owned meeting timer or prematurely allow votes.
+{
+  const { manager, lobby, sockets, users } = createMatch(296_307_400);
+  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), true);
+  const meeting = lobby.meeting!;
+  assert.equal(meeting.votingOpen, false);
+  const discussionTimer = meeting.discussionTimer;
+  const votingTimer = meeting.votingTimer;
+  assert.ok(discussionTimer, 'discussion timer is active');
+  assert.ok(votingTimer, 'overall meeting timer is active');
+  assert.equal(manager.sendMeetingChat(lobby, 0, 'Keep the discussion evidence-based.'), true);
+
+  const returningSlot = 2;
+  assert.equal(manager.markPlayerDisconnected(users[returningSlot], sockets[returningSlot].ws, 1_000), lobby);
+  const replacement = fakeSocket();
+  assert.equal(manager.joinLobby(lobby.code, users[returningSlot], 'Player 2 restored', replacement.ws), lobby);
+  const snapshot = manager.buildResumeSnapshot(lobby, returningSlot)!;
+
+  assert.equal(snapshot.phase, 'MEETING');
+  assert.ok(snapshot.meeting);
+  assert.equal(snapshot.meeting.votingOpen, false,
+    'a reconnect during discussion must not restore into voting early');
+  assert.equal(snapshot.meeting.hasVoted, false);
+  assert.ok(snapshot.meeting.elapsedMs >= 0);
+  assert.ok(snapshot.meeting.messages.some(message =>
+    message.text === 'Keep the discussion evidence-based.',
+  ));
+  assert.strictEqual(lobby.meeting, meeting, 'reattachment retains the original authoritative meeting');
+  assert.strictEqual(meeting.discussionTimer, discussionTimer,
+    'reattachment must not restart the discussion countdown');
+  assert.strictEqual(meeting.votingTimer, votingTimer,
+    'reattachment must not restart the overall meeting timeout');
+  assert.equal(manager.castVote(lobby, returningSlot, NO_TARGET), false,
+    'a restored player cannot vote before the discussion timer opens voting');
+
+  assert.equal(manager.markGameplayReady(lobby, returningSlot), true);
+  assert.equal(manager.isPlayerReady(lobby, returningSlot), true);
+  manager.disposeLobby(lobby);
+}
+
+// A vote cast before disconnect is retained across same-slot reattachment.
+// The resumed client is told hasVoted=true and cannot submit a second vote.
+{
+  const { manager, lobby, sockets, users } = createMatch(307_418_500);
+  assert.equal(manager.callMeeting(lobby, 0, NO_TARGET), true);
+  const meeting = lobby.meeting!;
+  meeting.votingOpen = true;
+  const returningSlot = 1;
+  assert.equal(manager.castVote(lobby, returningSlot, NO_TARGET), true);
+  const votingTimer = meeting.votingTimer;
+
+  assert.equal(manager.markPlayerDisconnected(users[returningSlot], sockets[returningSlot].ws, 1_000), lobby);
+  const replacement = fakeSocket();
+  assert.equal(manager.joinLobby(lobby.code, users[returningSlot], 'Player 1 restored', replacement.ws), lobby);
+  const snapshot = manager.buildResumeSnapshot(lobby, returningSlot)!;
+
+  assert.ok(snapshot.meeting);
+  assert.equal(snapshot.meeting.votingOpen, true);
+  assert.equal(snapshot.meeting.hasVoted, true,
+    'resume snapshot must preserve the reconnecting player\'s already-cast vote state');
+  assert.ok(snapshot.meeting.votes.some(vote =>
+    vote.slot === returningSlot && vote.targetSlot === NO_TARGET,
+  ));
+  assert.strictEqual(lobby.meeting, meeting);
+  assert.strictEqual(meeting.votingTimer, votingTimer,
+    'reattachment must not extend the vote deadline');
+  assert.equal(manager.markGameplayReady(lobby, returningSlot), true);
+  assert.equal(manager.castVote(lobby, returningSlot, 0), false,
+    'the same identity cannot vote twice after reconnect');
+
+  for (const voterSlot of [0, 2, 3]) {
+    assert.equal(manager.castVote(lobby, voterSlot, NO_TARGET), true);
+  }
+  assert.equal(lobby.phase, 'ROAMING', 'the retained vote participates in the original tally');
+  assert.equal(lobby.meeting, null);
+  manager.disposeLobby(lobby);
+}
+
 console.log('PASS: authenticated reconnect grace, same-slot reattachment, stale socket isolation, per-player readiness, resume snapshot privacy/state, meeting restore/votes, implicit skips and expiry');
