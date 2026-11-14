@@ -357,6 +357,10 @@ export class CollisionWorld {
   private readonly moveSolidHash = new Map<string, number[]>();
   private readonly sightSolidHash = new Map<string, number[]>();
   private readonly shadowSolidHash = new Map<string, number[]>();
+  private readonly moveRegions: Solid[] = [];
+  private readonly moveRegionHash = new Map<string, number[]>();
+  private readonly moveRegionSegments: Segment[] = [];
+  private readonly moveRegionSegmentHash = new Map<string, number[]>();
 
   constructor(shapes: readonly CollisionShape[], w = DEFAULT_W, h = DEFAULT_H, cell = DEFAULT_CELL) {
     if (![w, h, cell].every(Number.isFinite) || w <= 0 || h <= 0 || cell < 8) {
@@ -409,6 +413,18 @@ export class CollisionWorld {
         if (shape.castsShadow ?? shape.blocksSight) {
           const index = this.shadowSolids.push(solid) - 1;
           this.insertSolid(this.shadowSolidHash, index, solid);
+        }
+        if (shape.walkableRegion === true) {
+          const regionIndex = this.moveRegions.push(solid) - 1;
+          this.insertSolid(this.moveRegionHash, regionIndex, solid);
+          for (let edgeIndex = 0; edgeIndex < shape.points.length; edgeIndex++) {
+            const a = shape.points[edgeIndex], b = shape.points[(edgeIndex + 1) % shape.points.length];
+            const segment: Segment = {
+              ax: a[0], ay: a[1], bx: b[0], by: b[1], shapeIndex: regionIndex,
+            };
+            const segmentIndex = this.moveRegionSegments.push(segment) - 1;
+            this.insert(this.moveRegionSegmentHash, segmentIndex, segment);
+          }
         }
       }
     });
@@ -515,9 +531,29 @@ export class CollisionWorld {
       this.insideSolids(x, y, this.moveSolids, this.moveSolidHash);
   }
 
+  private insideWalkableRegion(x: number, y: number, radius: number): boolean {
+    for (const regionIndex of this.querySolids(this.moveRegionHash, x, y, radius)) {
+      const region = this.moveRegions[regionIndex];
+      const [minX, minY, maxX, maxY] = region.bounds;
+      if (x - radius < minX || x + radius > maxX ||
+          y - radius < minY || y + radius > maxY) continue;
+      if (!pointInPolygon(x, y, region.points)) continue;
+      if (radius === 0) return true;
+      let clearance = Number.POSITIVE_INFINITY;
+      for (const segmentIndex of this.query(this.moveRegionSegmentHash, x, y, radius)) {
+        const segment = this.moveRegionSegments[segmentIndex];
+        if (segment.shapeIndex !== regionIndex) continue;
+        clearance = Math.min(clearance, segmentDistance(x, y, segment));
+      }
+      if (clearance >= radius - EPS) return true;
+    }
+    return false;
+  }
+
   isWalkable(x: number, y: number, radius: number): boolean {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
+    if (this.moveRegions.length > 0 && !this.insideWalkableRegion(x, y, radius)) return false;
     if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
       const nearest = segmentDistance(x, y, this.moveSegments[index]);
