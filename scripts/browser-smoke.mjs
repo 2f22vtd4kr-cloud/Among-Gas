@@ -1035,7 +1035,7 @@ try {
   await waitForRoleRevealToFinish(page);
   const sabotageBanner = page.getByTestId('game-sabotage-banner');
   await sabotageBanner.waitFor({ state: 'visible', timeout: 10_000 });
-  await sabotageBanner.getByText(/1\\/2 починено/).waitFor({ state: 'visible' });
+  await sabotageBanner.getByText('1/2 починено').waitFor({ state: 'visible' });
 
   await page.goto(origin + '/?mock=task-interaction', { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
