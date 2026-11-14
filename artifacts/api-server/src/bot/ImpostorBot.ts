@@ -378,26 +378,41 @@ export class ImpostorBot extends BotAgent {
     });
     const generation = ++this._huntPlanningGeneration;
     const roundStartedAtMs = lobby.startedAtMs;
+    const observationId = this.recordObservation(self, 'impostor-hunt-target', {
+      visibleTargets,
+      killCooldownMs: self.killCooldownMs,
+    }, fallbackSlot);
     this._huntPlanningPending = true;
 
     void requestGroqDialogue(apiKey, messages, Date.now() + 8_000, { temperature: 0.2, jsonMode: true })
       .then(response => {
         if (!response || lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self ||
             !self.alive || lobby.startedAtMs !== roundStartedAtMs ||
-            this._state !== 'HUNTING' || this._huntTargetSlot !== fallbackSlot) return;
+            this._state !== 'HUNTING' || this._huntTargetSlot !== fallbackSlot) {
+          this.resolveObservation(observationId, 'stale', fallbackSlot, 'round or hunt target changed before model response');
+          return;
+        }
         const choice = parseImpostorHuntChoice(
           response,
           visibleTargets.map(target => target.slot),
         );
-        if (choice === null || choice === fallbackSlot) return;
+        if (choice === null || choice === fallbackSlot) {
+          this.resolveObservation(observationId, 'fallback', fallbackSlot, 'model returned no valid visible target alternative');
+          return;
+        }
         // Re-check visibility at commit time. A response cannot make the
         // impostor pursue a slot that has already left its legitimate view.
-        if (!this._visibleCrewPlayers(lobby, self).some(player => player.slot === choice)) return;
+        if (!this._visibleCrewPlayers(lobby, self).some(player => player.slot === choice)) {
+          this.resolveObservation(observationId, 'fallback', fallbackSlot, 'selected target was no longer visible at commit');
+          return;
+        }
         this._huntTargetSlot = choice;
         this._huntLastKnownPosition = null;
         this.clearPath();
+        this.resolveObservation(observationId, 'model', choice);
       })
       .catch(() => {
+        this.resolveObservation(observationId, 'fallback', fallbackSlot, 'provider request failed');
         // The local visible-isolation heuristic is the fail-closed fallback.
       })
       .finally(() => {
@@ -466,18 +481,32 @@ export class ImpostorBot extends BotAgent {
       killCooldownMs: self.killCooldownMs,
     });
     const roundStartedAtMs = lobby.startedAtMs;
+    const observationId = this.recordObservation(self, 'impostor-sabotage', {
+      availableSystems,
+      visibleCrewCount: visibleCrew.length,
+      visibleCrewPairsWithin350Px,
+      publicTaskProgressPct: Math.round(publicTaskProgressPct * 10) / 10,
+      killCooldownMs: self.killCooldownMs,
+    }, fallback);
     this._sabotagePlanningPending = true;
 
     void requestGroqDialogue(apiKey, messages, Date.now() + 8_000, { temperature: 0.2, jsonMode: true })
       .then(response => {
         if (lobby.phase !== 'ROAMING' || lobby.players.get(self.slot) !== self || !self.alive ||
-            lobby.startedAtMs !== roundStartedAtMs) return;
+            lobby.startedAtMs !== roundStartedAtMs) {
+          this.resolveObservation(observationId, 'stale', fallback, 'round changed before sabotage decision commit');
+          return;
+        }
         const chosen = response
           ? parseImpostorSabotageChoice(response, availableIds)
           : null;
-        this._commitSabotageChoice(lobby, self, manager, (chosen ?? fallback) as SabotageSystemId);
+        const selected = (chosen ?? fallback) as SabotageSystemId;
+        this.resolveObservation(observationId, chosen === null ? 'fallback' : 'model', selected,
+          chosen === null ? 'no valid model sabotage choice' : undefined);
+        this._commitSabotageChoice(lobby, self, manager, selected);
       })
       .catch(() => {
+        this.resolveObservation(observationId, 'fallback', fallback, 'provider request failed');
         if (lobby.phase === 'ROAMING' && lobby.players.get(self.slot) === self && self.alive &&
             lobby.startedAtMs === roundStartedAtMs) {
           this._commitSabotageChoice(lobby, self, manager, fallback);
