@@ -4,6 +4,7 @@ import {
   COLLISION_CUTOVER_REQUIRED_REGIONS,
   validateCollisionCutoverEvidence,
 } from "../../lib/shared/src/collision/releaseReadiness.js";
+import type { CollisionCutoverEvidence } from "../../lib/shared/src/collision/releaseReadiness.js";
 import { MAP_AUTHORING_ZONES } from "../../lib/shared/src/collision/mapZones.js";
 import { createDefaultZoneReviewRecord } from "../../lib/shared/src/collision/zoneReview.js";
 
@@ -87,7 +88,7 @@ assert.ok(emptyErrors.some((error) => error.includes("task-1")),
 assert.ok(emptyErrors.some((error) => error.includes("C38")),
   "missing disconnected-region owner dispositions must fail closed");
 
-const selfApproved = structuredClone(completeEvidence);
+const selfApproved: CollisionCutoverEvidence = structuredClone(completeEvidence);
 selfApproved.zoneReviews[0].reviewer = {
   name: "Map Author",
   reviewedAt: "2026-11-14T08:10:00.000Z",
@@ -97,12 +98,12 @@ selfApproved.zoneReviews[0].reviewer = {
 assert.ok(validateCollisionCutoverEvidence(selfApproved).some((error) => error.includes("Independent reviewer")),
   "self-review must not satisfy zone approval");
 
-const deferredBay = structuredClone(completeEvidence);
+const deferredBay: CollisionCutoverEvidence = structuredClone(completeEvidence);
 deferredBay.disconnectedRegions.find((region) => region.id === "C38")!.decision = "deferred";
 assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) => error.includes("C38: design disposition remains deferred")),
   "the ambiguous vehicle-service bay must remain blocked from cut-over while deferred");
 
-const noSightParity = structuredClone(completeEvidence);
+const noSightParity: CollisionCutoverEvidence = structuredClone(completeEvidence);
 noSightParity.parity.interactionLineOfSight = false;
 assert.ok(validateCollisionCutoverEvidence(noSightParity).some((error) => error.includes("line-of-sight parity")),
   "movement acceptance cannot stand in for interaction sight acceptance");
