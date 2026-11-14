@@ -219,6 +219,9 @@ export function validatePublicBotDialogueResponse(
     return { reply: null, reason: 'model response was not an object' };
   }
   const object = payload as Record<string, unknown>;
+  if (Object.keys(object).some(key => key !== 'reply' && key !== 'evidence')) {
+    return { reply: null, reason: 'model response contained unexpected envelope fields' };
+  }
   if (typeof object.reply !== 'string' || object.reply.trim().length === 0 || object.reply.trim().length > 180) {
     return { reply: null, reason: 'reply was empty or exceeded 180 characters' };
   }
@@ -243,6 +246,9 @@ export function validatePublicBotDialogueResponse(
       return { reply: null, reason: 'evidence entry was not an object' };
     }
     const evidence = item as Record<string, unknown>;
+    if (Object.keys(evidence).some(key => key !== 'speaker' && key !== 'quote')) {
+      return { reply: null, reason: 'evidence entry contained unexpected fields' };
+    }
     if (typeof evidence.speaker !== 'string' || typeof evidence.quote !== 'string' ||
         evidence.speaker.length > 32 || evidence.quote.length === 0 || evidence.quote.length > 220) {
       return { reply: null, reason: 'evidence speaker or quote had an invalid shape' };
@@ -258,6 +264,9 @@ export function validatePublicBotDialogueResponse(
     evidenceTexts.push(quote);
   }
 
+  if (!reply.trim().endsWith('?') && evidenceTexts.length === 0) {
+    return { reply: null, reason: 'non-question dialogue had no exact transcript evidence' };
+  }
   const factualVerb = /\b(?:saw|went|left|entered|killed|fixed|repaired|vented|sabotaged|completed|used|walked|stood|came|found|accused|voted|said|says|claimed|claims|told|was|were|is|are|has|have)\b/i;
   const factualSentences = reply.split(/(?<=[.!?])\s+/u).filter(sentence =>
     factualVerb.test(sentence) && !sentence.trim().endsWith('?'),
