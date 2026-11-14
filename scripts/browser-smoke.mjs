@@ -1397,8 +1397,10 @@ try {
     y: dragBox.y + dragBox.height / 2,
     id: 1,
   };
+  // The action cluster is 264px wide and remains fully inside the 390px
+  // gameplay viewport. 64% is reachable; 68% would be clamped by its safe bounds.
   const touchEnd = {
-    x: previewBox.x + previewBox.width * 0.68,
+    x: previewBox.x + previewBox.width * 0.64,
     y: previewBox.y + previewBox.height * 0.62,
     id: 1,
   };
@@ -1418,7 +1420,7 @@ try {
   await layoutSettings.getByTestId('control-layout-save').click();
   let movedSettingsBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(movedSettingsBox, 'the persistent action bar remains available at its saved custom position');
-  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.68) < 3,
+  assert.ok(Math.abs(movedSettingsBox.x + movedSettingsBox.width / 2 - 390 * 0.64) < 3,
     'dragged action bar X position must be applied to the gameplay HUD');
   assert.ok(Math.abs(movedSettingsBox.y + movedSettingsBox.height / 2 - 844 * 0.62) < 3,
     'dragged action bar Y position must be applied to the gameplay HUD');
@@ -1435,7 +1437,7 @@ try {
   const reloadedPreviewBox = await reloadedSettings.getByTestId('control-layout-preview').boundingBox();
   const reloadedDragBox = await reloadedSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(reloadedPreviewBox && reloadedDragBox, 'saved layout preview is available after reload');
-  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(reloadedDragBox.x + reloadedDragBox.width / 2 - (reloadedPreviewBox.x + reloadedPreviewBox.width * 0.64)) < 3,
     'saved action bar X position must hydrate after reload');
   assert.ok(Math.abs(reloadedDragBox.y + reloadedDragBox.height / 2 - (reloadedPreviewBox.y + reloadedPreviewBox.height * 0.62)) < 3,
     'saved action bar Y position must hydrate after reload');
@@ -1468,7 +1470,7 @@ try {
   const cancelledPreviewBox = await cancelledSettings.getByTestId('control-layout-preview').boundingBox();
   const cancelledDragBox = await cancelledSettings.getByTestId('control-drag-killReport').boundingBox();
   assert.ok(cancelledPreviewBox && cancelledDragBox, 'cancelled editor can be reopened');
-  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.68)) < 3,
+  assert.ok(Math.abs(cancelledDragBox.x + cancelledDragBox.width / 2 - (cancelledPreviewBox.x + cancelledPreviewBox.width * 0.64)) < 3,
     'Cancel must preserve the previously saved X position');
   assert.ok(Math.abs(cancelledDragBox.y + cancelledDragBox.height / 2 - (cancelledPreviewBox.y + cancelledPreviewBox.height * 0.62)) < 3,
     'Cancel must preserve the previously saved Y position');
@@ -1657,8 +1659,8 @@ try {
     }
   }
 
-  // Move the local player from the verified, open main-lobby spawn while the
-  // camera follows. Keep this separate from task-interaction: that fixture
+  // Move the local player along the verified east-generator aisle while
+  // the camera follows. Keep this separate from task-interaction: that fixture
   // deliberately relocates the player beside task 4, where nearby geometry can
   // constrain movement and is covered by the task/collision-specific checks.
   // The character's suit centroid should remain stable near canvas center.
@@ -1675,16 +1677,32 @@ try {
     return route.abort();
   });
   await cameraPage.goto(`${origin}/?mock=task-playing&skipReveal=true`, { waitUntil: 'domcontentloaded' });
+  // Keep the camera fixture foregrounded: background tabs may throttle rAF,
+  // while tile readiness is published from the gameplay render loop.
+  await cameraPage.bringToFront();
   await cameraPage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
   await cameraPage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   // The camera's base image is intentionally the 0.5× overview; native 2×
   // detail is rendered from the independently loaded visible tile set above it.
   // Wait for the tile overlay as well, so this test cannot pass on the overview alone.
-  await cameraPage.waitForFunction(() => {
-    const status = window.__AG_TILE_DEBUG;
-    return !!status && status.ready === true && status.visibleTotal > 0 &&
-      status.visibleLoaded === status.visibleTotal && status.failed === 0;
-  }, undefined, { timeout: 20_000 });
+  try {
+    await cameraPage.waitForFunction(() => {
+      const status = window.__AG_TILE_DEBUG;
+      return !!status && status.ready === true && status.visibleTotal > 0 &&
+        status.visibleLoaded === status.visibleTotal && status.failed === 0;
+    }, undefined, { timeout: 20_000 });
+  } catch (error) {
+    const tileDiagnostics = await cameraPage.evaluate(() => ({
+      visibilityState: document.visibilityState,
+      tileStatus: window.__AG_TILE_DEBUG ?? null,
+      camera: window.__AG_CAMERA_DEBUG ?? null,
+      mapRequests: performance.getEntriesByType('resource')
+        .map(entry => entry.name)
+        .filter(name => /map-overview|map-tiles/.test(name)),
+    }));
+    console.error('Camera tile readiness diagnostics:', JSON.stringify(tileDiagnostics));
+    throw error;
+  }
   const readCameraTransform = () => cameraPage.evaluate(() => window.__AG_CAMERA_DEBUG ?? null);
   const readWorldFingerprint = (playerX, playerY) => cameraPage.locator('canvas').evaluate((canvas, player) => {
     const context = canvas.getContext('2d');
@@ -1738,7 +1756,7 @@ try {
   // drag. Starting the trace only after mouse.move() misses most of the walk:
   // Playwright's stepped drag can already carry the player to nearby geometry.
   await cameraPage.evaluate(() => {
-    const trace = { active: true, samples: [] };
+    const trace = { active: true, samples: [], maxSamples: 24 };
     window.__AG_CAMERA_TRACE = trace;
     const capture = () => {
       if (!trace.active) return;
@@ -1747,6 +1765,10 @@ try {
           Number.isFinite(sample.playerX) && Number.isFinite(sample.playerY)) {
         trace.samples.push({ ...sample });
       }
+      if (trace.samples.length >= trace.maxSamples) {
+        trace.active = false;
+        return;
+      }
       requestAnimationFrame(capture);
     };
     requestAnimationFrame(capture);
@@ -1754,10 +1776,17 @@ try {
   await cameraPage.waitForTimeout(50);
   await cameraPage.mouse.move(joystickX, joystickY);
   await cameraPage.mouse.down();
-  await cameraPage.mouse.move(joystickX + 42, joystickY, { steps: 6 });
-  // Keep the pointer held for the entire trace window so the browser samples
-  // include both acceleration/motion and the camera-follow response.
-  await cameraPage.waitForTimeout(420);
+  // Keep the movement long enough to prove camera follow, but short
+  // enough to stay inside the viewport's camera-centering envelope.
+  await cameraPage.mouse.move(joystickX + 16, joystickY, { steps: 6 });
+  // Bound the held-pointer trace to 24 animation frames. Earlier samples
+  // establish the baseline; the final quarter must still show >30px of real
+  // movement, while the whole trace stays inside the camera-centering envelope.
+  await cameraPage.waitForFunction(
+    () => window.__AG_CAMERA_TRACE?.samples.length >= 24,
+    undefined,
+    { timeout: 5000 },
+  );
   await cameraPage.mouse.up();
   const cameraSamples = await cameraPage.evaluate(() => {
     const trace = window.__AG_CAMERA_TRACE;
@@ -1841,6 +1870,154 @@ try {
     'a remounted joystick must not inherit the pointer that was held before the modal opened');
   await cameraPage.mouse.up();
   await cameraPage.close();
+
+  // Exercise the development-only vector editor on a real touch-capable
+  // browser context. This remains a scratch document: no candidate or zone is
+  // saved to the server and live gameplay geometry is never mutated.
+  const editorPage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    deviceScaleFactor: 2,
+    isMobile: true,
+    hasTouch: true,
+  });
+  editorPage.on('pageerror', error => failures.push(error.message));
+  await editorPage.route('**/*', route => {
+    const url = route.request().url();
+    if (url.startsWith(origin)) return route.continue();
+    return route.abort();
+  });
+  await editorPage.goto(`${origin}/dev/collision`, { waitUntil: 'domcontentloaded' });
+  const editorCanvas = editorPage.locator('canvas[data-editor-loaded="true"]');
+  await editorCanvas.waitFor({ state: 'visible', timeout: 20_000 });
+  for (const label of ['Draw wall', 'Draw solid', 'Walk test', 'Vision preview (hold)', 'Loupe (4×)']) {
+    const target = editorPage.getByRole('button', { name: label, exact: true });
+    const box = await target.boundingBox();
+    assert.ok(box && box.height >= 48,
+      `mobile vector editor control "${label}" must retain a 48 CSS-pixel touch target`);
+  }
+
+  const editorTouch = await editorPage.context().newCDPSession(editorPage);
+  const touchEvent = async (type, points = []) => editorTouch.send('Input.dispatchTouchEvent', {
+    type,
+    touchPoints: points.map(point => ({ id: point.id, x: point.x, y: point.y })),
+  });
+  const editorScreenPoint = async world => editorCanvas.evaluate((canvas, point) => {
+    const rect = canvas.getBoundingClientRect();
+    const zoom = Number(canvas.dataset.zoom);
+    const cameraX = Number(canvas.dataset.cameraX);
+    const cameraY = Number(canvas.dataset.cameraY);
+    return {
+      x: rect.left + (point[0] - cameraX) * zoom,
+      y: rect.top + (point[1] - cameraY) * zoom,
+    };
+  }, world);
+  const editorTap = async world => {
+    const point = await editorScreenPoint(world);
+    await touchEvent('touchStart', [{ ...point, id: 1 }]);
+    await touchEvent('touchEnd');
+  };
+  const editorStroke = async (from, to) => {
+    const start = await editorScreenPoint(from);
+    const end = await editorScreenPoint(to);
+    await touchEvent('touchStart', [{ ...start, id: 1 }]);
+    for (let step = 1; step <= 8; step++) {
+      await touchEvent('touchMove', [{
+        id: 1,
+        x: start.x + (end.x - start.x) * step / 8,
+        y: start.y + (end.y - start.y) * step / 8,
+      }]);
+    }
+    await touchEvent('touchEnd');
+  };
+
+  await editorPage.getByRole('button', { name: 'Draw wall', exact: true }).click();
+  await editorStroke([1000, 900], [1200, 900]);
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-active-chain-point-count')) >= 2,
+  );
+  await editorPage.getByRole('button', { name: 'Finish chain', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 1,
+  );
+
+  // A second touch stroke begins 120 world pixels from the existing endpoint.
+  // The 48px touch hit radius must snap it to that endpoint, not leave a gap.
+  await editorStroke([1320, 900], [1450, 900]);
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-active-chain-point-count')) >= 2,
+  );
+  await editorPage.getByRole('button', { name: 'Finish chain', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 2,
+  );
+  const snappedWallPoints = await editorCanvas.getAttribute('data-shape-points').then(JSON.parse);
+  assert.ok(Math.abs(snappedWallPoints[1][0][0] - 1200) <= 1 &&
+    Math.abs(snappedWallPoints[1][0][1] - 900) <= 1,
+    'touch snapping must attach the second wall to the first wall endpoint');
+
+  await editorPage.getByRole('button', { name: 'Draw solid', exact: true }).click();
+  await editorTap([2100, 1200]);
+  await editorTap([2600, 1200]);
+  await editorTap([2350, 1750]);
+  await editorPage.getByRole('button', { name: 'Close polygon', exact: true }).click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
+  );
+  const closedLoopMetadata = await editorCanvas.getAttribute('data-shape-metadata').then(JSON.parse);
+  assert.equal(closedLoopMetadata[2].closed, true,
+    'three touch vertices and Close polygon must commit a closed solid loop');
+
+  await editorPage.getByRole('button', { name: 'Walk test', exact: true }).click();
+  await editorTap([800, 1500]);
+  await editorTap([1000, 1500]);
+  await editorPage.waitForFunction(() =>
+    document.querySelector('canvas')?.getAttribute('data-walk-point-count') === '2' &&
+    document.querySelector('canvas')?.getAttribute('data-walk-status')?.startsWith('PASS:'),
+  );
+  await editorPage.getByRole('button', { name: 'Vision preview (hold)', exact: true }).click();
+  const visionPoint = await editorScreenPoint([1800, 1600]);
+  await touchEvent('touchStart', [{ ...visionPoint, id: 1 }]);
+  await editorPage.waitForFunction(() =>
+    document.querySelector('canvas')?.getAttribute('data-vision-preview') === 'true',
+    null,
+    { timeout: 5_000 },
+  );
+  await touchEvent('touchEnd');
+  assert.equal(await editorCanvas.getAttribute('data-vision-preview'), 'true',
+    'a stationary touch hold must activate candidate-only vision preview');
+
+  await editorPage.getByRole('button', { name: 'Pan / zoom', exact: true }).click();
+  const editorBox = await editorCanvas.boundingBox();
+  assert.ok(editorBox);
+  const beforePinchZoom = Number(await editorCanvas.getAttribute('data-zoom'));
+  const pinchX = editorBox.x + editorBox.width / 2;
+  const pinchY = editorBox.y + editorBox.height / 2;
+  await touchEvent('touchStart', [
+    { id: 2, x: pinchX - 30, y: pinchY },
+    { id: 3, x: pinchX + 30, y: pinchY },
+  ]);
+  await touchEvent('touchMove', [
+    { id: 2, x: pinchX - 55, y: pinchY },
+    { id: 3, x: pinchX + 55, y: pinchY },
+  ]);
+  await touchEvent('touchEnd');
+  await editorPage.waitForFunction(previous =>
+    Number(document.querySelector('canvas')?.getAttribute('data-zoom')) > previous * 1.1,
+  beforePinchZoom);
+  await editorTouch.detach();
+
+  // Draft autosave/restore must survive reload without writing a server zone.
+  await editorPage.waitForTimeout(400);
+  await editorPage.reload({ waitUntil: 'domcontentloaded' });
+  await editorCanvas.waitFor({ state: 'visible', timeout: 20_000 });
+  const restoreDraft = editorPage.getByRole('button', { name: 'Restore local draft', exact: true });
+  await restoreDraft.waitFor({ state: 'visible', timeout: 10_000 });
+  await restoreDraft.click();
+  await editorPage.waitForFunction(() =>
+    Number(document.querySelector('canvas')?.getAttribute('data-shape-count')) === 3,
+  );
+  await editorPage.screenshot({ path: join(visualQaDir, 'vector-editor-mobile-touch-acceptance.png'), fullPage: true });
+  await editorPage.close();
 
   assert.deepEqual(failures, [], `browser page errors: ${failures.join('; ')}`);
 

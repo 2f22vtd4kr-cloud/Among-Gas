@@ -21,7 +21,18 @@ try {
     isMobile: true,
     hasTouch: true,
   });
-  await page.goto(`${origin}/?mock=playing`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${origin}/?mock=task-playing`, { waitUntil: 'domcontentloaded' });
+
+  const actionBar = page.getByTestId('game-action-bar');
+  await actionBar.waitFor({ state: 'visible', timeout: 30_000 });
+  const actionBarPosition = await actionBar.evaluate(element => {
+    const rect = element.getBoundingClientRect();
+    return { centerX: rect.left + rect.width / 2, centerY: rect.top + rect.height / 2 };
+  });
+  assert.ok(actionBarPosition.centerX > 195,
+    'persistent Report / Use action cluster must occupy the bottom-right half of a 390px phone');
+  assert.ok(actionBarPosition.centerY > 844 * 0.55,
+    'persistent action cluster must remain in the lower thumb zone');
 
   const settingsButton = page.getByRole('button', { name: /Settings|Настройки/ });
   await settingsButton.waitFor({ state: 'visible', timeout: 30_000 });

@@ -89,6 +89,7 @@ async function main() {
   try {
     const hostId = 981_001;
     const guestId = 981_002;
+    const thirdId = 981_003;
     const host = await connect(hostId, 'ReconnectHost');
     sockets.push(host);
     send(host, [0x10, 0x01]);
@@ -107,6 +108,15 @@ async function main() {
     assert.equal(guestSlot[2], 1, 'guest joins slot 1');
     await waitFor(guest, packet =>
       packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+    );
+
+    const third = await connect(thirdId, 'ReconnectThird');
+    sockets.push(third);
+    send(third, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const thirdSlot = await waitFor(third, packet => packet[0] === 0x10 && packet[1] === 0x05);
+    assert.equal(thirdSlot[2], 2, 'third client joins slot 2');
+    await waitFor(third, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
     );
 
     send(host, [0x12]);
@@ -131,7 +141,7 @@ async function main() {
     assert.equal(resumedSlot[2], 0, 'reconnected identity must retain its original slot');
 
     const resumedRoster = await waitFor(replacement, packet =>
-      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
     );
     assert.equal(parseRoomCode(resumedRoster), roomCode, 'reattachment must remain in the original room');
 
@@ -146,8 +156,8 @@ async function main() {
     assert.ok(Array.isArray(snapshot.players));
     assert.deepEqual(
       snapshot.players.map(player => player.slot).sort((a, b) => a - b),
-      [0, 1],
-      'snapshot roster preserves the same two slots',
+      [0, 1, 2],
+      'snapshot roster preserves all three original slots',
     );
     assert.ok(Array.isArray(snapshot.playerPositions));
     const ownPosition = snapshot.playerPositions.find(position => position.slot === 0);
@@ -164,7 +174,7 @@ async function main() {
     assert.ok(snapshot.players.every(player =>
       !Object.prototype.hasOwnProperty.call(player, 'tgUserId'),
     ));
-    assert.doesNotMatch(JSON.stringify(snapshot), /981001|981002/,
+    assert.doesNotMatch(JSON.stringify(snapshot), /981001|981002|981003/,
       'resume snapshot must not disclose Telegram user IDs');
 
     // Replacement closes the old transport. Its late close event must not
@@ -189,15 +199,117 @@ async function main() {
       'a late reconnect must not rebroadcast readiness and disturb connected players',
     );
 
+    // Reconnect a second client while the authoritative match is in DISCUSSION.
+    // The restored player must receive the meeting snapshot, not a stale ROAMING
+    // snapshot or a new lobby slot.
+    send(replacement, [0x13, 0xFF]);
+    await Promise.all([
+      waitFor(replacement, packet => packet[0] === 0x1B && packet[1] === 0x00 && packet[2] === 0xFF,
+        3000, 'emergency meeting on replacement host'),
+      waitFor(guest, packet => packet[0] === 0x1B && packet[1] === 0x00 && packet[2] === 0xFF,
+        3000, 'emergency meeting on connected guest'),
+      waitFor(third, packet => packet[0] === 0x1B && packet[1] === 0x00 && packet[2] === 0xFF,
+        3000, 'emergency meeting on third client'),
+    ]);
+
+    guest.ws.close();
+    await waitForClose(guest);
+    const reconnectedGuest = await connect(guestId, 'ReconnectGuest');
+    sockets.push(reconnectedGuest);
+    send(reconnectedGuest, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const rejoinedSlot = await waitFor(reconnectedGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x05,
+    );
+    assert.equal(rejoinedSlot[2], 1, 'meeting reconnect must preserve the guest slot');
+    await waitFor(reconnectedGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
+    );
+    const meetingResumeFrame = await waitFor(reconnectedGuest, packet => packet[0] === 0x25);
+    assert.equal(meetingResumeFrame[1], 0x01, 'meeting resume snapshot schema version must be 1');
+    const meetingSnapshot = JSON.parse(meetingResumeFrame.subarray(2).toString('utf8'));
+    assert.equal(meetingSnapshot.phase, 'MEETING');
+    assert.equal(meetingSnapshot.mySlot, 1);
+    assert.equal(meetingSnapshot.hostSlot, 0);
+    assert.equal(meetingSnapshot.meeting.reporterSlot, 0);
+    assert.equal(meetingSnapshot.meeting.bodySlot, 0xFF);
+    assert.equal(meetingSnapshot.meeting.votingOpen, false,
+      'a reconnect during discussion must not advance the meeting into voting');
+    assert.equal(meetingSnapshot.meeting.hasVoted, false);
+    assert.ok(Array.isArray(meetingSnapshot.meeting.messages));
+
+    console.log('--- Reconnect the same client after the authoritative discussion timer opens voting ---');
+    await new Promise(resolve => setTimeout(resolve, 15_150));
+    reconnectedGuest.ws.close();
+    await waitForClose(reconnectedGuest);
+    const votingGuest = await connect(guestId, 'ReconnectGuest');
+    sockets.push(votingGuest);
+    send(votingGuest, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const votingRejoinSlot = await waitFor(votingGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x05,
+    );
+    assert.equal(votingRejoinSlot[2], 1, 'voting reconnect must preserve the guest slot');
+    await waitFor(votingGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
+    );
+    const votingResumeFrame = await waitFor(votingGuest, packet => packet[0] === 0x25);
+    const votingSnapshot = JSON.parse(votingResumeFrame.subarray(2).toString('utf8'));
+    assert.equal(votingSnapshot.phase, 'MEETING');
+    assert.equal(votingSnapshot.mySlot, 1);
+    assert.equal(votingSnapshot.meeting.votingOpen, true,
+      'a reconnect during voting must restore the authoritative open-vote state');
+    assert.equal(votingSnapshot.meeting.hasVoted, false,
+      'a player who disconnected before voting must not inherit a phantom vote');
+    assert.ok(Array.isArray(votingSnapshot.meeting.messages));
+
+    // Readiness is per-slot across reconnects, including a player who rejoins
+    // after the meeting timer has opened voting. The vote handler deliberately
+    // rejects actions until this restored transport acknowledges readiness.
+    const votingReadyCount = votingGuest.msgs.filter(packet =>
+      packet[0] === 0x24 && packet[1] === 0x01,
+    ).length;
+    send(votingGuest, [0x23]);
+    await waitFor(votingGuest, packet => packet[0] === 0x24 && packet[1] === 0x01,
+      3000, 'targeted readiness acknowledgement after voting reconnect');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(votingGuest.msgs.filter(packet =>
+      packet[0] === 0x24 && packet[1] === 0x01,
+    ).length, votingReadyCount + 1,
+    'voting reconnect readiness must be acknowledged exactly once');
+
+    // Three equal votes (one for each target, including skip) create a true
+    // three-way tie without the two-player parity rule ending the match.
+    send(replacement, [0x14, 1]);
+    send(votingGuest, [0x14, 0]);
+    send(third, [0x14, 0xFF]);
+    const tieResults = await Promise.all([
+      waitFor(replacement, packet => packet[0] === 0x1C, 3000, 'host vote result after voting reconnect'),
+      waitFor(votingGuest, packet => packet[0] === 0x1C, 3000, 'restored guest vote result'),
+      waitFor(third, packet => packet[0] === 0x1C, 3000, 'third client tied vote result'),
+    ]);
+    for (const result of tieResults) {
+      assert.equal(result[1], 0xFF, 'three-way tie must preserve the no-ejection result');
+      assert.equal(result[2], 0x00, 'with one impostor and two crew, a tied vote must not award either team a win');
+    }
+
+    console.log('PASS: live WebSocket reconnect during voting restores same slot, open ballot and valid no-ejection tally');
+    console.log('PASS: live WebSocket reconnect during active meeting restores same slot and authoritative discussion state');
     console.log('PASS: live active-match WebSocket reconnect, same-slot identity, 0x25/v1 snapshot, old-socket retirement and targeted readiness');
   } finally {
+    const closing = sockets.map(socket => socket.ws.readyState === WebSocket.CLOSED
+      ? Promise.resolve()
+      : new Promise(resolve => socket.ws.once('close', resolve)));
     for (const socket of sockets) {
-      try { socket.ws.close(); } catch {}
+      try { if (socket.ws.readyState !== WebSocket.CLOSED) socket.ws.close(); } catch {}
     }
+    await Promise.all(closing);
   }
 }
 
-main().catch(error => {
+main().then(() => {
+  // The server-side discussion timer is intentionally live; this standalone
+  // integration process exits after all transports have been closed.
+  process.exit(0);
+}).catch(error => {
   console.error('WEBSOCKET RECONNECT TEST FAILED:', error);
-  process.exitCode = 1;
+  process.exit(1);
 });

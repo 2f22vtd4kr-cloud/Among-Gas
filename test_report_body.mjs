@@ -256,6 +256,52 @@ async function main() {
       assert.equal(packet[1], reporter.slot, 'meeting identifies the actual reporter');
       assert.equal(packet[2], victim.slot, 'meeting identifies the exact killed player/body');
     }
+    console.log('--- Verify live discussion relay and reject votes before the discussion timer opens ---');
+    const discussionText = 'I saw the body near the service bay. Did anyone witness the last movement?';
+    const discussionBytes = Buffer.from(discussionText, 'utf8');
+    send(reporter, [0x19, 0x01, discussionBytes.length, ...discussionBytes]);
+    const relayedMessages = await Promise.all(players.map(player => waitFor(
+      player,
+      packet => packet[0] === 0x19 && packet[1] === 0x02 &&
+        packet[2] === reporter.slot &&
+        packet.subarray(4, 4 + packet[3]).toString('utf8') === discussionText,
+      3000,
+      'server-relayed meeting discussion message',
+    )));
+    assert.equal(relayedMessages.length, 4, 'discussion transcript is broadcast to all connected clients');
+
+    const alivePlayers = players.filter(player => player.slot !== victim.slot);
+    assert.equal(alivePlayers.length, 3);
+    const earlyVoter = reporter; // a living crewmate, so the early vote is otherwise legal
+    send(earlyVoter, [0x14, impostor.slot]);
+    await sleep(150);
+    assert.equal(players.some(player => player.msgs.some(packet => packet[0] === 0x1C)), false,
+      'a vote sent during discussion must not prematurely tally the meeting');
+
+    console.log('--- Wait for the authoritative 15-second discussion window, then vote to eject the impostor ---');
+    await sleep(15_150);
+    for (const voter of alivePlayers.filter(player => player.slot !== earlyVoter.slot)) {
+      // The impostor votes for the reporter; the other crewmate votes for the impostor.
+      send(voter, [0x14, voter.slot === impostor.slot ? reporter.slot : impostor.slot]);
+    }
+    await sleep(150);
+    assert.equal(players.some(player => player.msgs.some(packet => packet[0] === 0x1C)), false,
+      'the server must wait for every connected living player vote before early tally');
+    send(earlyVoter, [0x14, impostor.slot]);
+
+    const voteResults = await Promise.all(players.map(player => waitFor(
+      player,
+      packet => packet[0] === 0x1C,
+      3000,
+      'authoritative meeting vote result and ejection',
+    )));
+    assert.equal(voteResults.length, 4, 'vote result is broadcast to every connected client');
+    for (const result of voteResults) {
+      assert.equal(result[1], impostor.slot, 'the plurality ejects the actual impostor slot');
+      assert.equal(result[2], 0x01, 'ejecting the sole impostor ends the game for crewmates');
+    }
+
+    console.log('PASS: live four-client report → discussion chat → voting gate → all-player vote → impostor ejection and crew win');
     console.log('PASS: real four-client kill → corpse broadcast → out-of-range rejection → in-range body report → meeting broadcast');
   } finally {
     for (const player of sockets) {

@@ -8,25 +8,31 @@
  * Subclasses implement tick() and chooseVote().
  */
 import {
-  CELL_X, CELL_Y, COLS, ROWS,
   buildCollisionGrid,
-  buildPreciseCollisionGrid,
-  isPlayerFootprintWalkableAtFeet,
+  buildPreciseVisionGrid,
   isPlayerPositionWalkable,
-  isPlayerPathWalkable,
+  isBlocked,
   isLineOfSightClear,
   isLineOfSightToInteractionTarget,
-  type Grid,
 } from '@workspace/shared/collisionMap';
 import {
   FEET_OFFSET_Y,
+  PLAYER_RADIUS,
+  PLAYER_HALF_WIDTH,
   MAP_W,
   MAP_H,
   MEETING_DISCUSSION_MS,
   MEETING_VOTING_MS,
 } from '@workspace/shared/coords';
 import { PathCache } from '@workspace/shared';
-import type { Point, PathGridGeometry } from '@workspace/shared';
+import {
+  BOT_NAVIGATION_GEOMETRY,
+  BOT_NAVIGATION_GRID,
+  isBotNavigationReachable,
+} from '@workspace/shared/collision/botNavigation';
+import { getProductionCollisionWorld } from '@workspace/shared/collision/productionWorld';
+import type { CollisionWorld } from '@workspace/shared/collision';
+import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
@@ -36,89 +42,90 @@ import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteRespons
 
 export { NO_TARGET };
 
-/** Collision grid shared across all bot agents (built once at module load). */
+/** Legacy compact grid retained for compatibility; bot movement uses the vector world below. */
 export const grid = buildCollisionGrid();
-const movementGrid = buildPreciseCollisionGrid();
-const NAV_COLS = COLS * 2;
-const NAV_ROWS = ROWS * 2;
-const NAV_CELL_X = CELL_X / 2;
-const NAV_CELL_Y = CELL_Y / 2;
-const navigationGeometry: PathGridGeometry = {
-  cols: NAV_COLS,
-  rows: NAV_ROWS,
-  cellX: NAV_CELL_X,
-  cellY: NAV_CELL_Y,
-};
+const movementGrid: CollisionWorld = getProductionCollisionWorld();
+// The red-line reference authors movement barriers, not vision occluders.
+// Match the server's independent vision grid so bots never choose a task point
+// that the authoritative interaction-visibility check will reject.
+const sightGrid = buildPreciseVisionGrid();
+const NAV_COLS = BOT_NAVIGATION_GEOMETRY.cols;
+const NAV_ROWS = BOT_NAVIGATION_GEOMETRY.rows;
+const NAV_CELL_X = BOT_NAVIGATION_GEOMETRY.cellX;
+const NAV_CELL_Y = BOT_NAVIGATION_GEOMETRY.cellY;
+const navigationGeometry = BOT_NAVIGATION_GEOMETRY;
+const navigationGrid = BOT_NAVIGATION_GRID;
+export { isBotNavigationReachable };
 
-/** Same three-circle foot footprint used by client prediction and server authority. */
-function canMoveToPlayer(collision: Grid, feetX: number, feetY: number): boolean {
-  return isPlayerFootprintWalkableAtFeet(collision, feetX, feetY);
+/** Empty routes represent cached pathfinding failure, not successful arrival. */
+export function hasCompletedNavigationRoute(route: readonly Point[] | null, index: number): boolean {
+  return route !== null && route.length > 0 && index >= route.length;
 }
 
 /**
- * Pathfinding uses grid cells, while live movement validates the character's
- * actual collision radius. Trace a clearance-aware navigation grid so A*
- * doesn't repeatedly send bots to cell-centres the real collision check
- * rejects (the old failure mode left a bot stationary forever at a task).
+ * Route invalidation compares the requested target at build time with its
+ * current position. It must not compare the target with the selected safe
+ * navigation-cell endpoint: that endpoint is intentionally offset by as much
+ * as the caller's arrival tolerance, and is not target drift.
  */
-function buildNavigationGrid(collision: Grid): Grid {
-  const result = new Uint8Array(NAV_COLS * NAV_ROWS);
-  for (let row = 0; row < NAV_ROWS; row++) {
-    for (let col = 0; col < NAV_COLS; col++) {
-      const index = row * NAV_COLS + col;
-      const x = (col + 0.5) * NAV_CELL_X;
-      const y = (row + 0.5) * NAV_CELL_Y;
-      result[index] = canMoveToPlayer(collision, x, y) ? 0 : 1;
-    }
+export function shouldRefreshNavigationRoute(
+  route: readonly Point[] | null,
+  index: number,
+  previousRequestedGoal: Point | null,
+  nextRequestedGoal: Point,
+  refreshDistance: number,
+): boolean {
+  if (route === null || hasCompletedNavigationRoute(route, index) || previousRequestedGoal === null) {
+    return true;
   }
-  return result;
+  return Math.hypot(
+    previousRequestedGoal.x - nextRequestedGoal.x,
+    previousRequestedGoal.y - nextRequestedGoal.y,
+  ) >= refreshDistance;
 }
 
-const navigationGrid = buildNavigationGrid(movementGrid);
+/**
+ * If a valid continuous player position lies in a blocked/coarse A* cell,
+ * connect it to the nearest safely reachable centre in the spawn component.
+ * Every connector is checked by the authoritative swept player footprint.
+ */
+function nearestCollisionSafeNavigationStart(feetStart: Point): Point | null {
+  const startCol = Math.floor(feetStart.x / NAV_CELL_X);
+  const startRow = Math.floor(feetStart.y / NAV_CELL_Y);
 
-/** Precompute the walkable component connected to the real spawn point. */
-function buildSpawnReachability(): Uint8Array {
-  const reachable = new Uint8Array(NAV_COLS * NAV_ROWS);
-  const startCol = Math.floor(SPAWN_X / NAV_CELL_X);
-  const startRow = Math.floor((SPAWN_Y + FEET_OFFSET_Y) / NAV_CELL_Y);
-  if (startCol < 0 || startCol >= NAV_COLS || startRow < 0 || startRow >= NAV_ROWS) return reachable;
-  const startIndex = startRow * NAV_COLS + startCol;
-  if (navigationGrid[startIndex] !== 0) return reachable;
-
-  const queue = [startIndex];
-  reachable[startIndex] = 1;
-  const directions: readonly [number, number, boolean][] = [
-    [0, -1, false], [0, 1, false], [-1, 0, false], [1, 0, false],
-    [-1, -1, true], [-1, 1, true], [1, -1, true], [1, 1, true],
-  ];
-  for (let head = 0; head < queue.length; head++) {
-    const index = queue[head];
-    const row = Math.floor(index / NAV_COLS);
-    const col = index - row * NAV_COLS;
-    for (const [dc, dr, diagonal] of directions) {
-      const nextCol = col + dc;
-      const nextRow = row + dr;
-      if (nextCol < 0 || nextCol >= NAV_COLS || nextRow < 0 || nextRow >= NAV_ROWS) continue;
-      const nextIndex = nextRow * NAV_COLS + nextCol;
-      if (reachable[nextIndex] || navigationGrid[nextIndex] !== 0) continue;
-      if (diagonal) {
-        if (navigationGrid[row * NAV_COLS + nextCol] !== 0 ||
-            navigationGrid[nextRow * NAV_COLS + col] !== 0) continue;
+  for (let radius = 0; radius <= 4; radius++) {
+    const candidates: Array<{ point: Point; distanceSquared: number }> = [];
+    for (let row = startRow - radius; row <= startRow + radius; row++) {
+      for (let col = startCol - radius; col <= startCol + radius; col++) {
+        if (Math.max(Math.abs(col - startCol), Math.abs(row - startRow)) !== radius ||
+            col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) continue;
+        const index = row * NAV_COLS + col;
+        if (navigationGrid[index] !== 0) continue;
+        const point = {
+          x: (col + 0.5) * NAV_CELL_X,
+          y: (row + 0.5) * NAV_CELL_Y,
+        };
+        if (!isBotNavigationReachable(point.x, point.y)) continue;
+        candidates.push({
+          point,
+          distanceSquared: (point.x - feetStart.x) ** 2 + (point.y - feetStart.y) ** 2,
+        });
       }
-      reachable[nextIndex] = 1;
-      queue.push(nextIndex);
+    }
+    candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
+    for (const candidate of candidates) {
+      const [x, y] = movementGrid.movePlayerAtFeet(
+        feetStart.x,
+        feetStart.y,
+        candidate.point.x - feetStart.x,
+        candidate.point.y - feetStart.y,
+      );
+      if (Math.hypot(x - candidate.point.x, y - candidate.point.y) <= 0.75) {
+        return candidate.point;
+      }
     }
   }
-  return reachable;
-}
-
-const spawnReachability = buildSpawnReachability();
-
-export function isBotNavigationReachable(feetX: number, feetY: number): boolean {
-  const col = Math.floor(feetX / NAV_CELL_X);
-  const row = Math.floor(feetY / NAV_CELL_Y);
-  if (col < 0 || col >= NAV_COLS || row < 0 || row >= NAV_ROWS) return false;
-  return spawnReachability[row * NAV_COLS + col] === 1;
+  return null;
 }
 
 /** Keep the bot inside navigation cells that A* can represent. */
@@ -129,22 +136,99 @@ function isNavigationPositionWalkable(feetX: number, feetY: number): boolean {
     navigationGrid[row * NAV_COLS + col] === 0;
 }
 
-/** Use the exact same 2px swept footprint check as human prediction and server authority. */
-function canTraverse(from: Point, to: Point): boolean {
-  // A fine-grid-valid point can still fall inside a blocked 2× navigation cell
-  // whose centre fails the bot's clearance test. Entering such a cell strands
-  // the bot because the next A* search rejects its start cell. Keep every bot
-  // endpoint in a cell that the navigation graph itself considers walkable.
-  if (!isNavigationPositionWalkable(to.x, to.y)) return false;
-  // Bot waypoints are stored in feet-space; the shared helper accepts the
-  // sprite anchor and applies the canonical feet offset internally.
-  return isPlayerPathWalkable(
-    movementGrid,
-    from.x,
-    from.y - FEET_OFFSET_Y,
-    to.x,
-    to.y - FEET_OFFSET_Y,
+/** Snap goals to the same cell centres returned by PathCache's A* waypoints. */
+function snapNavigationPoint(point: Point): Point {
+  const col = Math.floor(point.x / NAV_CELL_X);
+  const row = Math.floor((point.y + FEET_OFFSET_Y) / NAV_CELL_Y);
+  return {
+    x: (col + 0.5) * NAV_CELL_X,
+    y: (row + 0.5) * NAV_CELL_Y - FEET_OFFSET_Y,
+  };
+}
+
+/**
+ * Find nearby walkable graph nodes that are within the caller's arrival range
+ * of a continuous target. Chasing a moving player must end at a safe nav node,
+ * not require a straight swept-footprint segment from that node to the exact
+ * (off-centre) target coordinate; that final segment may cross a thin wall
+ * even when both positions are independently walkable.
+ */
+function nearbyCollisionSafeNavigationGoals(feetGoal: Point, maxDistance: number): Point[] {
+  if (!Number.isFinite(maxDistance) || maxDistance < 0) return [];
+  const minCol = Math.max(0, Math.floor((feetGoal.x - maxDistance) / NAV_CELL_X));
+  const maxCol = Math.min(NAV_COLS - 1, Math.floor((feetGoal.x + maxDistance) / NAV_CELL_X));
+  const minRow = Math.max(0, Math.floor((feetGoal.y - maxDistance) / NAV_CELL_Y));
+  const maxRow = Math.min(NAV_ROWS - 1, Math.floor((feetGoal.y + maxDistance) / NAV_CELL_Y));
+  const candidates: Array<{ point: Point; distanceSquared: number }> = [];
+
+  for (let row = minRow; row <= maxRow; row++) {
+    for (let col = minCol; col <= maxCol; col++) {
+      const index = row * NAV_COLS + col;
+      if (navigationGrid[index] !== 0) continue;
+      const point = {
+        x: (col + 0.5) * NAV_CELL_X,
+        y: (row + 0.5) * NAV_CELL_Y,
+      };
+      const dx = point.x - feetGoal.x;
+      const dy = point.y - feetGoal.y;
+      const distanceSquared = dx * dx + dy * dy;
+      if (distanceSquared > maxDistance * maxDistance ||
+          !isBotNavigationReachable(point.x, point.y)) continue;
+      candidates.push({ point, distanceSquared });
+    }
+  }
+
+  candidates.sort((a, b) => a.distanceSquared - b.distanceSquared);
+  return candidates.slice(0, 24).map(candidate => candidate.point);
+}
+
+/** Keep approach goals out of pinched wall gaps; leave extra room for the feet collider. */
+function hasApproachClearance(point: Point): boolean {
+  const feetY = point.y + FEET_OFFSET_Y;
+  const radius = PLAYER_RADIUS + 4;
+  return movementGrid.isWalkable(point.x - PLAYER_HALF_WIDTH, feetY, radius) &&
+    movementGrid.isWalkable(point.x, feetY, radius) &&
+    movementGrid.isWalkable(point.x + PLAYER_HALF_WIDTH, feetY, radius);
+}
+
+/** Return the actual safe feet endpoint, never the requested point near a blocked edge. */
+function traverseTo(from: Point, to: Point): Point | null {
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
   );
+  // The vector world is authoritative. Do not reject a safe continuous
+  // position merely because the centre of its coarse A* cell is blocked.
+  // Sliding may stop short of the requested point while still making safe
+  // progress along a wall, so return the actual swept endpoint.
+  if (Math.hypot(x - from.x, y - from.y) < 0.01) return null;
+  return { x, y };
+}
+
+/** Exact continuous swept-footprint test between adjacent A* cell centres. */
+function traverseVector(from: Point, to: Point): Point | null {
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
+  );
+  return Math.hypot(x - to.x, y - to.y) <= 0.75 ? { x, y } : null;
+}
+
+/** Distance from a point to a finite route segment. */
+/** A* may traverse a nav edge only when the exact player footprint can sweep it. */
+const validateProductionNavigationStep = (from: Point, to: Point): boolean => {
+  const [x, y] = movementGrid.movePlayerAtFeet(
+    from.x, from.y, to.x - from.x, to.y - from.y,
+  );
+  return Math.hypot(x - to.x, y - to.y) <= 0.75;
+};
+
+function distanceToSegment(point: Point, start: Point, end: Point): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
+    ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared,
+  ));
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
 }
 
 /** Pixel distance per 200ms tick ≈ 400px/s — legacy movement basis used by ghost tasks. */
@@ -155,9 +239,76 @@ export const BOT_MOVEMENT_STEP_PX = BOT_SPEED_PX / 2;
 
 /** Arrive when squared distance to goal is ≤ this (25px radius). */
 
+const BOT_DISCUSSION_MIN_GAP_MS = 3_200;
+const BOT_DISCUSSION_REPLY_MIN_GAP_MS = 1_600;
+const BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING = 4;
+
+interface MeetingBotDiscussionSchedule {
+  nextMessageAtMs: number;
+  lastMessageAtMs: number;
+  reservedMessages: number;
+  answeredQuestionKeys: Set<string>;
+}
+
+const meetingBotDiscussionSchedules = new WeakMap<object, MeetingBotDiscussionSchedule>();
+
+/**
+ * Reserve a single global speaking slot for all bots in this meeting.
+ * Ordinary turns retain the 3.2–3.9s meeting-wide cadence. A single selected
+ * responder may answer an unanswered public question after a shorter 1.6s
+ * human-like pause; the question key is then consumed so other bots cannot
+ * dog-pile the same prompt. Every turn still counts toward the meeting cap.
+ */
+export function reserveBotDiscussionSlot(
+  meeting: object,
+  nowMs: number,
+  slot: number,
+  livingBotCount: number,
+  questionReplyKey?: string,
+): boolean {
+  let schedule = meetingBotDiscussionSchedules.get(meeting);
+  if (!schedule) {
+    schedule = {
+      nextMessageAtMs: 0,
+      lastMessageAtMs: 0,
+      reservedMessages: 0,
+      answeredQuestionKeys: new Set<string>(),
+    };
+    meetingBotDiscussionSchedules.set(meeting, schedule);
+  }
+  const messageLimit = Math.min(
+    BOT_DISCUSSION_MAX_MESSAGES_PER_MEETING,
+    Math.max(1, Math.trunc(livingBotCount)),
+  );
+  if (schedule.reservedMessages >= messageLimit) return false;
+
+  const isQuestionReply = questionReplyKey !== undefined;
+  if (isQuestionReply) {
+    if (schedule.answeredQuestionKeys.has(questionReplyKey)) return false;
+    if (schedule.lastMessageAtMs > 0 &&
+        nowMs - schedule.lastMessageAtMs < BOT_DISCUSSION_REPLY_MIN_GAP_MS) return false;
+  } else if (nowMs < schedule.nextMessageAtMs) {
+    return false;
+  }
+
+  schedule.reservedMessages++;
+  schedule.lastMessageAtMs = nowMs;
+  if (isQuestionReply) schedule.answeredQuestionKeys.add(questionReplyKey);
+  // A reply is a real turn, so the normal minimum gap applies again after it.
+  // Deterministic variation avoids a metronomic cadence without allowing
+  // multiple agents to reserve the same turn in one 200ms frame.
+  schedule.nextMessageAtMs = nowMs + BOT_DISCUSSION_MIN_GAP_MS + (Math.abs(slot) % 3) * 350;
+  return true;
+}
+
 export abstract class BotAgent {
   protected readonly pathCache = new PathCache();
+  private navigationRoute: Point[] | null = null;
+  private navigationRouteGoal: Point | null = null;
+  private navigationRouteIndex = 0;
+  private navigationRouteOrigin: Point | null = null;
   private discussionMeeting: Lobby['meeting'] = null;
+  private discussionSentInMeeting = false;
   private nextDiscussionChatAtMs = 0;
   private lastDiscussionMessageKey = '';
   private discussionRequestPending = false;
@@ -316,12 +467,13 @@ export abstract class BotAgent {
     if (this.discussionMeeting !== meeting) {
       this.discussionMeeting = meeting;
       this.lastDiscussionMessageKey = '';
+      this.discussionSentInMeeting = false;
       this.discussionRequestPending = false;
       this.lastDiscussionReplyAtMs = 0;
       this.nextDiscussionChatAtMs = Date.now() + 500 + (self.slot % 5) * 650;
     }
     const now = Date.now();
-    if (this.discussionRequestPending || meeting.votingOpen || now < this.nextDiscussionChatAtMs) return;
+    if (this.discussionSentInMeeting || this.discussionRequestPending || meeting.votingOpen || now < this.nextDiscussionChatAtMs) return;
 
     const recentMessages = meeting.messages.slice(-8);
     const latestRelevant = [...recentMessages].reverse().find(entry => {
@@ -350,6 +502,10 @@ export abstract class BotAgent {
       ? `${latestRelevant.slot}:${latestRelevant.sentAtMs}`
       : 'opening';
     if (messageKey === this.lastDiscussionMessageKey || now - this.lastDiscussionReplyAtMs < 1400) return;
+    const livingBotCount = Array.from(lobby.players.values()).filter(player => player.alive && player.isBot).length;
+    const questionReplyKey = latestRelevant?.text.includes('?') ? messageKey : undefined;
+    if (!reserveBotDiscussionSlot(meeting, now, self.slot, livingBotCount, questionReplyKey)) return;
+    this.discussionSentInMeeting = true;
 
     const hasBody = meeting.bodySlot !== NO_TARGET;
     const speaker = latestRelevant ? lobby.players.get(latestRelevant.slot) : undefined;
@@ -422,6 +578,39 @@ export abstract class BotAgent {
    * nearly every real path (see .agents/memory/ for the investigation).
    * Fix: do the whole search in feet-space, then shift back once at the end.
    */
+  private rebuildNavigationRoute(feetStart: Point, feetGoal: Point, arrivalTolerancePx: number): void {
+    const routeStart = nearestCollisionSafeNavigationStart(feetStart) ?? feetStart;
+    const goalCandidates = nearbyCollisionSafeNavigationGoals(feetGoal, arrivalTolerancePx);
+    let result: ReturnType<PathCache["find"]> = null;
+
+    // Prefer a route ending at a nearby safe nav-cell centre. This avoids
+    // rejecting legitimate continuous targets merely because the final
+    // centre-to-target connector crosses a thin, independently authored wall.
+    for (const candidate of goalCandidates) {
+      const attempt = this.pathCache.find(
+        navigationGrid, routeStart, candidate, false, navigationGeometry, true, validateProductionNavigationStep,
+      );
+      if (attempt) {
+        result = attempt;
+        break;
+      }
+    }
+
+    // Keep a best-effort exact target fallback for goals that have no reachable
+    // node inside arrival range; the movement sweeper still prevents wall cuts.
+    if (!result) {
+      result = this.pathCache.find(
+        navigationGrid, routeStart, feetGoal, false, navigationGeometry, true, validateProductionNavigationStep,
+      );
+    }
+
+    this.navigationRoute = result?.waypoints ?? [];
+    // Keep the requested target snapshot, not the nearby cell-centre endpoint.
+    this.navigationRouteGoal = feetGoal;
+    this.navigationRouteIndex = 0;
+    this.navigationRouteOrigin = feetStart;
+  }
+
   protected navigateTo(self: LobbyPlayer, goal: Point, arrivalTolerancePx = 25): boolean {
     const dxGoal = goal.x - self.x;
     const dyGoal = goal.y - self.y;
@@ -429,63 +618,154 @@ export abstract class BotAgent {
 
     const feetStart: Point = { x: self.x, y: self.y + FEET_OFFSET_Y };
     const feetGoal: Point = { x: goal.x, y: goal.y + FEET_OFFSET_Y };
-    const result = this.pathCache.find(navigationGrid, feetStart, feetGoal, false, navigationGeometry);
-    const waypoint = result?.waypoints[0] ?? feetGoal;
-    const dx = waypoint.x - feetStart.x;
-    const dy = waypoint.y - feetStart.y;
-    const distance = Math.hypot(dx, dy);
-    const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
-    const direct = distance > 0
-      ? { x: feetStart.x + (dx / distance) * step, y: feetStart.y + (dy / distance) * step }
-      : feetGoal;
 
-    let next: Point | null = canTraverse(feetStart, direct) ? direct : null;
-    if (next === null) {
-      // A smoothed waypoint may still be unsafe near a thin wall or corner.
-      // Probe short, collision-safe detours rather than caching the rejected
-      // waypoint forever. The next tick will run A* from the new cell.
-      // Follow the next A* waypoint, not the final destination: when a
-      // wall blocks the smoothed segment, steering directly at the final
-      // goal can keep pushing the bot into the same obstacle and create a
-      // moving-but-never-arriving loop around corners.
-      const baseAngle = Math.atan2(dy, dx);
-      const angleOffsets = [
-        0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
-        3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
-        5 * Math.PI / 8, -5 * Math.PI / 8, 3 * Math.PI / 4, -3 * Math.PI / 4,
-        7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
-      ];
-      const stepLengths = [
-        Math.min(BOT_MOVEMENT_STEP_PX, Math.hypot(dxGoal, dyGoal)),
-        BOT_MOVEMENT_STEP_PX * 0.75, BOT_MOVEMENT_STEP_PX * 0.5, BOT_MOVEMENT_STEP_PX * 0.25, 8,
-      ];
-      let bestScore = -Infinity;
-      for (const length of stepLengths) {
-        for (const offset of angleOffsets) {
-          const angle = baseAngle + offset;
-          const candidate = {
-            x: feetStart.x + Math.cos(angle) * length,
-            y: feetStart.y + Math.sin(angle) * length,
-          };
-          if (!canTraverse(feetStart, candidate)) continue;
-          const remaining = Math.hypot(waypoint.x - candidate.x, waypoint.y - candidate.y);
-          const progress = Math.hypot(waypoint.x - feetStart.x, waypoint.y - feetStart.y) - remaining;
-          // Prefer progress, with a small penalty for wide detours and tiny steps.
-          const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
-          if (score > bestScore) {
-            bestScore = score;
-            next = candidate;
-          }
-        }
-        if (next !== null && bestScore > 0) break;
-      }
-      // A blocked path must not stay cached against the same start cell.
-      this.pathCache.clear();
+    // An empty route means A* found no path. Keep that negative result
+    // cached while the bot is stationary; only a successful route can be
+    // "complete" and trigger the normal next-tick rebuild.
+    // Hunt targets move continuously between 5Hz bot ticks. Replan when the
+    // requested target itself has moved materially, not because its safe
+    // cell-centre endpoint is naturally offset from the target.
+    const routeRefreshDistance = Math.max(12, arrivalTolerancePx * 0.5);
+
+    if (shouldRefreshNavigationRoute(
+      this.navigationRoute,
+      this.navigationRouteIndex,
+      this.navigationRouteGoal,
+      feetGoal,
+      routeRefreshDistance,
+    )) {
+      this.rebuildNavigationRoute(feetStart, feetGoal, arrivalTolerancePx);
     }
 
-    if (next !== null) {
-      self.x = next.x;
-      self.y = next.y - FEET_OFFSET_Y;
+    let route: Point[] | null = this.navigationRoute;
+    if (route && route.length > 0) {
+      while (this.navigationRouteIndex < route.length &&
+          Math.hypot(
+            route[this.navigationRouteIndex].x - feetStart.x,
+            route[this.navigationRouteIndex].y - feetStart.y,
+          ) <= 2) {
+        this.navigationRouteIndex++;
+      }
+
+      if (this.navigationRouteIndex < route.length) {
+        const segmentStart = this.navigationRouteIndex === 0
+          ? this.navigationRouteOrigin ?? feetStart
+          : route[this.navigationRouteIndex - 1];
+        if (distanceToSegment(
+          feetStart, segmentStart, route[this.navigationRouteIndex],
+        ) > 18) {
+          this.clearPath();
+          this.rebuildNavigationRoute(feetStart, feetGoal, arrivalTolerancePx);
+          route = this.navigationRoute;
+        }
+      }
+    }
+
+    let current = feetStart;
+    let remaining = BOT_MOVEMENT_STEP_PX;
+    let failedWaypoint: Point | null = null;
+
+    if (route && route.length > 0) {
+      // Follow the raw A* polyline edge by edge. Each adjacent segment is
+      // swept against the vector collision world, and several safe segments
+      // can be consumed in one tick without ever cutting across a corner.
+      let cursor = this.navigationRouteIndex;
+      while (remaining > 0.75 && cursor < route.length) {
+        const waypoint = route[cursor];
+        const dx = waypoint.x - current.x;
+        const dy = waypoint.y - current.y;
+        const distance = Math.hypot(dx, dy);
+        if (distance <= 0.75) {
+          cursor++;
+          continue;
+        }
+
+        const travel = Math.min(remaining, distance);
+        const candidate = {
+          x: current.x + (dx / distance) * travel,
+          y: current.y + (dy / distance) * travel,
+        };
+        const traversed = traverseVector(current, candidate);
+        if (!traversed ||
+            Math.hypot(traversed.x - candidate.x, traversed.y - candidate.y) > 0.75) {
+          failedWaypoint = waypoint;
+          break;
+        }
+
+        const moved = Math.hypot(traversed.x - current.x, traversed.y - current.y);
+        if (moved <= 0.01) {
+          failedWaypoint = waypoint;
+          break;
+        }
+        current = traversed;
+        remaining -= moved;
+        if (travel >= distance - 0.75) cursor++;
+        else break;
+      }
+      this.navigationRouteIndex = cursor;
+    }
+
+    // If a raw edge is unexpectedly blocked, or no A* route exists, probe a
+    // short collision-safe detour from the last safe position. Replan on the
+    // next tick rather than retaining a waypoint that the live world rejects.
+    const madeProgress = Math.hypot(current.x - feetStart.x, current.y - feetStart.y) > 0.01;
+    if (failedWaypoint || (!madeProgress && (!route || route.length === 0))) {
+      const from = current;
+      const target = failedWaypoint ?? feetGoal;
+      const dx = target.x - from.x;
+      const dy = target.y - from.y;
+      const distance = Math.hypot(dx, dy);
+      const step = Math.min(BOT_MOVEMENT_STEP_PX, distance);
+      const direct = distance > 0
+        ? { x: from.x + (dx / distance) * step, y: from.y + (dy / distance) * step }
+        : feetGoal;
+      let detour = traverseTo(from, direct);
+      if (!detour || Math.hypot(detour.x - from.x, detour.y - from.y) <= 0.01) {
+        const baseAngle = Math.atan2(dy, dx);
+        const angleOffsets = [
+          0, Math.PI / 8, -Math.PI / 8, Math.PI / 4, -Math.PI / 4,
+          3 * Math.PI / 8, -3 * Math.PI / 8, Math.PI / 2, -Math.PI / 2,
+          5 * Math.PI / 8, -5 * Math.PI / 8, 3 * Math.PI / 4, -3 * Math.PI / 4,
+          7 * Math.PI / 8, -7 * Math.PI / 8, Math.PI,
+        ];
+        const stepLengths = [
+          Math.min(BOT_MOVEMENT_STEP_PX, distance),
+          BOT_MOVEMENT_STEP_PX * 0.75, BOT_MOVEMENT_STEP_PX * 0.5, BOT_MOVEMENT_STEP_PX * 0.25, 8,
+        ];
+        let bestScore = -Infinity;
+        detour = null;
+        for (const length of stepLengths) {
+          for (const offset of angleOffsets) {
+            const angle = baseAngle + offset;
+            const candidate = {
+              x: from.x + Math.cos(angle) * length,
+              y: from.y + Math.sin(angle) * length,
+            };
+            const traversed = traverseTo(from, candidate);
+            if (!traversed) continue;
+            const remainingDistance = Math.hypot(target.x - traversed.x, target.y - traversed.y);
+            const progress = distance - remainingDistance;
+            const score = progress - Math.abs(offset) * 2 - (BOT_MOVEMENT_STEP_PX - length) * 0.05;
+            if (score > bestScore) {
+              bestScore = score;
+              detour = traversed;
+            }
+          }
+          if (detour !== null && bestScore > 0) break;
+        }
+      }
+      if (detour) current = detour;
+      // A missing route is cached while the bot is stationary. Replan after
+      // a real detour advances at least one navigation cell, not on every
+      // 200ms tick; this avoids repeatedly searching the entire grid at a wall.
+      const detourProgress = Math.hypot(current.x - feetStart.x, current.y - feetStart.y);
+      if (failedWaypoint || (route && route.length > 0) ||
+          detourProgress >= Math.min(NAV_CELL_X, NAV_CELL_Y)) this.clearPath();
+    }
+
+    if (Math.hypot(current.x - feetStart.x, current.y - feetStart.y) > 0.01) {
+      self.x = current.x;
+      self.y = current.y - FEET_OFFSET_Y;
     }
     return false;
   }
@@ -496,6 +776,10 @@ export abstract class BotAgent {
    */
   protected clearPath(): void {
     this.pathCache.clear();
+    this.navigationRoute = null;
+    this.navigationRouteGoal = null;
+    this.navigationRouteIndex = 0;
+    this.navigationRouteOrigin = null;
   }
 
   /** Pick a random walkable position in the spawn-connected component. */
@@ -533,18 +817,23 @@ export abstract class BotAgent {
    * Results are memoized per target since both the grid and spawn point are
    * static for the lifetime of the process.
    */
+  protected isSightPointBlocked(point: Point): boolean {
+    return isBlocked(sightGrid, point.x, point.y + FEET_OFFSET_Y);
+  }
+
   protected hasLineOfSightToPoint(from: Point, to: Point): boolean {
     return isLineOfSightClear(
-      movementGrid,
+      sightGrid,
       from.x, from.y + FEET_OFFSET_Y,
       to.x, to.y + FEET_OFFSET_Y,
     );
   }
 
   /**
-   * Find a spawn-reachable, walkable approach point that can actually see the
-   * interaction target. This mirrors the server's fine-grid LOS contract so
-   * bots do not repeatedly submit actions from behind a wall.
+   * Find a spawn-reachable, vector-collision-safe approach point that can
+   * actually see the interaction target. Movement uses the authored red-line
+   * vector world; visibility uses the same fine-grid occlusion model as the
+   * server because the red-line reference does not author vision blockers.
    */
   protected nearestApproachPoint(target: Point, maxRadius: number, targetRadiusPx = 24): Point {
     const key = `${target.x},${target.y},${maxRadius},${targetRadiusPx}`;
@@ -556,22 +845,33 @@ export abstract class BotAgent {
       isBotNavigationReachable(p.x, p.y + FEET_OFFSET_Y);
     const visible = (p: Point): boolean =>
       isLineOfSightToInteractionTarget(
-        movementGrid,
+        sightGrid,
         p.x, p.y + FEET_OFFSET_Y,
         target.x, target.y + FEET_OFFSET_Y,
         targetRadiusPx,
       );
 
-    let result: Point | null = reachable(target) && visible(target) ? target : null;
-    let nearestReachable: Point | null = reachable(target) ? target : null;
-    if (result === null) {
+    // Task target radii describe the solid prop perimeter, not a point the
+    // player should stand inside. Always approach from outside that footprint;
+    // targeting its centre can put a bot in a narrow car/console pocket that is
+    // technically walkable but cannot be reached by the swept player collider.
+    const minStandOff = Math.max(8, targetRadiusPx + PLAYER_RADIUS + 12);
+    let result: Point | null = null;
+    let nearestReachable: Point | null = null;
+    {
       const step = 4;
-      outer: for (let r = step; r <= maxRadius; r += step) {
+      const firstRadius = Math.ceil(minStandOff / step) * step;
+      outer: for (let r = firstRadius; r <= maxRadius; r += step) {
         const samples = Math.max(8, Math.ceil((2 * Math.PI * r) / step));
         for (let i = 0; i < samples; i++) {
           const angle = (i / samples) * Math.PI * 2;
-          const candidate = { x: target.x + Math.cos(angle) * r, y: target.y + Math.sin(angle) * r };
-          if (!reachable(candidate)) continue;
+          const candidate = snapNavigationPoint({
+            x: target.x + Math.cos(angle) * r,
+            y: target.y + Math.sin(angle) * r,
+          });
+          const candidateDistance = Math.hypot(candidate.x - target.x, candidate.y - target.y);
+          if (candidateDistance < minStandOff || candidateDistance > maxRadius ||
+              !hasApproachClearance(candidate) || !reachable(candidate)) continue;
           nearestReachable ??= candidate;
           if (!visible(candidate)) continue;
           result = candidate;

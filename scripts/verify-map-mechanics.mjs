@@ -23,7 +23,7 @@ const minigameSource = read('artifacts/telegram-game/src/components/TaskMinigame
 const gameMapSource = read('artifacts/telegram-game/src/pages/GameMap.tsx');
 const visionPolicySource = read('artifacts/telegram-game/src/game/mapVisionPolicy.ts');
 const worldDetailsSource = read('artifacts/telegram-game/src/game/mapWorldDetailsRenderer.ts');
-const visibilitySource = read('artifacts/telegram-game/src/game/visibility.ts');
+const visibilitySource = read('lib/shared/src/collision/visibility.ts');
 const indexHtml = read('artifacts/telegram-game/index.html');
 const gameContext = read('artifacts/telegram-game/src/context/GameContext.tsx');
 const playerSource = read('artifacts/telegram-game/src/game/player.ts');
@@ -256,7 +256,7 @@ assert.ok(taskBlock, 'Could not parse TASK_DEFS');
 const tasks = [...taskBlock.matchAll(/\{\s*id:\s*(\d+)\s*,\s*name:\s*'([^']+)'[\s\S]*?\.\.\.ref\(\s*(\d+)\s*,\s*(\d+)\s*\)\s*\}/g)]
   .map(m => ({ id: Number(m[1]), name: m[2], ...fromRef(Number(m[3]), Number(m[4])) }));
 assert.equal(tasks.length, 11, 'Expected the five existing Among Gas tasks plus six ported base-game tasks');
-assert.match(gameMapSource, /isPlayerPositionWalkable\(fineGrid, x, y\)/,
+assert.match(gameMapSource, /isPlayerPositionWalkable\(taskInteractionGrid, x, y\)/,
   'the task-interaction browser fixture must choose a position validated by the production collision footprint');
 assert.match(gameMapSource, /TASK_INTERACTION_RANGE_PX\s*-\s*8/,
   'the task-interaction fixture must place the player inside the actual task interaction radius');
@@ -324,18 +324,18 @@ assert.match(crewmateBotSource, /SABOTAGE_INTERACTION_RANGE_PX - 8/, 'sabotage r
 assert.match(crewmateBotSource, /TASK_INTERACTION_RANGE_PX - 8/, 'ghost task completion must stay inside the authoritative interaction range with a floating-point safety margin');
 assert.match(crewmateBotSource, /interactionDistance \+ 1/, 'ghost task approach must tolerate sub-pixel floating-point residue at arrival');
 assert.match(crewmateBotSource, /TASK_DWELL_TICKS = 12/, 'The one-variable balance retest must use 2.4s task-step dwell at the 5Hz bot AI rate');
-assert.match(impostorBotSource, /HUNT_ACQUIRE_THRESHOLD_PX = -200/, 'The current one-variable balance candidate must use the measured -200px visible-target acquisition threshold');
-assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 150/, 'The current one-variable balance candidate must use a 30s recurring sabotage interval at the 5Hz tick rate');
-assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => buildPreciseCollisionGrid\(\), \[\]\)/, 'GameMap must build one shared fine grid for task LOS and live movement');
+assert.match(impostorBotSource, /HUNT_ACQUIRE_THRESHOLD_PX = -300/, 'New hunts must stay within the active-hunt abort envelope so visible candidates are not needlessly discarded');
+assert.match(impostorBotSource, /SABOTAGE_INTERVAL_TICKS = 150/, 'Vector-navigation validation must preserve the accepted 30s recurring sabotage interval');
+assert.match(gameMapSource, /const taskInteractionGrid = useMemo\(\(\) => getProductionCollisionWorld\(\), \[\]\)/, 'GameMap must use the generated red-line vector world for collision');
 assert.match(gameMapSource, /isLineOfSightToInteractionTarget\(/, 'task actions must enforce the same line-of-sight contract as the authoritative server');
 assert.match(gameMapSource, /pad\.x,\s*pad\.y \+ FEET_OFFSET_Y/, 'sabotage repair prompts must target the visible repair pad rather than the parent system');
-assert.match(gameMapSource, /const grid = taskInteractionGrid/, 'live prediction and vision must reuse the task interaction grid');
-assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(fineGrid\)/, 'GameMap must derive live vision shadows from canonical fine geometry');
-assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(fineGrid, true\)/, 'narrow props must use measured fine-grid visual occluders rather than square collision cells');
-assert.match(gameMapSource, /const narrowSegments = buildFineShadowSegments\(fineGrid\)/, 'compact props must expose exact fine-grid silhouette edges');
-assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments\)/, 'GameMap must trace sight against walls, narrow circles and exact compact-prop outlines');
+assert.match(gameMapSource, /const visionSourceGrid = buildPreciseVisionGrid\(\)/, 'live vision must use a dedicated vision-source grid, not movement collision geometry');
+assert.match(gameMapSource, /const shadowGrid = buildShadowGrid\(visionSourceGrid\)/, 'GameMap must derive live vision shadows from the dedicated vision-source grid');
+assert.match(gameMapSource, /const narrowOccluders = buildNarrowShadowOccluders\(visionSourceGrid, true\)/, 'narrow props must use measured vision-source occluders rather than movement collision cells');
+assert.match(gameMapSource, /const narrowSegments = buildFineShadowSegments\(visionSourceGrid\)/, 'compact props must expose exact vision-source silhouette edges');
+assert.match(gameMapSource, /const rawVisiblePolygon = computeVisibilityPolygon\(px, py, visionRadius, shadowGrid, narrowOccluders, false, narrowSegments\)/, 'GameMap must trace sight against authored vision geometry without reintroducing movement-only manual polygons');
 assert.match(gameMapSource, /const visiblePolygon = smoothVisibilityPolygon\(rawVisiblePolygon, \{ x: px, y: py \}(?:, [1-8])?\)/, 'GameMap must conservatively smooth shadow contours without changing movement collision');
-assert.match(gameMapSource, /stepPlayer\(\s*fineGrid,/, 'Client prediction must use the canonical fine collision grid');
+assert.match(gameMapSource, /stepPlayer\(\s*taskInteractionGrid,/, 'Client prediction must use the red-line vector collision world');
 assert.doesNotMatch(gameMapSource, /showCollision|Show Collision \[C\]|toggle collision overlay/i, 'Collision debug controls must not appear in player gameplay');
 assert.match(worldDetailsSource, /getFrameRect\(getSlotColor\(body\.slot\), 'dead-body'\)/, 'A corpse must use the authored exposed-bone balaclava sprite, not a synthetic crop');
 assert.match(characterSpritesSource, /CHARACTER_SHEET_PATH\s*=\s*.*characters\.png\?v=/,
