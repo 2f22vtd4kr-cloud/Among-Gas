@@ -57,6 +57,8 @@ export interface CollisionSourceManifest {
       readonly ownerDecisionRequired: boolean;
     }[];
     readonly excludedDetachedCandidates: readonly string[];
+    readonly holeCount: number;
+    readonly excludedComponentCount: number;
   };
   readonly zoneShapeCounts?: Readonly<Record<string, number>>;
   readonly geometryOverrides?: {
