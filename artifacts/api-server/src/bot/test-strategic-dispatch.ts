@@ -8,6 +8,27 @@ import { TASK_DEFS } from '@workspace/shared/tasks';
 import type { Point } from '@workspace/shared';
 import type { Lobby, LobbyManager, LobbyPlayer } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
+import { BotObservationLog } from './botObservationLog.js';
+
+{
+  const log = new BotObservationLog(2);
+  const first = log.record(1, 'meeting-vote', { publicRoster: [{ slot: 1, username: 'Nova' }] }, 0);
+  log.resolve(first, 'model', 2);
+  log.record(1, 'crew-task-plan', { availableTasks: [4, 1] }, 4);
+  log.record(1, 'impostor-hunt-target', { visibleTargets: [2, 3] }, 2);
+  const snapshot = log.snapshot();
+  assert.deepEqual(snapshot.map(entry => entry.decision), ['crew-task-plan', 'impostor-hunt-target'],
+    'the observation trace retains only the newest bounded entries');
+  assert.equal(snapshot.every(entry => entry.botSlot === 1), true);
+  const mutable = snapshot[0].observation as { availableTasks: number[] };
+  mutable.availableTasks.push(999);
+  assert.deepEqual(
+    (log.snapshot()[0].observation.availableTasks as number[]),
+    [4, 1],
+    'reading the trace cannot mutate the bot internal observation buffer',
+  );
+}
+
 
 const originalFetch = globalThis.fetch;
 const fakeSocket = { readyState: 3, send: (_packet: unknown) => {} } as unknown as LobbyPlayer['ws'];
