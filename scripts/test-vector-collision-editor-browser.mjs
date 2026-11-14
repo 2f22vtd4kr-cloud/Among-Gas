@@ -188,7 +188,17 @@ try {
   // active zone selector aligned with that assignment for saving.
   await page.getByRole("button", { name: "Edit vertices" }).click();
   bounds = await canvas.boundingBox();
-  await touchTap(bounds.x + 220, bounds.y + 95);
+  const selectedShapePoints = JSON.parse(await canvas.getAttribute("data-shape-points") ?? "[]")[1];
+  assert.ok(selectedShapePoints?.length >= 3, "the second authored shape must remain a polygon");
+  const selectedWorldX = selectedShapePoints.reduce((sum, point) => sum + point[0], 0) / selectedShapePoints.length;
+  const selectedWorldY = selectedShapePoints.reduce((sum, point) => sum + point[1], 0) / selectedShapePoints.length;
+  const selectedZoom = Number(await canvas.getAttribute("data-zoom"));
+  const selectedCameraX = Number(await canvas.getAttribute("data-camera-x"));
+  const selectedCameraY = Number(await canvas.getAttribute("data-camera-y"));
+  await touchTap(
+    bounds.x + (selectedWorldX - selectedCameraX) * selectedZoom,
+    bounds.y + (selectedWorldY - selectedCameraY) * selectedZoom,
+  );
   const selectedShadow = page.getByRole("checkbox", { name: "Shadow", exact: true });
   await selectedShadow.waitFor();
   assert.equal(await selectedShadow.isChecked(), true,
