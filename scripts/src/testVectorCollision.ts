@@ -269,6 +269,29 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(playerFootprint.isWalkable(105, 100, 4), true, "center circle alone is clear");
   assert.equal(playerFootprint.isPlayerWalkableAtFeet(105, 100), false, "side foot circle must preserve the current wider feet footprint");
   assert.deepEqual(playerFootprint.movePlayerAtFeet(110, 100, -10, 0), [110, 100], "player feet footprint must not clip the nearby wall");
+  const floorRegion: CollisionShape = {
+    id: "walkable-floor-region",
+    points: [[20, 20], [180, 20], [180, 180], [20, 180]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    castsShadow: false,
+    walkableRegion: true,
+  };
+  const floorWorld = new CollisionWorld([floorRegion], 200, 200);
+  assert.equal(floorWorld.isWalkable(100, 100, 4), true,
+    "a point and its full radius must fit inside an authored floor region");
+  assert.equal(floorWorld.isWalkable(10, 100, 0), false,
+    "movement outside every authored floor region must be rejected");
+  assert.equal(floorWorld.isWalkable(23.9, 100, 4), false,
+    "the player radius must remain inside the floor boundary");
+  assert.equal(floorWorld.isWalkable(24, 100, 4), true,
+    "a player circle tangent to the floor boundary remains valid");
+  assert.equal(floorWorld.isLineOfSightClear(10, 100, 190, 100), true,
+    "movement-only floor regions must not silently become sight blockers");
+  assert.equal(floorWorld.isShadowLineOfSightClear(10, 100, 190, 100), true,
+    "movement-only floor regions must not silently become shadow occluders");
+
   const corridor = new CollisionWorld([
     shape("corridor-lower", [[0, 100], [200, 100]], false, true, false),
     shape("corridor-upper", [[0, 115], [200, 115]], false, true, false),
