@@ -786,7 +786,7 @@ export default function VectorCollisionEditor() {
       blocksMove,
       blocksSight,
       castsShadow: castsShadowMode === "inherit" ? undefined : castsShadowMode === "yes",
-      ...(strokeRadius > 0 ? { strokeRadius } : {}),
+      ...(blocksMove && strokeRadius > 0 ? { strokeRadius } : {}),
       label: shapeLabel.trim() || "Wall chain",
       zone,
     });
@@ -1522,7 +1522,7 @@ export default function VectorCollisionEditor() {
         </label>
         <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
           Stroke radius
-          <input aria-label="New wall stroke radius" type="number" min={0} max={12} step={0.5} value={strokeRadius} disabled={tool !== "wall"} onChange={event => setStrokeRadius(Math.max(0, Math.min(12, Number(event.target.value) || 0)))} style={{ width: 62, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
+          <input aria-label="New wall stroke radius" type="number" min={0} max={12} step={0.5} value={strokeRadius} disabled={tool !== "wall" || !blocksMove} onChange={event => setStrokeRadius(Math.max(0, Math.min(12, Number(event.target.value) || 0)))} style={{ width: 62, minHeight: 40, background: "#0d1720", color: "white", border: "1px solid #536879", borderRadius: 6, padding: "5px 7px" }} />
         </label>
         {(tool === "region" || tool === "hole") && (
           <label style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 5 }}>
