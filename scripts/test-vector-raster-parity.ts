@@ -51,6 +51,8 @@ for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
     // review process. For bot parity, compare the exact spawn-reachable graph.
     if (!isBotNavigationReachable(x, y + FEET_OFFSET_Y)) continue;
     reachableSamples++;
+    const zone = getPrimaryMapAuthoringZone(x, y) ?? "outside";
+    reachableByZone[zone] = (reachableByZone[zone] ?? 0) + 1;
     if (rasterWalkable && vectorWalkable) {
       reachableBothWalkable++;
       continue;
@@ -59,8 +61,6 @@ for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
       reachableBothBlocked++;
       continue;
     }
-    const zone = getPrimaryMapAuthoringZone(x, y) ?? "outside";
-    reachableByZone[zone] = (reachableByZone[zone] ?? 0) + 1;
     const mark = (red: number, green: number, blue: number) => {
       const left = Math.max(0, Math.min(MAP_W - 1, Math.floor(x - 4)));
       const top = Math.max(0, Math.min(MAP_H - 1, Math.floor(y - 4)));
