@@ -72,6 +72,9 @@ jobs:
 
       - name: Test bilingual vent overlay and network destinations
         run: pnpm --filter @workspace/scripts run test:vent-overlay
+
+      - name: Test emergency meeting button
+        run: pnpm --filter @workspace/scripts run test:emergency-button
       - name: Test Admin Table player visibility and map projection
         run: pnpm --filter @workspace/scripts run test:admin-table
       - name: Test extracted contextual HUD action selection and disable rules
