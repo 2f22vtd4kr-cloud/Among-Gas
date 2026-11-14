@@ -76,3 +76,5 @@ export { CollisionWorld, segmentsIntersect, validateCollisionDocument } from './
 export type { Point as CollisionPoint, CollisionShape, CollisionDocument } from './collision/index.js';
 export { History, simplifyRDP, snapPoint, shouldCloseLoop } from './collision/index.js';
 export type { SnapResult } from './collision/index.js';
+
+export * from './characterPalette.js';
