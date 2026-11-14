@@ -2150,7 +2150,6 @@ export default function GameMap() {
           reportAvailable={!amIDead && nearestBody !== null && sabotage === null && myVentId === null}
           useAvailable={useActionEnabled}
           useActionKind={useActionKind}
-          ventAvailable={!amIDead && amIImpostor && nearestVentId !== null && myVentId === null}
           english={en}
           positionStyle={customControlPositionStyle('killReport', controlLayout, joystickSide)}
           onKill={() => {
@@ -2179,13 +2178,6 @@ export default function GameMap() {
               enterVent(nearestVentId);
             } else if (useActionKind === 'admin') {
               setShowAdminTable(true);
-            }
-          }}
-          onVent={() => {
-            if (!amIDead && amIImpostor && nearestVentId !== null && myVentId === null) {
-              haptic.tap();
-              sfx('uiSelect', 0.3);
-              enterVent(nearestVentId);
             }
           }}
         />
