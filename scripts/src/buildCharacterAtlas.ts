@@ -104,8 +104,9 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
       columnData[offset + 1] = green;
       columnData[offset + 2] = blue;
       columnData[offset + 3] = alpha;
-      // Match putImageData() -> getImageData() for the completed palette cell.
-      normalizeCanvasReadback(columnData, offset);
+      // Do not normalize a second time here: loading the baked PNG into the
+      // runtime canvas performs the same final premultiplied-alpha readback
+      // that the legacy canvas performs after putImageData().
     }
   }
 
