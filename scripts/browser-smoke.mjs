@@ -18,7 +18,7 @@ const failures = [];
 // default is otherwise unbounded). A failed UI condition should identify its
 // test step instead of leaving the entire CI job running indefinitely.
 async function createPage(options) {
-  const page = await createPage(options);
+  const page = await browser.newPage(options);
   page.setDefaultTimeout(30_000);
   page.setDefaultNavigationTimeout(30_000);
   return page;
