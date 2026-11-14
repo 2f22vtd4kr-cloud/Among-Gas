@@ -30,7 +30,7 @@ import type { Point, PathGridGeometry } from '@workspace/shared';
 import type { Lobby, LobbyPlayer, LobbyManager } from '../ws/lobby.js';
 import { SPAWN_X, SPAWN_Y } from '../ws/lobby.js';
 import { NO_TARGET } from '@workspace/shared/coords';
-import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue } from './groqDialogue.js';
+import { buildPublicBotDialogueMessages, GROQ_DECISION_RESERVE_MS, requestGroqDialogue, validatePublicBotDialogueResponse } from './groqDialogue.js';
 import { buildInternalBotDialogue } from './internalDialogue.js';
 import { BotObservationLog, type BotObservationSource } from './botObservationLog.js';
 import { buildPublicBotVoteMessages, canCommitBotVote, parsePublicBotVoteResponse } from './aiVoting.js';
@@ -420,22 +420,37 @@ export abstract class BotAgent {
     }, fallback);
 
     void (async () => {
-      let reply: string | null = null;
+      let validatedReply: string | null = null;
+      let validationReason: string | undefined;
       if (sessionKey) {
-        reply = await requestGroqDialogue(sessionKey, buildPublicBotDialogueMessages({
+        const rawResponse = await requestGroqDialogue(sessionKey, buildPublicBotDialogueMessages({
           username: self.username,
           livingRoster: roster,
           meetingType: hasBody ? 'body report' : 'emergency call',
           publicTranscript: transcript,
-        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS);
+        }), (meeting.startedAtMs ?? 0) + MEETING_DISCUSSION_MS, { temperature: 0.65, jsonMode: true });
+        if (rawResponse) {
+          const validation = validatePublicBotDialogueResponse(rawResponse, {
+            username: self.username,
+            livingRoster: roster,
+            meetingType: hasBody ? 'body report' : 'emergency call',
+            publicTranscript: transcript,
+          });
+          validatedReply = validation.reply;
+          validationReason = validation.reason ?? undefined;
+        } else {
+          validationReason = 'provider returned no dialogue response';
+        }
+      } else {
+        validationReason = 'no session provider key configured';
       }
       if (lobby.meeting !== meeting || meeting.votingOpen || lobby.phase !== 'MEETING') {
         this.resolveObservation(observationId, 'stale', fallback, 'meeting ended before dialogue commit');
         return;
       }
-      const selectedReply = reply ?? fallback;
-      this.resolveObservation(observationId, reply ? 'model' : 'fallback', selectedReply,
-        reply ? undefined : 'no valid model dialogue');
+      const selectedReply = validatedReply ?? fallback;
+      this.resolveObservation(observationId, validatedReply ? 'model' : 'fallback', selectedReply,
+        validationReason);
       manager.sendMeetingChat(lobby, self.slot, selectedReply);
     })().catch(() => {
       this.resolveObservation(observationId, 'fallback', fallback, 'provider request failed');
