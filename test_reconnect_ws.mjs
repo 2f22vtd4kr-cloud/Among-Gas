@@ -249,6 +249,21 @@ async function main() {
       'a player who disconnected before voting must not inherit a phantom vote');
     assert.ok(Array.isArray(votingSnapshot.meeting.messages));
 
+    // Readiness is per-slot across reconnects, including a player who rejoins
+    // after the meeting timer has opened voting. The vote handler deliberately
+    // rejects actions until this restored transport acknowledges readiness.
+    const votingReadyCount = votingGuest.msgs.filter(packet =>
+      packet[0] === 0x24 && packet[1] === 0x01,
+    ).length;
+    send(votingGuest, [0x23]);
+    await waitFor(votingGuest, packet => packet[0] === 0x24 && packet[1] === 0x01,
+      3000, 'targeted readiness acknowledgement after voting reconnect');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    assert.equal(votingGuest.msgs.filter(packet =>
+      packet[0] === 0x24 && packet[1] === 0x01,
+    ).length, votingReadyCount + 1,
+    'voting reconnect readiness must be acknowledged exactly once');
+
     send(replacement, [0x14, 1]);
     send(votingGuest, [0x14, 0]);
     const tieResults = await Promise.all([
