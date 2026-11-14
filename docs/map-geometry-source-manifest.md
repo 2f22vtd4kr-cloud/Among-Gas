@@ -164,7 +164,7 @@ This historical inventory was originally checked against main at `aef0f099e8924e
 
 ### Candidate vector geometry is a separate, provisional branch
 
-PR #138 (`work/redline-vector-collision-runtime-mainline`) is a draft review candidate, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. It is partitioned into five sectors A–E, not the Plan's required 12 author/reviewer zones.
+PR #138 (`work/redline-vector-collision-runtime-mainline`) is a draft review candidate, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. Its 370 movement-only shapes now carry centroid-assigned Z01–Z12 ownership metadata (26, 32, 22, 16, 22, 72, 40, 30, 14, 36, 44, 16 shapes respectively). This is not author tracing or independent review; all 12 zone evidence and sign-off records remain open.
 
 Do not infer sight or shadow boundaries from these movement shapes. The five detached-region dispositions C0/C20/C27/C38/C56 remain provisional and require explicit design-owner approval. The 12-zone source tracing/review, full named route matrix, parking-marking classification, and independent sight/shadow contour authoring are not complete.
 
@@ -176,3 +176,6 @@ This manifest is a provenance record, not an approval of any collision/vision/sh
 
 
 **Mainline note (2026-11-13):** The provenance/review documentation was merged in PR #144 at main SHA `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. This was documentation-only; the geometry source/runtime baseline recorded above remains `925a465458e8462cef8b6112daff90a0edc239b3`.
+
+
+**Candidate metadata reconciliation (2026-11-14):** The latest PR #138 candidate assigns all 370 movement-only shapes to Z01–Z12 by centroid. The candidate still contains 14 closed and 356 open shapes; every shape blocks movement, none blocks sight, and no shadow-casting semantics have been authored. This supersedes the earlier A–E metadata description only. It does not satisfy the 12-zone source tracing, independent review, detached-region disposition, anchor-route, parking classification, or owner-approval gates.

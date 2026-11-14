@@ -29,7 +29,7 @@
 | Z11 | South-east service corridors | [1612, 1238.667, 2418, 1858.000] | Not traced | Not independently reviewed | Owner decision pending |
 | Z12 | South-east admin and lower rooms | [2418, 1238.667, 3224, 1858.000] | Not traced | Not independently reviewed | Owner decision pending |
 
-All 12 zones are currently **not traced / not reviewed** in this register. The 370-shape candidate in PR #138 is a five-sector A–E red-line movement trace and does not satisfy this 12-zone requirement.
+All 12 zones are currently **not traced / not reviewed** in this register. The current 370-shape candidate in PR #138 carries centroid-assigned Z01–Z12 ownership metadata (counts: Z01 26, Z02 32, Z03 22, Z04 16, Z05 22, Z06 72, Z07 40, Z08 30, Z09 14, Z10 36, Z11 44, Z12 16). This is metadata migration only: it does not create author-traced contours, complete source evidence, independent review, owner approval, or sight/shadow semantics. All 12 rows above correctly remain Not traced / Not independently reviewed / Owner decision pending.
 
 ## Required evidence per zone
 
@@ -90,3 +90,6 @@ only and never changes runtime geometry or authorizes a cut-over.
 
 
 **Baseline note (2026-11-13):** PR #144 merged this review register to main at `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. No geometry was changed or approved by that documentation merge.
+
+
+**Candidate metadata reconciliation (2026-11-14):** The current PR #138 branch assigns all 370 movement-only shapes to the canonical Z01–Z12 partition by ground-centroid metadata. The generated JSON still has 14 closed shapes and 356 open boundaries, all `blocksMove:true`, with zero `blocksSight:true` and no authored `castsShadow` values. This does not change the status table: all twelve zones still require source-backed author tracing, a distinct independent reviewer, and design-owner approval. The earlier five-sector A–E wording is superseded by the Z01–Z12 metadata assignment, not by completed review.
