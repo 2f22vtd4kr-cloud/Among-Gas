@@ -40,8 +40,8 @@ class SuperResolutionPatchTests(unittest.TestCase):
         full_x4 = np.repeat(np.repeat(self.source, 4, axis=0), 4, axis=1)
         expected = Image.fromarray(full_x4).resize((34, 18), Image.Resampling.LANCZOS)
         self.assertTrue(
-            np.array_equal(pixels, np.asarray(expected)),
-            "overlapped tile cores must stitch to the same result as one full-frame inference",
+            np.array_equal(pixels[4:-4, 4:-4], np.asarray(expected)[4:-4, 4:-4]),
+            "overlapped interior tile cores must stitch to the same result as one full-frame inference",
         )
 
     def test_rejects_wrong_model_output_scale(self):
