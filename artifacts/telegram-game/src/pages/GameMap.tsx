@@ -410,7 +410,6 @@ export default function GameMap() {
   const sabotageRemainingMs = sabotage
     ? Math.max(0, getSabotageTimeoutMs(sabotage.systemId as SabotageSystemId) - (sabotageNow - sabotage.startedAtMs))
     : 0;
-  const sabotageDef = sabotage ? SABOTAGE_DEFS[sabotage.systemId as SabotageSystemId] : null;
 
   // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
   // Movement freezes for everyone while a meeting is in progress — the server
