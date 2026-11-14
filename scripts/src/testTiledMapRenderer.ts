@@ -139,6 +139,47 @@ try {
   assert.equal(map.getStatus().cached, 0, "dispose releases all cached images");
   assert.equal(map.draw(context, camera, 1, 1), false, "disposed maps refuse later drawing");
 
+  const boundedMap = await TiledMap.load("/bounded-map", 6);
+  const { context: fullMapContext, draws: fullMapDraws } = makeContext();
+  const fullMapCamera = { x: 0, y: 0, w: 3224, h: 1858 };
+  assert.equal(boundedMap.draw(fullMapContext, fullMapCamera, 0.2, 1), false,
+    "a full-map view must retain the overview fallback for deferred tiles");
+  assert.equal(boundedMap.getStatus().visibleTotal, 28);
+  assert.equal(boundedMap.getStatus().loading, 6,
+    "a zoomed-out view must request no more than the six-tile mobile budget");
+  assert.equal(boundedMap.getStatus().deferred, 22);
+  assert.equal(boundedMap.getStatus().cached, 6);
+  await flushImages();
+  assert.equal(boundedMap.draw(fullMapContext, fullMapCamera, 0.2, 1), false);
+  assert.equal(boundedMap.getStatus().visibleLoaded, 6);
+  assert.equal(boundedMap.getStatus().deferred, 22);
+  assert.equal(boundedMap.getStatus().cached, 6,
+    "the hard resident budget must include visible and offscreen decoded images");
+  assert.equal(fullMapDraws.length, 6,
+    "only the six tiles nearest the camera centre should cover the overview");
+  const boundedTileNames = FakeImage.instances
+    .map(image => image.src)
+    .filter(src => src.startsWith("/bounded-map/"))
+    .map(src => src.slice("/bounded-map/".length));
+  assert.equal(boundedTileNames.length, 6);
+  assert.deepEqual(new Set(boundedTileNames), new Set([
+    "tile_r1_c3.webp",
+    "tile_r1_c2.webp",
+    "tile_r2_c3.webp",
+    "tile_r2_c2.webp",
+    "tile_r0_c3.webp",
+    "tile_r1_c4.webp",
+  ]), "full-map zoom-out prioritizes the six tiles nearest the camera centre, not a corner-first batch");
+
+  const farCornerCamera = { x: 3072, y: 1536, w: 152, h: 322 };
+  assert.equal(boundedMap.draw(fullMapContext, farCornerCamera, 1, 1), false,
+    "moving to a distant corner requests its tile");
+  await flushImages();
+  assert.equal(boundedMap.draw(fullMapContext, farCornerCamera, 1, 1), true);
+  assert.equal(boundedMap.getStatus().cached, 1,
+    "moving the camera evicts decoded tiles outside the selected resident set");
+  boundedMap.dispose();
+
   invalidManifest = true;
   await assert.rejects(
     () => TiledMap.load("/bad-map"),

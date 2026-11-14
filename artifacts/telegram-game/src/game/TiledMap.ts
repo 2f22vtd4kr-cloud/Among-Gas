@@ -1,6 +1,6 @@
 /**
  * Browser tile renderer for the canonical 3224×1858 world.
- * Tiles are 2× WebP; only the camera-visible 4–6 tiles stay decoded in memory.
+ * Tiles are 2× WebP; a hard mobile/desktop residency budget bounds decoded image memory.
  * Shared world boundaries are rounded with the same expression on both
  * neighbouring tiles, so no fractional-zoom hairline gaps can appear.
  */
@@ -65,7 +65,7 @@ export class TiledMap {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly pending = new Map<string, HTMLImageElement>();
   private disposed = false;
-  private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0, decodedBytes: 0 };
+  private status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, deferred: 0, cached: 0, decodedBytes: 0 };
 
   private constructor(
     private readonly manifest: TileManifest,
@@ -78,7 +78,8 @@ export class TiledMap {
     const response = await fetch(`${normalizedBase}manifest.json`, { cache: "force-cache" });
     if (!response.ok) throw new Error(`Map tile manifest request failed: HTTP ${response.status}`);
     const manifest = validateManifest(await response.json());
-    return new TiledMap(manifest, normalizedBase, Math.max(6, maxResident));
+    const residentLimit = Number.isFinite(maxResident) ? Math.max(1, Math.floor(maxResident)) : 12;
+    return new TiledMap(manifest, normalizedBase, residentLimit);
   }
 
   /** Draw visible tiles over the low-resolution overview fallback. */
@@ -93,23 +94,41 @@ export class TiledMap {
         camera.w <= 0 || camera.h <= 0 || zoom <= 0 || dpr <= 0) {
       throw new RangeError("Map camera, zoom and DPR must be finite and positive");
     }
-    let visibleTotal = 0;
+    const visibleTiles = this.manifest.tiles.filter(tile => {
+      const [wx, wy, ww, wh] = tile.world;
+      return !(wx + ww <= camera.x || wy + wh <= camera.y ||
+        wx >= camera.x + camera.w || wy >= camera.y + camera.h);
+    });
+    const visibleTotal = visibleTiles.length;
+    const centerX = camera.x + camera.w / 2;
+    const centerY = camera.y + camera.h / 2;
+    // A zoomed-out map view can intersect all 28 tiles. Never decode every
+    // visible tile: keep only the nearest tiles resident and let the overview
+    // fallback cover the deferred regions until the camera moves closer.
+    const selectedTiles = visibleTiles
+      .slice()
+      .sort((a, b) => {
+        const ax = a.world[0] + a.world[2] / 2 - centerX;
+        const ay = a.world[1] + a.world[3] / 2 - centerY;
+        const bx = b.world[0] + b.world[2] / 2 - centerX;
+        const by = b.world[1] + b.world[3] / 2 - centerY;
+        return ax * ax + ay * ay - (bx * bx + by * by) ||
+          a.row - b.row || a.col - b.col;
+      })
+      .slice(0, this.maxResident);
     let visibleLoaded = 0;
     let loading = 0;
     let failed = 0;
-    const visible = new Set<string>();
+    const deferred = visibleTotal - selectedTiles.length;
+    const visible = new Set(selectedTiles.map(tile => tile.file));
     const deviceScale = zoom * dpr;
     const previousSmoothing = ctx.imageSmoothingEnabled;
     const previousQuality = ctx.imageSmoothingQuality;
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
     try {
-      for (const tile of this.manifest.tiles) {
+      for (const tile of selectedTiles) {
         const [wx, wy, ww, wh] = tile.world;
-        if (wx + ww <= camera.x || wy + wh <= camera.y ||
-            wx >= camera.x + camera.w || wy >= camera.y + camera.h) continue;
-        visibleTotal++;
-        visible.add(tile.file);
         const image = this.get(tile);
         if (image === "loading") { loading++; continue; }
         if (image === "failed") { failed++; continue; }
@@ -119,7 +138,7 @@ export class TiledMap {
         const bottom = Math.round((wy + wh - camera.y) * deviceScale);
         if (right <= left || bottom <= top) continue;
         // One-device-pixel bleed closes compositor hairlines at fractional zoom.
-        // Tiles draw row-major, so the next tile covers the overlap deterministically.
+        // Tiles draw in stable centre-priority order, so overlap is deterministic.
         ctx.drawImage(image, left, top, right - left + 1, bottom - top + 1);
         visibleLoaded++;
       }
@@ -131,8 +150,8 @@ export class TiledMap {
     const decodedBytes = [...this.cache.values()].reduce((total, entry) =>
       typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement
         ? total + entry.naturalWidth * entry.naturalHeight * 4 : total, 0);
-    this.status = { visibleTotal, visibleLoaded, loading, failed, cached: this.cache.size, decodedBytes };
-    return visibleTotal > 0 && visibleLoaded === visibleTotal;
+    this.status = { visibleTotal, visibleLoaded, loading, failed, deferred, cached: this.cache.size, decodedBytes };
+    return visibleTotal > 0 && deferred === 0 && visibleLoaded === visibleTotal;
   }
 
   getStatus(): Readonly<typeof this.status> {
@@ -161,7 +180,7 @@ export class TiledMap {
       }
     }
     this.cache.clear();
-    this.status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, cached: 0, decodedBytes: 0 };
+    this.status = { visibleTotal: 0, visibleLoaded: 0, loading: 0, failed: 0, deferred: 0, cached: 0, decodedBytes: 0 };
   }
 
   private get(tile: TileMeta): CacheEntry {
@@ -193,21 +212,21 @@ export class TiledMap {
   }
 
   private evict(visible: ReadonlySet<string>): void {
-    if (this.cache.size <= this.maxResident) return;
+    // Keep only the current priority set, even when it contains fewer tiles
+    // than the budget. Otherwise a previous zoomed-out frame can leave stale
+    // decoded images resident after the camera moves to a single corner tile.
     for (const file of this.cache.keys()) {
-      if (this.cache.size <= this.maxResident) break;
-      if (!visible.has(file)) {
-        const pending = this.pending.get(file);
-        if (pending) {
-          pending.onload = null; pending.onerror = null; pending.src = "";
-          this.pending.delete(file);
-        }
-        const entry = this.cache.get(file);
-        if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
-          entry.onload = null; entry.onerror = null; entry.src = "";
-        }
-        this.cache.delete(file);
+      if (visible.has(file)) continue;
+      const pending = this.pending.get(file);
+      if (pending) {
+        pending.onload = null; pending.onerror = null; pending.src = "";
+        this.pending.delete(file);
       }
+      const entry = this.cache.get(file);
+      if (typeof HTMLImageElement !== "undefined" && entry instanceof HTMLImageElement) {
+        entry.onload = null; entry.onerror = null; entry.src = "";
+      }
+      this.cache.delete(file);
     }
   }
 }
