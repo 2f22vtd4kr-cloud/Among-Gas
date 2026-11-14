@@ -7,95 +7,9 @@ import {
   CHARACTER_SHEET_WIDTH,
   CHARACTER_SOURCE_SHEET_COLS,
   CHARACTER_SOURCE_SHEET_WIDTH,
-  type GeneratedCharacterPalette,
 } from './characterSprites';
-
-type Hsl = readonly [hue: number, saturation: number, lightness: number];
-type Rgba = readonly [red: number, green: number, blue: number, alpha: number];
-
-const SUIT_HUE_MIN = 155;
-const SUIT_HUE_MAX = 186;
-const SUIT_MIN_SATURATION = 0.3;
-
-export function rgbToHsl(red: number, green: number, blue: number): Hsl {
-  const r = red / 255;
-  const g = green / 255;
-  const b = blue / 255;
-  const max = Math.max(r, g, b);
-  const min = Math.min(r, g, b);
-  const delta = max - min;
-  const lightness = (max + min) / 2;
-
-  if (delta === 0) return [0, 0, lightness];
-
-  const saturation = delta / (1 - Math.abs(2 * lightness - 1));
-  let hue: number;
-  if (max === r) hue = 60 * (((g - b) / delta) % 6);
-  else if (max === g) hue = 60 * ((b - r) / delta + 2);
-  else hue = 60 * ((r - g) / delta + 4);
-  if (hue < 0) hue += 360;
-  return [hue, saturation, lightness];
-}
-
-function hslToRgb(hue: number, saturation: number, lightness: number): readonly [number, number, number] {
-  const h = ((hue % 360) + 360) % 360;
-  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
-  const x = chroma * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = lightness - chroma / 2;
-  let r = 0;
-  let g = 0;
-  let b = 0;
-
-  if (h < 60) [r, g, b] = [chroma, x, 0];
-  else if (h < 120) [r, g, b] = [x, chroma, 0];
-  else if (h < 180) [r, g, b] = [0, chroma, x];
-  else if (h < 240) [r, g, b] = [0, x, chroma];
-  else if (h < 300) [r, g, b] = [x, 0, chroma];
-  else [r, g, b] = [chroma, 0, x];
-
-  return [
-    Math.round((r + m) * 255),
-    Math.round((g + m) * 255),
-    Math.round((b + m) * 255),
-  ];
-}
-
-function isRecolorableSuitHsl(hue: number, saturation: number, lightness: number, alpha: number): boolean {
-  if (alpha === 0) return false;
-  // The pale breathing/filter disk shares a cyan hue with the suit but is
-  // both much lighter and more neutral. Keep that hardware untouched.
-  const filterLike = hue >= 174 && hue <= 183 && lightness >= 0.72;
-  return !filterLike && hue >= SUIT_HUE_MIN && hue <= SUIT_HUE_MAX &&
-    saturation >= SUIT_MIN_SATURATION && lightness >= 0.1 && lightness <= 0.95;
-}
-
-/** True only for the saturated teal suit material, not visor/filter/outline pixels. */
-export function isRecolorableSuitPixel(red: number, green: number, blue: number, alpha: number): boolean {
-  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
-  return isRecolorableSuitHsl(hue, saturation, lightness, alpha);
-}
-
-/**
- * Hue-shift one suit pixel while preserving its authored per-pixel shading.
- * Low-saturation outline/filter pixels and the blue visor are returned unchanged.
- */
-export function recolorSuitPixel(
-  red: number,
-  green: number,
-  blue: number,
-  alpha: number,
-  palette: GeneratedCharacterPalette,
-): Rgba {
-  const [hue, saturation, lightness] = rgbToHsl(red, green, blue);
-  if (!isRecolorableSuitHsl(hue, saturation, lightness, alpha)) return [red, green, blue, alpha];
-  const nextSaturation = Math.max(0, Math.min(1, saturation * (palette.saturationScale ?? 1)));
-  const nextLightness = Math.max(0.04, Math.min(
-    0.96,
-    lightness * (palette.lightnessScale ?? 1) + (palette.lightnessOffset ?? 0),
-  ));
-  const [nextRed, nextGreen, nextBlue] = hslToRgb(palette.hue, nextSaturation, nextLightness);
-  return [nextRed, nextGreen, nextBlue, alpha];
-}
+import { recolorSuitPixel } from '@workspace/shared';
+export { isRecolorableSuitPixel, recolorSuitPixel, rgbToHsl } from '@workspace/shared';
 
 /**
  * Build an in-memory 18-column atlas from the original seven-column PNG.
@@ -156,16 +70,16 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
   return atlas;
 }
 
-let cachedSourceUrl: string | null = null;
+let cachedAtlasUrl: string | null = null;
 let cachedAtlasPromise: Promise<HTMLCanvasElement> | null = null;
 
-/** Load and palette-expand the source once per application session. */
+/** Load the build-time baked 18-palette atlas; no palette generation runs on mobile. */
 export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  const sourceUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\/+/, '')}`;
+  const atlasUrl = `${normalizedBase}${CHARACTER_SHEET_PATH.replace(/^\/+/, '')}`;
 
-  if (cachedSourceUrl === sourceUrl && cachedAtlasPromise) return cachedAtlasPromise;
-  cachedSourceUrl = sourceUrl;
+  if (cachedAtlasUrl === atlasUrl && cachedAtlasPromise) return cachedAtlasPromise;
+  cachedAtlasUrl = atlasUrl;
   cachedAtlasPromise = new Promise<HTMLCanvasElement>((resolve, reject) => {
     const loadStartedAt = performance.now();
     const image = new Image();
@@ -174,7 +88,7 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
     const fail = () => {
       if (processing) return;
       processing = true;
-      reject(new Error(`Unable to load character atlas: ${sourceUrl}`));
+      reject(new Error(`Unable to load baked character atlas: ${atlasUrl}`));
     };
     const ready = async () => {
       if (processing || !image.complete || image.naturalWidth <= 0) return;
@@ -183,8 +97,16 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
         if (typeof image.decode === 'function') {
           try { await image.decode(); } catch { /* a successful load remains a usable decode fallback */ }
         }
-        const sourceReadyAt = performance.now();
-        const atlas = createCharacterAtlas(image);
+        if (image.naturalWidth !== CHARACTER_SHEET_WIDTH || image.naturalHeight !== CHARACTER_SHEET_HEIGHT) {
+          throw new Error(`Unexpected baked character atlas dimensions: ${image.naturalWidth}×${image.naturalHeight}`);
+        }
+        const atlas = document.createElement('canvas');
+        atlas.width = CHARACTER_SHEET_WIDTH;
+        atlas.height = CHARACTER_SHEET_HEIGHT;
+        const context = atlas.getContext('2d');
+        if (!context) throw new Error('Could not allocate the baked character atlas canvas');
+        context.imageSmoothingEnabled = false;
+        context.drawImage(image, 0, 0);
         const atlasReadyAt = performance.now();
         if (import.meta.env.DEV) {
           (window as Window & {
@@ -197,16 +119,18 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
               atlasWidth: number;
               atlasHeight: number;
               generatedPaletteCount: number;
+              bakedAsset: boolean;
             };
           }).__AG_CHARACTER_ATLAS_METRICS = {
-            sourceLoadMs: sourceReadyAt - loadStartedAt,
-            generationMs: atlasReadyAt - sourceReadyAt,
+            sourceLoadMs: atlasReadyAt - loadStartedAt,
+            generationMs: 0,
             totalMs: atlasReadyAt - loadStartedAt,
             sourceWidth: image.naturalWidth,
             sourceHeight: image.naturalHeight,
             atlasWidth: atlas.width,
             atlasHeight: atlas.height,
             generatedPaletteCount: GENERATED_CHARACTER_PALETTES.length,
+            bakedAsset: true,
           };
         }
         resolve(atlas);
@@ -217,13 +141,13 @@ export function loadCharacterAtlas(baseUrl = '/'): Promise<HTMLCanvasElement> {
 
     image.onload = () => { void ready(); };
     image.onerror = fail;
-    image.src = sourceUrl;
+    image.src = atlasUrl;
     if (image.complete && image.naturalWidth > 0) void ready();
   });
 
   cachedAtlasPromise.catch(() => {
-    if (cachedSourceUrl === sourceUrl) {
-      cachedSourceUrl = null;
+    if (cachedAtlasUrl === atlasUrl) {
+      cachedAtlasUrl = null;
       cachedAtlasPromise = null;
     }
   });

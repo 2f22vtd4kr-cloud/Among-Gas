@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import sharp from 'sharp';
+import { GENERATED_CHARACTER_PALETTES, recolorSuitPixel } from '@workspace/shared';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
 const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
@@ -36,6 +38,34 @@ try {
   assert.equal(sourceAssetGitBlobSha, '5e2562defd86b956d6a75dc1136c8298443f93c4',
     'character source art changed: review the new authored asset before updating its golden baseline');
 
+  // Compare Sharp's straight-alpha decode with Chromium's exact drawImage ->
+  // getImageData result before attempting to reproduce the browser conversion.
+  const { data: sharpSourceData, info: sharpSourceInfo } = await sharp(sourceAsset)
+    .extract({ left: 0, top: 0, width: 160, height: 1401 })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  assert.equal(sharpSourceInfo.channels, 4);
+  const sourceRawBase64 = sharpSourceData.toString('base64');
+  const probeSourceOffset = (20 * 160 + 79) * 4;
+  const probeAlpha = sharpSourceData[probeSourceOffset + 3];
+  const normalizeProbeChannel = channel => {
+    if (probeAlpha === 0) return 0;
+    const premultiplied = Math.floor((channel * probeAlpha + 127) / 255);
+    return Math.min(255, Math.floor((premultiplied * 255 + probeAlpha / 2) / probeAlpha));
+  };
+  const nodeProbeInput = [
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset]),
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset + 1]),
+    normalizeProbeChannel(sharpSourceData[probeSourceOffset + 2]),
+    probeAlpha,
+  ];
+  const nodePaletteProbe = GENERATED_CHARACTER_PALETTES.map(palette => ({
+    color: palette.color,
+    palette,
+    output: recolorSuitPixel(...nodeProbeInput, palette),
+  }));
+
   const poseWindows = [
     { pose: 'idle', top: 0, bottom: 136 },
     { pose: 'walk-1', top: 172, bottom: 310 },
@@ -47,11 +77,225 @@ try {
     { pose: 'dead-body', top: 1067, bottom: 1160 },
     { pose: 'sit-crouch', top: 1198, bottom: 1326 },
   ];
-  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha }) => {
+  const metrics = await page.evaluate(async ({ poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe }) => {
     const atlas = window.__AG_CHARACTER_ATLAS;
     if (!atlas) throw new Error('Runtime character atlas was not exposed in the development build');
     const context = atlas.getContext('2d');
     if (!context) throw new Error('Runtime character atlas has no readable 2D context');
+
+    // Compare the build-time baked asset against the exact legacy in-memory
+    // renderer. The baked PNG is accepted only when every RGBA byte matches.
+    const [spriteModule, atlasModule] = await Promise.all([
+      import('/src/game/characterSprites.ts'),
+      import('/src/game/characterAtlas.ts'),
+    ]);
+    const sourceImage = new Image();
+    sourceImage.src = spriteModule.CHARACTER_SOURCE_SHEET_PATH;
+    await sourceImage.decode();
+
+    const sharpSource = Uint8Array.from(atob(sourceRawBase64), character => character.charCodeAt(0));
+    const sourceProbeCanvas = document.createElement('canvas');
+    sourceProbeCanvas.width = 160;
+    sourceProbeCanvas.height = 1401;
+    const sourceProbeContext = sourceProbeCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sourceProbeContext) throw new Error('Could not allocate source readback probe');
+    sourceProbeContext.imageSmoothingEnabled = false;
+    sourceProbeContext.drawImage(sourceImage, 0, 0, 160, 1401, 0, 0, 160, 1401);
+    const browserSource = sourceProbeContext.getImageData(0, 0, 160, 1401).data;
+
+    const normalizeCandidate = (channel, alpha) => {
+      if (alpha === 0) return 0;
+      const premultiplied = Math.floor((channel * alpha + 127) / 255);
+      return Math.min(255, Math.floor((premultiplied * 255 + alpha / 2) / alpha));
+    };
+    const sourceDecodeCandidates = {
+      sharpRaw: { mismatchBytes: 0, maxDelta: 0 },
+      currentRoundTrip: { mismatchBytes: 0, maxDelta: 0 },
+      sampledRoundTrip: { mismatchBytes: 0, maxDelta: 0, samples: [] },
+    };
+    for (let offset = 0; offset < browserSource.length; offset += 4) {
+      for (let channel = 0; channel < 4; channel++) {
+        const raw = sharpSource[offset + channel];
+        const observed = browserSource[offset + channel];
+        const rawDelta = Math.abs(raw - observed);
+        if (rawDelta) sourceDecodeCandidates.sharpRaw.mismatchBytes++;
+        sourceDecodeCandidates.sharpRaw.maxDelta = Math.max(sourceDecodeCandidates.sharpRaw.maxDelta, rawDelta);
+        const candidate = channel === 3 ? raw : normalizeCandidate(raw, sharpSource[offset + 3]);
+        const candidateDelta = Math.abs(candidate - observed);
+        if (candidateDelta) sourceDecodeCandidates.currentRoundTrip.mismatchBytes++;
+        sourceDecodeCandidates.currentRoundTrip.maxDelta = Math.max(
+          sourceDecodeCandidates.currentRoundTrip.maxDelta, candidateDelta,
+        );
+      }
+    }
+
+    // Compare the exact scaled source-cell draw used by the legacy atlas with
+    // the builder's Sharp -> nearest-sample -> alpha-readback projection.
+    const scaledSourceCanvas = document.createElement('canvas');
+    scaledSourceCanvas.width = 161;
+    scaledSourceCanvas.height = 1401;
+    const scaledSourceContext = scaledSourceCanvas.getContext('2d', { willReadFrequently: true });
+    if (!scaledSourceContext) throw new Error('Could not allocate scaled source-cell probe');
+    scaledSourceContext.imageSmoothingEnabled = false;
+    scaledSourceContext.drawImage(sourceImage, 0, 0, 160, 1401, 0, 0, 161, 1401);
+    const browserScaledSource = scaledSourceContext.getImageData(0, 0, 161, 1401).data;
+    for (let y = 0; y < 1401; y++) {
+      for (let x = 0; x < 161; x++) {
+        const sourceX = Math.max(0, Math.min(159, Math.ceil((x + 0.5) * 160 / 161) - 1));
+        const sourceOffset = (y * 160 + sourceX) * 4;
+        const destinationOffset = (y * 161 + x) * 4;
+        for (let channel = 0; channel < 4; channel++) {
+          const raw = sharpSource[sourceOffset + channel];
+          const candidate = channel === 3 ? raw : normalizeCandidate(raw, sharpSource[sourceOffset + 3]);
+          const observed = browserScaledSource[destinationOffset + channel];
+          const delta = Math.abs(candidate - observed);
+          if (delta) {
+            sourceDecodeCandidates.sampledRoundTrip.mismatchBytes++;
+            sourceDecodeCandidates.sampledRoundTrip.maxDelta = Math.max(
+              sourceDecodeCandidates.sampledRoundTrip.maxDelta, delta,
+            );
+            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 12) {
+              sourceDecodeCandidates.sampledRoundTrip.samples.push({
+                x, y, sourceX, channel, candidate, observed, alpha: sharpSource[sourceOffset + 3],
+              });
+            }
+          }
+        }
+      }
+    }
+
+    const browserProbeOffset = (20 * 161 + 80) * 4;
+    const browserProbeInput = Array.from(browserScaledSource.slice(browserProbeOffset, browserProbeOffset + 4));
+    const browserPaletteProbe = spriteModule.GENERATED_CHARACTER_PALETTES.map(palette => ({
+      color: palette.color,
+      output: atlasModule.recolorSuitPixel(...browserProbeInput, palette),
+    }));
+    const paletteImplementationProbe = {
+      nodeInput: nodeProbeInput,
+      browserInput: browserProbeInput,
+      node: nodePaletteProbe.map(({ color, palette, output }) => ({ color, palette, output })),
+      browser: browserPaletteProbe,
+    };
+
+    const referenceAtlas = atlasModule.createCharacterAtlas(sourceImage);
+    const referenceContext = referenceAtlas.getContext('2d');
+    if (!referenceContext) throw new Error('Reference atlas has no readable 2D context');
+    const referencePixels = referenceContext.getImageData(0, 0, atlas.width, atlas.height).data;
+    const bakedPixels = context.getImageData(0, 0, atlas.width, atlas.height).data;
+    let differentBytes = 0;
+    let maxChannelDelta = 0;
+    const channelDifferences = [0, 0, 0, 0];
+    const mismatchByColumn = Array.from({ length: 18 }, () => ({
+      pixels: 0, rgbPixels: 0, alphaPixels: 0, transparentRgbPixels: 0,
+    }));
+    const mismatchByReferenceAlpha = new Map();
+    const mismatchSamples = [];
+    for (let pixelOffset = 0; pixelOffset < bakedPixels.length; pixelOffset += 4) {
+      const referenceAlpha = referencePixels[pixelOffset + 3];
+      const bakedAlpha = bakedPixels[pixelOffset + 3];
+      const pixelIndex = pixelOffset / 4;
+      const x = pixelIndex % atlas.width;
+      const y = Math.floor(pixelIndex / atlas.width);
+      const column = Math.floor(x / 161);
+      let pixelDiffers = false;
+      let rgbDiffers = false;
+      let alphaDiffers = false;
+      for (let channel = 0; channel < 4; channel++) {
+        const delta = Math.abs(bakedPixels[pixelOffset + channel] - referencePixels[pixelOffset + channel]);
+        if (delta !== 0) {
+          differentBytes++;
+          channelDifferences[channel]++;
+          pixelDiffers = true;
+          if (channel === 3) alphaDiffers = true;
+          else rgbDiffers = true;
+        }
+        maxChannelDelta = Math.max(maxChannelDelta, delta);
+      }
+      if (!pixelDiffers) continue;
+      const columnStats = mismatchByColumn[column];
+      columnStats.pixels++;
+      if (rgbDiffers) columnStats.rgbPixels++;
+      if (alphaDiffers) columnStats.alphaPixels++;
+      if (rgbDiffers && referenceAlpha === 0 && bakedAlpha === 0) columnStats.transparentRgbPixels++;
+      const alphaKey = String(referenceAlpha);
+      const alphaStats = mismatchByReferenceAlpha.get(alphaKey) ?? { pixels: 0, rgbPixels: 0, alphaPixels: 0 };
+      alphaStats.pixels++;
+      if (rgbDiffers) alphaStats.rgbPixels++;
+      if (alphaDiffers) alphaStats.alphaPixels++;
+      mismatchByReferenceAlpha.set(alphaKey, alphaStats);
+      if (mismatchSamples.length < 24) {
+        mismatchSamples.push({
+          x, y, column,
+          reference: Array.from(referencePixels.slice(pixelOffset, pixelOffset + 4)),
+          baked: Array.from(bakedPixels.slice(pixelOffset, pixelOffset + 4)),
+        });
+      }
+    }
+    // Probe Chromium's own nearest-neighbour phase independently of sprite
+    // contents. This uses a monotonic red-channel ramp so each sampled source
+    // pixel is observable in the destination byte array.
+    function probeCanvasNearestSampling(sourceWidth, destinationWidth) {
+      const sourceCanvas = document.createElement('canvas');
+      sourceCanvas.width = sourceWidth;
+      sourceCanvas.height = 1;
+      const sourceContext = sourceCanvas.getContext('2d');
+      if (!sourceContext) throw new Error('Could not allocate nearest-sampling source probe');
+      const sourceImage = sourceContext.createImageData(sourceWidth, 1);
+      for (let x = 0; x < sourceWidth; x++) {
+        sourceImage.data[x * 4] = x;
+        sourceImage.data[x * 4 + 3] = 255;
+      }
+      sourceContext.putImageData(sourceImage, 0, 0);
+
+      const destinationCanvas = document.createElement('canvas');
+      destinationCanvas.width = destinationWidth;
+      destinationCanvas.height = 1;
+      const destinationContext = destinationCanvas.getContext('2d', { willReadFrequently: true });
+      if (!destinationContext) throw new Error('Could not allocate nearest-sampling destination probe');
+      destinationContext.imageSmoothingEnabled = false;
+      destinationContext.drawImage(
+        sourceCanvas,
+        0, 0, sourceWidth, 1,
+        0, 0, destinationWidth, 1,
+      );
+      const destinationPixels = destinationContext.getImageData(0, 0, destinationWidth, 1).data;
+      const observed = Array.from({ length: destinationWidth }, (_, x) => destinationPixels[x * 4]);
+      const formulas = {
+        floorCenter: x => Math.floor((x + 0.5) * sourceWidth / destinationWidth),
+        lowerTieCenter: x => Math.ceil((x + 0.5) * sourceWidth / destinationWidth) - 1,
+        floorOrigin: x => Math.floor(x * sourceWidth / destinationWidth),
+        roundCenter: x => Math.round((x + 0.5) * sourceWidth / destinationWidth - 0.5),
+        roundOrigin: x => Math.round(x * sourceWidth / destinationWidth),
+      };
+      const candidates = Object.fromEntries(Object.entries(formulas).map(([name, sample]) => {
+        const predicted = Array.from({ length: destinationWidth }, (_, x) =>
+          Math.max(0, Math.min(sourceWidth - 1, sample(x))),
+        );
+        return [name, {
+          mismatchCount: predicted.reduce((count, value, x) => count + (value !== observed[x] ? 1 : 0), 0),
+          predicted,
+        }];
+      }));
+      return { sourceWidth, destinationWidth, observed, candidates };
+    }
+    const canvasSamplingProbe = [
+      probeCanvasNearestSampling(160, 161),
+      probeCanvasNearestSampling(159, 161),
+    ];
+
+    const bakedParityDiagnostics = {
+      differentBytes,
+      sourceDecodeCandidates,
+      paletteImplementationProbe,
+      canvasSamplingProbe,
+      maxChannelDelta,
+      channelDifferences,
+      mismatchByColumn: mismatchByColumn.map((stats, column) => ({ column, ...stats })),
+      mismatchByReferenceAlpha: Object.fromEntries([...mismatchByReferenceAlpha.entries()]
+        .sort((a, b) => Number(a[0]) - Number(b[0]))),
+      mismatchSamples,
+    };
+    const atlasMetrics = window.__AG_CHARACTER_ATLAS_METRICS ?? null;
     const cellWidth = 161;
     const colors = [
       'teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta', 'red', 'blue',
@@ -138,6 +382,9 @@ try {
     return {
       width: atlas.width,
       height: atlas.height,
+      bakedAsset: atlasMetrics?.bakedAsset === true,
+      bakedParity: { differentBytes, maxChannelDelta },
+      bakedParityDiagnostics,
       cellWidth,
       columns: atlas.width / cellWidth,
       sourceAssetGitBlobSha,
@@ -153,8 +400,12 @@ try {
       gameplayMatrixDataUrl: gameplayMatrix.toDataURL('image/png'),
       matrixDataUrl: matrix.toDataURL('image/png'),
     };
-  }, { poseWindows, sourceAssetGitBlobSha });
+  }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe });
 
+  console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
+  assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
+  assert.deepEqual(metrics.bakedParity, { differentBytes: 0, maxChannelDelta: 0 },
+    'every baked RGBA byte must match the legacy in-memory renderer exactly');
   assert.equal(metrics.width, 2898, 'runtime atlas width must be 18 × 161px');
   assert.equal(metrics.height, 1401, 'runtime atlas must preserve the authored source height');
   assert.equal(metrics.columns, 18, 'runtime canvas must contain eighteen palette columns');
@@ -201,6 +452,8 @@ try {
     const manifest = {
       gameplayDisplay: metrics.gameplayDisplay,
       sourceAssetGitBlobSha,
+      bakedAsset: metrics.bakedAsset,
+      bakedParity: metrics.bakedParity,
       width: metrics.width,
       height: metrics.height,
       cellWidth: metrics.cellWidth,

@@ -1,0 +1,132 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import sharp from "sharp";
+import {
+  CHARACTER_CELL_WIDTH,
+  CHARACTER_COLORS,
+  CHARACTER_SHEET_HEIGHT,
+  CHARACTER_SHEET_WIDTH,
+  CHARACTER_SOURCE_SHEET_COLS,
+  CHARACTER_SOURCE_SHEET_WIDTH,
+  GENERATED_CHARACTER_PALETTES,
+  recolorSuitPixel,
+} from "@workspace/shared";
+
+const root = path.resolve(import.meta.dirname, "../..");
+const publicDir = path.join(root, "artifacts/telegram-game/public");
+const sourcePath = path.join(publicDir, "sprites/characters.png");
+const outputPath = path.join(publicDir, "sprites/characters-18.png");
+
+const sourceMetadata = await sharp(sourcePath).metadata();
+if (sourceMetadata.width !== CHARACTER_SOURCE_SHEET_WIDTH ||
+    sourceMetadata.height !== CHARACTER_SHEET_HEIGHT) {
+  throw new Error(
+    `Unexpected character source dimensions: ${sourceMetadata.width}×${sourceMetadata.height}`,
+  );
+}
+
+const sourceCellWidth = CHARACTER_SOURCE_SHEET_WIDTH / CHARACTER_SOURCE_SHEET_COLS;
+const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]));
+const atlas = Buffer.alloc(CHARACTER_SHEET_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
+
+/**
+ * Canvas 2D stores pixels premultiplied by alpha. Both drawImage() followed by
+ * getImageData(), and putImageData() followed by getImageData(), quantize RGB
+ * through an 8-bit premultiplied representation. Reproduce that round-trip so
+ * the PNG has the same stable straight-alpha values the legacy canvas exposes.
+ *
+ * Keep this integer arithmetic explicit: it is part of the byte-exact golden
+ * contract, not a visual approximation.
+ */
+function canvasReadbackChannel(channel: number, alpha: number): number {
+  if (alpha === 0) return 0;
+  const premultiplied = Math.floor((channel * alpha + 127) / 255);
+  return Math.min(255, Math.floor((premultiplied * 255 + alpha / 2) / alpha));
+}
+
+function normalizeCanvasReadback(data: Buffer, offset: number): void {
+  const alpha = data[offset + 3];
+  data[offset] = canvasReadbackChannel(data[offset], alpha);
+  data[offset + 1] = canvasReadbackChannel(data[offset + 1], alpha);
+  data[offset + 2] = canvasReadbackChannel(data[offset + 2], alpha);
+}
+
+for (let column = 0; column < CHARACTER_COLORS.length; column++) {
+  const color = CHARACTER_COLORS[column];
+  const sourceColumn = column < CHARACTER_SOURCE_SHEET_COLS ? column : 0;
+  const sourceLeft = Math.ceil(sourceColumn * sourceCellWidth);
+  const sourceRight = Math.floor((sourceColumn + 1) * sourceCellWidth);
+  const sourceColumnWidth = sourceRight - sourceLeft;
+  if (sourceColumnWidth <= 0) throw new Error(`Invalid source column ${sourceColumn}`);
+
+  const { data: sourceData, info } = await sharp(sourcePath)
+    .extract({ left: sourceLeft, top: 0, width: sourceColumnWidth, height: CHARACTER_SHEET_HEIGHT })
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  if (info.width !== sourceColumnWidth || info.height !== CHARACTER_SHEET_HEIGHT || info.channels !== 4) {
+    throw new Error(`Unexpected source ${color} column shape: ${info.width}×${info.height}×${info.channels}`);
+  }
+
+  // Match Canvas drawImage(..., imageSmoothingEnabled=false): sample the
+  // nearest source sample at each destination pixel centre. The exact browser
+  // sampling phase is verified separately by the browser parity probe. Sharp's resize
+  // kernel uses a different phase for this 159/160→161 mapping, which made
+  // the pre-baked PNG differ from the legacy runtime renderer.
+  const columnData = Buffer.alloc(CHARACTER_CELL_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
+  for (let row = 0; row < CHARACTER_SHEET_HEIGHT; row++) {
+    for (let x = 0; x < CHARACTER_CELL_WIDTH; x++) {
+      const samplePosition = (x + 0.5) * sourceColumnWidth / CHARACTER_CELL_WIDTH;
+      // Chromium resolves an exact nearest-neighbour boundary toward the
+      // lower source pixel. `ceil(position) - 1` matches both
+      // 160→161 (including its exact midpoint) and 159→161 sampling.
+      const sourceX = Math.max(
+        0,
+        Math.min(sourceColumnWidth - 1, Math.ceil(samplePosition) - 1),
+      );
+      const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
+      const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
+      sourceData.copy(columnData, targetOffset, sourceOffset, sourceOffset + 4);
+      // Match drawImage() -> getImageData(), including partially-transparent
+      // antialiased edge pixels (not only the fully-transparent case).
+      normalizeCanvasReadback(columnData, targetOffset);
+    }
+  }
+
+  const palette = paletteByColor.get(color);
+  if (palette) {
+    for (let offset = 0; offset < columnData.length; offset += 4) {
+      const [red, green, blue, alpha] = recolorSuitPixel(
+        columnData[offset], columnData[offset + 1], columnData[offset + 2], columnData[offset + 3], palette,
+      );
+      columnData[offset] = red;
+      columnData[offset + 1] = green;
+      columnData[offset + 2] = blue;
+      columnData[offset + 3] = alpha;
+      // Do not normalize a second time here: loading the baked PNG into the
+      // runtime canvas performs the same final premultiplied-alpha readback
+      // that the legacy canvas performs after putImageData().
+    }
+  }
+
+  const columnBytes = CHARACTER_CELL_WIDTH * 4;
+  for (let row = 0; row < CHARACTER_SHEET_HEIGHT; row++) {
+    const sourceOffset = row * columnBytes;
+    const targetOffset = (row * CHARACTER_SHEET_WIDTH + column * CHARACTER_CELL_WIDTH) * 4;
+    columnData.copy(atlas, targetOffset, sourceOffset, sourceOffset + columnBytes);
+  }
+}
+
+await fs.mkdir(path.dirname(outputPath), { recursive: true });
+await sharp(atlas, {
+  raw: {
+    width: CHARACTER_SHEET_WIDTH,
+    height: CHARACTER_SHEET_HEIGHT,
+    channels: 4,
+  },
+}).png({ compressionLevel: 9, adaptiveFiltering: false }).toFile(outputPath);
+
+console.log(
+  `Baked 18×9 character atlas ${CHARACTER_SHEET_WIDTH}×${CHARACTER_SHEET_HEIGHT} from ${path.relative(root, sourcePath)} → ${path.relative(root, outputPath)}`,
+);
