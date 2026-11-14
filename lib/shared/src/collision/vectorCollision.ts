@@ -44,16 +44,6 @@ export interface CollisionSourceManifest {
   };
   readonly shapeCounts: Readonly<Record<string, number>>;
   readonly zoneShapeCounts?: Readonly<Record<string, number>>;
-  readonly rasterConstraint?: {
-    readonly kind: "fine-grid-blocked-cell-union";
-    readonly cols: number;
-    readonly rows: number;
-    readonly blockedCells: number;
-    readonly mergedRectangles: number;
-    readonly cellWidth: number;
-    readonly cellHeight: number;
-    readonly sourcePath: string;
-  };
   readonly geometryOverrides?: {
     readonly walkableReplacementZones: readonly {
       readonly id: string;
@@ -248,18 +238,6 @@ export function validateCollisionDocument(value: unknown): string[] {
     }
     if (!source.shapeCounts || !Number.isInteger(source.shapeCounts.total) || (source.shapeCounts.total ?? 0) < 1) {
       errors.push("source.shapeCounts.total must be a positive integer");
-    }
-    if (source.rasterConstraint !== undefined) {
-      const raster = source.rasterConstraint;
-      if (!raster || raster.kind !== "fine-grid-blocked-cell-union" ||
-          !Number.isInteger(raster.cols) || raster.cols < 1 ||
-          !Number.isInteger(raster.rows) || raster.rows < 1 ||
-          !Number.isInteger(raster.blockedCells) || raster.blockedCells < 0 ||
-          !Number.isInteger(raster.mergedRectangles) || raster.mergedRectangles < 1 ||
-          !(raster.cellWidth > 0) || !(raster.cellHeight > 0) ||
-          raster.sourcePath !== "lib/shared/src/collisionDataFine.ts") {
-        errors.push("source.rasterConstraint must describe the canonical fine-grid blocked-cell union");
-      }
     }
   }
   return errors;

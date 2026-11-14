@@ -4,7 +4,6 @@ import path from "node:path";
 import sharp from "sharp";
 import { CollisionWorld, validateCollisionDocument, type CollisionDocument, type CollisionShape, type Point } from "../../lib/shared/src/collision/vectorCollision.js";
 import { MAP_H, MAP_W } from "../../lib/shared/src/coords.js";
-import { buildPreciseCollisionGrid, FINE_CELL_X, FINE_CELL_Y, FINE_COLS, FINE_ROWS } from "../../lib/shared/src/collisionMap.js";
 import { assignMapAuthoringZonesByCentroid } from "../../lib/shared/src/collision/mapZones.js";
 import {
   MANUAL_BLOCKED_POLYGONS,
@@ -129,59 +128,6 @@ function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   // keep the area unclassified until an owner-traced outline is reviewed.
   return shapes;
 }
-/**
- * Add the complete current fine-grid blocked topology as indexed vector solids.
- * Red-line traces remain the candidate authored boundaries; this conservative
- * constraint prevents vector-only routes into cells rejected by current movement.
- */
-function makeFineGridSolidShapes(grid: Uint8Array): CollisionShape[] {
-  if (grid.length !== FINE_COLS * FINE_ROWS) {
-    throw new Error("fine-grid constraint dimensions do not match the canonical mask");
-  }
-  type Rect = { x0: number; x1: number; y0: number; y1: number };
-  const active = new Map<string, Rect>();
-  const finished: Rect[] = [];
-  for (let y = 0; y < FINE_ROWS; y++) {
-    const runs: Array<readonly [number, number]> = [];
-    let x = 0;
-    while (x < FINE_COLS) {
-      if (grid[y * FINE_COLS + x] !== 1) { x++; continue; }
-      const x0 = x;
-      while (x < FINE_COLS && grid[y * FINE_COLS + x] === 1) x++;
-      runs.push([x0, x]);
-    }
-    const next = new Map<string, Rect>();
-    for (const [x0, x1] of runs) {
-      const key = x0 + ":" + x1;
-      const previous = active.get(key);
-      next.set(key, previous
-        ? { ...previous, y1: y + 1 }
-        : { x0, x1, y0: y, y1: y + 1 });
-    }
-    for (const [key, rect] of active) {
-      if (!next.has(key)) finished.push(rect);
-    }
-    active.clear();
-    for (const [key, rect] of next) active.set(key, rect);
-  }
-  finished.push(...active.values());
-
-  return finished.map((rect, index) => {
-    const minX = rect.x0 * FINE_CELL_X;
-    const maxX = rect.x1 * FINE_CELL_X;
-    const minY = rect.y0 * FINE_CELL_Y;
-    const maxY = rect.y1 * FINE_CELL_Y;
-    return {
-      id: "fine-grid-blocked-" + String(index + 1).padStart(4, "0"),
-      points: [[minX, minY], [maxX, minY], [maxX, maxY], [minX, maxY]] as Point[],
-      closed: true,
-      blocksMove: true,
-      blocksSight: false,
-      label: "fine-grid blocked region (parity constraint)",
-    };
-  });
-}
-
 type ReplacementBounds = readonly [number, number, number, number];
 
 function pointAt(a: Point, b: Point, t: number): Point {
@@ -335,13 +281,7 @@ async function main():Promise<void> {
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
   const tracedShapes=makeShapes(paths,info.width,info.height);
-  const redlineCandidateShapes=applyWalkableReplacementZones(tracedShapes);
-  const fineGrid=buildPreciseCollisionGrid();
-  const fineGridBlockedCells=Array.from(fineGrid).reduce((sum,value)=>sum+(value===1?1:0),0);
-  const fineGridShapes=makeFineGridSolidShapes(fineGrid);
-  const shapes=assignMapAuthoringZonesByCentroid({
-    shapes:[...redlineCandidateShapes,...fineGridShapes],
-  }).shapes;
+  const shapes=assignMapAuthoringZonesByCentroid({shapes:applyWalkableReplacementZones(tracedShapes)}).shapes;
   const points=shapes.reduce((n,s)=>n+s.points.length,0);
   if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
   const document:CollisionDocument={
@@ -353,8 +293,6 @@ async function main():Promise<void> {
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
         collisionEngine:{path:"lib/shared/src/collision/vectorCollision.ts",sha256:await hash("lib/shared/src/collision/vectorCollision.ts")},
         collisionOverrides:{path:"lib/shared/src/collisionOverrides.ts",sha256:await hash("lib/shared/src/collisionOverrides.ts")},
-        fineGridData:{path:"lib/shared/src/collisionDataFine.ts",sha256:await hash("lib/shared/src/collisionDataFine.ts")},
-        fineGridRuntime:{path:"lib/shared/src/collisionMap.ts",sha256:await hash("lib/shared/src/collisionMap.ts")},
       },
       geometryOverrides:{
         walkableReplacementZones:MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone=>({id:zone.id,bounds:zone.bounds})),
@@ -362,20 +300,9 @@ async function main():Promise<void> {
       },
       referenceImage:{width:info.width,height:info.height},
       vectorization:{redPixelCount:redCount,skeletonPixelCount:skeletonCount,tracedPathCount:paths.length,simplifiedPointCount:points,simplificationToleranceSourcePx:TOLERANCE,closedSolidCount:shapes.filter(s=>s.closed).length,openBoundaryCount:shapes.filter(s=>!s.closed).length},
-      rasterConstraint:{
-        kind:"fine-grid-blocked-cell-union",
-        cols:FINE_COLS,
-        rows:FINE_ROWS,
-        blockedCells:fineGridBlockedCells,
-        mergedRectangles:fineGridShapes.length,
-        cellWidth:FINE_CELL_X,
-        cellHeight:FINE_CELL_Y,
-        sourcePath:"lib/shared/src/collisionDataFine.ts",
-      },
       shapeCounts:{
         total:shapes.length,
-        tracedAfterReplacementClipping:redlineCandidateShapes.length,
-        fineGridSolidRectangles:fineGridShapes.length,
+        tracedAfterReplacementClipping:tracedShapes.length,
         closedSolids:shapes.filter(s=>s.closed).length,
         openBoundaries:shapes.filter(s=>!s.closed).length,
         manualBlockedPolygons:MANUAL_BLOCKED_POLYGONS.length,
@@ -400,7 +327,7 @@ async function main():Promise<void> {
     'import type { CollisionDocument } from "./vectorCollision.js";\n'+
     "const COLLISION_DOCUMENT_JSON = "+JSON.stringify(JSON.stringify(document))+";\n"+
     "export const COLLISION_DOCUMENT = JSON.parse(COLLISION_DOCUMENT_JSON) as CollisionDocument;\n");
-  const svgPaths=redlineCandidateShapes.map(s=>{
+  const svgPaths=shapes.map(s=>{
     const d=s.points.map((p,i)=>(i?"L ":"M ")+(p[0]/MAP_W*info.width)+" "+(p[1]/MAP_H*info.height)).join(" ")+(s.closed?" Z":"");
     return '<path d="'+d+'" fill="none" stroke="#00ff68" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
   }).join("");
@@ -425,7 +352,7 @@ async function main():Promise<void> {
     const left=Math.floor(col*info.width/4),top=Math.floor(row*info.height/3);
     const right=Math.floor((col+1)*info.width/4),bottom=Math.floor((row+1)*info.height/3);
     const cropWidth=right-left,cropHeight=bottom-top;
-    const localPaths=redlineCandidateShapes.map(shape=>{
+    const localPaths=shapes.map(shape=>{
       const d=shape.points.map((point,index)=>(index?"L ":"M ")+
         ((point[0]/MAP_W*info.width-left)*detailScale).toFixed(2)+" "+
         ((point[1]/MAP_H*info.height-top)*detailScale).toFixed(2)).join(" ");
