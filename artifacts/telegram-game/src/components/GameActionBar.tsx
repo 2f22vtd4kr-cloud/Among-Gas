@@ -9,13 +9,11 @@ export interface GameActionBarProps {
   reportAvailable: boolean;
   useAvailable: boolean;
   useActionKind: string | null;
-  ventAvailable: boolean;
   english: boolean;
   positionStyle: CSSProperties;
   onKill: () => void;
   onReport: () => void;
   onUse: () => void;
-  onVent: () => void;
 }
 
 const ACTION_SIZE = 60;
@@ -42,7 +40,7 @@ const baseButton: CSSProperties = {
   WebkitTapHighlightColor: "transparent",
 };
 
-function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use" | "vent"; actionKind?: string | null }) {
+function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use"; actionKind?: string | null }) {
   const common = {
     width: 28,
     height: 28,
@@ -83,12 +81,6 @@ function ActionGlyph({ kind, actionKind }: { kind: "kill" | "report" | "use" | "
       <path d="M24 15v9m0 5v.5" />
     </svg>
   );
-  if (kind === "vent") return (
-    <svg {...common}>
-      <path d="M7 12h34M7 24h34M7 36h34" />
-      <path d="m15 7 0 30m18-30v30" opacity=".6" />
-    </svg>
-  );
   return (
     <svg {...common}>
       <path d="M14 24v-9a3 3 0 0 1 6 0v8-12a3 3 0 0 1 6 0v12-9a3 3 0 0 1 6 0v10-5a3 3 0 0 1 6 0v10c0 8-5 13-13 13h-2c-5 0-8-2-11-7l-5-8a3 3 0 0 1 5-3l4 5" />
@@ -100,7 +92,7 @@ function ActionButton({
   kind, label, ariaLabel, disabled, background, onClick, cooldown, testId,
   useActionKind, useAvailable, reportAvailable, killAvailable,
 }: {
-  kind: "kill" | "report" | "use" | "vent";
+  kind: "kill" | "report" | "use";
   label: string;
   ariaLabel: string;
   disabled: boolean;
@@ -157,7 +149,6 @@ export default function GameActionBar(props: GameActionBarProps) {
   const killDisabled = props.killCooldownMs > 0 || !props.killAvailable;
   const reportDisabled = props.isGhost || !props.reportAvailable;
   const useDisabled = !props.useAvailable;
-  const ventDisabled = !props.ventAvailable;
 
   return (
     <div
@@ -219,19 +210,6 @@ export default function GameActionBar(props: GameActionBarProps) {
         useAvailable={props.useAvailable}
         onClick={props.onUse}
       />
-      {props.isImpostor && !props.isGhost && (
-        <ActionButton
-          kind="vent"
-          testId="game-action-vent"
-          label={props.english ? "VENT" : "ЛЮК"}
-          ariaLabel={ventDisabled
-            ? (props.english ? "Vent unavailable" : "Люк недоступен")
-            : (props.english ? "Enter vent" : "Войти в люк")}
-          disabled={ventDisabled}
-          background="#9c61c7"
-          onClick={props.onVent}
-        />
-      )}
     </div>
   );
 }
