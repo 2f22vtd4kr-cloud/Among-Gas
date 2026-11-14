@@ -114,6 +114,40 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(contains([1900, 505], foliage.visibility(1500, 505, 500)), false);
 }
 
+// Dense closed geometry uses spatially indexed solid bounds without changing queries.
+{
+  const solids: CollisionShape[] = [];
+  for (let index = 0; index < 2048; index++) {
+    const column = index % 100;
+    const row = Math.floor(index / 100);
+    const x = 20 + column * 32;
+    const y = 20 + row * 32;
+    solids.push(shape(
+      "indexed-solid-" + index,
+      [[x, y], [x + 8, y], [x + 8, y + 8], [x, y + 8]],
+      true,
+      true,
+      false,
+      false,
+    ));
+  }
+  const dense = new CollisionWorld(solids);
+  for (const index of [0, 1, 99, 100, 511, 1024, 1536, 2047]) {
+    const column = index % 100;
+    const row = Math.floor(index / 100);
+    const x = 20 + column * 32;
+    const y = 20 + row * 32;
+    assert.equal(dense.insideSolid(x + 4, y + 4), true,
+      "solid lookup must find indexed interiors across hash cells");
+    assert.equal(dense.isWalkable(x + 4, y + 4, 2), false,
+      "indexed solid interiors must remain movement-blocked");
+    assert.equal(dense.isLineOfSightClear(x - 4, y + 4, x + 12, y + 4), true,
+      "movement-only indexed solids must not become vision blockers");
+    assert.equal(dense.isShadowLineOfSightClear(x - 4, y + 4, x + 12, y + 4), true,
+      "movement-only indexed solids must not become shadow blockers");
+  }
+}
+
 // Direct and perimeter-aware line of sight share the same vector blockers.
 {
   const wall = new CollisionWorld([
