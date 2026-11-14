@@ -29,6 +29,28 @@ const sourceCellWidth = CHARACTER_SOURCE_SHEET_WIDTH / CHARACTER_SOURCE_SHEET_CO
 const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]));
 const atlas = Buffer.alloc(CHARACTER_SHEET_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
 
+/**
+ * Canvas 2D stores pixels premultiplied by alpha. Both drawImage() followed by
+ * getImageData(), and putImageData() followed by getImageData(), quantize RGB
+ * through an 8-bit premultiplied representation. Reproduce that round-trip so
+ * the PNG has the same stable straight-alpha values the legacy canvas exposes.
+ *
+ * Keep this integer arithmetic explicit: it is part of the byte-exact golden
+ * contract, not a visual approximation.
+ */
+function canvasReadbackChannel(channel: number, alpha: number): number {
+  if (alpha === 0) return 0;
+  const premultiplied = Math.floor((channel * alpha + 127) / 255);
+  return Math.min(255, Math.floor((premultiplied * 255 + alpha / 2) / alpha));
+}
+
+function normalizeCanvasReadback(data: Buffer, offset: number): void {
+  const alpha = data[offset + 3];
+  data[offset] = canvasReadbackChannel(data[offset], alpha);
+  data[offset + 1] = canvasReadbackChannel(data[offset + 1], alpha);
+  data[offset + 2] = canvasReadbackChannel(data[offset + 2], alpha);
+}
+
 for (let column = 0; column < CHARACTER_COLORS.length; column++) {
   const color = CHARACTER_COLORS[column];
   const sourceColumn = column < CHARACTER_SOURCE_SHEET_COLS ? column : 0;
@@ -61,15 +83,9 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
       const sourceOffset = (row * sourceColumnWidth + sourceX) * 4;
       const targetOffset = (row * CHARACTER_CELL_WIDTH + x) * 4;
       sourceData.copy(columnData, targetOffset, sourceOffset, sourceOffset + 4);
-      // Canvas stores drawImage pixels premultiplied; fully transparent pixels
-      // therefore read back with zero RGB even if the PNG contains hidden RGB.
-      // Normalize this case before encoding the baked atlas so getImageData()
-      // parity is byte-exact.
-      if (columnData[targetOffset + 3] === 0) {
-        columnData[targetOffset] = 0;
-        columnData[targetOffset + 1] = 0;
-        columnData[targetOffset + 2] = 0;
-      }
+      // Match drawImage() -> getImageData(), including partially-transparent
+      // antialiased edge pixels (not only the fully-transparent case).
+      normalizeCanvasReadback(columnData, targetOffset);
     }
   }
 
@@ -83,6 +99,8 @@ for (let column = 0; column < CHARACTER_COLORS.length; column++) {
       columnData[offset + 1] = green;
       columnData[offset + 2] = blue;
       columnData[offset + 3] = alpha;
+      // Match putImageData() -> getImageData() for the completed palette cell.
+      normalizeCanvasReadback(columnData, offset);
     }
   }
 
