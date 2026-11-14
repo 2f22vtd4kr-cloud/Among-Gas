@@ -81,6 +81,7 @@ import { stepRemotePlayerAnimation, type RemotePlayerAnimationState } from '../g
 import { MapCameraController } from '../game/mapCamera';
 import { getUseActionKind, isUseActionEnabled } from '../game/gameActionState';
 import GameActionBar from '../components/GameActionBar';
+import GameSabotageControls from '../components/GameSabotageControls';
 import TaskListPanel from '../components/TaskListPanel';
 import { EmergencyCallIcon } from '../components/EmergencyMeetingArtwork';
 import EmergencyCallSplash from '../components/EmergencyCallSplash';
@@ -409,7 +410,6 @@ export default function GameMap() {
   const sabotageRemainingMs = sabotage
     ? Math.max(0, getSabotageTimeoutMs(sabotage.systemId as SabotageSystemId) - (sabotageNow - sabotage.startedAtMs))
     : 0;
-  const sabotageDef = sabotage ? SABOTAGE_DEFS[sabotage.systemId as SabotageSystemId] : null;
 
   // ── Meetings & voting (Phase 6) ────────────────────────────────────────────
   // Movement freezes for everyone while a meeting is in progress — the server
@@ -1886,104 +1886,22 @@ export default function GameMap() {
           }}
         />
       )}
-      {/* ── Sabotage panel button (Phase 8, impostor only) ─────────────────── */}
-      {loaded && !amIDead && amIImpostor && meeting === null && sabotage === null && (
-        <div style={{
-          position: 'fixed', bottom: 130, left: 24, zIndex: 25,
-          ...customControlPositionStyle('sabotage', controlLayout, joystickSide),
-        }}>
-          <button
-            aria-label={sabotageCooldownMs > 0
-              ? (en ? `Sabotage cooldown ${Math.ceil(sabotageCooldownMs / 1000)} seconds` : `Перезарядка саботажа ${Math.ceil(sabotageCooldownMs / 1000)} секунд`)
-              : (en ? 'Sabotage' : 'Саботаж')}
-            disabled={sabotageCooldownMs > 0}
-            onClick={() => { haptic.tap(); setShowSabotagePanel(true); }}
-            style={{
-              width: 88, height: 88, borderRadius: '50%',
-              fontFamily: 'sans-serif', fontWeight: 900, fontSize: 11,
-              letterSpacing: '0.03em', textTransform: 'uppercase',
-              color: sabotageCooldownMs > 0 ? 'rgba(200,170,255,0.35)' : '#f0e4ff',
-              background: sabotageCooldownMs > 0
-                ? 'rgba(50,20,70,0.55)'
-                : 'radial-gradient(circle, rgba(130,40,200,0.95), rgba(60,10,110,0.95))',
-              border: `2px solid ${sabotageCooldownMs > 0 ? 'rgba(160,100,220,0.25)' : 'rgba(190,130,255,0.85)'}`,
-              boxShadow: sabotageCooldownMs > 0 ? 'none' : '0 0 22px rgba(150,60,255,0.5)',
-              cursor: sabotageCooldownMs > 0 ? 'default' : 'pointer',
-              backdropFilter: 'blur(4px)',
-            }}
-          >
-            {sabotageCooldownMs > 0 ? Math.ceil(sabotageCooldownMs / 1000) : (
-              <svg viewBox="0 0 48 48" width="38" height="38" aria-hidden="true">
-                <path d="M24 5 45 42H3L24 5Z" fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" />
-                <path d="M24 17v12m0 6v1" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" />
-              </svg>
-            )}
-          </button>
-        </div>
-      )}
-
-      {/* ── Sabotage active banner (Phase 8) ─────────────────────────────────── */}
-      {loaded && sabotage && sabotageDef && (
-        <div style={{
-          position: 'fixed', top: 'calc(env(safe-area-inset-top, 0px) + 112px)', left: '50%', transform: 'translateX(-50%)',
-          padding: '6px 16px', zIndex: 40, textAlign: 'center',
-          background: 'rgba(70,10,10,0.9)', color: '#ffe4e4',
-          fontFamily: 'sans-serif', fontSize: 12, fontWeight: 700,
-          letterSpacing: '0.03em', borderRadius: 8,
-          border: '1px solid rgba(255,100,100,0.4)', backdropFilter: 'blur(6px)',
-        }}>
-          {sabotageRu(sabotageDef.name, language)} {en ? 'sabotaged' : 'саботирован'} — {Math.ceil(sabotageRemainingMs / 1000)}{en ? 's' : 'с'}
-          {sabotageDef.pads.length > 1 && (
-            <span style={{ opacity: 0.8 }}> ({sabotage.fixedPads.length}/{sabotageDef.pads.length} {en ? 'fixed' : 'починено'})</span>
-          )}
-        </div>
-      )}
-
-      {/* ── Sabotage panel overlay (Phase 8, impostor only) ─────────────────── */}
-      {showSabotagePanel && amIImpostor && sabotage === null && (
-        <div
-          style={{
-            position: 'fixed', inset: 0, zIndex: 55,
-            display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
-            background: 'rgba(6,10,18,0.85)', backdropFilter: 'blur(4px)', gap: 14,
-          }}
-          onClick={() => setShowSabotagePanel(false)}
-        >
-          <div style={{
-            fontSize: 11, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
-            letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 4,
-          }}>
-            {en ? 'Choose a sabotage system' : 'Выберите систему саботажа'}
-          </div>
-          {Object.values(SABOTAGE_DEFS).map(def => (
-            <button
-              key={def.id}
-              onClick={(e) => { e.stopPropagation(); haptic.tap(); sfx('uiSelect', 0.3); triggerSabotage(def.id); setShowSabotagePanel(false); }}
-              style={{
-                padding: '12px 32px', borderRadius: 10, minWidth: 180,
-                background: 'rgba(130,40,200,0.85)', color: '#f0e4ff',
-                border: '1px solid rgba(190,130,255,0.5)',
-                fontFamily: 'sans-serif', fontWeight: 700, fontSize: 14,
-                letterSpacing: '0.03em', cursor: 'pointer',
-              }}
-            >
-              {sabotageRu(def.name, language)}
-            </button>
-          ))}
-          <button
-            onClick={() => setShowSabotagePanel(false)}
-            style={{
-              marginTop: 8, padding: '8px 20px', borderRadius: 8,
-              background: 'transparent', color: 'rgba(255,255,255,0.6)',
-              border: '1px solid rgba(255,255,255,0.25)',
-              fontFamily: 'sans-serif', fontSize: 12, cursor: 'pointer',
-            }}
-          >
-            {en ? 'Cancel' : 'Отмена'}
-          </button>
-        </div>
-      )}
+      <GameSabotageControls
+        loaded={loaded}
+        isDead={amIDead}
+        isImpostor={amIImpostor}
+        meetingActive={meeting !== null}
+        sabotage={sabotage}
+        cooldownMs={sabotageCooldownMs}
+        remainingMs={sabotageRemainingMs}
+        english={en}
+        language={language}
+        positionStyle={customControlPositionStyle('sabotage', controlLayout, joystickSide)}
+        panelOpen={showSabotagePanel}
+        onPanelOpen={() => setShowSabotagePanel(true)}
+        onPanelClose={() => setShowSabotagePanel(false)}
+        onTrigger={triggerSabotage}
+      />
 
       {/* ── Emergency meeting button (Phase 6) ─────────────────────────────── */}
       {loaded && !amIDead && meeting === null && sabotage === null && (

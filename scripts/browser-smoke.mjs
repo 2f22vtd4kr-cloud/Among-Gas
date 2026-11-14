@@ -1009,8 +1009,10 @@ try {
   // All five sabotage choices render in the impostor panel.
   await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
   await waitForRoleRevealToFinish(page);
-  const sabotageButton = page.getByRole('button', { name: /Саботаж/ });
+  const sabotageButton = page.getByTestId('game-action-sabotage');
   await sabotageButton.waitFor({ state: 'visible', timeout: 10_000 });
+  assert.equal(await page.getByTestId('game-sabotage-panel').count(), 0,
+    'the sabotage chooser must stay closed until the impostor opens it');
   const sabotageIcon = sabotageButton.locator('svg');
   const sabotageIconBox = await sabotageIcon.boundingBox();
   assert.equal(await sabotageButton.locator('img').count(), 0,
@@ -1018,11 +1020,26 @@ try {
   assert.ok(sabotageIconBox && sabotageIconBox.width >= 32 && sabotageIconBox.height >= 32,
     'Sabotage action must display its legible original vector icon');
   await sabotageButton.click();
+  await page.getByTestId('game-sabotage-panel').waitFor({ state: 'visible' });
   await page.getByText('Выберите систему саботажа', { exact: true }).waitFor({ state: 'visible' });
-  for (const system of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери']) {
-    await page.getByRole('button', { name: system, exact: true }).waitFor({ state: 'visible' });
+  for (const [index, system] of ['Свет', 'O₂', 'Реактор', 'Связь', 'Двери'].entries()) {
+    const option = page.getByTestId('game-sabotage-option-' + (index + 1));
+    await option.waitFor({ state: 'visible' });
+    assert.equal(await option.innerText(), system,
+      'Sabotage system ' + (index + 1) + ' must retain its localized label');
   }
   await page.getByRole('button', { name: 'Отмена', exact: true }).click();
+  await page.getByTestId('game-sabotage-panel').waitFor({ state: 'hidden' });
+
+  await page.goto(origin + '/?mock=sabotage-o2', { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  const sabotageBanner = page.getByTestId('game-sabotage-banner');
+  await sabotageBanner.waitFor({ state: 'visible', timeout: 10_000 });
+  await sabotageBanner.getByText('1/2 починено').waitFor({ state: 'visible' });
+
+  await page.goto(origin + '/?mock=task-interaction', { waitUntil: 'domcontentloaded' });
+  await waitForRoleRevealToFinish(page);
+  await page.getByTestId('game-action-sabotage').waitFor({ state: 'hidden' });
 
   // English must persist into actual gameplay, tasks, and meeting screens—not only the menu.
   await page.goto(`${origin}/?mock=lobby-empty`, { waitUntil: 'domcontentloaded' });
