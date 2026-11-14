@@ -49,7 +49,8 @@ try {
     await page.waitForFunction(() => {
       const status = window.__AG_TILE_DEBUG;
       return !!status && (status.visibleTotal ?? 0) > 0 &&
-        status.visibleLoaded === status.visibleTotal && status.failed === 0;
+        status.loading === 0 && status.failed === 0 &&
+        status.visibleLoaded + (status.deferred ?? 0) === status.visibleTotal;
     }, undefined, { timeout: 25_000 });
 
     const status = await page.evaluate(() => window.__AG_TILE_DEBUG);
