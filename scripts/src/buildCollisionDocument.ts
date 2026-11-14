@@ -9,6 +9,8 @@ import {
   CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS,
   MANUAL_BLOCKED_POLYGONS,
   MANUAL_WALKABLE_REPLACEMENT_ZONES,
+  SOURCE_ART_ISOLATED_REGION_CANDIDATES,
+  SOURCE_ART_SEALED_REGION_CANDIDATES,
 } from "../../lib/shared/src/collisionOverrides.js";
 
 const root = path.resolve(import.meta.dirname, "../..");
@@ -107,6 +109,221 @@ function area(p:readonly Point[]):number {
   let a=0; for(let i=0;i<p.length;i++){const q=p[i],r=p[(i+1)%p.length];a+=q[0]*r[1]-r[0]*q[1];}
   return Math.abs(a)/2;
 }
+interface FreeComponent {
+  readonly id: number;
+  readonly area: number;
+  readonly minX: number;
+  readonly minY: number;
+  readonly maxX: number;
+  readonly maxY: number;
+  readonly touchesBorder: boolean;
+}
+
+function closeBinaryMask(mask: Uint8Array, w: number, h: number, kernel: number): Uint8Array {
+  if (kernel < 3 || kernel % 2 === 0) throw new RangeError("closing kernel must be an odd value >=3");
+  const radius = Math.floor(kernel / 2);
+  const dilated = new Uint8Array(mask.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let found = false;
+    for (let dy = -radius; dy <= radius && !found; dy++) {
+      const ny = y + dy;
+      if (ny < 0 || ny >= h) continue;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx;
+        if (nx >= 0 && nx < w && mask[ny * w + nx] === 1) { found = true; break; }
+      }
+    }
+    if (found) dilated[y * w + x] = 1;
+  }
+  const closed = new Uint8Array(mask.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let full = true;
+    for (let dy = -radius; dy <= radius && full; dy++) {
+      const ny = y + dy;
+      if (ny < 0 || ny >= h) continue;
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = x + dx;
+        if (nx >= 0 && nx < w && dilated[ny * w + nx] === 0) { full = false; break; }
+      }
+    }
+    if (full) closed[y * w + x] = 1;
+  }
+  return closed;
+}
+
+function labelFreeComponents(barrier: Uint8Array, w: number, h: number): {
+  labels: Int32Array;
+  components: FreeComponent[];
+} {
+  const labels = new Int32Array(barrier.length);
+  labels.fill(-1);
+  const queue = new Int32Array(barrier.length);
+  const components: FreeComponent[] = [];
+  const neighbours: readonly (readonly [number, number])[] = [
+    [-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],
+  ];
+  for (let start = 0; start < barrier.length; start++) {
+    if (barrier[start] === 1 || labels[start] !== -1) continue;
+    const id = components.length;
+    let head = 0, tail = 0;
+    queue[tail++] = start;
+    labels[start] = id;
+    let minX = w, minY = h, maxX = -1, maxY = -1, touchesBorder = false;
+    while (head < tail) {
+      const index = queue[head++];
+      const x = index % w, y = Math.floor(index / w);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+      if (x === 0 || y === 0 || x === w - 1 || y === h - 1) touchesBorder = true;
+      for (const [dx, dy] of neighbours) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const next = ny * w + nx;
+        if (barrier[next] === 1 || labels[next] !== -1) continue;
+        labels[next] = id;
+        queue[tail++] = next;
+      }
+    }
+    components.push({ id, area: tail, minX, minY, maxX, maxY, touchesBorder });
+  }
+  return { labels, components };
+}
+
+function signedArea(points: readonly Point[]): number {
+  let value = 0;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index], b = points[(index + 1) % points.length];
+    value += a[0] * b[1] - b[0] * a[1];
+  }
+  return value / 2;
+}
+
+function componentOuterContours(
+  labels: Int32Array, w: number, h: number, componentId: number,
+): Point[][] {
+  type Edge = { ax: number; ay: number; bx: number; by: number; direction: number };
+  const edges: Edge[] = [];
+  const outgoing = new Map<string, number[]>();
+  const add = (ax: number, ay: number, bx: number, by: number, direction: number) => {
+    const index = edges.length;
+    edges.push({ ax, ay, bx, by, direction });
+    const key = ax + "," + ay;
+    const bucket = outgoing.get(key);
+    if (bucket) bucket.push(index); else outgoing.set(key, [index]);
+  };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (labels[y * w + x] !== componentId) continue;
+    if (y === 0 || labels[(y - 1) * w + x] !== componentId) add(x, y, x + 1, y, 0);
+    if (x === w - 1 || labels[y * w + x + 1] !== componentId) add(x + 1, y, x + 1, y + 1, 1);
+    if (y === h - 1 || labels[(y + 1) * w + x] !== componentId) add(x + 1, y + 1, x, y + 1, 2);
+    if (x === 0 || labels[y * w + x - 1] !== componentId) add(x, y + 1, x, y, 3);
+  }
+  const used = new Uint8Array(edges.length);
+  const priority = [1, 3, 2, 0];
+  const loops: Point[][] = [];
+  for (let start = 0; start < edges.length; start++) {
+    if (used[start]) continue;
+    const first = edges[start];
+    const loop: Point[] = [];
+    let edgeIndex = start, closed = false, guard = 0;
+    while (!used[edgeIndex] && guard++ <= edges.length + 2) {
+      used[edgeIndex] = 1;
+      const edge = edges[edgeIndex];
+      loop.push([edge.ax, edge.ay]);
+      if (edge.bx === first.ax && edge.by === first.ay) { closed = true; break; }
+      const candidates = (outgoing.get(edge.bx + "," + edge.by) ?? []).filter(index => !used[index]);
+      if (!candidates.length) break;
+      candidates.sort((a, b) => {
+        const da = (edges[a].direction - edge.direction + 4) % 4;
+        const db = (edges[b].direction - edge.direction + 4) % 4;
+        return priority.indexOf(da) - priority.indexOf(db);
+      });
+      edgeIndex = candidates[0];
+    }
+    if (!closed || loop.length < 3) continue;
+    // With the component interior kept on the right, outer loops have positive
+    // signed area; negative loops are holes around furniture/fixtures.
+    if (signedArea(loop) > 0) loops.push(loop);
+  }
+  return loops;
+}
+
+function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
+  shapes: CollisionShape[];
+  metadata: NonNullable<CollisionDocument["source"]>["walkableRegionExtraction"];
+} {
+  const barrier = closeBinaryMask(mask, w, h, 5);
+  const { labels, components } = labelFreeComponents(barrier, w, h);
+  const interior = components.filter(component => !component.touchesBorder);
+  const main = interior.sort((a, b) => b.area - a.area)[0];
+  if (!main || main.area < 100_000) throw new Error("red-line source did not produce a substantial spawn-connected floor region");
+
+  const isolatedReference = SOURCE_ART_ISOLATED_REGION_CANDIDATES[0].islandSideReferenceImage;
+  const referenceX = isolatedReference[0], referenceY = isolatedReference[1];
+  let isolatedId = labels[referenceY * w + referenceX];
+  if (isolatedId < 0 || isolatedId === main.id) {
+    let nearest = Number.POSITIVE_INFINITY;
+    for (let radius = 1; radius <= 8 && (isolatedId < 0 || isolatedId === main.id); radius++) {
+      for (let dy = -radius; dy <= radius; dy++) for (let dx = -radius; dx <= radius; dx++) {
+        const x = referenceX + dx, y = referenceY + dy;
+        if (x < 0 || y < 0 || x >= w || y >= h) continue;
+        const id = labels[y * w + x];
+        if (id < 0 || id === main.id) continue;
+        const d = dx * dx + dy * dy;
+        if (d < nearest) { nearest = d; isolatedId = id; }
+      }
+    }
+  }
+  const isolated = components.find(component => component.id === isolatedId);
+  if (!isolated || isolated.touchesBorder || isolated.area < 10_000 || isolated.id === main.id) {
+    throw new Error("C38 source-art reference point did not resolve to a separate enclosed floor component");
+  }
+
+  const selected = [
+    { component: main, id: "main-spawn-connected-floor", role: "spawn-connected-floor" as const, label: "source-derived spawn-connected playable floor" },
+    { component: isolated, id: "east-office-vehicle-service-bay", role: "isolated-interior-candidate" as const, label: "source-derived isolated bay interior; no entry authored" },
+  ];
+  const shapes: CollisionShape[] = [];
+  for (const region of selected) {
+    const loops = componentOuterContours(labels, w, h, region.component.id);
+    if (!loops.length) throw new Error("source floor region has no closed outer contour: " + region.id);
+    loops.forEach((loop, loopIndex) => {
+      const simplified = simplify([...loop, loop[0]], TOLERANCE);
+      if (simplified.length > 1 && simplified[0][0] === simplified[simplified.length - 1][0] &&
+          simplified[0][1] === simplified[simplified.length - 1][1]) simplified.pop();
+      const points = simplified.map(([x, y]) => [(x / w) * MAP_W, (y / h) * MAP_H] as Point);
+      if (points.length < 3 || area(points) < 100) return;
+      shapes.push({
+        id: "walkable-region-" + region.id + "-" + String(loopIndex + 1).padStart(2, "0"),
+        points,
+        closed: true,
+        blocksMove: false,
+        blocksSight: false,
+        castsShadow: false,
+        walkableRegion: true,
+        label: region.label,
+      });
+    });
+  }
+  return {
+    shapes,
+    metadata: {
+      morphologyKernelSourcePx: 5,
+      connectivity: 8,
+      selectedRegions: selected.map(region => ({
+        id: region.id,
+        role: region.role,
+        pixelArea: region.component.area,
+        sourceBounds: [region.component.minX, region.component.minY, region.component.maxX + 1, region.component.maxY + 1] as const,
+        ownerDecisionRequired: region.role === "isolated-interior-candidate",
+      })),
+      excludedDetachedCandidates: SOURCE_ART_SEALED_REGION_CANDIDATES.map(candidate => candidate.id),
+    },
+  };
+}
+
 function makeShapes(paths:number[][],w:number,h:number):CollisionShape[] {
   const shapes:CollisionShape[]=[];
   for(const path of paths) {
