@@ -179,11 +179,20 @@ async function main() {
     );
     send(soloHost, [0x23]);
     await waitFor(soloHost, b => b[0] === 0x24 && b[1] === 0x01, 2_000);
-    await sleep(1_500);
+    const botResumeStartedAt = Date.now();
+    while (
+      soloHost.msgs.filter(b => b[0] === 0xFF).length <= spawnDeltaCount &&
+      Date.now() - botResumeStartedAt < 5_000
+    ) {
+      await sleep(100);
+    }
+    const resumedDeltaCount = soloHost.msgs.filter(b => b[0] === 0xFF).length;
+    const botResumeMs = Date.now() - botResumeStartedAt;
     assert.ok(
-      soloHost.msgs.filter(b => b[0] === 0xFF).length > spawnDeltaCount,
-      'bot movement deltas must resume after the human acknowledges decoded map and sprites',
+      resumedDeltaCount > spawnDeltaCount,
+      `bot movement deltas must resume within 5s after map/sprite acknowledgement; received ${resumedDeltaCount - spawnDeltaCount} deltas after ${botResumeMs}ms`,
     );
+    console.log(`[solo bot movement] resumed ${resumedDeltaCount - spawnDeltaCount} deltas in ${botResumeMs}ms after map/sprite acknowledgement`);
 
     console.log('--- Verify a live server-backed emergency meeting, discussion, voting and ejection ---');
     const emergencyHost = await connect(90005, 'EmergencyHost');
