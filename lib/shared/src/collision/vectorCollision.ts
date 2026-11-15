@@ -46,6 +46,7 @@ export interface CollisionSourceManifest {
     readonly tracedPathCount: number; readonly simplifiedPointCount: number;
     readonly simplificationToleranceSourcePx: number;
     rasterCellExpansionSourcePx: number;
+    readonly strokeWidthQuantile: number;
     readonly closedSolidCount: number; readonly openBoundaryCount: number;
     readonly strokeRadiusMedianWorldPx?: number; readonly strokeRadiusMaxWorldPx?: number;
   };
