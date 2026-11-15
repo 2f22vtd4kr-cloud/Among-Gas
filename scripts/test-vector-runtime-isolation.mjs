@@ -55,6 +55,15 @@ assert.deepEqual(metadata.walkableReplacementZones, [
   { id: "east-generator-approach-aisle", bounds: [2780, 850, 3100, 950] },
 ]);
 assert.deepEqual(metadata.movementOnlyBlockedPolygons, ["green-service-van-silhouette"]);
+assert.deepEqual(metadata.provisionalSourceArtBlockedPolygons, [
+  "north-cafeteria-upper-furniture-strip",
+  "northwest-tank-machinery-enclosure",
+  "northeast-generator-room-machinery-footprint",
+  "south-central-service-fixture-enclosure",
+  "southwest-shop-shelving-interior",
+]);
+assert.equal(document.source.shapeCounts.manualBlockedPolygons, 1);
+assert.equal(document.source.shapeCounts.provisionalSourceArtBlockedPolygons, 5);
 const van = document.shapes.find(shape => shape.id === "manual-blocked-001-green-service-van-silhouette");
 assert.ok(van, "generated vector world must retain the hand-traced van silhouette");
 assert.equal(van.closed, true);
