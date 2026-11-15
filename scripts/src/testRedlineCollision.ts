@@ -19,6 +19,10 @@ import { MAP_AUTHORING_ZONES } from "@workspace/shared/collision";
 const document = getProductionCollisionDocument();
 const world = getProductionCollisionWorld();
 assert.equal(document.source?.kind, "redline-vector");
+assert.equal(document.source?.generatorVersion, 10,
+  "collision QA artifacts must be regenerated when source-vector geometry behavior changes");
+assert.ok((document.source?.vectorization?.simplificationToleranceSourcePx ?? Infinity) <= 0.5,
+  "source redline contours must retain sub-pixel detail relative to the player footprint");
 const walkableRegions = document.shapes.filter(shape => shape.walkableRegion === true);
 assert.ok(walkableRegions.length >= 2, "source-derived main floor and isolated C38 interior regions must be present");
 assert.ok(walkableRegions.some(shape => shape.id.startsWith("walkable-region-main-spawn-connected-floor")));
