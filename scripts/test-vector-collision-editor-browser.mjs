@@ -366,8 +366,8 @@ try {
     y: bounds.y + bounds.height * 0.48,
   };
   await touchTap(floorStart.x, floorStart.y);
-  await touchTap(floorStart.x + 55, floorStart.y);
-  await touchTap(floorStart.x + 55, floorStart.y + 48);
+  await touchTap(floorStart.x + 65, floorStart.y);
+  await touchTap(floorStart.x + 65, floorStart.y + 65);
   await touchTap(floorStart.x + 2, floorStart.y + 2);
   try {
     await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3", null, { timeout: 10000 });
@@ -385,13 +385,23 @@ try {
   await page.getByLabel("Walkable region ID").fill("smoke-floor");
   bounds = await canvas.boundingBox();
   const holeStart = { x: floorStart.x + 15, y: floorStart.y + 12 };
-  assert.ok(holeStart.x + 26 < floorStart.x + 55 && holeStart.y + 26 < floorStart.y + 48,
+  assert.ok(holeStart.x + 22 < floorStart.x + 65 && holeStart.y + 22 < floorStart.y + 65,
     "the linked hole is fully inside its authored floor polygon");
+  // Keep the triangular test hole below the floor polygon's diagonal edge.
   await touchTap(holeStart.x, holeStart.y);
-  await touchTap(holeStart.x + 24, holeStart.y);
-  await touchTap(holeStart.x + 24, holeStart.y + 24);
+  await touchTap(holeStart.x + 20, holeStart.y);
+  await touchTap(holeStart.x + 20, holeStart.y + 20);
   await touchTap(holeStart.x + 2, holeStart.y + 2);
-  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "4");
+  try {
+    await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "4", null, { timeout: 10000 });
+  } catch (error) {
+    throw new Error("Mobile linked floor hole did not commit: " + JSON.stringify({
+      shapeCount: await canvas.getAttribute("data-shape-count"),
+      draftPoints: await canvas.getAttribute("data-draft-point-count"),
+      bounds: await canvas.boundingBox(),
+      regionId: await page.getByLabel("Walkable region ID").inputValue(),
+    }), { cause: error });
+  }
 
   const regionDownloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export JSON" }).click();
