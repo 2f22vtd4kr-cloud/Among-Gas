@@ -50,17 +50,26 @@ try {
     await page.waitForTimeout(60);
   };
   const touchDrag = async (startX, startY, endX, endY, steps = 5) => {
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchStart", touchPoints: [{ id: 1, x: startX, y: startY }],
-    });
-    for (let step = 1; step <= steps; step++) {
-      const t = step / steps;
-      await touch.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: [{ id: 1, x: startX + (endX - startX) * t, y: startY + (endY - startY) * t }],
+    // Browser downloads and Playwright touchscreen taps can invalidate an
+    // older raw CDP session while leaving the page alive. Give each multi-frame
+    // drag its own short-lived session instead of reusing the setup session.
+    assert.equal(page.isClosed(), false, "editor page remains open before touch drag");
+    const dragTouch = await page.context().newCDPSession(page);
+    try {
+      await dragTouch.send("Input.dispatchTouchEvent", {
+        type: "touchStart", touchPoints: [{ id: 1, x: startX, y: startY }],
       });
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        await dragTouch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ id: 1, x: startX + (endX - startX) * t, y: startY + (endY - startY) * t }],
+        });
+      }
+      await dragTouch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } finally {
+      await dragTouch.detach().catch(() => undefined);
     }
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await page.waitForTimeout(50);
   };
 
