@@ -182,7 +182,11 @@ jobs:
           done
           if [ "$ready" -ne 1 ]; then cat /tmp/among-gas-replit-dev.log; exit 1; fi
           curl -fsS "http://127.0.0.1:5173/" | grep -q '<div id="root">'
-          WS_URL=ws://127.0.0.1:5173/api/ws node test_sabotage.mjs
+          if ! WS_URL=ws://127.0.0.1:5173/api/ws node test_sabotage.mjs; then
+            echo "---- Replit dev stack log after WebSocket gameplay failure ----" >&2
+            cat /tmp/among-gas-replit-dev.log >&2
+            exit 1
+          fi
       - name: Archive production Telegram Mini App build for deployment verification
         uses: actions/upload-artifact@v7
         with:
