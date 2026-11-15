@@ -108,16 +108,7 @@ try {
     const normalizeCandidate = (channel, alpha) => {
       if (alpha === 0) return 0;
       const premultiplied = Math.floor((channel * alpha + 127) / 255);
-      return Math.min(255, (() => {
-        const numerator = premultiplied * 255;
-        const quotient = Math.floor(numerator / alpha);
-        const remainder = numerator - quotient * alpha;
-        const doubledRemainder = remainder * 2;
-        return doubledRemainder > alpha ||
-          (doubledRemainder === alpha && quotient % 2 === 1)
-          ? quotient + 1
-          : quotient;
-      })());
+      return Math.min(255, Math.floor((premultiplied * 255 + alpha / 2) / alpha));
     };
     const sourceDecodeCandidates = {
       sharpRaw: { mismatchBytes: 0, maxDelta: 0 },
