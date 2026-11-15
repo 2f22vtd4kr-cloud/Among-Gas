@@ -57,7 +57,7 @@ assert.ok(walkableHoles.some(hole => hole.id.includes("C38") &&
   "the isolated C38 floor must be subtracted from the main floor before being reintroduced as its own region");
 
 assert.equal(document.source?.walkableRegionExtraction?.morphologyKernelSourcePx, 5);
-assert.equal(document.source?.walkableRegionExtraction?.connectivity, 8);
+assert.equal(document.source?.walkableRegionExtraction?.connectivity, 4);
 assert.equal(document.source?.walkableRegionExtraction?.selectedRegions.some(region =>
   region.id === "east-office-vehicle-service-bay" && region.ownerDecisionRequired,
 ), true);
