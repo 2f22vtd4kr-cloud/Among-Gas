@@ -46,7 +46,7 @@ export interface CollisionSourceManifest {
     readonly tracedPathCount: number; readonly simplifiedPointCount: number;
     readonly simplificationToleranceSourcePx: number;
     rasterCellExpansionSourcePx: number;
-    readonly strokeWidthQuantile: number;
+    readonly strokeWidthSampling: "per-edge-maximum";
     readonly closedSolidCount: number; readonly openBoundaryCount: number;
     readonly strokeRadiusMedianWorldPx?: number; readonly strokeRadiusMaxWorldPx?: number;
   };
@@ -195,8 +195,8 @@ export function validateCollisionDocument(value: unknown): string[] {
       errors.push(prefix + " must set boolean blocksMove and blocksSight flags");
     }
     if (shape.strokeRadius !== undefined &&
-        (!Number.isFinite(shape.strokeRadius) || shape.strokeRadius < 0 || shape.strokeRadius > 12)) {
-      errors.push(prefix + ".strokeRadius must be finite and between 0 and 12 world pixels");
+        (!Number.isFinite(shape.strokeRadius) || shape.strokeRadius < 0 || shape.strokeRadius > 16)) {
+      errors.push(prefix + ".strokeRadius must be finite and between 0 and 16 world pixels");
     }
     if (shape.strokeRadius !== undefined && shape.strokeRadius > 0 && shape.blocksMove !== true) {
       errors.push(prefix + ".strokeRadius is only valid on movement-blocking shapes");
