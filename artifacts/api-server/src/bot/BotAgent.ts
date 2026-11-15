@@ -360,7 +360,7 @@ export abstract class BotAgent {
           before: [Math.round(beforeX * 10) / 10, Math.round(beforeY * 10) / 10],
           after: [Math.round(self.x * 10) / 10, Math.round(self.y * 10) / 10],
           moved: Math.hypot(self.x - beforeX, self.y - beforeY) > 0.01,
-          routeLength: this.navigationRoute.length,
+          routeLength: this.navigationRoute?.length ?? 0,
           routeIndex: this.navigationRouteIndex,
           routeGoal: this.navigationRouteGoal,
         }));
