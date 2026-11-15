@@ -156,9 +156,9 @@ try {
             sourceDecodeCandidates.sampledRoundTrip.maxDelta = Math.max(
               sourceDecodeCandidates.sampledRoundTrip.maxDelta, delta,
             );
-            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 12) {
+            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 64) {
               sourceDecodeCandidates.sampledRoundTrip.samples.push({
-                x, y, sourceX, channel, candidate, observed, alpha: sharpSource[sourceOffset + 3],
+                x, y, sourceX, channel, raw, candidate, observed, alpha: sharpSource[sourceOffset + 3],
               });
             }
           }
