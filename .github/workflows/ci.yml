@@ -133,6 +133,9 @@ jobs:
       - name: Typecheck and build API/frontend
         run: pnpm run build
 
+      - name: Enforce screenshot-free code QA
+        run: node scripts/test-no-visual-artifacts.mjs
+
       - name: Verify the eleven task minigames render through independent modules
         run: pnpm --filter @workspace/scripts run test:minigame-registry
 
