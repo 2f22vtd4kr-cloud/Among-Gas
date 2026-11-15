@@ -1849,7 +1849,7 @@ try {
         assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
           'impostor role reveal must show a living character, not the corpse sprite');
         const spriteClip = await revealSprite.evaluate(element => getComputedStyle(element).clipPath);
-        assert.ok(spriteClip.includes('49%') && spriteClip.includes('58.5%'),
+        assert.ok(spriteClip.includes('53%') && spriteClip.includes('56%'),
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
       const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
