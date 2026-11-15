@@ -25,6 +25,8 @@ assert.ok((document.source?.vectorization?.simplificationToleranceSourcePx ?? In
   "source redline contours must retain sub-pixel detail relative to the player footprint");
 const walkableRegions = document.shapes.filter(shape => shape.walkableRegion === true);
 assert.ok(walkableRegions.length >= 2, "source-derived main floor and isolated C38 interior regions must be present");
+assert.ok((document.source?.walkableRegionExtraction?.simplificationToleranceSourcePx ?? Infinity) <= 1.25,
+  "large walkable-region contours retain their separately bounded simplification tolerance");
 assert.ok(walkableRegions.some(shape => shape.id.startsWith("walkable-region-main-spawn-connected-floor")));
 assert.ok(walkableRegions.some(shape => shape.id.startsWith("walkable-region-east-office-vehicle-service-bay")));
 for (const region of walkableRegions) {
