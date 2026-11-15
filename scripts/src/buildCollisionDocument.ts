@@ -192,8 +192,11 @@ function labelFreeComponents(barrier: Uint8Array, w: number, h: number): {
   labels.fill(-1);
   const queue = new Int32Array(barrier.length);
   const components: FreeComponent[] = [];
+  // Match the reviewed fine-grid component classifier: four-neighbour
+  // connectivity. Eight-neighbour connectivity can leak a diagonal corner
+  // between a prop footprint and the room floor, hiding a blocked component.
   const neighbours: readonly (readonly [number, number])[] = [
-    [-1,-1],[0,-1],[1,-1],[-1,0],[1,0],[-1,1],[0,1],[1,1],
+    [0,-1],[-1,0],[1,0],[0,1],
   ];
   for (let start = 0; start < barrier.length; start++) {
     if (barrier[start] === 1 || labels[start] !== -1) continue;
@@ -431,7 +434,7 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
     shapes,
     metadata: {
       morphologyKernelSourcePx: 5,
-      connectivity: 8,
+      connectivity: 4,
       simplificationToleranceSourcePx: WALKABLE_REGION_TOLERANCE,
       selectedRegions: selected.map(region => ({
         id: region.id,
