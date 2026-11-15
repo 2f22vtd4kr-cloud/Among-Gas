@@ -24,6 +24,10 @@ const upperCafeteriaRasterBlocked = !isPlayerPositionWalkable(raster, 1488, 104)
 assert.ok(upperCafeteriaRasterBlocked, "Z02 upper-cafeteria regression point must remain blocked in the reviewed raster");
 assert.equal(isPlayerPositionWalkable(vector, 1488, 104), false,
   "Z02 upper-cafeteria vector wall must preserve the reviewed raster's player-footprint clearance");
+assert.equal(isPlayerPositionWalkable(raster, 2432, 296), false,
+  "Z04 upper generator-room raster footprint must remain blocked");
+assert.equal(isPlayerPositionWalkable(vector, 2432, 296), false,
+  "Z04 upper generator-room candidate footprint must preserve reviewed player clearance");
 const SAMPLE_STEP_PX = 8;
 const MAX_REACHABLE_DIRECTIONAL_MISMATCH_PCT = 2;
 
