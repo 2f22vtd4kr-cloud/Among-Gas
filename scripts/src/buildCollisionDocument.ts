@@ -706,7 +706,7 @@ async function main():Promise<void> {
   for(let i=0;i<mask.length;i++) if(red(data,i*info.channels)){mask[i]=1;redCount++;}
   if(redCount<1500) throw new Error("too few red reference pixels: "+redCount);
   const wallMask=dilateRedMask(mask,info.width,info.height,2);
-  const walkableRegionExtraction=extractSourceWalkableRegions(mask.slice(),info.width,info.height);
+  const walkableRegionExtraction=extractSourceWalkableRegions(wallMask.slice(),info.width,info.height);
   // The reviewed fine-grid generator dilates the exact same red-pixel mask by
   // two 8-neighbour iterations before flood-fill/downsampling. Trace and measure
   // that dilated wall footprint too; omitting this step was the principal
