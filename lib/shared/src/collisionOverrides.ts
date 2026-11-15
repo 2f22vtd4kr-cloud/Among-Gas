@@ -65,6 +65,15 @@ export const CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS: readonly {
     points: [[699,500],[695,642],[590,656],[595,803],[671,808],[742,747],[851,747],[894,794],[913,794],[908,600],[932,505]],
   },
   {
+    // Provisional ground footprint of the north-east generator-room machinery.
+    // The reviewed fine-grid parity overlay shows blocked player footprints
+    // above the existing lower equipment contour; this follows the source
+    // redline's outer housing perimeter and remains movement-only pending
+    // independent zone-owner review.
+    id: 'northeast-generator-room-machinery-footprint',
+    points: [[2403,278],[2479,280],[2495,282],[2619,429],[2533,498],[2518,493],[2450,472],[2412,458],[2376,460],[2412,363]],
+  },
+  {
     id: 'south-central-service-fixture-enclosure',
     points: [[1648,856],[1491,865],[1306,671],[1287,671],[1287,728],[1410,856],[1410,946],[1396,960],[1188,960],[1117,974],[979,955],[932,903],[913,903],[908,1074],[894,1088],[680,1083],[671,993],[590,993],[590,1330],[638,1334],[657,1377],[699,1382],[718,1401],[709,1453],[879,1495],[903,1538],[941,1538],[941,1500],[998,1491],[993,1040],[1169,1026],[1401,1031],[1420,1045],[1420,1135],[1325,1239],[1325,1377],[1240,1467],[1150,1472],[1150,1505],[1373,1500],[1387,1254],[1501,1135],[1643,1130],[1652,1116]],
   },
