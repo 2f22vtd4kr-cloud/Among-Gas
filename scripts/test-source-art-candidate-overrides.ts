@@ -16,7 +16,7 @@ const expected = [
 
 assert.equal(CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.length, expected.length);
 assert.equal(document.source?.shapeCounts.provisionalSourceArtBlockedPolygons, expected.length);
-const declared = new Set(document.source?.geometryOverrides?.movementOnlyBlockedPolygons ?? []);
+const declared = new Set(document.source?.geometryOverrides?.provisionalSourceArtBlockedPolygons ?? []);
 
 for (const id of expected) {
   const source = CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.find(polygon => polygon.id === id);
