@@ -153,7 +153,7 @@ jobs:
       - name: Verify Replit development preview and WebSocket proxy
         run: |
           set -euo pipefail
-          VITE_ENABLE_GAME_MOCKS=true VITE_WS_URL=wss://invalid.example/api/ws bash scripts/replit-dev.sh >/tmp/among-gas-replit-dev.log 2>&1 &
+          AG_DEBUG_BOT_TICKS=1 VITE_ENABLE_GAME_MOCKS=true VITE_WS_URL=wss://invalid.example/api/ws bash scripts/replit-dev.sh >/tmp/among-gas-replit-dev.log 2>&1 &
           stack_pid=$!
           cleanup() {
             trap - EXIT
