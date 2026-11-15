@@ -30,18 +30,25 @@ const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [pale
 const atlas = Buffer.alloc(CHARACTER_SHEET_WIDTH * CHARACTER_SHEET_HEIGHT * 4);
 
 /**
- * Canvas 2D stores pixels premultiplied by alpha. Both drawImage() followed by
- * getImageData(), and putImageData() followed by getImageData(), quantize RGB
- * through an 8-bit premultiplied representation. Reproduce that round-trip so
- * the PNG has the same stable straight-alpha values the legacy canvas exposes.
- *
- * Keep this integer arithmetic explicit: it is part of the byte-exact golden
- * contract, not a visual approximation.
+ * Chromium Canvas 2D stores pixels premultiplied by alpha and readback
+ * unpremultiplies with round-to-nearest, ties-to-even. Reproduce both stages
+ * using integer arithmetic: half-way quotients must choose the even channel,
+ * not JavaScript Math.round()'s upward tie rule. This is part of the byte-exact
+ * atlas contract, not a visual approximation.
  */
 function canvasReadbackChannel(channel: number, alpha: number): number {
   if (alpha === 0) return 0;
   const premultiplied = Math.floor((channel * alpha + 127) / 255);
-  return Math.min(255, Math.floor((premultiplied * 255) / alpha));
+  return Math.min(255, (() => {
+    const numerator = premultiplied * 255;
+    const quotient = Math.floor(numerator / alpha);
+    const remainder = numerator - quotient * alpha;
+    const doubledRemainder = remainder * 2;
+    return doubledRemainder > alpha ||
+      (doubledRemainder === alpha && quotient % 2 === 1)
+      ? quotient + 1
+      : quotient;
+  })());
 }
 
 function normalizeCanvasReadback(data: Buffer, offset: number): void {
