@@ -12,7 +12,7 @@ for (const [name, source] of [
   ['character atlas browser test', atlasBrowser],
 ]) {
   assert.doesNotMatch(source, /\.screenshot\s*\(/, `${name} must not capture screenshots`);
-  assert.doesNotMatch(source, /writeFileSync|VISUAL_QA_DIR|toDataURL\\s*\\(/,
+  assert.doesNotMatch(source, /writeFileSync|VISUAL_QA_DIR|toDataURL\s*\(/,
     `${name} must not export generated visual artifacts`);
 }
 
