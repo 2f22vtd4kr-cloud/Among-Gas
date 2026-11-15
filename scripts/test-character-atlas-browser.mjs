@@ -293,6 +293,53 @@ try {
       probeCanvasNearestSampling(159, 161),
     ];
 
+    // The production legacy renderer draws each 160px source cell at an
+    // absolute atlas destination offset (column * 161), not at x=0. Compare
+    // those exact browser drawImage samples with the isolated x=0 ramp probe.
+    // This detects offset-dependent nearest-neighbour phase differences that
+    // a standalone 161px canvas cannot reveal.
+    const destinationOffsetProbeCanvas = document.createElement('canvas');
+    destinationOffsetProbeCanvas.width = spriteModule.CHARACTER_SHEET_WIDTH;
+    destinationOffsetProbeCanvas.height = spriteModule.CHARACTER_SHEET_HEIGHT;
+    const destinationOffsetProbeContext = destinationOffsetProbeCanvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+    if (!destinationOffsetProbeContext) {
+      throw new Error('Could not allocate atlas destination-offset sampling probe');
+    }
+    destinationOffsetProbeContext.imageSmoothingEnabled = false;
+    const destinationOffsetSamplingProbe = [];
+    for (let column = spriteModule.CHARACTER_SOURCE_SHEET_COLS;
+      column < spriteModule.CHARACTER_COLORS.length; column++) {
+      const destinationLeft = column * spriteModule.CHARACTER_CELL_WIDTH;
+      destinationOffsetProbeContext.drawImage(
+        sourceImage,
+        0, 0, 160, spriteModule.CHARACTER_SHEET_HEIGHT,
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      );
+      const offsetPixels = destinationOffsetProbeContext.getImageData(
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      ).data;
+      let differentBytes = 0;
+      const samples = [];
+      for (let offset = 0; offset < browserScaledSource.length; offset++) {
+        if (offsetPixels[offset] === browserScaledSource[offset]) continue;
+        differentBytes++;
+        if (samples.length < 8) {
+          const pixelOffset = offset - (offset % 4);
+          const pixel = pixelOffset / 4;
+          samples.push({
+            x: pixel % spriteModule.CHARACTER_CELL_WIDTH,
+            y: Math.floor(pixel / spriteModule.CHARACTER_CELL_WIDTH),
+            channel: offset % 4,
+            isolated: browserScaledSource[offset],
+            atlasOffset: offsetPixels[offset],
+          });
+        }
+      }
+      destinationOffsetSamplingProbe.push({ column, destinationLeft, differentBytes, samples });
+    }
+
     const bakedParityDiagnostics = {
       differentBytes,
       sourceDecodeCandidates,
