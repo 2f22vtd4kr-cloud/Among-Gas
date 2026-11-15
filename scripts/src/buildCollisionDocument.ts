@@ -695,6 +695,7 @@ async function main():Promise<void> {
         tracedPathCount:paths.length,
         simplifiedPointCount:points,
         simplificationToleranceSourcePx:TOLERANCE,
+        rasterCellExpansionSourcePx:RASTER_CELL_EXPANSION_SOURCE_PX,
         closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
         strokeRadiusMedianWorldPx:median(shapes.map(s=>s.strokeRadius ?? 0).filter(v=>v>0)),
