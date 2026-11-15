@@ -17,7 +17,12 @@ const root = path.resolve(import.meta.dirname, "../..");
 const referencePath = path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg");
 const outputDir = path.join(root, "lib/shared/src/collision");
 const qaPath = path.join(root, "artifacts/telegram-game/collision-redline-vector-qa.png");
+// Trace the narrow redline strokes more closely than the old 1.25 px
+// simplification, but keep broad walkable-region contours separately bounded:
+// a single connected floor component can otherwise exceed the document's
+// 2,000-vertex per-shape schema limit.
 const TOLERANCE = 0.5;
+const WALKABLE_REGION_TOLERANCE = 1.25;
 
 async function hash(relative: string): Promise<string> {
   return createHash("sha256").update(await readFile(path.join(root, relative))).digest("hex");
@@ -261,7 +266,7 @@ function componentOuterContours(
 }
 
 function simplifySourceLoop(loop: Point[]): Point[] {
-  const simplified = simplify([...loop, loop[0]], TOLERANCE);
+  const simplified = simplify([...loop, loop[0]], WALKABLE_REGION_TOLERANCE);
   if (simplified.length > 1 &&
       simplified[0][0] === simplified[simplified.length - 1][0] &&
       simplified[0][1] === simplified[simplified.length - 1][1]) simplified.pop();
@@ -400,6 +405,7 @@ function extractSourceWalkableRegions(mask: Uint8Array, w: number, h: number): {
     metadata: {
       morphologyKernelSourcePx: 5,
       connectivity: 8,
+      simplificationToleranceSourcePx: WALKABLE_REGION_TOLERANCE,
       selectedRegions: selected.map(region => ({
         id: region.id,
         role: region.role,
