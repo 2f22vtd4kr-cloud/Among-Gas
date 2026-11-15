@@ -135,10 +135,10 @@ try {
   await page.locator('.au-input').waitFor({ state: 'hidden' });
 
 
-    for (const [fixture, roomCode, filename] of [
-    ['lobby-host', 'XYZ789', 'lobby-host.png'],
-    ['lobby-solo', 'SOLO01', 'lobby-solo.png'],
-    ['lobby-guest', 'ABC123', 'lobby-guest.png'],
+    for (const [fixture, roomCode] of [
+    ['lobby-host', 'XYZ789'],
+    ['lobby-solo', 'SOLO01'],
+    ['lobby-guest', 'ABC123'],
   ]) {
     const lobbyPage = await createPage({
       viewport: { width: 390, height: 844 },
@@ -1781,31 +1781,21 @@ try {
   );
   await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
 
-  // Capture major non-roaming gameplay states as CI visual artifacts.
+  // Run functional assertions for major non-roaming gameplay states.
   // Each state gets an isolated browser context so timers and overlays cannot
-  // leak from one fixture into another.
-  const visualStateCases = [
-    ['reveal-impostor', 'role-reveal-impostor.png'],
-    ['task-playing', 'task-progress.png'],
-    ['crew-idle', 'crew-idle-persistent-actions.png'],
-    ['report-ready', 'report-ready.png'],
-    ['corpse-all-colors', 'corpse-all-seven-colors.png'],
-    ['impostor-opening', 'impostor-opening-cooldown.png'],
-    ['kill-ready', 'kill-ready.png'],
-    ['meeting-discussion', 'meeting-discussion.png'],
-    ['meeting-voting', 'meeting-voting.png'],
-    ['meeting-result', 'meeting-result.png'],
-    ['gameover-crew', 'gameover-crew.png'],
-    ['gameover-impostor', 'gameover-impostor.png'],
-    ['sabotage-ready', 'sabotage-ready.png'],
-    ['sabotage-o2', 'sabotage-o2.png'],
+  // leak from one fixture into another; this test emits no visual artifacts.
+  const gameplayStateCases = [
+    'reveal-impostor', 'task-playing', 'crew-idle', 'report-ready',
+    'corpse-all-colors', 'impostor-opening', 'kill-ready',
+    'meeting-discussion', 'meeting-voting', 'meeting-result',
+    'gameover-crew', 'gameover-impostor', 'sabotage-ready', 'sabotage-o2',
   ];
-  const visualViewports = [
+  const stateViewports = [
     { label: 'mobile', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
     { label: 'desktop', viewport: { width: 1440, height: 900 }, isMobile: false, hasTouch: false },
   ];
-  for (const [fixture, filename] of visualStateCases) {
-    for (const viewport of visualViewports) {
+  for (const fixture of gameplayStateCases) {
+    for (const viewport of stateViewports) {
       const statePage = await createPage({
         viewport: viewport.viewport,
         deviceScaleFactor: viewport.isMobile ? 2 : 1,
@@ -1822,7 +1812,7 @@ try {
       await statePage.waitForSelector('canvas', { state: 'visible', timeout: 15_000 });
       await statePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
       if (fixture.startsWith('reveal-')) {
-        // Role-reveal fixtures deliberately keep the overlay visible for capture.
+        // Role-reveal fixtures deliberately keep the overlay visible for state assertions.
         await statePage.getByText(/^(ваша роль|your role)$/i).waitFor({ state: 'visible', timeout: 15_000 });
       } else {
         await waitForRoleRevealToFinish(statePage);
@@ -1868,10 +1858,9 @@ try {
         assert.ok(spriteClip.includes('53%') && spriteClip.includes('56%'),
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
-      const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
       if (fixture === 'sabotage-ready') {
         // The fixture enables sabotage but does not open the selection panel.
-        // Capture the real selection UI and verify every available system.
+        // Open the real selection UI and verify every available system.
         await statePage.getByRole('button', { name: /Саботаж/ })
           .click();
         await statePage.getByText('Выберите систему саботажа', { exact: true })
