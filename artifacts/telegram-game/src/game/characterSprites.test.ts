@@ -55,16 +55,19 @@ for (const color of CHARACTER_COLORS) {
   }
 }
 
-assert.equal(getCharacterClipNotch('idle')?.rightLegStart, 0.585,
-  'idle leg-gap mask must remove the stray black hook while preserving the right foot');
+assert.deepEqual(getCharacterClipNotch('idle'), {
+  leftLegStart: 0.30, leftLegEnd: 0.53, rightLegStart: 0.56, rightLegEnd: 0.75, top: 0.79,
+}, 'idle clip must preserve the full width of both authored feet while removing the central bridge');
 const idleClipPercentages = [...(getCharacterClipPath('idle') ?? '').matchAll(/(-?\d+(?:\.\d+)?)%/g)]
   .map(([, value]) => Number(value));
-assert.ok(idleClipPercentages.some(value => Math.abs(value - 58.5) < 1e-9),
-  'idle DOM and canvas renderers must preserve the full right-leg silhouette');
-assert.equal(getCharacterClipNotch('dead-body')?.rightLegStart, 0.67,
-  'corpse leg-gap mask must remove the detached horizontal bridge');
-assert.match(getCharacterClipPath('dead-body') ?? '', /67%/,
-  'corpse DOM and canvas renderers must share the widened transparent gap');
+assert.ok(idleClipPercentages.some(value => Math.abs(value - 53) < 1e-9) &&
+  idleClipPercentages.some(value => Math.abs(value - 56) < 1e-9),
+  'idle DOM and canvas renderers must retain the measured gap between both complete leg silhouettes');
+assert.deepEqual(getCharacterClipNotch('dead-body'), {
+  leftLegStart: 0.30, leftLegEnd: 0.51, rightLegStart: 0.52, rightLegEnd: 0.77, top: 0.66,
+}, 'corpse clip must preserve both complete leg silhouettes and the exposed-bone edge');
+assert.match(getCharacterClipPath('dead-body') ?? '', /51%/,
+  'corpse DOM and canvas renderers must share the measured transparent gap');
 
 // Every authored pose must occupy its own measured vertical window. This
 // guards against a future uniform-row calculation or crop edit that silently

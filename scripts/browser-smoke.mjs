@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
 import { chromium } from 'playwright-core';
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
-const visualQaDir = process.env.VISUAL_QA_DIR ?? '/tmp/among-gas-visual-qa';
-mkdirSync(visualQaDir, { recursive: true });
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
@@ -115,14 +111,14 @@ try {
   const aiSaveBounds = await aiKeySave.boundingBox();
   assert.ok(aiKeyBounds && aiSaveBounds && aiKeyBounds.y >= 0 && aiSaveBounds.y + aiSaveBounds.height <= viewport.height,
     'Optional bot AI configuration and its save action must be visible without scrolling the Settings dialog');
-  await page.screenshot({ path: join(visualQaDir, 'settings-default.png'), fullPage: true });
-  await page.screenshot({ path: join(visualQaDir, 'settings-ai-visible.png'), fullPage: true });
+
+
   await settingsSave.scrollIntoViewIfNeeded();
   const saveBounds = await settingsSave.boundingBox();
   assert.ok(saveBounds && saveBounds.y >= settingsBounds.y &&
     saveBounds.y + saveBounds.height <= settingsBounds.y + settingsBounds.height,
-    'Settings Save control must be reachable inside the scrollable dialog without clipping'); 
-  await page.screenshot({ path: join(visualQaDir, 'settings-save-visible.png'), fullPage: true });
+    'Settings Save control must be reachable inside the scrollable dialog without clipping');
+
   await lobbySettings.getByRole('button', { name: 'English' }).click();
   await page.getByRole('button', { name: 'CREATE ROOM' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'SOLO vs BOTS' }).waitFor({ state: 'visible' });
@@ -137,10 +133,9 @@ try {
   await page.locator('.au-input').waitFor({ state: 'visible' });
   await page.getByTestId('join-code-back').click();
   await page.locator('.au-input').waitFor({ state: 'hidden' });
-  await page.screenshot({ path: join(visualQaDir, 'lobby-english.png'), fullPage: true });
 
-  // Preserve the three distinct waiting-room states for visual QA as well.
-  for (const [fixture, roomCode, filename] of [
+
+    for (const [fixture, roomCode, filename] of [
     ['lobby-host', 'XYZ789', 'lobby-host.png'],
     ['lobby-solo', 'SOLO01', 'lobby-solo.png'],
     ['lobby-guest', 'ABC123', 'lobby-guest.png'],
@@ -159,7 +154,7 @@ try {
     });
     await lobbyPage.goto(`${origin}/?mock=${fixture}`, { waitUntil: 'domcontentloaded' });
     await lobbyPage.getByText(roomCode, { exact: true }).waitFor({ state: 'visible', timeout: 15_000 });
-    await lobbyPage.screenshot({ path: join(visualQaDir, filename), fullPage: true });
+
     await lobbyPage.close();
   }
   const menuSpriteHeightRatios = await page.locator('.au-menu-character-sprite').evaluateAll(nodes =>
@@ -272,8 +267,30 @@ try {
     if (!spriteContext) return false;
     const spritePixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height).data;
     let opaqueSamples = 0;
-    for (let i = 3; i < spritePixels.length; i += 16) if (spritePixels[i] > 0) opaqueSamples++;
-    if (opaqueSamples < 20) return false;
+    let lowerMinX = sprite.width;
+    let lowerMaxX = -1;
+    const lowerStartY = Math.floor(sprite.height * 0.79);
+    const lastRowY = sprite.height - 1;
+    const lastRowXs = [];
+    for (let i = 3; i < spritePixels.length; i += 4) {
+      if (spritePixels[i] === 0) continue;
+      opaqueSamples++;
+      const pixel = i / 4;
+      const x = pixel % sprite.width;
+      const y = Math.floor(pixel / sprite.width);
+      if (y >= lowerStartY) {
+        lowerMinX = Math.min(lowerMinX, x);
+        lowerMaxX = Math.max(lowerMaxX, x);
+      }
+      if (y === lastRowY) lastRowXs.push(x);
+    }
+    const lastRowRuns = [];
+    for (const x of lastRowXs) {
+      const last = lastRowRuns[lastRowRuns.length - 1];
+      if (last && x === last.maxX + 1) last.maxX = x;
+      else lastRowRuns.push({ minX: x, maxX: x });
+    }
+    if (opaqueSamples < 20 || lowerMaxX < lowerMinX || lastRowRuns.length !== 2) return false;
     const spriteBounds = sprite.getBoundingClientRect();
     const shadowBounds = shadow.getBoundingClientRect();
     const shadowStyle = getComputedStyle(shadow);
@@ -283,6 +300,8 @@ try {
       displayHeight: sprite.getAttribute('data-display-height'),
       transform: sprite.style.transform,
       clipPath: sprite.style.clipPath,
+      lowerLegAlphaBounds: { minX: lowerMinX, maxX: lowerMaxX, startY: lowerStartY },
+      bottomLegRuns: lastRowRuns,
       revealLeft: reveal.getBoundingClientRect().left,
       revealTop: reveal.getBoundingClientRect().top,
       revealWidth: reveal.getBoundingClientRect().width,
@@ -316,6 +335,19 @@ try {
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
+  const roleBottomClipXs = [...roleRevealSnapshot.clipPath.matchAll(/([\d.]+)% 100%/g)]
+    .map(([, value]) => Number(value));
+  assert.ok(roleBottomClipXs.length >= 4);
+  assert.ok(Math.min(...roleBottomClipXs) <= roleRevealSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
+    'role-reveal clip must not cut into the outer edge of either lower leg');
+  assert.ok(Math.max(...roleBottomClipXs) >= roleRevealSnapshot.lowerLegAlphaBounds.maxX / 161 * 100,
+    'role-reveal clip must preserve the full width of both feet');
+  const roleClipBands = roleBottomClipXs.sort((a, b) => a - b);
+  assert.ok(roleClipBands[0] <= roleRevealSnapshot.bottomLegRuns[0].minX / 161 * 100 &&
+    roleClipBands[1] >= roleRevealSnapshot.bottomLegRuns[0].maxX / 161 * 100 &&
+    roleClipBands[2] <= roleRevealSnapshot.bottomLegRuns[1].minX / 161 * 100 &&
+    roleClipBands[3] >= roleRevealSnapshot.bottomLegRuns[1].maxX / 161 * 100,
+    'role-reveal clip must fully contain both measured lower-leg/foot alpha runs');
   assert.ok(Math.abs(roleRevealSnapshot.shadowCenterX - roleRevealSnapshot.spriteCenterX) < 2,
     'the role-reveal ground shadow must stay centered beneath the character');
   assert.ok(roleRevealSnapshot.shadowTop >= roleRevealSnapshot.spriteBottom - 2,
@@ -325,10 +357,6 @@ try {
     'the ground shadow must have enough area and contrast to remain visible at mobile render scale');
   assert.equal(roleRevealSnapshot.shadowAnimation, 'rrShadowPulse',
     'the role-reveal ground shadow must animate with the character bob');
-  const roleRevealDataUrl = await page.locator('[data-testid="role-reveal-character"] canvas.ag-character-sprite')
-    .evaluate(canvas => canvas.toDataURL('image/png'));
-  writeFileSync(join(visualQaDir, 'role-reveal-sprite-crop.png'),
-    Buffer.from(roleRevealDataUrl.split(',')[1], 'base64'));
   // The dedicated reveal fixture deliberately holds the opening overlay
   // visible for inspection. Navigate to gameplay only after capturing it.
   await page.goto(`${origin}/?mock=task-interaction&skipReveal=true`, { waitUntil: 'domcontentloaded' });
@@ -454,7 +482,7 @@ try {
   );
   // The mock fixture starts at the closest verified walkable point beside
   // the assigned console so this checks proximity UI independently of movement.
-  await page.screenshot({ path: join(visualQaDir, 'task-action-prompt.png'), fullPage: true });
+
   const taskDiagnostics = await page.evaluate(() => ({
     taskFixturePosition: window.__AG_TASK_FIXTURE_POSITION ?? null,
     taskDebug: window.__AG_TASK_DEBUG ?? null,
@@ -537,7 +565,7 @@ try {
     'the wall must be the reason the nearby task is not selected');
   assert.equal(blockedTaskDiagnostics.actionCount, 0,
     'task prompt must stay hidden when the player is in range but has no line of sight');
-  await blockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-occluded-hidden.png'), fullPage: true });
+
   await blockedTaskPage.close();
 
   // Ghosts are intentionally exempt from task LOS checks on the server and
@@ -591,7 +619,7 @@ try {
     'ghosts do not receive the Kill control');
   await ghostBlockedTaskPage.getByTestId('game-action-use').click();
   await ghostBlockedTaskPage.getByText(/Заправить двигатель|Fuel Engine/).waitFor({ state: 'visible', timeout: 5_000 });
-  await ghostBlockedTaskPage.screenshot({ path: join(visualQaDir, 'task-action-ghost-through-wall.png'), fullPage: true });
+
   await ghostBlockedTaskPage.close();
 
   // Verify the task prompt remains in a clear HUD band on short portrait and landscape screens.
@@ -633,7 +661,7 @@ try {
   const emergencyIconBox = await emergencyIcon.boundingBox();
   assert.ok(emergencyIconBox && emergencyIconBox.width >= 68 && emergencyIconBox.height >= 68,
     'Emergency control must display the large authored SVG alarm icon');
-  await page.screenshot({ path: join(visualQaDir, 'emergency-control-390x844.png'), fullPage: true });
+
   assert.ok(
     emergencyBox.x + emergencyBox.width <= gameplaySettingsBox.x ||
       gameplaySettingsBox.x + gameplaySettingsBox.width <= emergencyBox.x ||
@@ -655,7 +683,7 @@ try {
     /Waiting for server confirmation|Ожидаем подтверждение сервера/i);
   assert.equal(await emergencySplash.evaluate(element => getComputedStyle(element).backgroundColor), 'rgb(4, 10, 17)',
     'Emergency splash must fully obscure gameplay controls and text beneath it');
-  await page.screenshot({ path: join(visualQaDir, 'emergency-call-splash.png'), fullPage: true });
+
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
   // The role-reveal sprite is transient; observe it before the slower cold-map
   // loading gate, never after it may have unmounted.
@@ -699,7 +727,7 @@ try {
   // Exercise a complete two-step task on the mobile viewport.
   await taskButton.click();
   await page.getByText('Почистить фильтры', { exact: true }).waitFor({ state: 'visible' });
-  await page.screenshot({ path: join(visualQaDir, 'task-minigame-russian.png'), fullPage: true });
+
   const dirtyFilter = page.getByRole('button', { name: /Грязный фильтр/ });
   for (let i = 0; i < 5; i++) await dirtyFilter.first().click();
   await page.getByText('Шаг 2 из 2', { exact: true }).waitFor({ state: 'visible', timeout: 5_000 });
@@ -709,8 +737,7 @@ try {
   // Open every canonical task through the real proximity-gated Use action. This is a browser
   // gallery, not an SSR-only registry assertion: every module must mount inside the gameplay
   // overlay at a phone viewport, expose its dialog semantics, and remain within the safe viewport.
-  // Plan v2 six-state action-bar acceptance matrix. Each capture uses a
-  // deterministic fixture and asserts the action state before the screenshot.
+  // Plan v2 six-state action-bar acceptance matrix; assertions remain artifact-free.
   const hudStateMatrix = [];
   const captureHudState = async (name, fixture, verify) => {
     await page.goto(`${origin}/?mock=${fixture}&skipReveal=true`, { waitUntil: 'domcontentloaded' });
@@ -719,7 +746,7 @@ try {
     // state to mount the living-player action bar before asserting its controls.
     await page.getByTestId('game-action-bar').waitFor({ state: 'visible', timeout: 20_000 });
     const details = await verify(page);
-    await page.screenshot({ path: join(visualQaDir, `hud-matrix-${name}.png`), fullPage: true });
+
     hudStateMatrix.push({ state: name, fixture, viewport: { width: 390, height: 844 }, ...details });
   };
 
@@ -730,6 +757,23 @@ try {
     assert.equal(await use.isEnabled(), false, 'crew idle: no nearby task is actionable');
     assert.equal(await report.isVisible(), true, 'crew idle: Report remains visible');
     assert.equal(await report.isEnabled(), false, 'crew idle: no body means Report is disabled');
+    for (const [label, button] of [['Use', use], ['Report', report]]) {
+      const style = await button.evaluate(element => {
+        const computed = getComputedStyle(element);
+        return {
+          backgroundImage: computed.backgroundImage,
+          backgroundColor: computed.backgroundColor,
+          borderRadius: computed.borderRadius,
+          boxShadow: computed.boxShadow,
+          opacity: computed.opacity,
+        };
+      });
+      assert.equal(style.backgroundImage, 'none', `crew idle: ${label} must use a flat original-style button surface`);
+      assert.equal(style.backgroundColor, 'rgba(72, 78, 84, 0.94)', `crew idle: ${label} must use the shared neutral disabled surface`);
+      assert.equal(style.borderRadius, '50%', `crew idle: ${label} must remain circular`);
+      assert.equal(style.boxShadow, 'none', `crew idle: disabled ${label} must not glow`);
+      assert.equal(style.opacity, '0.45', `crew idle: disabled ${label} must be visibly desaturated`);
+    }
     assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew idle: no Kill action');
     return { use: 'disabled-no-nearby-task', report: 'disabled-no-body', kill: 'absent' };
   });
@@ -772,8 +816,19 @@ try {
     assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
     assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
     assert.equal(await kill.getAttribute('data-kill-state'), 'ready');
-    assert.equal(await kill.evaluate(element => getComputedStyle(element).animationName), 'ag-kill-ready-pulse',
-      'impostor ready: Kill gives a restrained pulse when a target is actionable');
+    const killStyle = await kill.evaluate(element => {
+      const computed = getComputedStyle(element);
+      return {
+        backgroundImage: computed.backgroundImage,
+        backgroundColor: computed.backgroundColor,
+        animationName: computed.animationName,
+        borderRadius: computed.borderRadius,
+      };
+    });
+    assert.equal(killStyle.backgroundImage, 'none', 'impostor ready: Kill uses a flat solid surface');
+    assert.equal(killStyle.backgroundColor, 'rgb(199, 53, 53)', 'impostor ready: Kill uses the restrained red HUD fill');
+    assert.equal(killStyle.animationName, 'none', 'impostor ready: Kill does not pulse or glow');
+    assert.equal(killStyle.borderRadius, '50%', 'impostor ready: Kill remains circular');
     assert.equal(await current.getByTestId('game-action-report').isEnabled(), false);
     assert.equal(await current.getByTestId('game-action-use').isEnabled(), false);
     return { kill: 'enabled-target', report: 'disabled-no-body', use: 'disabled-no-interaction' };
@@ -800,7 +855,6 @@ try {
     return { kill: 'absent', report: 'absent', ghost: 'visible' };
   });
 
-  writeFileSync(join(visualQaDir, 'hud-state-matrix.json'), JSON.stringify(hudStateMatrix, null, 2) + '\n');
 
   const minigameGallery = [
     [0, 'Fix Wiring', 'Починить проводку'],
@@ -860,10 +914,7 @@ try {
         dialogBox.y + dialogBox.height <= viewport.height + 0.5,
       `task ${taskId} dialog must stay inside the ${viewport.width}×${viewport.height} phone viewport; got ${JSON.stringify(dialogBox)}`,
     );
-    await page.screenshot({
-      path: join(visualQaDir, `minigame-gallery-${String(taskId).padStart(2, '0')}.png`),
-      fullPage: true,
-    });
+
     await minigameDialog.getByRole('button', { name: /^(Close|Закрыть)$/ }).click();
     await minigameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
   }
@@ -888,15 +939,29 @@ try {
     'Report remains visible but disabled when no body is nearby');
   assert.equal(await useAlwaysVisible.isEnabled(), false,
     'Use remains visible but disabled when no interaction is nearby');
-  const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
-  assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
-    'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  const neutralReportStyle = await reportAlwaysVisible.evaluate(element => {
+    const computed = getComputedStyle(element);
+    return {
+      backgroundImage: computed.backgroundImage,
+      backgroundColor: computed.backgroundColor,
+      borderRadius: computed.borderRadius,
+      boxShadow: computed.boxShadow,
+      opacity: computed.opacity,
+    };
+  });
+  assert.equal(neutralReportStyle.backgroundImage, 'none',
+    'disabled Report must use a flat surface without a gradient');
+  assert.equal(neutralReportStyle.backgroundColor, 'rgba(72, 78, 84, 0.94)',
+    'disabled Report uses the shared neutral grey surface, not an active colour');
+  assert.equal(neutralReportStyle.borderRadius, '50%', 'disabled Report remains circular');
+  assert.equal(neutralReportStyle.boxShadow, 'none', 'disabled Report has no glow');
+  assert.equal(neutralReportStyle.opacity, '0.45', 'disabled Report remains visibly desaturated');
   await page.setViewportSize({ width: 320, height: 720 });
   await page.waitForTimeout(100);
   const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
   assert.ok(actionBarBox && actionBarBox.x >= 0 && actionBarBox.x + actionBarBox.width <= 320,
     'the three-button impostor action bar must remain inside a narrow 320px phone viewport');
-  await page.screenshot({ path: join(visualQaDir, 'game-action-bar-320px.png'), fullPage: true });
+
   await page.setViewportSize({ width: 390, height: 844 });
 
   // At match start, the Kill button must be disabled until the initial cooldown expires.
@@ -924,7 +989,7 @@ try {
   await reportButton.waitFor({ state: 'visible', timeout: 10_000 });
   assert.equal(await reportButton.isEnabled(), true, 'Report is enabled when a living player is in range of a body');
   assert.equal(await page.getByTestId('game-action-use').isVisible(), true, 'Use remains visible beside Report');
-  await page.screenshot({ path: join(visualQaDir, 'corpse-report-ready.png'), fullPage: true });
+
   const litMapPixel = await page.locator('canvas').evaluate(canvas => {
     const context = canvas.getContext('2d');
     if (!context) return null;
@@ -963,8 +1028,7 @@ try {
   // The report-ready fixture places the corpse diagonally from the player, clear of walls.
   // The real row-7 corpse asset includes an exposed ivory bone; ensure those
   // pixels are present in the *rendered game canvas*, not just in the asset file.
-  // The screenshot artifact is visually inspected for the authored exposed-bone sprite.
-  // Keep the report-button proximity assertion above; per-pixel sampling is brittle
+    // Keep the report-button proximity assertion above; per-pixel sampling is brittle
   // because canvas backing-store DPR and CSS transforms differ across CI runners.
 
 
@@ -979,7 +1043,7 @@ try {
   await page.keyboard.type(typedMessage);
   assert.equal(await chatTextbox.inputValue(), typedMessage,
     'keyboard movement bindings must never drop Latin, Cyrillic, numeric, or punctuation input');
-  await page.screenshot({ path: join(visualQaDir, 'meeting-chat-typing.png'), fullPage: true });
+
   await chatTextbox.fill('');
   await page.getByText('Голосование начнётся после обсуждения', { exact: true }).waitFor({ state: 'visible' });
 
@@ -1007,7 +1071,7 @@ try {
   await page.getByText(/I was finishing the task console\./).waitFor({ state: 'visible' });
   await page.getByRole('textbox', { name: 'Сообщение в обсуждении' }).waitFor({ state: 'hidden' });
   await page.getByRole('button', { name: 'Пропустить' }).waitFor({ state: 'hidden' });
-  await page.screenshot({ path: join(visualQaDir, 'meeting-ghost-read-only-chat.png'), fullPage: true });
+
 
   // All five sabotage choices render in the impostor panel.
   await page.goto(`${origin}/?mock=sabotage-ready`, { waitUntil: 'domcontentloaded' });
@@ -1096,8 +1160,30 @@ try {
     if (!spriteContext) return false;
     const spritePixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height).data;
     let opaqueSamples = 0;
-    for (let i = 3; i < spritePixels.length; i += 16) if (spritePixels[i] > 0) opaqueSamples++;
-    if (opaqueSamples < 20) return false;
+    let lowerMinX = sprite.width;
+    let lowerMaxX = -1;
+    const lowerStartY = Math.floor(sprite.height * 0.66);
+    const lastRowY = sprite.height - 1;
+    const lastRowXs = [];
+    for (let i = 3; i < spritePixels.length; i += 4) {
+      if (spritePixels[i] === 0) continue;
+      opaqueSamples++;
+      const pixel = i / 4;
+      const x = pixel % sprite.width;
+      const y = Math.floor(pixel / sprite.width);
+      if (y >= lowerStartY) {
+        lowerMinX = Math.min(lowerMinX, x);
+        lowerMaxX = Math.max(lowerMaxX, x);
+      }
+      if (y === lastRowY) lastRowXs.push(x);
+    }
+    const lastRowRuns = [];
+    for (const x of lastRowXs) {
+      const last = lastRowRuns[lastRowRuns.length - 1];
+      if (last && x === last.maxX + 1) last.maxX = x;
+      else lastRowRuns.push({ minX: x, maxX: x });
+    }
+    if (opaqueSamples < 20 || lowerMaxX < lowerMinX || lastRowRuns.length !== 2) return false;
     const r = sprite.getBoundingClientRect();
     return {
       pose: sprite.getAttribute('data-pose'),
@@ -1105,24 +1191,36 @@ try {
       sourceY: sprite.getAttribute('data-source-y'),
       sourceHeight: sprite.getAttribute('data-source-height'),
       displayHeight: sprite.getAttribute('data-display-height'),
+      clipPath: sprite.style.clipPath,
+      lowerLegAlphaBounds: { minX: lowerMinX, maxX: lowerMaxX, startY: lowerStartY },
+      bottomLegRuns: lastRowRuns,
       x: r.left, y: r.top, width: r.width, height: r.height,
     };
   }, undefined, { timeout: 1_400 });
   const corpseSnapshot = await corpseSnapshotHandle.jsonValue();
   await corpseSnapshotHandle.dispose();
-  const corpseDataUrl = await page.locator('.ag-kill-victim-lower canvas.ag-character-sprite')
-    .evaluate(canvas => canvas.toDataURL('image/png'));
-  writeFileSync(join(visualQaDir, 'corpse-sprite-isolated.png'),
-    Buffer.from(corpseDataUrl.split(',')[1], 'base64'));
   assert.equal(corpseSnapshot.pose, 'dead-body');
   assert.equal(corpseSnapshot.row, '7');
   assert.equal(corpseSnapshot.sourceY, '1067');
   assert.equal(corpseSnapshot.sourceHeight, '93');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
+  const corpseBottomClipXs = [...corpseSnapshot.clipPath.matchAll(/([\d.]+)% 100%/g)]
+    .map(([, value]) => Number(value));
+  assert.ok(corpseBottomClipXs.length >= 4);
+  assert.ok(Math.min(...corpseBottomClipXs) <= corpseSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
+    'corpse clip must not cut into the outer edge of the lower body or exposed bone');
+  assert.ok(Math.max(...corpseBottomClipXs) >= corpseSnapshot.lowerLegAlphaBounds.maxX / 161 * 100,
+    'corpse clip must preserve the full width of the corpse lower silhouette');
+  const corpseClipBands = corpseBottomClipXs.sort((a, b) => a - b);
+  assert.ok(corpseClipBands[0] <= corpseSnapshot.bottomLegRuns[0].minX / 161 * 100 &&
+    corpseClipBands[1] >= corpseSnapshot.bottomLegRuns[0].maxX / 161 * 100 &&
+    corpseClipBands[2] <= corpseSnapshot.bottomLegRuns[1].minX / 161 * 100 &&
+    corpseClipBands[3] >= corpseSnapshot.bottomLegRuns[1].maxX / 161 * 100,
+    'corpse clip must fully contain both measured lower-leg/foot alpha runs');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
-  await page.screenshot({ path: join(visualQaDir, 'kill-screen-victim.png'), fullPage: true });
+
 
   const corpseColorCoverage = await page.evaluate(async () => {
     const image = new Image();
@@ -1195,7 +1293,7 @@ try {
     0,
     'the attacker should see gameplay, not the victim-only full-screen kill animation',
   );
-  await page.screenshot({ path: join(visualQaDir, 'kill-animation-attacker.png'), fullPage: true });
+
 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto(`${origin}/?mock=kill-animation-victim&skipReveal=true`, { waitUntil: 'domcontentloaded' });
@@ -1259,7 +1357,7 @@ try {
     `the local ghost must animate over time (changed pixels in its canvas region: ${changedGhostPixels})`,
   );
   await page.waitForTimeout(450);
-  await page.screenshot({ path: join(visualQaDir, 'ghost-mode.png'), fullPage: true });
+
 
   // Capture the low-vision Lights sabotage state to review contrast and the HUD.
   await page.goto(`${origin}/?mock=sabotage-lights`, { waitUntil: 'domcontentloaded' });
@@ -1276,7 +1374,7 @@ try {
     'sabotage banner must not overlap the task-list toggle',
   );
   await page.waitForTimeout(250);
-  await page.screenshot({ path: join(visualQaDir, 'vision-lights.png'), fullPage: true });
+
 
   // Return to the normal task fixture so viewport assertions test the playable HUD.
   await page.goto(`${origin}/?mock=task-interaction`, { waitUntil: 'domcontentloaded' });
@@ -1292,7 +1390,7 @@ try {
   assert.equal(await taskUseAction.getAttribute('data-use-available'), 'true');
   assert.equal(await taskReportAction.isDisabled(), true,
     'Report stays visible but disabled until a body is in range');
-  await page.screenshot({ path: join(visualQaDir, 'gameplay-hud.png'), fullPage: true });
+
   const gameplaySurfaceSelection = await page.locator('#root > div').first().evaluate(element =>
     getComputedStyle(element).userSelect,
   );
@@ -1334,10 +1432,7 @@ try {
       `${viewport.label}: game canvas exceeds horizontal viewport bounds`);
     assert.ok(layout.canvas.top >= -1 && layout.canvas.bottom <= layout.viewportHeight + 1,
       `${viewport.label}: game canvas exceeds vertical viewport bounds`);
-    await page.screenshot({
-      path: join(visualQaDir, `gameplay-${viewport.label.replaceAll(' ', '-')}.png`),
-      fullPage: true,
-    });
+
   }
   // Per-control layout is adjustable, saved, applied to gameplay, and resettable.
   await page.setViewportSize({ width: 390, height: 844 });
@@ -1593,7 +1688,7 @@ try {
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'visible' });
   assert.equal(await decodePage.getByTestId('gameplay-loading-screen').isVisible(), true,
     'gameplay must stay locked while map and sprite decode promises are unresolved');
-  await decodePage.screenshot({ path: join(visualQaDir, 'loading-screen-before-ready.png'), fullPage: true });
+
   await decodePage.evaluate(() => window.__releaseImageDecodes());
   await decodePage.getByTestId('gameplay-loading-screen').waitFor({ state: 'hidden', timeout: 15_000 });
   await decodePage.close();
@@ -1637,7 +1732,7 @@ try {
     `overview fallback must load when detail tiles fail; observed: ${mapAssetEvents.join(' | ')}`);
   assert.equal(tileManifestRejected, true,
     'the browser test must actually exercise a failed optional tile manifest');
-  await fallbackPage.screenshot({ path: join(visualQaDir, 'map-overview-tiles-fallback.png'), fullPage: true });
+
   await fallbackPage.close();
 
   // Restricted WebViews can reject localStorage writes; current-session settings must still respond.
@@ -1754,7 +1849,7 @@ try {
         assert.equal(await revealSprite.getAttribute('data-pose'), 'idle',
           'impostor role reveal must show a living character, not the corpse sprite');
         const spriteClip = await revealSprite.evaluate(element => getComputedStyle(element).clipPath);
-        assert.ok(spriteClip.includes('49%') && spriteClip.includes('58.5%'),
+        assert.ok(spriteClip.includes('53%') && spriteClip.includes('56%'),
           `role-reveal sprite must clip the detached black atlas strokes between the legs; got ${spriteClip}`);
       }
       const viewportFilename = filename.replace(/\.png$/, `-${viewport.label}.png`);
@@ -1770,7 +1865,7 @@ try {
             .waitFor({ state: 'visible', timeout: 10_000 });
         }
       }
-      await statePage.screenshot({ path: join(visualQaDir, viewportFilename), fullPage: true });
+
       await statePage.close();
     }
   }
@@ -1886,7 +1981,7 @@ try {
   assert.ok(cameraSamples.length >= 8,
     'camera-follow trace must capture at least eight animation frames');
   const worldAfterMovement = await readWorldFingerprint(cameraBaseline.screenX, cameraBaseline.screenY);
-  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-diagnostic.png'), fullPage: true });
+
   console.log('Camera follow diagnostic:', JSON.stringify({
     baseline: cameraBaseline,
     samples: cameraSamples,
@@ -1934,7 +2029,7 @@ try {
     `camera must keep the moving player near its pre-movement screen position (offset ${maxCameraOffsetX.toFixed(1)}, ${maxCameraOffsetY.toFixed(1)})`);
   assert.ok(cameraSpreadX < 14 && cameraSpreadY < 14,
     `camera-following player screen position must not shake (spread ${cameraSpreadX.toFixed(1)}×${cameraSpreadY.toFixed(1)})`);
-  await cameraPage.screenshot({ path: join(visualQaDir, 'camera-stability-after-move.png'), fullPage: true });
+
 
   // Keep a pointer actively held while a blocking overlay opens. The joystick
   // must unmount, clear its direction, and not inherit that pointer on remount.

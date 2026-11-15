@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 const origin = process.env.GAME_URL ?? 'http://127.0.0.1:5173';
-const visualDir = process.env.VISUAL_QA_DIR;
-if (visualDir) mkdirSync(visualDir, { recursive: true });
 
 const browser = await chromium.launch({
   headless: true,
@@ -53,18 +49,12 @@ try {
   assert.ok(geometry.buttonHeight <= 56,
     `Leave match must be a compact secondary action, got ${geometry.buttonHeight}px high`);
 
-  if (visualDir) {
-    await page.screenshot({ path: join(visualDir, 'in-game-settings-leave.png'), fullPage: false });
-  }
 
   await leaveButton.click();
   const confirmDialog = page.locator('[role="dialog"][aria-labelledby="ag-leave-match-title"]');
   await confirmDialog.waitFor({ state: 'visible', timeout: 10_000 });
   assert.match(await confirmDialog.innerText(), /Leave this match\?|Выйти из матча\?/,
     'Leave match must require an explicit confirmation step');
-  if (visualDir) {
-    await page.screenshot({ path: join(visualDir, 'in-game-leave-confirm.png'), fullPage: false });
-  }
 
   await confirmDialog.getByRole('button', { name: /Stay|Остаться/ }).click();
   await confirmDialog.waitFor({ state: 'hidden', timeout: 5_000 });

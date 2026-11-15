@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -405,32 +405,12 @@ try {
       'green', 'pink', 'orange', 'yellow', 'black', 'white', 'lime', 'cyan', 'rose',
     ];
     const frames = [];
-    const gameplayMatrix = document.createElement('canvas');
+    // Preserve the numeric gameplay-scale contract without creating image matrices.
     const gameplayZoom = 0.7; // GameMap.tsx ZOOM used for the gameplay camera.
     const playerDisplayHeight = Math.round(36 * (3224 / 1652));
     const playerDisplayWidth = playerDisplayHeight * (cellWidth / (1401 / 9));
     const gameplayCellWidth = Math.ceil(playerDisplayWidth * gameplayZoom) + 10;
     const gameplayCellHeight = Math.ceil(playerDisplayHeight * gameplayZoom) + 10;
-    gameplayMatrix.width = colors.length * gameplayCellWidth;
-    gameplayMatrix.height = poseWindows.length * gameplayCellHeight;
-    const gameplayContext = gameplayMatrix.getContext('2d');
-    if (!gameplayContext) throw new Error('Could not allocate gameplay-scale character matrix');
-    gameplayContext.fillStyle = '#202a35';
-    gameplayContext.fillRect(0, 0, gameplayMatrix.width, gameplayMatrix.height);
-    gameplayContext.imageSmoothingEnabled = true;
-    gameplayContext.imageSmoothingQuality = 'high';
-
-    const matrix = document.createElement('canvas');
-    const cellW = 84;
-    const cellH = 72;
-    matrix.width = colors.length * cellW;
-    matrix.height = poseWindows.length * cellH;
-    const matrixContext = matrix.getContext('2d');
-    if (!matrixContext) throw new Error('Could not allocate character golden matrix');
-    matrixContext.fillStyle = '#202a35';
-    matrixContext.fillRect(0, 0, matrix.width, matrix.height);
-    matrixContext.imageSmoothingEnabled = false;
-
     for (let row = 0; row < poseWindows.length; row++) {
       const pose = poseWindows[row];
       for (let column = 0; column < colors.length; column++) {
@@ -463,23 +443,6 @@ try {
           alphaBounds: opaquePixels > 0 ? { minX, minY, maxX, maxY } : null,
         });
 
-        // Render a compact 18-colour × 9-pose visual reference without resampling the atlas.
-        const scale = Math.min((cellW - 10) / cellWidth, (cellH - 10) / height);
-        const drawWidth = Math.max(1, Math.round(cellWidth * scale));
-        const drawHeight = Math.max(1, Math.round(height * scale));
-        const dx = column * cellW + Math.round((cellW - drawWidth) / 2);
-        const dy = row * cellH + Math.round((cellH - drawHeight) / 2);
-        matrixContext.drawImage(atlas, x, pose.top, cellWidth, height, dx, dy, drawWidth, drawHeight);
-
-        // Match GameMap.tsx's 0.7 zoom and its per-pose crop-height scaling.
-        // This second matrix makes lower-leg/feet-anchor defects visible at the
-        // size characters occupy in the actual camera, not only in source pixels.
-        const gameplayWidth = Math.max(1, Math.round(playerDisplayWidth * gameplayZoom));
-        const gameplayHeight = Math.max(1, Math.round(playerDisplayHeight * gameplayZoom * (height / (1401 / 9))));
-        const gameplayX = column * gameplayCellWidth + Math.round((gameplayCellWidth - gameplayWidth) / 2);
-        const gameplayY = row * gameplayCellHeight + Math.round((gameplayCellHeight - gameplayHeight) / 2);
-        gameplayContext.drawImage(atlas, x, pose.top, cellWidth, height,
-          gameplayX, gameplayY, gameplayWidth, gameplayHeight);
       }
     }
     const legacyFrames = [];
@@ -552,8 +515,6 @@ try {
         gameplayCellWidth,
         gameplayCellHeight,
       },
-      gameplayMatrixDataUrl: gameplayMatrix.toDataURL('image/png'),
-      matrixDataUrl: matrix.toDataURL('image/png'),
     };
   }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe });
 
@@ -622,33 +583,6 @@ try {
   assert.equal(corpseFrames.length, 18);
   assert.ok(corpseFrames.every(frame => frame.opaquePixels > 100),
     'all eighteen generated colors must retain the authored corpse and exposed-bone row');
-
-  const visualQaDir = process.env.VISUAL_QA_DIR;
-  if (visualQaDir) {
-    mkdirSync(visualQaDir, { recursive: true });
-    const matrixBase64 = metrics.matrixDataUrl.slice('data:image/png;base64,'.length);
-    writeFileSync(join(visualQaDir, 'character-atlas-golden-matrix.png'), Buffer.from(matrixBase64, 'base64'));
-    const gameplayMatrixBase64 = metrics.gameplayMatrixDataUrl.slice('data:image/png;base64,'.length);
-    writeFileSync(join(visualQaDir, 'character-atlas-gameplay-scale.png'), Buffer.from(gameplayMatrixBase64, 'base64'));
-    const manifest = {
-      gameplayDisplay: metrics.gameplayDisplay,
-      sourceAssetGitBlobSha,
-      bakedAsset: metrics.bakedAsset,
-      bakedParity: metrics.bakedParity,
-      width: metrics.width,
-      height: metrics.height,
-      cellWidth: metrics.cellWidth,
-      colors: [
-        'teal', 'maroon', 'navy', 'purple', 'brown', 'dark-gray', 'magenta', 'red', 'blue',
-        'green', 'pink', 'orange', 'yellow', 'black', 'white', 'lime', 'cyan', 'rose',
-      ],
-      poseWindows,
-      frames: metrics.frames.map(({ color, pose, hash, opaquePixels, alphaBounds }) => ({
-        color, pose, hash, opaquePixels, alphaBounds,
-      })),
-    };
-    writeFileSync(join(visualQaDir, 'character-atlas-frame-metrics.json'), JSON.stringify(manifest, null, 2) + '\n');
-  }
 
   console.log('Runtime character atlas frame matrix passed:', JSON.stringify({
     width: metrics.width,
