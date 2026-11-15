@@ -30,7 +30,6 @@ import {
 } from '../game/characterAnimation';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
-import type { MeetingChatMessage } from '../context/GameContext';
 
 import {
   useGameState,
@@ -88,10 +87,10 @@ import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton
 import { buildAdminTableAgents } from '../game/adminTableAgents';
 import TaskListPanel from '../components/TaskListPanel';
 import EmergencyCallSplash from '../components/EmergencyCallSplash';
-import MeetingChatPanel from '../components/MeetingChatPanel';
-import MeetingVotingPanel from '../components/MeetingVotingPanel';
 import KillAnimationOverlay from '../components/KillAnimationOverlay';
 import GameOverOverlay from '../components/GameOverOverlay';
+import GameMeetingOverlay from '../components/GameMeetingOverlay';
+import GameMiniMapOverlay from '../components/GameMiniMapOverlay';
 import RoleRevealOverlay from '../components/RoleRevealOverlay';
 import { sabotageRu, slotColor, taskRu } from '../game/mapPresentation';
 
@@ -1524,72 +1523,20 @@ export default function GameMap() {
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
-      {showMiniMap && loaded && myRole !== null && meeting === null && (
-        <div ref={mapDialogRef} data-minimap-tick={miniMapTick} role="dialog" aria-modal="true" aria-label={en ? 'Among Gas map' : 'Карта Among Gas'}
-          onClick={() => setShowMiniMap(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 75,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 'max(12px, env(safe-area-inset-top, 12px)) 12px max(12px, env(safe-area-inset-bottom, 12px))',
-            background: 'rgba(2,8,15,0.94)', backdropFilter: 'blur(6px)', color: '#e4f5ff', fontFamily: 'sans-serif',
-          }}>
-          <div onClick={event => event.stopPropagation()} style={{
-            width: 'min(96vw, 900px)', maxHeight: '100%', overflowY: 'auto',
-            borderRadius: 14, padding: 12, background: 'linear-gradient(155deg, rgba(18,42,55,0.98), rgba(5,14,25,0.99))',
-            border: '1px solid rgba(100,210,230,0.55)', boxShadow: '0 16px 60px rgba(0,0,0,0.55)',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 9 }}>
-              <div>
-                <div style={{ fontWeight: 950, fontSize: 'clamp(18px, 4vw, 25px)', letterSpacing: '0.07em' }}>{en ? 'FACILITY MAP' : 'КАРТА ОБЪЕКТА'}</div>
-                <div style={{ marginTop: 3, fontSize: 11, color: 'rgba(190,225,235,0.68)' }}>
-                  {myRole === 'crewmate' ? (en ? 'Your unfinished tasks are marked in yellow' : 'Ваши незавершённые задания отмечены жёлтым') : (en ? 'Map overview' : 'Обзор карты')}
-                </div>
-              </div>
-              <button ref={mapCloseRef} onClick={() => setShowMiniMap(false)} aria-label={en ? 'Close map' : 'Закрыть карту'} style={{
-                width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
-                background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
-              }}>×</button>
-            </div>
-            <div style={{
-              position: 'relative', width: '100%', aspectRatio: MAP_W / MAP_H,
-              overflow: 'hidden', borderRadius: 9, border: '1px solid rgba(120,200,220,0.4)', background: '#13212a',
-            }}>
-              <img src={`${import.meta.env.BASE_URL}map-overview.webp`} alt={en ? 'Among Gas map' : 'Карта Among Gas'} draggable={false}
-                style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'contain', userSelect: 'none' }} />
-              {myRole === 'crewmate' && myTasks.filter(task => {
-                const def = TASK_DEFS.find(item => item.id === task.taskId);
-                return def !== undefined && task.completedSteps < def.steps;
-              }).map(task => {
-                const def = TASK_DEFS.find(item => item.id === task.taskId)!;
-                return <span key={task.taskId} title={taskRu(def.name, language)} style={{
-                  position: 'absolute', left: `${def.x / MAP_W * 100}%`, top: `${def.y / MAP_H * 100}%`,
-                  transform: 'translate(-50%,-50%)', display: 'grid', placeItems: 'center',
-                  width: 'clamp(13px, 2.8vw, 22px)', height: 'clamp(13px, 2.8vw, 22px)',
-                  borderRadius: '50%', background: '#f1c40f', border: '1px solid #fff5b4',
-                  color: '#493900', fontSize: 'clamp(10px, 1.7vw, 15px)', fontWeight: 950,
-                  boxShadow: '0 0 8px rgba(255,211,48,0.72)',
-                }}>!</span>;
-              })}
-              {myVentId === null && (
-                <span title={en ? 'You are here' : 'Вы здесь'} aria-label={en ? 'Your location' : 'Ваше местоположение'} style={{
-                  position: 'absolute', left: `${playerStateRef.current.x / MAP_W * 100}%`, top: `${playerStateRef.current.y / MAP_H * 100}%`,
-                  transform: 'translate(-50%,-50%)', width: 'clamp(12px, 2.6vw, 19px)', height: 'clamp(12px, 2.6vw, 19px)',
-                  borderRadius: '50%', background: '#45e6bc', border: '2px solid #fff',
-                  boxShadow: '0 0 0 4px rgba(69,230,188,0.25), 0 0 8px #000',
-                }} />
-              )}
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', gap: 8, padding: '8px 2px 0', fontSize: 11, color: 'rgba(220,239,242,0.7)' }}>
-              <span>● {en ? 'Your location' : 'Ваше местоположение'}</span>
-              <span>! {en ? 'Unfinished task' : 'Незавершённое задание'}</span>
-              <span>{myTasks.filter(task => {
-                const def = TASK_DEFS.find(item => item.id === task.taskId);
-                return def !== undefined && task.completedSteps < def.steps;
-              }).length} {en ? 'tasks remaining' : 'заданий осталось'}</span>
-            </div>
-          </div>
-        </div>
-      )}
+      <GameMiniMapOverlay
+        open={showMiniMap && loaded && myRole !== null && meeting === null}
+        english={en}
+        isCrewmate={myRole === 'crewmate'}
+        tasks={myTasks}
+        taskLabel={name => taskRu(name, language)}
+        playerPosition={playerStateRef.current}
+        inVent={myVentId !== null}
+        overviewSrc={`${import.meta.env.BASE_URL}map-overview.webp`}
+        tick={miniMapTick}
+        dialogRef={mapDialogRef}
+        closeButtonRef={mapCloseRef}
+        onClose={() => setShowMiniMap(false)}
+      />
 
       {loaded && gameplayReady && meeting === null && !settingsOpen && !leaveConfirmOpen && myVentId === null && !showAdminTable && !showMiniMap && activeTaskId === null && !showSabotagePanel && !killAnimation && !voteResult?.winner && <Joystick keysRef={keysRef} />}
 
@@ -1819,69 +1766,23 @@ export default function GameMap() {
 
       {/* ── Meeting overlay: discussion → voting (Phase 6) ─────────────────── */}
       {meeting && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 60,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(6,10,18,0.94)', backdropFilter: 'blur(4px)', padding: 24,
-          overflowY: 'auto',
-        }}>
-          <div style={{ textAlign: 'center', marginBottom: 22 }}>
-            <div style={{
-              fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
-              letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
-            }}>
-              {meeting.bodySlot === NO_TARGET ? (en ? 'Emergency meeting' : 'Экстренное собрание') : (en ? 'Body reported' : 'Найдено тело')}
-            </div>
-            <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
-              {meeting.bodySlot === NO_TARGET
-                ? `${playerName(meeting.reporterSlot)} ${en ? 'called an emergency meeting' : 'вызвал экстренное собрание'}`
-                : `${playerName(meeting.reporterSlot)} ${en ? 'reported' : 'нашёл тело'} ${playerName(meeting.bodySlot)}`}
-            </div>
-            <div style={{
-              marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
-              color: inDiscussion ? '#8ab8cc' : '#ffd166',
-            }}>
-              {Math.ceil(meetingRemainingMs / 1000)}s
-            </div>
-            <div style={{
-              fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
-              textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
-            }}>
-              {inDiscussion ? (en ? 'Discussion' : 'Обсуждение') : (en ? 'Voting' : 'Голосование')}
-            </div>
-          </div>
-
-          {amIDead && (
-            <div style={{
-              color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
-            }}>
-              {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
-            </div>
-          )}
-
-          <MeetingChatPanel
-            messages={meetingMessages}
-            inDiscussion={inDiscussion}
-            isDead={amIDead}
-            english={en}
-            draft={chatDraft}
-            onDraftChange={setChatDraft}
-            playerName={playerName}
-            onSend={sendMeetingChat}
-          />
-
-          {!inDiscussion && !amIDead && (
-            <MeetingVotingPanel
-              players={players}
-              deadSlots={deadSlots}
-              hasVoted={hasVoted}
-              mySlot={mySlot}
-              english={en}
-              onVote={slot => { haptic.tap(); sfx('uiSelect', 0.3); castVote(slot); }}
-            />
-          )}
-        </div>
+        <GameMeetingOverlay
+          meeting={meeting}
+          remainingMs={meetingRemainingMs}
+          inDiscussion={inDiscussion}
+          isDead={amIDead}
+          english={en}
+          messages={meetingMessages}
+          players={players}
+          deadSlots={deadSlots}
+          hasVoted={hasVoted}
+          mySlot={mySlot}
+          draft={chatDraft}
+          onDraftChange={setChatDraft}
+          playerName={playerName}
+          onSendChat={sendMeetingChat}
+          onVote={slot => { haptic.tap(); sfx('uiSelect', 0.3); castVote(slot); }}
+        />
       )}
 
       {/* ── Task minigame overlay (Phase 7) ─────────────────────────────────── */}
