@@ -1484,7 +1484,7 @@ export default function VectorCollisionEditor() {
 
       <nav style={{ display: "flex", gap: 6, padding: 8, overflowX: "auto", background: "#14212c", borderBottom: "1px solid #334c5e" }}>
         {(["pan", "wall", "solid", "region", "hole", "edit", "erase", "walk", "vision", "loupe"] as Tool[]).map(item => (
-          <button key={item} type="button" data-testid={"collision-tool-" + item} style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); }}>{TOOL_LABELS[item]}</button>
+          <button key={item} type="button" data-testid={"collision-tool-" + item} style={buttonStyle(tool === item)} onClick={() => { setTool(item); setLoupe(null); if (item === "walk") setAnalysis(null); }}>{TOOL_LABELS[item]}</button>
         ))}
         <span style={{ width: 1, background: "#435b6d", margin: "0 3px" }} />
         <button type="button" style={buttonStyle()} onClick={undo} disabled={!historyRef.current.canUndo}>Undo</button>
