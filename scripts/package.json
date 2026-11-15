@@ -31,7 +31,8 @@
     "build:character-atlas": "tsx ./src/buildCharacterAtlas.ts",
     "test:admin-table": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameAdminTable.test.tsx",
     "test:vent-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameVentOverlay.test.tsx",
-    "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx"
+    "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx",
+    "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx"
   },
   "devDependencies": {
     "@types/node": "catalog:",
