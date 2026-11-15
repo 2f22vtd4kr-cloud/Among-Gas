@@ -328,6 +328,11 @@ export function smoothVisibilityPolygon(
   origin: VisionPoint,
   windowRadius = 3,
 ): VisionPoint[] {
+  // A malformed contour cannot produce a trustworthy closed polygon. Fail closed
+  // instead of allowing NaN/Infinity to poison the renderer's path coordinates.
+  if (points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    return [];
+  }
   if (points.length < 3 || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) {
     return [...points];
   }
