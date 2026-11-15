@@ -19,10 +19,12 @@ import { MAP_AUTHORING_ZONES } from "@workspace/shared/collision";
 const document = getProductionCollisionDocument();
 const world = getProductionCollisionWorld();
 assert.equal(document.source?.kind, "redline-vector");
-assert.equal(document.source?.generatorVersion, 11,
+assert.equal(document.source?.generatorVersion, 12,
   "collision QA artifacts must be regenerated when source-vector geometry behavior changes");
 assert.ok(Math.abs((document.source?.vectorization?.rasterCellExpansionSourcePx ?? 0) - Math.SQRT2) < 1e-9,
   "redline obstacle radii must conservatively cover the half-diagonal of each 2×2 raster cell");
+assert.equal(document.source?.vectorization?.strokeWidthQuantile, 0.9,
+  "redline obstacle widths must use a conservative upper-tail estimate, not a path-wide median");
 assert.ok((document.source?.vectorization?.simplificationToleranceSourcePx ?? Infinity) <= 0.5,
   "source redline contours must retain sub-pixel detail relative to the player footprint");
 const walkableRegions = document.shapes.filter(shape => shape.walkableRegion === true);
