@@ -465,12 +465,6 @@ function median(values: number[]): number {
   const middle = Math.floor(values.length / 2);
   return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
 }
-function quantile(values: number[], fraction: number): number {
-  if (!values.length) return 0;
-  const sorted = values.slice().sort((a, b) => a - b);
-  const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1));
-  return sorted[index];
-}
 
 function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Array):CollisionShape[]{
   const shapes:CollisionShape[]=[];
