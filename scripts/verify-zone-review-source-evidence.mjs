@@ -9,7 +9,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const collisionDir = resolve(repoRoot, "lib/shared/src/collision");
 const zoneIds = Array.from({ length: 12 }, (_, index) => `Z${String(index + 1).padStart(2, "0")}`);
 const expectedRecords = new Set(zoneIds.map(id => `collision.zone-${id}.review.v1.json`));
-const entries = (await readdir(collisionDir)).filter(name => /^collision\\.zone-Z\\d{2}\\.review\\.v1\\.json$/.test(name));
+const entries = (await readdir(collisionDir)).filter(name => /^collision\.zone-Z\d{2}\.review\.v1\.json$/.test(name));
 const errors = [];
 
 if (entries.length !== expectedRecords.size || entries.some(name => !expectedRecords.has(name))) {
