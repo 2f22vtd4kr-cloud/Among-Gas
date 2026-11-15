@@ -35,6 +35,13 @@ assert.deepEqual(indexed, reference,
 assert.ok(index.nodes.length > 1, "large contour sets should build a hierarchy");
 assert.equal(index.segments, segments, "index must retain the immutable source segment collection");
 
+assert.throws(() => buildVisualOccluderSegmentIndex([
+  { ax: Number.NaN, ay: 0, bx: 1, by: 1 },
+]), /finite endpoints/, "non-finite segment endpoints must be rejected before BVH bounds are built");
+assert.throws(() => buildVisualOccluderSegmentIndex([
+  { ax: 1, ay: 1, bx: 1, by: 1 },
+]), /non-zero length/, "zero-length segments must be rejected instead of silently entering the occluder index");
+
 const emptyIndex = buildVisualOccluderSegmentIndex([]);
 assert.deepEqual(computeVisibilityPolygon(
   origin.x, origin.y, radius, emptyFineGrid, [], false, [], emptyIndex,
