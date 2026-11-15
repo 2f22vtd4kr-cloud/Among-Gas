@@ -405,6 +405,12 @@ try {
       'green', 'pink', 'orange', 'yellow', 'black', 'white', 'lime', 'cyan', 'rose',
     ];
     const frames = [];
+    // Preserve the numeric gameplay-scale contract without creating image matrices.
+    const gameplayZoom = 0.7; // GameMap.tsx ZOOM used for the gameplay camera.
+    const playerDisplayHeight = Math.round(36 * (3224 / 1652));
+    const playerDisplayWidth = playerDisplayHeight * (cellWidth / (1401 / 9));
+    const gameplayCellWidth = Math.ceil(playerDisplayWidth * gameplayZoom) + 10;
+    const gameplayCellHeight = Math.ceil(playerDisplayHeight * gameplayZoom) + 10;
     for (let row = 0; row < poseWindows.length; row++) {
       const pose = poseWindows[row];
       for (let column = 0; column < colors.length; column++) {
