@@ -44,6 +44,7 @@ const vectorOnlyByZone: Record<string, number> = {};
 const reachableByZone: Record<string, number> = {};
 const mismatchOverlay = Buffer.alloc(MAP_W * MAP_H * 4);
 const vectorOnlyExamples: Array<{ x: number; y: number; zone: string }> = [];
+const vectorOnlyDiagnosticsByZone: Record<string, Array<{ x: number; y: number; zone: string }>> = {};
 const rasterOnlyExamples: Array<{ x: number; y: number; zone: string }> = [];
 
 for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
@@ -87,6 +88,8 @@ for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
       reachableVectorOnly++;
       vectorOnlyByZone[zone] = (vectorOnlyByZone[zone] ?? 0) + 1;
       if (vectorOnlyExamples.length < 20) vectorOnlyExamples.push({ x, y, zone });
+      const zoneSamples = vectorOnlyDiagnosticsByZone[zone] ?? (vectorOnlyDiagnosticsByZone[zone] = []);
+      if (zoneSamples.length < 3) zoneSamples.push({ x, y, zone });
     } else {
       mark(32, 220, 255);
       reachableRasterOnly++;
@@ -104,7 +107,8 @@ if (vectorOnlyExamples.length > 0) {
       ((px - a[0]) * dx + (py - a[1]) * dy) / lengthSquared));
     return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy);
   };
-  mismatchDiagnostics = vectorOnlyExamples.slice(0, 8).map(position => {
+  const zoneDiagnosticSamples = Object.values(vectorOnlyDiagnosticsByZone).flat();
+  mismatchDiagnostics = zoneDiagnosticSamples.map(position => {
     const feetY = position.y + FEET_OFFSET_Y;
     const circles = [position.x - PLAYER_HALF_WIDTH, position.x, position.x + PLAYER_HALF_WIDTH].map(cx => {
       const vectorWalkable = vector.isWalkable(cx, feetY, PLAYER_RADIUS);
