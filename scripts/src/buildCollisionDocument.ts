@@ -517,7 +517,19 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
     const statueRing=Math.abs(cx/w-.54)<.09&&Math.abs(cy/h-.27)<.10;
     const closed=loop&&area(unique)>=20&&area(unique)<=8000&&!statueRing;
     if(closed){
-      append(unique.map(([x,y])=>worldPoint(x,y)),true,0,"red-line solid footprint");
+      // A closed footprint has both a filled interior and a thick authored
+      // red-line boundary. Preserve the fill, and carry the measured median
+      // source half-width onto its perimeter segments so a player's circular
+      // footprint cannot skim through the rasterized outline while its centre
+      // remains outside the polygon.
+      const closedHalfWidths = unique
+        .map(pixel => strokeDistance[pixel] ?? 0)
+        .filter(value => Number.isFinite(value) && value > 0);
+      const closedRadius = Math.min(
+        16,
+        Math.ceil((median(closedHalfWidths) * scale + expansion) * 2) / 2,
+      );
+      append(unique.map(([x,y])=>worldPoint(x,y)),true,closedRadius,"red-line solid footprint");
       continue;
     }
     // Stroke width varies along connected source-art paths. A single
