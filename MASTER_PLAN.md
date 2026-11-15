@@ -78,7 +78,7 @@ Roles: **S16-AD** art director (style bible, final say), **S16-G1…G6** tile ge
 4. **Output:** exactly 1024² (or the tile's size); the 64 px context ring is only for blending.
 5. **Stitch** with 64 px feathered blends into one 6448×3716 master (`map_tiles.py cut` then reassembles; blending script by S16-Q).
 6. **Gate:** `tile_qa.py candidate.png master_baseline.png`. Fail → regenerate **that tile** with lower strength. Max 3 attempts, then escalate to S16-AD (hero areas may go to option D).
-7. **Human gate (you, on a phone):** a 6-image gallery per round: statue, parking, gas station, boiler room, lobby corridor, electrical. Look for: invented objects, melted lines, colour drift, repeated texture.
+7. **Owner gate:** no generated image gallery. Preserve source-map and geometry invariants in code; the owner will inspect the live running game directly when implementation is ready.
 
 ### 3.2 Hero areas that need extra care
 Statue plaza (face, planter plants, the painted statue shadow: ask the owner whether to keep it), the cars with white parking lines (lines must stay painted-on, flat, never raised), gas station glass/kiosk, ice on pipes, boiler pipes, van, cable room.
