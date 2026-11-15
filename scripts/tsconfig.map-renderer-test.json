@@ -27,7 +27,9 @@
     "../artifacts/telegram-game/src/game/mapPlayerCanvasPosition.ts",
     "../artifacts/telegram-game/src/game/mapPlayerCanvasPosition.test.ts",
     "../artifacts/telegram-game/src/game/mapVisionPolicy.ts",
-    "../artifacts/telegram-game/src/game/mapVisionPolicy.test.ts"
+    "../artifacts/telegram-game/src/game/mapVisionPolicy.test.ts",
+    "../artifacts/telegram-game/src/game/visibility.ts",
+    "../artifacts/telegram-game/src/game/visibility.test.ts"
   ],
   "exclude": []
 }

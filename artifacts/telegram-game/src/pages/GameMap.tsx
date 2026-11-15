@@ -57,7 +57,7 @@ import {
   type SabotageSystemId,
 } from '@workspace/shared/sabotage';
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
-import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
+import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, buildVisualOccluderSegmentIndex, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
 import TaskMinigame from '../components/TaskMinigame';
 import SettingsDialog from '../components/SettingsDialog';
@@ -1010,6 +1010,9 @@ export default function GameMap() {
     const shadowGrid = buildShadowGrid(fineGrid);
     const narrowOccluders = buildNarrowShadowOccluders(fineGrid, true);
     const narrowSegments = buildFineShadowSegments(fineGrid);
+    // Contours are immutable for the lifetime of this game-map session. Build
+    // their BVH once rather than scanning every segment for all 720 rays/frame.
+    const narrowSegmentIndex = buildVisualOccluderSegmentIndex(narrowSegments);
     if (!isSpawnWalkable(fineGrid)) {
       throw new Error('Unsafe player spawn: the rendered-feet footprint overlaps blocked map geometry');
     }
@@ -1373,7 +1376,7 @@ export default function GameMap() {
       );
       if (visionRadius !== null) {
         const visionR = visionRadius * scale;
-        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments);
+        const rawVisiblePolygon = computeVisibilityPolygon(px, py, visionRadius, shadowGrid, narrowOccluders, true, narrowSegments, narrowSegmentIndex);
         // Smooth the visual shadow silhouette across a wider ray window. The helper clamps every smoothed ray to its original hit distance, so it can soften stair-stepped occluders without extending sight through a wall.
         const visiblePolygon = smoothVisibilityPolygon(rawVisiblePolygon, { x: px, y: py }, 6);
 

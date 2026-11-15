@@ -972,6 +972,22 @@ try {
   await openingKillButton.waitFor({ state: 'visible', timeout: 10_000 });
   assert.equal(await openingKillButton.isEnabled(), false,
     'the opening kill cooldown must disable the Kill action even when a target is in range');
+  const cooldownSweep = openingKillButton.getByTestId('kill-cooldown-sweep');
+  await cooldownSweep.waitFor({ state: 'visible', timeout: 5_000 });
+  const sweepMetrics = await openingKillButton.evaluate(element => {
+    const ring = element.querySelector('[data-testid="kill-cooldown-sweep"] circle');
+    if (!ring) throw new Error('Kill cooldown sweep must render its radial SVG ring');
+    return {
+      progress: Number(element.getAttribute('data-cooldown-progress')),
+      dashArray: Number(ring.getAttribute('stroke-dasharray')),
+      dashOffset: Number(ring.getAttribute('stroke-dashoffset')),
+    };
+  });
+  assert.ok(sweepMetrics.progress > 0 && sweepMetrics.progress <= 1,
+    'opening cooldown exposes a normalized non-zero remaining fraction');
+  assert.ok(sweepMetrics.dashArray > 0 && sweepMetrics.dashOffset > 0 &&
+    sweepMetrics.dashOffset <= sweepMetrics.dashArray,
+    'radial cooldown sweep must encode the remaining fraction as a bounded SVG dash offset');
   const cooldownStyle = await openingKillButton.evaluate(element => ({
     opacity: getComputedStyle(element).opacity,
     filter: getComputedStyle(element).filter,

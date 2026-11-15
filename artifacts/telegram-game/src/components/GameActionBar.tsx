@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { getCooldownSweepProgress } from "../game/gameActionState";
 
 export interface GameActionBarProps {
   isImpostor: boolean;
@@ -22,6 +23,7 @@ const buttonBase: CSSProperties = {
   width: 68,
   height: 68,
   flex: "0 0 68px",
+  position: "relative",
   borderRadius: "50%",
   display: "flex",
   flexDirection: "column",
@@ -39,6 +41,7 @@ const buttonBase: CSSProperties = {
 
 export default function GameActionBar(props: GameActionBarProps) {
   const killDisabled = props.killCooldownMs > 0 || !props.killAvailable;
+  const killCooldownProgress = getCooldownSweepProgress(props.killCooldownMs, props.killCooldownMaxMs);
   const reportDisabled = !props.reportAvailable;
   const useDisabled = !props.useAvailable;
 
@@ -62,6 +65,7 @@ export default function GameActionBar(props: GameActionBarProps) {
           data-kill-state={killDisabled ? "disabled" : "ready"}
           data-kill-available={String(props.killAvailable)}
           data-cooldown-ms={props.killCooldownMs}
+          data-cooldown-progress={killCooldownProgress.toFixed(4)}
           aria-label={props.killCooldownMs > 0
             ? (props.english ? `Kill cooldown ${Math.ceil(props.killCooldownMs / 1000)} seconds` : `Перезарядка убийства ${Math.ceil(props.killCooldownMs / 1000)} секунд`)
             : props.killAvailable ? (props.english ? "Kill" : "Убить") : (props.english ? "Kill unavailable" : "Убийство недоступно")}
@@ -90,6 +94,33 @@ export default function GameActionBar(props: GameActionBarProps) {
             </svg>
           )}
           <span>KILL</span>
+          {killCooldownProgress > 0 && (
+            <svg
+              data-testid="kill-cooldown-sweep"
+              viewBox="0 0 68 68"
+              width="68"
+              height="68"
+              aria-hidden="true"
+              style={{
+                position: "absolute",
+                inset: 0,
+                transform: "rotate(-90deg)",
+                pointerEvents: "none",
+              }}
+            >
+              <circle
+                cx="34"
+                cy="34"
+                r="30"
+                fill="none"
+                stroke="rgba(255,255,255,0.92)"
+                strokeWidth="3"
+                strokeDasharray={2 * Math.PI * 30}
+                strokeDashoffset={2 * Math.PI * 30 * (1 - killCooldownProgress)}
+                strokeLinecap="round"
+              />
+            </svg>
+          )}
         </button>
       )}
 
