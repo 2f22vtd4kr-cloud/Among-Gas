@@ -939,9 +939,23 @@ try {
     'Report remains visible but disabled when no body is nearby');
   assert.equal(await useAlwaysVisible.isEnabled(), false,
     'Use remains visible but disabled when no interaction is nearby');
-  const neutralReport = await reportAlwaysVisible.evaluate(element => getComputedStyle(element).backgroundImage);
-  assert.match(neutralReport, /rgb\(119,\s*131,\s*138\).*rgb\(70,\s*81,\s*88\)/i,
-    'disabled Report uses the neutral grey surface, not a hidden or active colour');
+  const neutralReportStyle = await reportAlwaysVisible.evaluate(element => {
+    const computed = getComputedStyle(element);
+    return {
+      backgroundImage: computed.backgroundImage,
+      backgroundColor: computed.backgroundColor,
+      borderRadius: computed.borderRadius,
+      boxShadow: computed.boxShadow,
+      opacity: computed.opacity,
+    };
+  });
+  assert.equal(neutralReportStyle.backgroundImage, 'none',
+    'disabled Report must use a flat surface without a gradient');
+  assert.equal(neutralReportStyle.backgroundColor, 'rgba(72, 78, 84, 0.94)',
+    'disabled Report uses the shared neutral grey surface, not an active colour');
+  assert.equal(neutralReportStyle.borderRadius, '50%', 'disabled Report remains circular');
+  assert.equal(neutralReportStyle.boxShadow, 'none', 'disabled Report has no glow');
+  assert.equal(neutralReportStyle.opacity, '0.45', 'disabled Report remains visibly desaturated');
   await page.setViewportSize({ width: 320, height: 720 });
   await page.waitForTimeout(100);
   const actionBarBox = await page.getByTestId('game-action-bar').boundingBox();
