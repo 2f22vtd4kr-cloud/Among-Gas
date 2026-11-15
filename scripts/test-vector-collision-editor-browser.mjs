@@ -230,6 +230,8 @@ try {
 
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
+  assert.equal(await page.locator("[data-candidate-analysis='complete']").count(), 0,
+    "switching to walk preview must release the analysis panel's height so the canvas remains usable");
   await page.getByTestId("selected-shape-inspector").waitFor({ state: "detached" }).catch(() => undefined);
   assert.equal(await page.getByTestId("selected-shape-inspector").count(), 0,
     "the multi-row selected-shape inspector must not consume the walk-preview canvas outside edit mode");
