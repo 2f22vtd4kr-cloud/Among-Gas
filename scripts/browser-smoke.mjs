@@ -779,8 +779,19 @@ try {
     assert.equal(await kill.isVisible(), true, 'impostor ready: Kill is visible');
     assert.equal(await kill.isEnabled(), true, 'impostor ready: Kill is enabled in range');
     assert.equal(await kill.getAttribute('data-kill-state'), 'ready');
-    assert.equal(await kill.evaluate(element => getComputedStyle(element).animationName), 'ag-kill-ready-pulse',
-      'impostor ready: Kill gives a restrained pulse when a target is actionable');
+    const killStyle = await kill.evaluate(element => {
+      const computed = getComputedStyle(element);
+      return {
+        backgroundImage: computed.backgroundImage,
+        backgroundColor: computed.backgroundColor,
+        animationName: computed.animationName,
+        borderRadius: computed.borderRadius,
+      };
+    });
+    assert.equal(killStyle.backgroundImage, 'none', 'impostor ready: Kill uses a flat solid surface');
+    assert.equal(killStyle.backgroundColor, 'rgb(199, 53, 53)', 'impostor ready: Kill uses the restrained red HUD fill');
+    assert.equal(killStyle.animationName, 'none', 'impostor ready: Kill does not pulse or glow');
+    assert.equal(killStyle.borderRadius, '50%', 'impostor ready: Kill remains circular');
     assert.equal(await current.getByTestId('game-action-report').isEnabled(), false);
     assert.equal(await current.getByTestId('game-action-use').isEnabled(), false);
     return { kill: 'enabled-target', report: 'disabled-no-body', use: 'disabled-no-interaction' };
