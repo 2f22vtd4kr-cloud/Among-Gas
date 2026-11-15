@@ -433,7 +433,13 @@ try {
   await page.getByLabel("New wall stroke radius").fill("4");
   await page.getByLabel("New shape shadow behavior").selectOption("no");
   bounds = await canvas.boundingBox();
-  await touchDrag(bounds.x + 440, bounds.y + 260, bounds.x + 485, bounds.y + 260, 5);
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas remains usable for the final stroke");
+  const strokeStartX = bounds.x + bounds.width * 0.55;
+  const strokeEndX = bounds.x + bounds.width * 0.75;
+  const strokeY = bounds.y + Math.min(260, bounds.height * 0.45);
+  await touchDrag(strokeStartX, strokeY, strokeEndX, strokeY, 5);
+  await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2,
+    null, { timeout: 5000 });
   await page.getByRole("button", { name: "Finish chain" }).click();
   await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "5");
   const strokeDownloadPromise = page.waitForEvent("download");
