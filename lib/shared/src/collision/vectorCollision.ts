@@ -52,6 +52,7 @@ export interface CollisionSourceManifest {
   readonly walkableRegionExtraction?: {
     readonly morphologyKernelSourcePx: number;
     readonly connectivity: 8;
+    readonly simplificationToleranceSourcePx: number;
     readonly selectedRegions: readonly {
       readonly id: string;
       readonly role: "spawn-connected-floor" | "isolated-interior-candidate";
