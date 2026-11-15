@@ -267,8 +267,21 @@ try {
     if (!spriteContext) return false;
     const spritePixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height).data;
     let opaqueSamples = 0;
-    for (let i = 3; i < spritePixels.length; i += 16) if (spritePixels[i] > 0) opaqueSamples++;
-    if (opaqueSamples < 20) return false;
+    let lowerMinX = sprite.width;
+    let lowerMaxX = -1;
+    const lowerStartY = Math.floor(sprite.height * 0.72);
+    for (let i = 3; i < spritePixels.length; i += 4) {
+      if (spritePixels[i] === 0) continue;
+      opaqueSamples++;
+      const pixel = i / 4;
+      const x = pixel % sprite.width;
+      const y = Math.floor(pixel / sprite.width);
+      if (y >= lowerStartY) {
+        lowerMinX = Math.min(lowerMinX, x);
+        lowerMaxX = Math.max(lowerMaxX, x);
+      }
+    }
+    if (opaqueSamples < 20 || lowerMaxX < lowerMinX) return false;
     const spriteBounds = sprite.getBoundingClientRect();
     const shadowBounds = shadow.getBoundingClientRect();
     const shadowStyle = getComputedStyle(shadow);
@@ -278,6 +291,7 @@ try {
       displayHeight: sprite.getAttribute('data-display-height'),
       transform: sprite.style.transform,
       clipPath: sprite.style.clipPath,
+      lowerLegAlphaBounds: { minX: lowerMinX, maxX: lowerMaxX, startY: lowerStartY },
       revealLeft: reveal.getBoundingClientRect().left,
       revealTop: reveal.getBoundingClientRect().top,
       revealWidth: reveal.getBoundingClientRect().width,
@@ -311,6 +325,13 @@ try {
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
+  const roleBottomClipXs = [...roleRevealSnapshot.clipPath.matchAll(/([\\d.]+)% 100%/g)]
+    .map(([, value]) => Number(value));
+  assert.ok(roleBottomClipXs.length >= 4);
+  assert.ok(Math.min(...roleBottomClipXs) <= roleRevealSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
+    'role-reveal clip must not cut into the outer edge of either lower leg');
+  assert.ok(Math.max(...roleBottomClipXs) >= roleRevealSnapshot.lowerLegAlphaBounds.maxX / 161 * 100,
+    'role-reveal clip must preserve the full width of both feet');
   assert.ok(Math.abs(roleRevealSnapshot.shadowCenterX - roleRevealSnapshot.spriteCenterX) < 2,
     'the role-reveal ground shadow must stay centered beneath the character');
   assert.ok(roleRevealSnapshot.shadowTop >= roleRevealSnapshot.spriteBottom - 2,
@@ -1109,8 +1130,21 @@ try {
     if (!spriteContext) return false;
     const spritePixels = spriteContext.getImageData(0, 0, sprite.width, sprite.height).data;
     let opaqueSamples = 0;
-    for (let i = 3; i < spritePixels.length; i += 16) if (spritePixels[i] > 0) opaqueSamples++;
-    if (opaqueSamples < 20) return false;
+    let lowerMinX = sprite.width;
+    let lowerMaxX = -1;
+    const lowerStartY = Math.floor(sprite.height * 0.58);
+    for (let i = 3; i < spritePixels.length; i += 4) {
+      if (spritePixels[i] === 0) continue;
+      opaqueSamples++;
+      const pixel = i / 4;
+      const x = pixel % sprite.width;
+      const y = Math.floor(pixel / sprite.width);
+      if (y >= lowerStartY) {
+        lowerMinX = Math.min(lowerMinX, x);
+        lowerMaxX = Math.max(lowerMaxX, x);
+      }
+    }
+    if (opaqueSamples < 20 || lowerMaxX < lowerMinX) return false;
     const r = sprite.getBoundingClientRect();
     return {
       pose: sprite.getAttribute('data-pose'),
@@ -1118,6 +1152,8 @@ try {
       sourceY: sprite.getAttribute('data-source-y'),
       sourceHeight: sprite.getAttribute('data-source-height'),
       displayHeight: sprite.getAttribute('data-display-height'),
+      clipPath: getComputedStyle(sprite).clipPath,
+      lowerLegAlphaBounds: { minX: lowerMinX, maxX: lowerMaxX, startY: lowerStartY },
       x: r.left, y: r.top, width: r.width, height: r.height,
     };
   }, undefined, { timeout: 1_400 });
@@ -1129,6 +1165,13 @@ try {
   assert.equal(corpseSnapshot.sourceHeight, '93');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
+  const corpseBottomClipXs = [...corpseSnapshot.clipPath.matchAll(/([\\d.]+)% 100%/g)]
+    .map(([, value]) => Number(value));
+  assert.ok(corpseBottomClipXs.length >= 4);
+  assert.ok(Math.min(...corpseBottomClipXs) <= corpseSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
+    'corpse clip must not cut into the outer edge of the lower body or exposed bone');
+  assert.ok(Math.max(...corpseBottomClipXs) >= corpseSnapshot.lowerLegAlphaBounds.maxX / 161 * 100,
+    'corpse clip must preserve the full width of the corpse lower silhouette');
   assert.equal(await page.locator('.ag-corpse-head-window, .ag-corpse-suit-window').count(), 0,
     'the adjacent sit-crouch row must not be spliced into the corpse');
 
