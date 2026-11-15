@@ -700,8 +700,8 @@ try {
   // Open every canonical task through the real proximity-gated Use action. This is a browser
   // gallery, not an SSR-only registry assertion: every module must mount inside the gameplay
   // overlay at a phone viewport, expose its dialog semantics, and remain within the safe viewport.
-  // Plan v2 six-state action-bar acceptance matrix. Each capture uses a
-    const hudStateMatrix = [];
+  // Plan v2 six-state action-bar acceptance matrix; assertions remain artifact-free.
+  const hudStateMatrix = [];
   const captureHudState = async (name, fixture, verify) => {
     await page.goto(`${origin}/?mock=${fixture}&skipReveal=true`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('canvas', { state: 'visible', timeout: 30_000 });
@@ -720,6 +720,23 @@ try {
     assert.equal(await use.isEnabled(), false, 'crew idle: no nearby task is actionable');
     assert.equal(await report.isVisible(), true, 'crew idle: Report remains visible');
     assert.equal(await report.isEnabled(), false, 'crew idle: no body means Report is disabled');
+    for (const [label, button] of [['Use', use], ['Report', report]]) {
+      const style = await button.evaluate(element => {
+        const computed = getComputedStyle(element);
+        return {
+          backgroundImage: computed.backgroundImage,
+          backgroundColor: computed.backgroundColor,
+          borderRadius: computed.borderRadius,
+          boxShadow: computed.boxShadow,
+          opacity: computed.opacity,
+        };
+      });
+      assert.equal(style.backgroundImage, 'none', `crew idle: ${label} must use a flat original-style button surface`);
+      assert.equal(style.backgroundColor, 'rgba(72, 78, 84, 0.94)', `crew idle: ${label} must use the shared neutral disabled surface`);
+      assert.equal(style.borderRadius, '50%', `crew idle: ${label} must remain circular`);
+      assert.equal(style.boxShadow, 'none', `crew idle: disabled ${label} must not glow`);
+      assert.equal(style.opacity, '0.45', `crew idle: disabled ${label} must be visibly desaturated`);
+    }
     assert.equal(await current.getByTestId('game-action-kill').count(), 0, 'crew idle: no Kill action');
     return { use: 'disabled-no-nearby-task', report: 'disabled-no-body', kill: 'absent' };
   });
