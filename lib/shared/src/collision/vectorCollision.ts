@@ -308,6 +308,23 @@ function pointInPolygon(x: number, y: number, points: readonly Point[]): boolean
   return inside;
 }
 
+/** Exact Euclidean distance from a point to the closed polygon boundary. */
+function distanceToPolygonBoundary(x: number, y: number, points: readonly Point[]): number {
+  let nearest = Number.POSITIVE_INFINITY;
+  for (let index = 0; index < points.length; index++) {
+    const a = points[index];
+    const b = points[(index + 1) % points.length];
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared <= EPS * EPS
+      ? 0
+      : Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / lengthSquared));
+    nearest = Math.min(nearest, distance(x, y, a[0] + dx * t, a[1] + dy * t));
+    if (nearest <= EPS) return 0;
+  }
+  return nearest;
+}
+
 function pointInRect(point: Point, minX: number, minY: number, maxX: number, maxY: number): boolean {
   return point[0] >= minX && point[0] <= maxX && point[1] >= minY && point[1] <= maxY;
 }
@@ -564,12 +581,20 @@ export class CollisionWorld {
     y: number,
     solids: readonly Solid[],
     index: Map<string, number[]>,
+    radius = 0,
   ): boolean {
-    for (const solidIndex of this.querySolids(index, x, y, 0)) {
+    for (const solidIndex of this.querySolids(index, x, y, radius)) {
       const solid = solids[solidIndex];
       const b = solid.bounds;
-      if (x < b[0] || x > b[2] || y < b[1] || y > b[3]) continue;
+      if (x + radius < b[0] || x - radius > b[2] ||
+          y + radius < b[1] || y - radius > b[3]) continue;
       if (pointInPolygon(x, y, solid.points)) return true;
+      // Closed solids are filled obstacles, so a circle must be rejected when
+      // it overlaps an edge even if its centre lies outside the polygon. Keep
+      // exact tangency walkable, matching the open-segment radius contract.
+      if (radius > 0 && distanceToPolygonBoundary(x, y, solid.points) < radius - EPS) {
+        return true;
+      }
     }
     return false;
   }
@@ -656,7 +681,7 @@ export class CollisionWorld {
     if (![x, y, radius].every(Number.isFinite) || radius < 0 ||
         x < radius || y < radius || x > this.w - radius || y > this.h - radius) return false;
     if (this.moveRegions.length > 0 && !this.insideWalkableRegion(x, y, radius)) return false;
-    if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash)) return false;
+    if (this.insideSolids(x, y, this.moveSolids, this.moveSolidHash, radius)) return false;
     for (const index of this.query(this.moveHash, x, y, radius)) {
       const segment = this.moveSegments[index];
       const nearest = segmentDistance(x, y, segment);
