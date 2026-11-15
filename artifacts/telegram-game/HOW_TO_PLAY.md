@@ -50,7 +50,12 @@ Among Gas keeps its own balaclava characters and custom gas-station map. The rul
 
 When a body is reported or an emergency meeting is called, normal movement and gameplay actions pause for the meeting. First comes **Discussion**, when players can chat; then **Voting**, when votes are accepted. Use the countdown to see which phase is active. The meeting closes when its server-controlled timer and vote flow finish.
 
-Bots post short discussion messages based on the meeting type and their assigned role, and cast votes only when voting opens. They do not have a history of witnessed player movements, so they avoid making location-based accusations. Their statements are simple local heuristics, not a connected large language model, so treat them as conversation starters rather than proof.
+Bots can use two modes:
+
+- **Built-in fallback:** when no provider key is configured, or a model request times out, fails validation, or misses its decision deadline, server-side rules choose a safe in-game action and a conservative meeting response. The game does not require an AI provider to run.
+- **Optional model-backed AI:** the lobby host can add a Groq API key in **Settings → Optional Groq AI for bots**. With a key configured, bots can request model decisions for selected tactical choices (such as task plans, visible-target selection and sabotage) and meeting dialogue. The server supplies only the public information appropriate to that decision, such as currently visible players, public task progress, the living-player roster and the public meeting transcript. Hidden roles and private player positions are not given to the meeting-dialogue model. Model output is schema/evidence-checked and the server revalidates each selected action against the current game state; invalid or unavailable model responses use the built-in fallback.
+
+The key is sent over your authenticated game connection and kept in server memory for that lobby only. It is not saved in browser storage or shared with other players, and must be entered again for a new session. Calls are made to Groq, so use a key you control and follow your provider account's terms. Model-generated discussion is not proof: check claims against what players actually said and what you observed.
 
 ## Quick troubleshooting
 

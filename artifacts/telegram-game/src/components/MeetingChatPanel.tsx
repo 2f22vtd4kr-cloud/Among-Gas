@@ -1,3 +1,4 @@
+import React from 'react';
 import type { MeetingChatMessage } from '../context/GameContext';
 import { ADMIN_DOT_COLORS, slotColor } from '../game/mapPresentation';
 

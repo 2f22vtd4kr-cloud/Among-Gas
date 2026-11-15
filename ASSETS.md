@@ -4,6 +4,8 @@
 
 This file is the release inventory for visual/audio assets. No third-party asset is treated as cleared merely because it exists in the repository.
 
+**Repository licence status:** the root package is private and declares `UNLICENSED`. The repository contains no root `LICENSE` file and does not grant an MIT or other redistribution licence. Do not treat the package's former `MIT` metadata as a licence grant. A project-wide licence must be selected and documented by the rights holder before release; asset-specific ownership and third-party permissions remain separate checks.
+
 ### Legacy external bundle — removed from the current tree
 
 On 2026-11-10, `artifacts/telegram-game/public/au-assets/` was confirmed to contain 17 files byte-identical to assets in [`AI0702/Among-Us-clone`](https://github.com/AI0702/Among-Us-clone/tree/e75a1410c8bc9e82b41f2ab51deec373c8486e29/Assets/Images).
