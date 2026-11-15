@@ -30,3 +30,11 @@ export function isUseActionEnabled(kind: UseActionKind, input: UseActionStateInp
     !input.showAdminTable &&
     !input.showMiniMap;
 }
+
+
+/** Remaining fraction for the Kill cooldown ring, clamped to the full circle. */
+export function getCooldownSweepProgress(remainingMs: number, maximumMs: number): number {
+  if (!Number.isFinite(remainingMs) || !Number.isFinite(maximumMs) ||
+      remainingMs <= 0 || maximumMs <= 0) return 0;
+  return Math.min(1, Math.max(0, remainingMs / maximumMs));
+}
