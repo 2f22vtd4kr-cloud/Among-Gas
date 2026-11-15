@@ -269,7 +269,7 @@ try {
     let opaqueSamples = 0;
     let lowerMinX = sprite.width;
     let lowerMaxX = -1;
-    const lowerStartY = Math.floor(sprite.height * 0.72);
+    const lowerStartY = Math.floor(sprite.height * 0.79);
     const lastRowY = sprite.height - 1;
     const lastRowXs = [];
     for (let i = 3; i < spritePixels.length; i += 4) {
@@ -1162,7 +1162,7 @@ try {
     let opaqueSamples = 0;
     let lowerMinX = sprite.width;
     let lowerMaxX = -1;
-    const lowerStartY = Math.floor(sprite.height * 0.58);
+    const lowerStartY = Math.floor(sprite.height * 0.66);
     const lastRowY = sprite.height - 1;
     const lastRowXs = [];
     for (let i = 3; i < spritePixels.length; i += 4) {
