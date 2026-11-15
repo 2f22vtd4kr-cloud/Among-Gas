@@ -1,11 +1,12 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { readFile, readdir } from "node:fs/promises";
+import { readFile, readdir, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const realRepoRoot = await realpath(repoRoot);
 const collisionDir = resolve(repoRoot, "lib/shared/src/collision");
 const zoneIds = Array.from({ length: 12 }, (_, index) => `Z${String(index + 1).padStart(2, "0")}`);
 const expectedRecords = new Set(zoneIds.map(id => `collision.zone-${id}.review.v1.json`));
@@ -50,7 +51,13 @@ for (const zoneId of zoneIds) {
     }
     let bytes;
     try {
-      bytes = await readFile(absolutePath);
+      const canonicalPath = await realpath(absolutePath);
+      const canonicalRelativePath = relative(realRepoRoot, canonicalPath);
+      if (canonicalRelativePath === ".." || canonicalRelativePath.startsWith(`..${sep}`) || isAbsolute(canonicalRelativePath)) {
+        errors.push(`${label}: sourcePath resolves outside the repository through a symlink`);
+        continue;
+      }
+      bytes = await readFile(canonicalPath);
       execFileSync("git", ["ls-files", "--error-unmatch", relativePath], { cwd: repoRoot, stdio: "ignore" });
     } catch {
       errors.push(`${label}: source file is missing or not tracked by Git (${evidence.sourcePath})`);
