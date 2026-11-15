@@ -1,3 +1,4 @@
+import React from 'react';
 import type { LobbyPlayer } from '../context/GameContext';
 import { NO_TARGET } from '@workspace/shared/coords';
 import { ADMIN_DOT_COLORS, slotColor } from '../game/mapPresentation';
