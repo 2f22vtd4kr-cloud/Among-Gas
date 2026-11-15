@@ -3,6 +3,7 @@ import type {
   MeetingChatMessage,
   MeetingInfo,
 } from '../context/GameContext';
+import { NO_TARGET } from '@workspace/shared/coords';
 import MeetingChatPanel from './MeetingChatPanel';
 import MeetingVotingPanel from './MeetingVotingPanel';
 
@@ -59,10 +60,10 @@ export default function GameMeetingOverlay({
           fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
           letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
         }}>
-          {meeting.bodySlot === 0xFF ? (english ? 'Emergency meeting' : 'Экстренное собрание') : (english ? 'Body reported' : 'Найдено тело')}
+          {meeting.bodySlot === NO_TARGET ? (english ? 'Emergency meeting' : 'Экстренное собрание') : (english ? 'Body reported' : 'Найдено тело')}
         </div>
         <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
-          {meeting.bodySlot === 0xFF
+          {meeting.bodySlot === NO_TARGET
             ? `${playerName(meeting.reporterSlot)} ${english ? 'called an emergency meeting' : 'вызвал экстренное собрание'}`
             : `${playerName(meeting.reporterSlot)} ${english ? 'reported' : 'нашёл тело'} ${playerName(meeting.bodySlot)}`}
         </div>
