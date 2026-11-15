@@ -11,14 +11,14 @@ for (const [name, source] of [
   ['browser smoke', browserSmoke],
   ['character atlas browser test', atlasBrowser],
 ]) {
-  assert.doesNotMatch(source, /\\.screenshot\\s*\\(/, `${name} must not capture screenshots`);
+  assert.doesNotMatch(source, /\.screenshot\s*\(/, `${name} must not capture screenshots`);
   assert.doesNotMatch(source, /writeFileSync|VISUAL_QA_DIR|toDataURL\\s*\\(/,
     `${name} must not export generated visual artifacts`);
 }
 
 assert.doesNotMatch(workflow, /renderCollisionQa|among-gas-visual-qa|VISUAL_QA_DIR/,
   'CI must not render, upload, or request generated visual QA images');
-assert.match(plan, /CODE-LEVEL QA \\(no generated images\\)/,
+assert.match(plan, /CODE-LEVEL QA \(no generated images\)/,
   'Plan 2 must keep screenshot-free code-level acceptance');
 assert.match(plan, /Do not capture screenshots, render overlays, create image galleries or upload image artifacts/,
   'Plan 2 must explicitly prohibit generated visual artifacts');
