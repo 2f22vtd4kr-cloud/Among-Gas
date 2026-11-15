@@ -54,6 +54,22 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
     const sourceRight = Math.floor((sourceColumn + 1) * sourceCellWidth);
     const destinationLeft = column * CHARACTER_CELL_WIDTH;
 
+    const palette = paletteByColor.get(color);
+    if (!palette) {
+      // Preserve the original seven authored columns exactly as before.
+      atlasContext.drawImage(
+        source,
+        sourceLeft, 0, sourceRight - sourceLeft, CHARACTER_SHEET_HEIGHT,
+        destinationLeft, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT,
+      );
+      continue;
+    }
+
+    // Generated palettes are rasterized at local origin. Drawing these 160px
+    // source cells directly at large atlas X coordinates changes Chromium's
+    // nearest-neighbour phase at an exact source-pixel boundary in columns
+    // 10–12. The build-time generator samples each cell locally, so do the
+    // same here and copy the recolored ImageData into the final atlas.
     cellContext.clearRect(0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
     cellContext.drawImage(
       source,
@@ -61,28 +77,21 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
       0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT,
     );
 
-    const palette = paletteByColor.get(color);
-    if (palette) {
-      const pixels = cellContext.getImageData(0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
-      for (let offset = 0; offset < pixels.data.length; offset += 4) {
-        const recolored = recolorSuitPixel(
-          pixels.data[offset],
-          pixels.data[offset + 1],
-          pixels.data[offset + 2],
-          pixels.data[offset + 3],
-          palette,
-        );
-        pixels.data[offset] = recolored[0];
-        pixels.data[offset + 1] = recolored[1];
-        pixels.data[offset + 2] = recolored[2];
-        pixels.data[offset + 3] = recolored[3];
-      }
-      cellContext.putImageData(pixels, 0, 0);
+    const pixels = cellContext.getImageData(0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
+    for (let offset = 0; offset < pixels.data.length; offset += 4) {
+      const recolored = recolorSuitPixel(
+        pixels.data[offset],
+        pixels.data[offset + 1],
+        pixels.data[offset + 2],
+        pixels.data[offset + 3],
+        palette,
+      );
+      pixels.data[offset] = recolored[0];
+      pixels.data[offset + 1] = recolored[1];
+      pixels.data[offset + 2] = recolored[2];
+      pixels.data[offset + 3] = recolored[3];
     }
-
-    // putImageData copies the already-rasterized cell without another resize
-    // or coordinate-dependent sampling phase.
-    atlasContext.drawImage(cellCanvas, destinationLeft, 0);
+    atlasContext.putImageData(pixels, destinationLeft, 0);
   }
 
   return atlas;
