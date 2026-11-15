@@ -524,6 +524,7 @@ export class LobbyManager {
   private _deltaInterval: ReturnType<typeof setInterval> | null = null;
   /** 5Hz bot AI tick loop — keeps server-side pathfinding economical; client animation interpolates between updates. */
   private _botInterval: ReturnType<typeof setInterval> | null = null;
+  private _lastBotDebugLogAt = 0;
 
   /** Optional sink for LobbyEvent — set only by the headless simulation runner. */
   private _eventListener: ((event: LobbyEvent) => void) | null = null;
@@ -2067,6 +2068,25 @@ export class LobbyManager {
   private _tickBots(): void {
     for (const lobby of this.lobbies.values()) {
       if (lobby.phase !== 'ROAMING' && lobby.phase !== 'MEETING') continue;
+      const debugBotTicks = process.env.AG_DEBUG_BOT_TICKS === '1';
+      if (debugBotTicks && Date.now() - this._lastBotDebugLogAt >= 1_000) {
+        this._lastBotDebugLogAt = Date.now();
+        logger.info({
+          code: lobby.code,
+          phase: lobby.phase,
+          gameplayReady: lobby.gameplayReady === true,
+          readySlots: [...(lobby.gameplayReadySlots ?? [])],
+          players: [...lobby.players.values()].map(player => ({
+            slot: player.slot,
+            bot: player.isBot === true,
+            alive: player.alive,
+            role: player.role,
+            x: Math.round(player.x * 10) / 10,
+            y: Math.round(player.y * 10) / 10,
+            tasks: player.assignedTasks.length,
+          })),
+        }, '[BotDebug] lobby tick gate');
+      }
       // Bots must not start walking, sabotaging or hunting while any connected
       // human client is still showing its map-loading screen.
       if (lobby.phase === 'ROAMING' && !this.isGameplayReady(lobby)) continue;
