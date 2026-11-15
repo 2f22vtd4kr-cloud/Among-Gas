@@ -54,7 +54,7 @@ export interface CollisionSourceManifest {
   readonly shapeCounts: Readonly<Record<string, number>>;
   readonly walkableRegionExtraction?: {
     readonly morphologyKernelSourcePx: number;
-    readonly connectivity: 8;
+    readonly connectivity: 4;
     readonly simplificationToleranceSourcePx: number;
     readonly selectedRegions: readonly {
       readonly id: string;
