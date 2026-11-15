@@ -124,6 +124,15 @@ export function buildVisualOccluderSegmentIndex(
   segments: readonly VisualOccluderSegment[],
   leafSize = 8,
 ): VisualOccluderSegmentIndex {
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index];
+    if (!segment || ![segment.ax, segment.ay, segment.bx, segment.by].every(Number.isFinite)) {
+      throw new TypeError(`Visual occluder segment ${index} must have finite endpoints`);
+    }
+    if (Math.hypot(segment.bx - segment.ax, segment.by - segment.ay) <= 1e-9) {
+      throw new RangeError(`Visual occluder segment ${index} must have non-zero length`);
+    }
+  }
   const order = segments.map((_segment, index) => index);
   const nodes: VisualOccluderSegmentIndexNode[] = [];
   const maxLeafSize = Number.isFinite(leafSize) ? Math.max(1, Math.floor(leafSize)) : 8;
