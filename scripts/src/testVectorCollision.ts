@@ -106,6 +106,18 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   assert.equal(world.insideSolid(1050, 550), true);
   assert.equal(world.isWalkable(1050, 550, 12), false);
   assert.equal(world.isWalkable(900, 550, 12), true);
+  assert.equal(world.insideSolid(998, 550), false,
+    "point-only solid lookup remains false when its centre is outside the polygon");
+  assert.equal(world.isWalkable(998, 550, 4), false,
+    "a circular footprint must not overlap a closed solid edge when its centre is outside");
+  assert.equal(world.isWalkable(996, 550, 4), true,
+    "exact tangency to a closed solid edge remains walkable");
+  assert.equal(world.isWalkable(998, 498, 4), false,
+    "circle-vs-solid checks must include the rounded corner distance");
+  assert.equal(world.isWalkable(997, 497, 4), true,
+    "circle-vs-solid checks must not over-expand corners using a square AABB");
+  assert.equal(world.isWalkable(1000, 500, 0), false,
+    "zero-radius points on closed solid boundaries remain blocked");
   const bench = new CollisionWorld([shape("bench", [[1600, 480], [1650, 480], [1650, 530], [1600, 530]], true, true, false)]);
   assert.equal(bench.isWalkable(1625, 505, 10), false);
   assert.equal(contains([1900, 505], bench.visibility(1500, 505, 500)), true);
