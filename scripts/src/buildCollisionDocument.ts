@@ -22,6 +22,11 @@ const qaPath = path.join(root, "artifacts/telegram-game/collision-redline-vector
 // a single connected floor component can otherwise exceed the document's
 // 2,000-vertex per-shape schema limit.
 const TOLERANCE = 0.5;
+// The canonical fine raster marks a 2×2 source-pixel cell blocked when any
+// source pixel in that cell is blocked. Expanding the vector stroke by the
+// half-diagonal of that conservative cell footprint prevents false-walkable
+// slivers along the raster cell boundary.
+const RASTER_CELL_EXPANSION_SOURCE_PX = Math.SQRT2;
 const WALKABLE_REGION_TOLERANCE = 1.25;
 
 async function hash(relative: string): Promise<string> {
@@ -481,7 +486,7 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
     // The raster source blocks the full authored red stroke. Preserve its
     // measured half-width around the skeleton rather than treating a thick
     // wall marking as a zero-width mathematical line.
-    const strokeRadius = closed ? 0 : Math.min(12, Math.max(0, sourceHalfWidth - 0.25) * scale);
+    const strokeRadius = closed ? 0 : Math.min(12, Math.max(0, sourceHalfWidth + RASTER_CELL_EXPANSION_SOURCE_PX) * scale);
     shapes.push({
       id:"redline-"+String(shapes.length+1).padStart(4,"0"),
       points,closed,blocksMove:true,blocksSight:false,
@@ -668,7 +673,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:10,
+      kind:"redline-vector",generatorVersion:11,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
