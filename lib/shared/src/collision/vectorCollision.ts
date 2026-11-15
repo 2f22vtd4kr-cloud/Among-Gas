@@ -713,14 +713,13 @@ export class CollisionWorld {
       const midpointX = (source.ax + source.bx) / 2;
       const midpointY = (source.ay + source.by) / 2;
       const candidateRadius = Math.hypot(source.bx - source.ax, source.by - source.ay) / 2 + EPS;
-      const candidates = new Set([
-        ...this.query(this.moveRegionSegmentHash, midpointX, midpointY, candidateRadius),
-        ...this.query(this.moveRegionHoleSegmentHash, midpointX, midpointY, candidateRadius),
+      const candidates = new Set<Segment>([
+        ...Array.from(this.query(this.moveRegionSegmentHash, midpointX, midpointY, candidateRadius),
+          candidateIndex => this.moveRegionSegments[candidateIndex]),
+        ...Array.from(this.query(this.moveRegionHoleSegmentHash, midpointX, midpointY, candidateRadius),
+          candidateIndex => this.moveRegionHoleSegments[candidateIndex]),
       ]);
-      for (const candidateIndex of candidates) {
-        const other = candidateIndex < this.moveRegionSegments.length
-          ? this.moveRegionSegments[candidateIndex]
-          : this.moveRegionHoleSegments[candidateIndex - this.moveRegionSegments.length];
+      for (const other of candidates) {
         if (other === source) continue;
         if (Math.max(other.ax, other.bx) < sourceMinX ||
             Math.min(other.ax, other.bx) > sourceMaxX ||
