@@ -74,6 +74,7 @@ export interface CollisionSourceManifest {
       readonly bounds: readonly [number, number, number, number];
     }[];
     readonly movementOnlyBlockedPolygons: readonly string[];
+    readonly provisionalSourceArtBlockedPolygons?: readonly string[];
   };
 }
 
