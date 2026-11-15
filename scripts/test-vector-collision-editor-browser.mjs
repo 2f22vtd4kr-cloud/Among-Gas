@@ -43,25 +43,33 @@ try {
   // Use real Chromium touchscreen PointerEvents for authored strokes, not synthetic mouse events.
   const touch = await page.context().newCDPSession(page);
   const touchTap = async (x, y) => {
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchStart", touchPoints: [{ id: 1, x, y }],
-    });
-    await page.waitForTimeout(35);
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
-    await page.waitForTimeout(35);
+    // Use Playwright's single-touch API for taps so Chromium completes the full
+    // touch/pointer lifecycle before the next tap. Raw CDP remains in use for
+    // multi-step drags and pinch gestures where per-frame control is required.
+    await page.touchscreen.tap(x, y);
+    await page.waitForTimeout(60);
   };
   const touchDrag = async (startX, startY, endX, endY, steps = 5) => {
-    await touch.send("Input.dispatchTouchEvent", {
-      type: "touchStart", touchPoints: [{ id: 1, x: startX, y: startY }],
-    });
-    for (let step = 1; step <= steps; step++) {
-      const t = step / steps;
-      await touch.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: [{ id: 1, x: startX + (endX - startX) * t, y: startY + (endY - startY) * t }],
+    // Browser downloads and Playwright touchscreen taps can invalidate an
+    // older raw CDP session while leaving the page alive. Give each multi-frame
+    // drag its own short-lived session instead of reusing the setup session.
+    assert.equal(page.isClosed(), false, "editor page remains open before touch drag");
+    const dragTouch = await page.context().newCDPSession(page);
+    try {
+      await dragTouch.send("Input.dispatchTouchEvent", {
+        type: "touchStart", touchPoints: [{ id: 1, x: startX, y: startY }],
       });
+      for (let step = 1; step <= steps; step++) {
+        const t = step / steps;
+        await dragTouch.send("Input.dispatchTouchEvent", {
+          type: "touchMove",
+          touchPoints: [{ id: 1, x: startX + (endX - startX) * t, y: startY + (endY - startY) * t }],
+        });
+      }
+      await dragTouch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    } finally {
+      await dragTouch.detach().catch(() => undefined);
     }
-    await touch.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
     await page.waitForTimeout(50);
   };
 
@@ -231,7 +239,14 @@ try {
 
   // Walk preview uses the production three-circle feet footprint, but remains a straight-line editor test, not live joystick/pathfinding parity.
   await page.getByRole("button", { name: "Walk test" }).click();
+  assert.equal(await page.locator("[data-candidate-analysis='complete']").count(), 0,
+    "switching to walk preview must release the analysis panel's height so the canvas remains usable");
+  await page.getByTestId("selected-shape-inspector").waitFor({ state: "detached" }).catch(() => undefined);
+  assert.equal(await page.getByTestId("selected-shape-inspector").count(), 0,
+    "the multi-row selected-shape inspector must not consume the walk-preview canvas outside edit mode");
+  await page.getByRole("button", { name: "Clear route test" }).click();
   bounds = await canvas.boundingBox();
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "walk preview canvas remains usable after candidate analysis");
   await touchTap(bounds.x + 40, bounds.y + 40);
   await page.waitForFunction(
     () => document.querySelector("canvas")?.getAttribute("data-walk-point-count") === "1",
@@ -239,21 +254,34 @@ try {
     { timeout: 10000 },
   );
   await page.getByText(/Start selected\. Tap a destination/).waitFor();
-  await touchTap(bounds.x + 100, bounds.y + 40);
-  await page.waitForFunction(
-    () => {
-      const canvas = document.querySelector("canvas");
-      return canvas?.getAttribute("data-walk-point-count") === "2" &&
-        Boolean(canvas.getAttribute("data-walk-status"));
-    },
-    null,
-    { timeout: 10000 },
-  );
+  // Re-read the canvas bounds after the first point/status render; responsive
+  // footer wrapping can resize the flex canvas between the two real touch taps.
+  bounds = await canvas.boundingBox();
+  await touchTap(bounds.x + Math.min(100, bounds.width - 20), bounds.y + 40);
+  try {
+    await page.waitForFunction(
+      () => {
+        const canvas = document.querySelector("canvas");
+        return canvas?.getAttribute("data-walk-point-count") === "2" &&
+          Boolean(canvas.getAttribute("data-walk-status"));
+      },
+      null,
+      { timeout: 10000 },
+    );
+  } catch (error) {
+    const diagnostic = {
+      pointCount: await canvas.getAttribute("data-walk-point-count"),
+      status: await canvas.getAttribute("data-walk-status"),
+      bounds: await canvas.boundingBox(),
+      pageErrors: [...errors],
+    };
+    throw new Error("Mobile walk preview did not record its destination: " + JSON.stringify(diagnostic), { cause: error });
+  }
 
   // Use real Chromium touch input (not mouse events) to verify pinch takeover
   // in every non-destructive tool. A second finger must cancel an active wall
   // drag rather than accidentally committing a stray segment.
-  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
+  const pinchModes = ["Pan / zoom", "Draw wall", "Draw solid", "Draw floor region", "Draw floor hole", "Edit vertices", "Delete shape", "Walk test", "Vision preview (hold)", "Loupe (4×)"];
   for (const mode of pinchModes) {
     console.log("PINCH TAKEOVER TEST:", mode);
     // Each independent pinch starts from a known zoom. Without this reset, the
@@ -331,6 +359,98 @@ try {
   assert.equal(Number(await canvas.getAttribute("data-draft-point-count")), 0);
   assert.equal(Number(await canvas.getAttribute("data-active-chain-point-count")), 0);
   assert.equal(Number(await canvas.getAttribute("data-draft-wall-point-count")), 0);
+
+  // Floor-region and linked-hole authoring use the same mobile polygon gesture,
+  // but they must create non-blocking, explicitly linked movement topology.
+  await page.getByRole("button", { name: "Fit map" }).click();
+  await page.getByRole("button", { name: "Draw floor region" }).click();
+  await page.getByLabel("Walkable region ID").fill("smoke-floor");
+  bounds = await canvas.boundingBox();
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180,
+    "floor authoring uses a fully restored mobile canvas workspace");
+  // Use viewport-relative positions. Fixed +320/+340 CSS-pixel offsets can
+  // land outside the 390px mobile canvas after device-pixel-ratio scaling.
+  const floorStart = {
+    x: bounds.x + bounds.width * 0.55,
+    y: bounds.y + bounds.height * 0.48,
+  };
+  await touchTap(floorStart.x, floorStart.y);
+  await touchTap(floorStart.x + 100, floorStart.y);
+  await touchTap(floorStart.x + 100, floorStart.y + 100);
+  await touchTap(floorStart.x + 2, floorStart.y + 2);
+  try {
+    await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3", null, { timeout: 10000 });
+  } catch (error) {
+    throw new Error("Mobile floor-region taps did not commit: " + JSON.stringify({
+      shapeCount: await canvas.getAttribute("data-shape-count"),
+      draftPoints: await canvas.getAttribute("data-draft-point-count"),
+      bounds: await canvas.boundingBox(),
+      zoom: await canvas.getAttribute("data-zoom"),
+      camera: [await canvas.getAttribute("data-camera-x"), await canvas.getAttribute("data-camera-y")],
+    }), { cause: error });
+  }
+
+  await page.getByRole("button", { name: "Draw floor hole" }).click();
+  await page.getByLabel("Walkable region ID").fill("smoke-floor");
+  bounds = await canvas.boundingBox();
+  const holeStart = { x: floorStart.x + 40, y: floorStart.y + 15 };
+  assert.ok(holeStart.x + 25 < floorStart.x + 100 && holeStart.y + 25 < floorStart.y + 100,
+    "the linked hole is fully inside its authored floor polygon");
+  // Keep every hole vertex clear of the floor edges and the editor's 12px
+  // snapping radius, so the gesture cannot snap onto the parent boundary.
+  await touchTap(holeStart.x, holeStart.y);
+  await touchTap(holeStart.x + 25, holeStart.y);
+  await touchTap(holeStart.x + 25, holeStart.y + 25);
+  await touchTap(holeStart.x, holeStart.y);
+  try {
+    await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "4", null, { timeout: 10000 });
+  } catch (error) {
+    throw new Error("Mobile linked floor hole did not commit: " + JSON.stringify({
+      shapeCount: await canvas.getAttribute("data-shape-count"),
+      draftPoints: await canvas.getAttribute("data-draft-point-count"),
+      bounds: await canvas.boundingBox(),
+      regionId: await page.getByLabel("Walkable region ID").inputValue(),
+    }), { cause: error });
+  }
+
+  const regionDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON" }).click();
+  const regionDownload = await regionDownloadPromise;
+  const regionStream = await regionDownload.createReadStream();
+  let regionJson = "";
+  for await (const chunk of regionStream) regionJson += chunk.toString();
+  const regionDocument = JSON.parse(regionJson);
+  assert.equal(regionDocument.shapes[2].walkableRegion, true);
+  assert.equal(regionDocument.shapes[2].walkableRegionId, "smoke-floor");
+  assert.equal(regionDocument.shapes[2].blocksMove, false);
+  assert.equal(regionDocument.shapes[3].walkableRegionHole, true);
+  assert.equal(regionDocument.shapes[3].walkableRegionId, "smoke-floor");
+  assert.equal(regionDocument.shapes[3].blocksMove, false);
+
+  // A movement stroke can carry its own width and independently opt out of
+  // presentation shadows without changing sight or movement flags.
+  await page.getByRole("button", { name: "Draw wall" }).click();
+  await page.getByLabel("New wall stroke radius").fill("4");
+  await page.getByLabel("New shape shadow behavior").selectOption("no");
+  bounds = await canvas.boundingBox();
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180, "mobile canvas remains usable for the final stroke");
+  const strokeStartX = bounds.x + bounds.width * 0.55;
+  const strokeEndX = bounds.x + bounds.width * 0.75;
+  const strokeY = bounds.y + Math.min(260, bounds.height * 0.45);
+  await touchDrag(strokeStartX, strokeY, strokeEndX, strokeY, 5);
+  await page.waitForFunction(() => Number(document.querySelector("canvas")?.getAttribute("data-active-chain-point-count")) >= 2,
+    null, { timeout: 5000 });
+  await page.getByRole("button", { name: "Finish chain" }).click();
+  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "5");
+  const strokeDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON" }).click();
+  const strokeDownload = await strokeDownloadPromise;
+  const strokeStream = await strokeDownload.createReadStream();
+  let strokeJson = "";
+  for await (const chunk of strokeStream) strokeJson += chunk.toString();
+  const strokeDocument = JSON.parse(strokeJson);
+  assert.equal(strokeDocument.shapes[4].strokeRadius, 4);
+  assert.equal(strokeDocument.shapes[4].castsShadow, false);
 
   assert.deepEqual(errors, [], "vector editor should not emit browser runtime errors");
   console.log("VECTOR COLLISION MOBILE EDITOR BROWSER TESTS PASSED");
