@@ -522,7 +522,7 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
       // source half-width onto its perimeter segments so a player's circular
       // footprint cannot skim through the rasterized outline while its centre
       // remains outside the polygon.
-      const closedHalfWidths = unique
+      const closedHalfWidths = path
         .map(pixel => strokeDistance[pixel] ?? 0)
         .filter(value => Number.isFinite(value) && value > 0);
       const closedRadius = Math.min(
