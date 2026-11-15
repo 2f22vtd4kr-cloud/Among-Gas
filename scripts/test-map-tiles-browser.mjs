@@ -1,14 +1,10 @@
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
-import { join } from "node:path";
 const playwright = process.env.PLAYWRIGHT_MODULE
   ? await import(process.env.PLAYWRIGHT_MODULE)
   : await import("playwright-core");
 const { chromium } = playwright;
 
 const origin = process.env.GAME_URL ?? "http://127.0.0.1:5173";
-const outputDir = process.env.VISUAL_QA_DIR ?? "/tmp/among-gas-visual-qa";
-mkdirSync(outputDir, { recursive: true });
 const browser = await chromium.launch({
   headless: true,
   ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
@@ -64,7 +60,6 @@ try {
       `${testCase.name}: overview plus visible tile decoded memory must stay below 72 MiB (observed ${status.totalDecodedBytes})`);
     const tileReadyMs = Date.now() - startedAt;
 
-    await page.screenshot({ path: join(outputDir, `map-tiles-${testCase.name}.png`), fullPage: true });
     console.log(`${testCase.name}: ${tileRequests.length} tile requests; tile-ready ${tileReadyMs}ms; ${JSON.stringify(status)}`);
     await context.close();
   }
