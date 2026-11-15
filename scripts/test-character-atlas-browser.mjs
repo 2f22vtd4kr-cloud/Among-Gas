@@ -226,8 +226,16 @@ try {
       if (alphaDiffers) alphaStats.alphaPixels++;
       mismatchByReferenceAlpha.set(alphaKey, alphaStats);
       if (mismatchSamples.length < 24) {
+        const localX = x % 161;
+        const sourcePixelOffset = (y * 161 + localX) * 4;
+        const sourcePixel = Array.from(browserScaledSource.slice(sourcePixelOffset, sourcePixelOffset + 4));
+        const paletteColor = spriteModule.CHARACTER_COLORS[column];
+        const palette = spriteModule.GENERATED_CHARACTER_PALETTES.find(item => item.color === paletteColor);
+        const directOutput = palette
+          ? atlasModule.recolorSuitPixel(...sourcePixel, palette)
+          : sourcePixel;
         mismatchSamples.push({
-          x, y, column,
+          x, y, column, localX, paletteColor, sourcePixel, directOutput,
           reference: Array.from(referencePixels.slice(pixelOffset, pixelOffset + 4)),
           baked: Array.from(bakedPixels.slice(pixelOffset, pixelOffset + 4)),
         });
@@ -404,7 +412,17 @@ try {
     };
   }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe });
 
-  console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
+  const mismatchNodePaletteProbes = metrics.bakedParityDiagnostics.mismatchSamples.map(sample => {
+    const palette = GENERATED_CHARACTER_PALETTES.find(item => item.color === sample.paletteColor);
+    return {
+      x: sample.x, y: sample.y, column: sample.column, paletteColor: sample.paletteColor,
+      nodeOutput: palette ? recolorSuitPixel(...sample.sourcePixel, palette) : sample.sourcePixel,
+      browserOutput: sample.directOutput,
+    };
+  });
+  console.log('Character atlas byte-parity diagnostics:', JSON.stringify({
+    ...metrics.bakedParityDiagnostics, mismatchNodePaletteProbes,
+  }));
   assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
   assert.deepEqual(metrics.bakedParity, { differentBytes: 0, maxChannelDelta: 0 },
     'every baked RGBA byte must match the legacy in-memory renderer exactly');
