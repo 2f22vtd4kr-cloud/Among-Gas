@@ -53,17 +53,19 @@ export function drawVisionFogOverlay({
 
   // Reveal only inside the ray-cast polygon; destination-out acts on this
   // offscreen fog buffer, never the map/player pixels on the main canvas.
+  const hasValidPolygon = visiblePolygon.length > 2 &&
+    visiblePolygon.every(point => Number.isFinite(point.x) && Number.isFinite(point.y));
   fogContext.save();
   fogContext.globalCompositeOperation = 'destination-out';
-  fogContext.beginPath();
-  for (let i = 0; i < visiblePolygon.length; i++) {
-    const point = visiblePolygon[i];
-    const x = (point.x - cameraX) * scale;
-    const y = (point.y - cameraY) * scale;
-    if (i === 0) fogContext.moveTo(x, y);
-    else fogContext.lineTo(x, y);
-  }
-  if (visiblePolygon.length > 2) {
+  if (hasValidPolygon) {
+    fogContext.beginPath();
+    for (let i = 0; i < visiblePolygon.length; i++) {
+      const point = visiblePolygon[i];
+      const x = (point.x - cameraX) * scale;
+      const y = (point.y - cameraY) * scale;
+      if (i === 0) fogContext.moveTo(x, y);
+      else fogContext.lineTo(x, y);
+    }
     fogContext.closePath();
     fogContext.clip();
     const gradient = fogContext.createRadialGradient(
