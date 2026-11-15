@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { GENERATED_CHARACTER_PALETTES, recolorSuitPixel } from '@workspace/shared';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
-const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const atlasModulePath = join(repoRoot, 'artifacts/telegram-game/src/game/characterAtlas.ts');
 if (!existsSync(atlasModulePath)) {
   console.log('Character atlas browser contract deferred: the runtime atlas implementation is not merged yet.');
   process.exit(0);
@@ -29,7 +31,7 @@ try {
   await page.goto(`${origin}/?mock=corpse-all-colors`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__AG_CHARACTER_ATLAS), { timeout: 15_000 });
 
-  const sourceAssetPath = 'artifacts/telegram-game/public/sprites/characters.png';
+  const sourceAssetPath = join(repoRoot, 'artifacts/telegram-game/public/sprites/characters.png');
   const sourceAsset = readFileSync(sourceAssetPath);
   const sourceAssetGitBlobSha = createHash('sha1')
     .update(`blob ${sourceAsset.length}\0`)
