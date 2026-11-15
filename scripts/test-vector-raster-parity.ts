@@ -4,12 +4,14 @@ import path from "node:path";
 import sharp from "sharp";
 import {
   buildPreciseCollisionGrid,
+  canMoveTo,
+  isBlocked,
   isPlayerPositionWalkable,
   MAP_H,
   MAP_W,
   MANUAL_WALKABLE_REPLACEMENT_ZONES,
 } from "../lib/shared/src/collisionMap.js";
-import { FEET_OFFSET_Y } from "../lib/shared/src/coords.js";
+import { FEET_OFFSET_Y, PLAYER_HALF_WIDTH, PLAYER_RADIUS } from "../lib/shared/src/coords.js";
 import { MAP_AUTHORING_ZONES, getPrimaryMapAuthoringZone } from "../lib/shared/src/collision/mapZones.js";
 import { isBotNavigationReachable } from "../lib/shared/src/collision/botNavigation.js";
 import { getProductionCollisionWorld } from "../lib/shared/src/collision/productionWorld.js";
@@ -85,6 +87,49 @@ for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
       if (rasterOnlyExamples.length < 20) rasterOnlyExamples.push({ x, y, zone });
     }
   }
+}
+
+if (vectorOnlyExamples.length > 0) {
+  const segmentDistance = (px: number, py: number, a: readonly number[], b: readonly number[]) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
+      ((px - a[0]) * dx + (py - a[1]) * dy) / lengthSquared));
+    return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy);
+  };
+  const diagnostics = vectorOnlyExamples.slice(0, 8).map(position => {
+    const feetY = position.y + FEET_OFFSET_Y;
+    const circles = [position.x - PLAYER_HALF_WIDTH, position.x, position.x + PLAYER_HALF_WIDTH].map(cx => {
+      const vectorWalkable = vector.isWalkable(cx, feetY, PLAYER_RADIUS);
+      const rasterWalkable = canMoveTo(raster, cx, feetY, PLAYER_RADIUS);
+      const rasterBlockedRingPoints: Array<{x:number;y:number}> = [];
+      const minCell = Math.min(MAP_W / 680, MAP_H / 392);
+      const samples = Math.max(8, Math.ceil((2 * Math.PI * PLAYER_RADIUS) / (minCell * 0.5)));
+      for (let index = 0; index < samples; index++) {
+        const angle = (index / samples) * Math.PI * 2;
+        const x = cx + Math.cos(angle) * PLAYER_RADIUS;
+        const y = feetY + Math.sin(angle) * PLAYER_RADIUS;
+        if (isBlocked(raster, x, y)) rasterBlockedRingPoints.push({x:Number(x.toFixed(2)),y:Number(y.toFixed(2))});
+      }
+      const nearest = vector.shapes.filter(shape => shape.blocksMove).flatMap(shape => {
+        const edgeCount = shape.closed ? shape.points.length : shape.points.length - 1;
+        const edges = [];
+        for (let edge = 0; edge < edgeCount; edge++) {
+          const a = shape.points[edge], b = shape.points[(edge + 1) % shape.points.length];
+          edges.push({
+            shape: shape.id,
+            strokeRadius: shape.strokeRadius ?? 0,
+            distance: segmentDistance(cx, feetY, a, b),
+            a, b,
+          });
+        }
+        return edges;
+      }).sort((a, b) => a.distance - b.distance).slice(0, 3);
+      return {cx, feetY, vectorWalkable, rasterWalkable, rasterCenterBlocked:isBlocked(raster,cx,feetY), rasterBlockedRingPoints, nearest};
+    });
+    return {position, feetY, circles};
+  });
+  console.log("[vector/raster mismatch diagnostics]", JSON.stringify(diagnostics));
 }
 
 const mapVectorOnlyPct = mapSamples > 0 ? (mapVectorOnly / mapSamples) * 100 : 0;
