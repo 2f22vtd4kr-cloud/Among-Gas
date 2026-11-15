@@ -750,10 +750,8 @@ async function main():Promise<void> {
       },
       geometryOverrides:{
         walkableReplacementZones:MANUAL_WALKABLE_REPLACEMENT_ZONES.map(zone=>({id:zone.id,bounds:zone.bounds})),
-        movementOnlyBlockedPolygons:[
-          ...MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
-          ...CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.map(polygon=>polygon.id),
-        ],
+        movementOnlyBlockedPolygons:MANUAL_BLOCKED_POLYGONS.map(polygon=>polygon.id),
+        provisionalSourceArtBlockedPolygons:CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.map(polygon=>polygon.id),
       },
       referenceImage:{width:info.width,height:info.height},
       walkableRegionExtraction:walkableRegionExtraction.metadata,
