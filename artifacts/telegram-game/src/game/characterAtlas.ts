@@ -91,7 +91,8 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
       pixels.data[offset + 2] = recolored[2];
       pixels.data[offset + 3] = recolored[3];
     }
-    atlasContext.putImageData(pixels, destinationLeft, 0);
+    cellContext.putImageData(pixels, 0, 0);
+    atlasContext.drawImage(cellCanvas, destinationLeft, 0);
   }
 
   return atlas;
