@@ -130,6 +130,33 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     "the player radius cannot overlap the boundary of a linked floor hole");
   assert.equal(floor.isWalkable(68, 100, 8), true,
     "the player can approach a hole while preserving the full radius clearance");
+
+  const leftFloor: CollisionShape = {
+    id: "adjacent-floor-left",
+    points: [[20, 20], [100, 20], [100, 180], [20, 180]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    walkableRegion: true,
+    walkableRegionId: "adjacent-left",
+  };
+  const rightFloor: CollisionShape = {
+    id: "adjacent-floor-right",
+    points: [[100, 20], [180, 20], [180, 180], [100, 180]],
+    closed: true,
+    blocksMove: false,
+    blocksSight: false,
+    walkableRegion: true,
+    walkableRegionId: "adjacent-right",
+  };
+  const joinedFloor = new CollisionWorld([leftFloor, rightFloor], 200, 200);
+  assert.equal(joinedFloor.isWalkable(100, 100, 8), true,
+    "a shared edge between adjacent authored floor regions is internal to their union");
+  assert.deepEqual(joinedFloor.move(80, 100, 40, 0, 8), [120, 100],
+    "swept movement must cross a shared floor-region seam without a phantom wall");
+  assert.equal(joinedFloor.isWalkable(20, 100, 8), false,
+    "union handling must continue to enforce the true outer floor boundary");
+
   const [stoppedX] = floor.move(50, 100, 100, 0, 4);
   assert.ok(stoppedX <= 76.01,
     "swept movement must stop at the authored floor hole instead of crossing it");
