@@ -21,8 +21,8 @@ const world = getProductionCollisionWorld();
 assert.equal(document.source?.kind, "redline-vector");
 assert.equal(document.source?.generatorVersion, 14,
   "collision QA artifacts must be regenerated when source-vector geometry behavior changes");
-assert.ok(Math.abs((document.source?.vectorization?.rasterCellExpansionSourcePx ?? 0) - Math.SQRT2) < 1e-9,
-  "redline obstacle radii must conservatively cover the half-diagonal of each 2×2 raster cell");
+assert.ok(Math.abs((document.source?.vectorization?.rasterCellExpansionSourcePx ?? 0) - 0.35) < 1e-9,
+  "redline obstacle radii must reflect the reviewed 35% wall-vote threshold when reducing 2×2 source cells");
 assert.equal(document.source?.vectorization?.redMaskDilationSourcePx, 2,
   "vector wall extraction must preserve the reviewed fine-grid generator's two-pixel red-mask dilation");
 assert.equal(document.source?.vectorization?.strokeWidthSampling, "per-edge-maximum",
