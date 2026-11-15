@@ -20,6 +20,16 @@ export interface VisualOccluderSegment {
   by: number;
 }
 
+interface VisualOccluderSegmentIndexNode {
+  minX: number; minY: number; maxX: number; maxY: number;
+  left: number; right: number; start: number; count: number;
+}
+export interface VisualOccluderSegmentIndex {
+  readonly segments: readonly VisualOccluderSegment[];
+  readonly nodes: readonly VisualOccluderSegmentIndexNode[];
+  readonly order: readonly number[];
+}
+
 // A half-degree angular step keeps wall silhouettes smooth without the
 // quadratic segment-intersection cost of testing every ray against every wall.
 const VISION_RAY_COUNT = 720;
@@ -87,6 +97,93 @@ function raySegmentHitDistance(
   return distance >= 0 && distance < maxDistance && t >= 0 && t <= 1 ? distance : null;
 }
 
+
+function rayBoundsEntryDistance(
+  px: number, py: number, dx: number, dy: number,
+  bounds: Pick<VisualOccluderSegmentIndexNode, "minX" | "minY" | "maxX" | "maxY">,
+  maxDistance: number,
+): number | null {
+  let near = 0, far = maxDistance;
+  if (Math.abs(dx) < 1e-12) {
+    if (px < bounds.minX || px > bounds.maxX) return null;
+  } else {
+    const a = (bounds.minX - px) / dx, b = (bounds.maxX - px) / dx;
+    near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b));
+  }
+  if (Math.abs(dy) < 1e-12) {
+    if (py < bounds.minY || py > bounds.maxY) return null;
+  } else {
+    const a = (bounds.minY - py) / dy, b = (bounds.maxY - py) / dy;
+    near = Math.max(near, Math.min(a, b)); far = Math.min(far, Math.max(a, b));
+  }
+  return far >= near && far >= 0 && near < maxDistance ? Math.max(0, near) : null;
+}
+
+/** Build a static BVH so each animation-frame ray visits nearby contours only. */
+export function buildVisualOccluderSegmentIndex(
+  segments: readonly VisualOccluderSegment[],
+  leafSize = 8,
+): VisualOccluderSegmentIndex {
+  const order = segments.map((_segment, index) => index);
+  const nodes: VisualOccluderSegmentIndexNode[] = [];
+  const maxLeafSize = Number.isFinite(leafSize) ? Math.max(1, Math.floor(leafSize)) : 8;
+  const build = (start: number, end: number): number => {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let offset = start; offset < end; offset++) {
+      const segment = segments[order[offset]];
+      minX = Math.min(minX, segment.ax, segment.bx); minY = Math.min(minY, segment.ay, segment.by);
+      maxX = Math.max(maxX, segment.ax, segment.bx); maxY = Math.max(maxY, segment.ay, segment.by);
+    }
+    const nodeIndex = nodes.length;
+    nodes.push({ minX, minY, maxX, maxY, left: -1, right: -1, start, count: end - start });
+    if (end - start <= maxLeafSize) return nodeIndex;
+    const splitX = maxX - minX >= maxY - minY;
+    const sorted = order.slice(start, end).sort((left, right) => {
+      const a = segments[left], b = segments[right];
+      const ca = splitX ? a.ax + a.bx : a.ay + a.by;
+      const cb = splitX ? b.ax + b.bx : b.ay + b.by;
+      return ca - cb || left - right;
+    });
+    for (let offset = 0; offset < sorted.length; offset++) order[start + offset] = sorted[offset];
+    const middle = start + Math.floor((end - start) / 2);
+    const left = build(start, middle), right = build(middle, end);
+    nodes[nodeIndex] = { minX, minY, maxX, maxY, left, right, start: 0, count: 0 };
+    return nodeIndex;
+  };
+  if (segments.length) build(0, segments.length);
+  return { segments, nodes, order };
+}
+
+function indexedRaySegmentHitDistance(
+  px: number, py: number, dx: number, dy: number,
+  index: VisualOccluderSegmentIndex, maxDistance: number,
+): number | null {
+  if (!index.nodes.length) return null;
+  let closest = maxDistance;
+  const stack = [0];
+  while (stack.length) {
+    const node = index.nodes[stack.pop()!];
+    if (rayBoundsEntryDistance(px, py, dx, dy, node, closest) === null) continue;
+    if (node.count > 0) {
+      for (let offset = node.start; offset < node.start + node.count; offset++) {
+        const segment = index.segments[index.order[offset]];
+        const hit = raySegmentHitDistance(px, py, dx, dy, segment, closest);
+        if (hit !== null && hit < closest) closest = hit;
+      }
+      continue;
+    }
+    const left = index.nodes[node.left], right = index.nodes[node.right];
+    const leftEntry = rayBoundsEntryDistance(px, py, dx, dy, left, closest);
+    const rightEntry = rayBoundsEntryDistance(px, py, dx, dy, right, closest);
+    if (leftEntry !== null && rightEntry !== null) {
+      if (leftEntry <= rightEntry) stack.push(node.right, node.left);
+      else stack.push(node.left, node.right);
+    } else if (leftEntry !== null) stack.push(node.left);
+    else if (rightEntry !== null) stack.push(node.right);
+  }
+  return closest < maxDistance ? closest : null;
+}
+
 /** First ray/segment hit for an authored vector outline. */
 function rayPolygonHitDistance(px: number, py: number, dx: number, dy: number,
   points: readonly (readonly [number, number])[], maxDistance: number): number | null {
@@ -118,6 +215,7 @@ export function computeVisibilityPolygon(
   narrowOccluders: readonly VisualOccluderCircle[] = [],
   includeManualMapPolygons = false,
   narrowSegments: readonly VisualOccluderSegment[] = [],
+  narrowSegmentIndex?: VisualOccluderSegmentIndex,
 ): VisionPoint[] {
   if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(radius) || radius <= 0) {
     return [];
@@ -197,18 +295,21 @@ export function computeVisibilityPolygon(
         if (hit !== null && hit < hitDistance) hitDistance = hit;
       }
     }
-    for (const segment of narrowSegments) {
-      // Cheap expanded-AABB reject keeps exact edge tests local to the sight ray.
-      const minX = Math.min(segment.ax, segment.bx) - 1;
-      const maxX = Math.max(segment.ax, segment.bx) + 1;
-      const minY = Math.min(segment.ay, segment.by) - 1;
-      const maxY = Math.max(segment.ay, segment.by) + 1;
-      const endX = px + dx * hitDistance;
-      const endY = py + dy * hitDistance;
-      if (Math.max(px, endX) < minX || Math.min(px, endX) > maxX ||
-          Math.max(py, endY) < minY || Math.min(py, endY) > maxY) continue;
-      const hit = raySegmentHitDistance(px, py, dx, dy, segment, hitDistance);
+    if (narrowSegmentIndex?.segments === narrowSegments) {
+      const hit = indexedRaySegmentHitDistance(px, py, dx, dy, narrowSegmentIndex, hitDistance);
       if (hit !== null && hit < hitDistance) hitDistance = hit;
+    } else {
+      for (const segment of narrowSegments) {
+        const minX = Math.min(segment.ax, segment.bx) - 1;
+        const maxX = Math.max(segment.ax, segment.bx) + 1;
+        const minY = Math.min(segment.ay, segment.by) - 1;
+        const maxY = Math.max(segment.ay, segment.by) + 1;
+        const endX = px + dx * hitDistance, endY = py + dy * hitDistance;
+        if (Math.max(px, endX) < minX || Math.min(px, endX) > maxX ||
+            Math.max(py, endY) < minY || Math.min(py, endY) > maxY) continue;
+        const hit = raySegmentHitDistance(px, py, dx, dy, segment, hitDistance);
+        if (hit !== null && hit < hitDistance) hitDistance = hit;
+      }
     }
     points.push({ x: px + dx * hitDistance, y: py + dy * hitDistance });
   }
