@@ -353,20 +353,40 @@ try {
 
   // Floor-region and linked-hole authoring use the same mobile polygon gesture,
   // but they must create non-blocking, explicitly linked movement topology.
+  await page.getByRole("button", { name: "Fit map" }).click();
   await page.getByRole("button", { name: "Draw floor region" }).click();
   await page.getByLabel("Walkable region ID").fill("smoke-floor");
   bounds = await canvas.boundingBox();
-  const floorStart = { x: bounds.x + 320, y: bounds.y + 180 };
+  assert.ok(bounds && bounds.width > 250 && bounds.height > 180,
+    "floor authoring uses a fully restored mobile canvas workspace");
+  // Use viewport-relative positions. Fixed +320/+340 CSS-pixel offsets can
+  // land outside the 390px mobile canvas after device-pixel-ratio scaling.
+  const floorStart = {
+    x: bounds.x + bounds.width * 0.55,
+    y: bounds.y + bounds.height * 0.48,
+  };
   await touchTap(floorStart.x, floorStart.y);
-  await touchTap(floorStart.x + 70, floorStart.y);
-  await touchTap(floorStart.x + 70, floorStart.y + 60);
+  await touchTap(floorStart.x + 55, floorStart.y);
+  await touchTap(floorStart.x + 55, floorStart.y + 48);
   await touchTap(floorStart.x + 2, floorStart.y + 2);
-  await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3");
+  try {
+    await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3", null, { timeout: 10000 });
+  } catch (error) {
+    throw new Error("Mobile floor-region taps did not commit: " + JSON.stringify({
+      shapeCount: await canvas.getAttribute("data-shape-count"),
+      draftPoints: await canvas.getAttribute("data-draft-point-count"),
+      bounds: await canvas.boundingBox(),
+      zoom: await canvas.getAttribute("data-zoom"),
+      camera: [await canvas.getAttribute("data-camera-x"), await canvas.getAttribute("data-camera-y")],
+    }), { cause: error });
+  }
 
   await page.getByRole("button", { name: "Draw floor hole" }).click();
   await page.getByLabel("Walkable region ID").fill("smoke-floor");
   bounds = await canvas.boundingBox();
-  const holeStart = { x: bounds.x + 340, y: bounds.y + 198 };
+  const holeStart = { x: floorStart.x + 15, y: floorStart.y + 12 };
+  assert.ok(holeStart.x + 26 < floorStart.x + 55 && holeStart.y + 26 < floorStart.y + 48,
+    "the linked hole is fully inside its authored floor polygon");
   await touchTap(holeStart.x, holeStart.y);
   await touchTap(holeStart.x + 24, holeStart.y);
   await touchTap(holeStart.x + 24, holeStart.y + 24);
