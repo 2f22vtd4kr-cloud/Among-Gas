@@ -71,5 +71,15 @@ assert.deepEqual(
 );
 assert.ok(defaultSmoothed.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
   "smoothing always returns finite vertices for finite source geometry");
+assert.deepEqual(
+  smoothVisibilityPolygon([...smoothingFixture, { x: Number.NaN, y: 12 }], origin),
+  [],
+  "a contour containing NaN fails closed instead of returning a malformed polygon",
+);
+assert.deepEqual(
+  smoothVisibilityPolygon([{ x: 1, y: 2 }, { x: Number.POSITIVE_INFINITY, y: 3 }], origin),
+  [],
+  "a short contour containing infinity also fails closed",
+);
 
 console.log("VISION CONTOUR INDEX TESTS PASSED: exact indexed/brute-force parity, empty index and leaf-size edge case");
