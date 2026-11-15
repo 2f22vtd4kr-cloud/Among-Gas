@@ -325,7 +325,7 @@ try {
     `role-reveal rendered aspect ratio must match its measured source crop (expected ${expectedRoleCropRatio.toFixed(3)}, got ${roleCropRatio.toFixed(3)})`);
   assert.match(roleRevealSnapshot.clipPath, /polygon/,
     'role sprites must mask detached lower-leg strokes without removing the feet');
-  const roleBottomClipXs = [...roleRevealSnapshot.clipPath.matchAll(/([\\d.]+)% 100%/g)]
+  const roleBottomClipXs = [...roleRevealSnapshot.clipPath.matchAll(/([\d.]+)% 100%/g)]
     .map(([, value]) => Number(value));
   assert.ok(roleBottomClipXs.length >= 4);
   assert.ok(Math.min(...roleBottomClipXs) <= roleRevealSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
@@ -1165,7 +1165,7 @@ try {
   assert.equal(corpseSnapshot.sourceHeight, '93');
   assert.equal(corpseSnapshot.displayHeight, '118');
   assert.ok(corpseSnapshot.width > 0 && corpseSnapshot.height > 0);
-  const corpseBottomClipXs = [...corpseSnapshot.clipPath.matchAll(/([\\d.]+)% 100%/g)]
+  const corpseBottomClipXs = [...corpseSnapshot.clipPath.matchAll(/([\d.]+)% 100%/g)]
     .map(([, value]) => Number(value));
   assert.ok(corpseBottomClipXs.length >= 4);
   assert.ok(Math.min(...corpseBottomClipXs) <= corpseSnapshot.lowerLegAlphaBounds.minX / 161 * 100,
