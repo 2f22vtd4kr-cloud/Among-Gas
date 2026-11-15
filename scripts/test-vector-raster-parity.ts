@@ -89,6 +89,7 @@ for (let y = 40; y <= MAP_H - 80; y += SAMPLE_STEP_PX) {
   }
 }
 
+let mismatchDiagnostics: unknown[] = [];
 if (vectorOnlyExamples.length > 0) {
   const segmentDistance = (px: number, py: number, a: readonly number[], b: readonly number[]) => {
     const dx = b[0] - a[0], dy = b[1] - a[1];
@@ -97,7 +98,7 @@ if (vectorOnlyExamples.length > 0) {
       ((px - a[0]) * dx + (py - a[1]) * dy) / lengthSquared));
     return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy);
   };
-  const diagnostics = vectorOnlyExamples.slice(0, 8).map(position => {
+  mismatchDiagnostics = vectorOnlyExamples.slice(0, 8).map(position => {
     const feetY = position.y + FEET_OFFSET_Y;
     const circles = [position.x - PLAYER_HALF_WIDTH, position.x, position.x + PLAYER_HALF_WIDTH].map(cx => {
       const vectorWalkable = vector.isWalkable(cx, feetY, PLAYER_RADIUS);
@@ -129,7 +130,7 @@ if (vectorOnlyExamples.length > 0) {
     });
     return {position, feetY, circles};
   });
-  console.log("[vector/raster mismatch diagnostics]", JSON.stringify(diagnostics));
+  console.log("[vector/raster mismatch diagnostics]", JSON.stringify(mismatchDiagnostics));
 }
 
 const mapVectorOnlyPct = mapSamples > 0 ? (mapVectorOnly / mapSamples) * 100 : 0;
@@ -183,6 +184,7 @@ await writeFile(
   path.join(qaDirectory, "vector-raster-parity.json"),
   JSON.stringify({
     ...summary,
+    mismatchDiagnostics,
     legend: {
       red: "candidate vector says walkable; reviewed fine-grid says blocked",
       cyan: "reviewed fine-grid says walkable; candidate vector says blocked",
