@@ -113,10 +113,14 @@ const reachablePoints=queue.map(index=>{
   const row=Math.floor(index/cols),col=index-row*cols;
   return {x:(col+0.5)*nav.cellX,y:(row+0.5)*nav.cellY};
 });
-function nearestDistance(point:{x:number;y:number}):number {
+function nearestReachablePoint(point:{x:number;y:number}):{distance:number;point:{x:number;y:number}|null} {
   let nearest=Infinity;
-  for(const candidate of reachablePoints) nearest=Math.min(nearest,Math.hypot(candidate.x-point.x,candidate.y-point.y));
-  return nearest;
+  let nearestPoint:{x:number;y:number}|null=null;
+  for(const candidate of reachablePoints) {
+    const distance=Math.hypot(candidate.x-point.x,candidate.y-point.y);
+    if(distance<nearest){nearest=distance;nearestPoint=candidate;}
+  }
+  return {distance:nearest,point:nearestPoint};
 }
 const anchors = [
   ...TASK_DEFS.map(task=>({kind:"task",id:task.id,name:task.name,x:task.x,y:task.y,max:TASK_INTERACTION_RANGE_PX-30})),
@@ -125,9 +129,13 @@ const anchors = [
   ...ADMIN_TABLE_DEFS.map(table=>({kind:"admin",id:table.id,name:table.name,x:table.x,y:table.y,max:ADMIN_TABLE_INTERACTION_RANGE_PX})),
 ];
 for(const anchor of anchors) {
-  const distance=nearestDistance(anchor);
-  assert.ok(distance<=anchor.max,
-    anchor.kind+" "+anchor.name+" is "+Math.round(distance)+"px from vector-reachable floor (limit "+Math.round(anchor.max)+"px)");
+  const nearest=nearestReachablePoint(anchor);
+  const nearestLabel=nearest.point
+    ? " nearest reachable point ("+Math.round(nearest.point.x)+","+Math.round(nearest.point.y)+")"
+    : " no reachable points";
+  assert.ok(nearest.distance<=anchor.max,
+    anchor.kind+" "+anchor.name+" at ("+anchor.x+","+anchor.y+") is "+Math.round(nearest.distance)+
+    "px from vector-reachable floor (limit "+Math.round(anchor.max)+"px);"+nearestLabel);
 }
 for(const [index,shape] of document.shapes.entries()) {
   const edgeCount=shape.closed?shape.points.length:shape.points.length-1;
