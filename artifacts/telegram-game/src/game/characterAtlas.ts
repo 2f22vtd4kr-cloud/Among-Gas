@@ -27,10 +27,23 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
   const atlas = document.createElement('canvas');
   atlas.width = CHARACTER_SHEET_WIDTH;
   atlas.height = CHARACTER_SHEET_HEIGHT;
-  const context = atlas.getContext('2d', { willReadFrequently: true });
-  if (!context) throw new Error('Could not allocate the character palette canvas');
+  const atlasContext = atlas.getContext('2d', { willReadFrequently: true });
+  if (!atlasContext) throw new Error('Could not allocate the character palette canvas');
 
-  context.imageSmoothingEnabled = false;
+  // Rasterize every source cell at local origin before placing its pixels in
+  // the atlas. Chromium's nearest-neighbour drawImage sampling can vary at
+  // exact half-pixel boundaries when the same 160→161 resize is performed at
+  // large absolute destination X coordinates (notably columns 10–12). The
+  // build-time Sharp generator uses local cell coordinates, so keeping this
+  // runtime path local makes the two renderers deterministic and byte-equal.
+  const cellCanvas = document.createElement('canvas');
+  cellCanvas.width = CHARACTER_CELL_WIDTH;
+  cellCanvas.height = CHARACTER_SHEET_HEIGHT;
+  const cellContext = cellCanvas.getContext('2d', { willReadFrequently: true });
+  if (!cellContext) throw new Error('Could not allocate the character cell canvas');
+
+  atlasContext.imageSmoothingEnabled = false;
+  cellContext.imageSmoothingEnabled = false;
   const sourceCellWidth = CHARACTER_SOURCE_SHEET_WIDTH / CHARACTER_SOURCE_SHEET_COLS;
   const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]));
 
@@ -41,30 +54,35 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
     const sourceRight = Math.floor((sourceColumn + 1) * sourceCellWidth);
     const destinationLeft = column * CHARACTER_CELL_WIDTH;
 
-    context.drawImage(
+    cellContext.clearRect(0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
+    cellContext.drawImage(
       source,
       sourceLeft, 0, sourceRight - sourceLeft, CHARACTER_SHEET_HEIGHT,
-      destinationLeft, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT,
+      0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT,
     );
 
     const palette = paletteByColor.get(color);
-    if (!palette) continue;
-
-    const pixels = context.getImageData(destinationLeft, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
-    for (let offset = 0; offset < pixels.data.length; offset += 4) {
-      const recolored = recolorSuitPixel(
-        pixels.data[offset],
-        pixels.data[offset + 1],
-        pixels.data[offset + 2],
-        pixels.data[offset + 3],
-        palette,
-      );
-      pixels.data[offset] = recolored[0];
-      pixels.data[offset + 1] = recolored[1];
-      pixels.data[offset + 2] = recolored[2];
-      pixels.data[offset + 3] = recolored[3];
+    if (palette) {
+      const pixels = cellContext.getImageData(0, 0, CHARACTER_CELL_WIDTH, CHARACTER_SHEET_HEIGHT);
+      for (let offset = 0; offset < pixels.data.length; offset += 4) {
+        const recolored = recolorSuitPixel(
+          pixels.data[offset],
+          pixels.data[offset + 1],
+          pixels.data[offset + 2],
+          pixels.data[offset + 3],
+          palette,
+        );
+        pixels.data[offset] = recolored[0];
+        pixels.data[offset + 1] = recolored[1];
+        pixels.data[offset + 2] = recolored[2];
+        pixels.data[offset + 3] = recolored[3];
+      }
+      cellContext.putImageData(pixels, 0, 0);
     }
-    context.putImageData(pixels, destinationLeft, 0);
+
+    // putImageData copies the already-rasterized cell without another resize
+    // or coordinate-dependent sampling phase.
+    atlasContext.drawImage(cellCanvas, destinationLeft, 0);
   }
 
   return atlas;
