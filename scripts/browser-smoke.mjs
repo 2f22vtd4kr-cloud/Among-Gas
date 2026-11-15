@@ -1662,6 +1662,7 @@ try {
   const visualStateCases = [
     ['reveal-impostor', 'role-reveal-impostor.png'],
     ['task-playing', 'task-progress.png'],
+    ['crew-idle', 'crew-idle-persistent-actions.png'],
     ['corpse-all-colors', 'corpse-all-seven-colors.png'],
     ['impostor-opening', 'impostor-opening-cooldown.png'],
     ['kill-ready', 'kill-ready.png'],
@@ -1702,6 +1703,32 @@ try {
       }
       if (fixture.startsWith('gameover-')) {
         await statePage.getByTestId('gameover-lobby-icon').waitFor({ state: 'visible' });
+      }
+      if (['crew-idle', 'impostor-opening', 'kill-ready'].includes(fixture)) {
+        const reportAction = statePage.getByTestId('game-action-report');
+        const useAction = statePage.getByTestId('game-action-use');
+        await reportAction.waitFor({ state: 'visible', timeout: 5_000 });
+        await useAction.waitFor({ state: 'visible', timeout: 5_000 });
+        if (fixture === 'crew-idle') {
+          assert.equal(await reportAction.isDisabled(), true,
+            'living crewmates must always see Report, disabled when no body is in range');
+          assert.equal(await useAction.isDisabled(), true,
+            'living crewmates must always see Use, disabled when no interaction is available');
+          assert.equal(await statePage.getByTestId('game-action-kill').count(), 0,
+            'Kill must never be rendered for a crewmate');
+        } else if (fixture === 'impostor-opening') {
+          const killAction = statePage.getByTestId('game-action-kill');
+          await killAction.waitFor({ state: 'visible', timeout: 5_000 });
+          assert.equal(await killAction.isDisabled(), true,
+            'impostor Kill must remain visible but disabled during cooldown');
+          assert.equal(await reportAction.isDisabled(), true);
+          assert.equal(await useAction.isDisabled(), true);
+        } else {
+          const killAction = statePage.getByTestId('game-action-kill');
+          await killAction.waitFor({ state: 'visible', timeout: 5_000 });
+          assert.equal(await killAction.isDisabled(), false,
+            'in-range impostor Kill must be enabled when cooldown has elapsed');
+        }
       }
       if (fixture === 'reveal-impostor') {
         const revealSprite = statePage.getByTestId('role-reveal-character').locator('[data-pose]');
