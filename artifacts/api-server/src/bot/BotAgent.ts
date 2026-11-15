@@ -346,7 +346,25 @@ export abstract class BotAgent {
     }
 
     if (lobby.phase === 'ROAMING') {
+      const debugBotTicks = process.env.AG_DEBUG_BOT_TICKS === '1';
+      const beforeX = self.x;
+      const beforeY = self.y;
       this.roamingTick(lobby, self, manager);
+      if (debugBotTicks) {
+        console.info('[BotDebug] agent tick', JSON.stringify({
+          lobby: lobby.code,
+          slot: self.slot,
+          role: self.role,
+          alive: self.alive,
+          taskCount: self.assignedTasks.length,
+          before: [Math.round(beforeX * 10) / 10, Math.round(beforeY * 10) / 10],
+          after: [Math.round(self.x * 10) / 10, Math.round(self.y * 10) / 10],
+          moved: Math.hypot(self.x - beforeX, self.y - beforeY) > 0.01,
+          routeLength: this.navigationRoute.length,
+          routeIndex: this.navigationRouteIndex,
+          routeGoal: this.navigationRouteGoal,
+        }));
+      }
       return;
     }
 
