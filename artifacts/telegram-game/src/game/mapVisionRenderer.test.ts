@@ -98,4 +98,20 @@ const polygon = [
   assert.equal(mainCalls.filter(call => call.name === 'drawImage').length, 1, 'fallback fog should still be composited');
 }
 
+{
+  const { context, calls } = recordingContext();
+  const { context: mainContext, calls: mainCalls } = recordingContext();
+  const { canvas } = recordingCanvas(640, 480);
+  drawVisionFogOverlay({
+    context: mainContext, fogContext: context, fogCanvas: canvas,
+    canvasWidth: 640, canvasHeight: 480, cameraX: 0, cameraY: 0, scale: 1,
+    playerScreenX: 20, playerScreenY: 20, visionRadiusScreenPx: 80,
+    visiblePolygon: [{ x: 1, y: 2 }, { x: Number.NaN, y: 4 }, { x: 5, y: 6 }],
+  });
+  assert.ok(!calls.some(call => ['moveTo', 'lineTo', 'clip', 'createRadialGradient'].includes(call.name)),
+    'non-finite polygons must not reach canvas path or reveal operations');
+  assert.equal(mainCalls.filter(call => call.name === 'drawImage').length, 1,
+    'invalid geometry must retain the conservative full-fog fallback');
+}
+
 console.log('Map vision fog renderer passed (buffer resize, camera transform, clipped gradient, iOS filter reset, degenerate-polygon fallback).');
