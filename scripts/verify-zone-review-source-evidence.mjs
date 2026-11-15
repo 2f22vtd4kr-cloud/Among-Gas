@@ -74,6 +74,10 @@ for (const zoneId of zoneIds) {
       errors.push(`${label}: source is not a readable raster image (${evidence.sourcePath})`);
       continue;
     }
+    if (!["png", "jpeg", "webp", "avif", "tiff", "gif"].includes(metadata.format ?? "")) {
+      errors.push(`${label}: source must be a supported raster image, found ${metadata.format ?? "unknown"} (${evidence.sourcePath})`);
+      continue;
+    }
     if (metadata.width !== evidence.sourceWidth || metadata.height !== evidence.sourceHeight) {
       errors.push(`${label}: recorded dimensions ${evidence.sourceWidth}x${evidence.sourceHeight} do not match actual ${metadata.width}x${metadata.height}`);
     }
