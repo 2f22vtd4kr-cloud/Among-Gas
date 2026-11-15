@@ -1636,8 +1636,8 @@ export default function VectorCollisionEditor() {
 
       <footer style={{ padding: "8px 10px", background: "#182633", borderTop: "1px solid #334c5e", fontSize: 11, color: "#b8cbd6", display: "flex", gap: 10, flexWrap: "wrap" }}>
         <span>{status}{walkStatus ? " · " + walkStatus : ""}</span>
-        {selected && (
-          <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
+        {selected && tool === "edit" && (
+          <span data-testid="selected-shape-inspector" style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 7 }}>
             <strong>{selected.label || selected.id}</strong>
             <label><input type="checkbox" checked={selected.blocksMove} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksMove: event.target.checked })} /> Move</label>
             <label><input type="checkbox" checked={selected.blocksSight} disabled={selected.walkableRegion === true || selected.walkableRegionHole === true} onChange={event => updateSelected({ blocksSight: event.target.checked })} /> Sight</label>
