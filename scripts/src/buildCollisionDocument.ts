@@ -472,9 +472,22 @@ function quantile(values: number[], fraction: number): number {
   return sorted[index];
 }
 
-function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Array):CollisionShape[] {
+function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Array):CollisionShape[]{
   const shapes:CollisionShape[]=[];
-  for(const path of paths) {
+  const scale=(MAP_W/w+MAP_H/h)/2;
+  const expansion=RASTER_CELL_EXPANSION_SOURCE_PX*scale;
+  const worldPoint=(x:number,y:number):Point=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H];
+  const append=(points:Point[],closed:boolean,radius:number,label:string)=>{
+    if(points.length<(closed?3:2)) return;
+    if(closed&&area(points)<1) return;
+    shapes.push({
+      id:"redline-"+String(shapes.length+1).padStart(4,"0"),
+      points,closed,blocksMove:true,blocksSight:false,
+      ...(radius>0?{strokeRadius:radius}:{}),
+      label,
+    });
+  };
+  for(const path of paths){
     if(path.length<4) continue;
     const raw:Point[]=path.map(i=>[i%w,Math.floor(i/w)]);
     let length=0; for(let i=1;i<raw.length;i++) length+=Math.hypot(raw[i][0]-raw[i-1][0],raw[i][1]-raw[i-1][1]);
@@ -484,24 +497,34 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
     const cx=unique.reduce((s,p)=>s+p[0],0)/unique.length,cy=unique.reduce((s,p)=>s+p[1],0)/unique.length;
     const statueRing=Math.abs(cx/w-.54)<.09&&Math.abs(cy/h-.27)<.10;
     const closed=loop&&area(unique)>=20&&area(unique)<=8000&&!statueRing;
-    const selected=closed?unique:simple;
-    const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
-    if(closed&&area(points)<1) continue;
-    const scale = (MAP_W / w + MAP_H / h) / 2;
-    // Use an upper-tail width estimate: the median systematically under-sized
-    // thick local wall runs when a traced path crossed both narrow and broad
-    // red strokes, producing reachable positions the conservative raster blocks.
-    const sourceHalfWidth = quantile(path.map(index => strokeDistance[index]).filter(Number.isFinite), 0.9);
-    // The raster source blocks the full authored red stroke. Preserve its
-    // measured half-width around the skeleton rather than treating a thick
-    // wall marking as a zero-width mathematical line.
-    const strokeRadius = closed ? 0 : Math.min(12, Math.max(0, sourceHalfWidth + RASTER_CELL_EXPANSION_SOURCE_PX) * scale);
-    shapes.push({
-      id:"redline-"+String(shapes.length+1).padStart(4,"0"),
-      points,closed,blocksMove:true,blocksSight:false,
-      ...(strokeRadius > 0 ? { strokeRadius } : {}),
-      label:closed?"red-line solid footprint":"red-line boundary",
-    });
+    if(closed){
+      append(unique.map(([x,y])=>worldPoint(x,y)),true,0,"red-line solid footprint");
+      continue;
+    }
+    // Stroke width varies along connected source-art paths. A single
+    // path-wide median/quantile erased locally thick wall sections. Build
+    // contiguous runs with a conservative per-edge width so each section
+    // keeps the width actually measured at its own source pixels.
+    let runStart=0;
+    let runRadius=0;
+    const edgeRadius=(index:number)=>{
+      const a=strokeDistance[path[index]]??0;
+      const b=strokeDistance[path[index+1]]??0;
+      const localHalfWidth=Math.max(Number.isFinite(a)?a:0,Number.isFinite(b)?b:0);
+      return Math.min(16,Math.ceil((localHalfWidth*scale+expansion)*2)/2);
+    };
+    for(let edge=0;edge<path.length-1;edge++){
+      const radius=edgeRadius(edge);
+      if(edge===0){runRadius=radius;continue;}
+      if(radius!==runRadius){
+        const segment=simplify(raw.slice(runStart,edge+1),TOLERANCE);
+        append(segment.map(([x,y])=>worldPoint(x,y)),false,runRadius,"red-line boundary");
+        runStart=edge;
+        runRadius=radius;
+      }
+    }
+    const finalSegment=simplify(raw.slice(runStart),TOLERANCE);
+    append(finalSegment.map(([x,y])=>worldPoint(x,y)),false,runRadius,"red-line boundary");
   }
   // The red-line reference does not author a statue-pedestal contour.
   // Do not promote the old estimated rectangle as production movement geometry;
@@ -682,7 +705,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:12,
+      kind:"redline-vector",generatorVersion:13,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -705,7 +728,7 @@ async function main():Promise<void> {
         simplifiedPointCount:points,
         simplificationToleranceSourcePx:TOLERANCE,
         rasterCellExpansionSourcePx:RASTER_CELL_EXPANSION_SOURCE_PX,
-        strokeWidthQuantile:0.9,
+        strokeWidthSampling:"per-edge-maximum",
         closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
         strokeRadiusMedianWorldPx:median(shapes.map(s=>s.strokeRadius ?? 0).filter(v=>v>0)),
