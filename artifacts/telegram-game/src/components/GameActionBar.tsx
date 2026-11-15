@@ -16,36 +16,34 @@ export interface GameActionBarProps {
   onUse: () => void;
 }
 
-const neutralSurface = "radial-gradient(circle, #77838a, #465158)";
-const neutralBorder = "2px solid rgba(190,202,208,0.5)";
+const neutralSurface = "rgba(72, 78, 84, 0.94)";
+const neutralBorder = "2px solid rgba(220, 225, 230, 0.72)";
 const buttonBase: CSSProperties = {
-  width: 72,
-  height: 72,
-  flex: "0 0 72px",
+  width: 68,
+  height: 68,
+  flex: "0 0 68px",
   borderRadius: "50%",
   display: "flex",
   flexDirection: "column",
   alignItems: "center",
   justifyContent: "center",
-  gap: 1,
-  fontFamily: "sans-serif",
-  fontWeight: 900,
-  fontSize: 8,
+  gap: 2,
+  fontFamily: "Arial, sans-serif",
+  fontWeight: 800,
+  fontSize: 9,
   letterSpacing: "0.04em",
   textTransform: "uppercase",
-  backdropFilter: "blur(4px)",
+  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.45)",
   touchAction: "manipulation",
 };
 
 export default function GameActionBar(props: GameActionBarProps) {
   const killDisabled = props.killCooldownMs > 0 || !props.killAvailable;
-  const cooldownRatio = Math.max(0, Math.min(1, props.killCooldownMs / Math.max(1, props.killCooldownMaxMs)));
   const reportDisabled = !props.reportAvailable;
   const useDisabled = !props.useAvailable;
 
   return (
     <>
-    <style>{`\n      @keyframes ag-kill-ready-pulse {\n        0%, 100% { box-shadow: 0 0 12px rgba(255,40,40,0.32); transform: scale(1); }\n        50% { box-shadow: 0 0 24px rgba(255,65,65,0.72); transform: scale(1.045); }\n      }\n      @media (prefers-reduced-motion: reduce) {\n        .ag-kill-ready-pulse { animation: none !important; }\n      }\n    `}</style>
     <div data-testid="game-action-bar" style={{
       position: "fixed",
       bottom: 130,
@@ -62,7 +60,6 @@ export default function GameActionBar(props: GameActionBarProps) {
           type="button"
           data-testid="game-action-kill"
           data-kill-state={killDisabled ? "disabled" : "ready"}
-          className={!killDisabled ? "ag-kill-ready-pulse" : undefined}
           data-kill-available={String(props.killAvailable)}
           data-cooldown-ms={props.killCooldownMs}
           aria-label={props.killCooldownMs > 0
@@ -77,12 +74,9 @@ export default function GameActionBar(props: GameActionBarProps) {
             opacity: killDisabled ? 0.45 : 1,
             filter: killDisabled ? "saturate(0.2)" : "none",
             color: killDisabled ? "#d8dfe3" : "#fff0f0",
-            background: props.killCooldownMs > 0
-              ? `conic-gradient(from -90deg, rgba(190,200,206,0.9) 0deg, rgba(190,200,206,0.9) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) ${cooldownRatio * 360}deg, rgba(66,76,83,0.98) 360deg)`
-              : killDisabled ? neutralSurface : "radial-gradient(circle, rgba(210,20,20,0.96), rgba(120,0,0,0.98))",
-            border: killDisabled ? neutralBorder : "2px solid rgba(255,135,135,0.9)",
-            boxShadow: killDisabled ? "none" : "0 0 18px rgba(255,40,40,0.45)",
-            animation: !killDisabled ? "ag-kill-ready-pulse 1.6s ease-in-out infinite" : "none",
+            background: killDisabled ? neutralSurface : "#c73535",
+            border: killDisabled ? neutralBorder : "2px solid rgba(255,255,255,0.88)",
+            boxShadow: killDisabled ? "none" : buttonBase.boxShadow,
             cursor: killDisabled ? "default" : "pointer",
           }}
         >
@@ -108,10 +102,12 @@ export default function GameActionBar(props: GameActionBarProps) {
         onClick={props.onReport}
         style={{
           ...buttonBase,
-          color: reportDisabled ? "#c5cdd1" : "#fff5d6",
-          background: reportDisabled ? neutralSurface : "radial-gradient(circle, rgba(220,160,20,0.96), rgba(140,90,0,0.98))",
-          border: reportDisabled ? neutralBorder : "2px solid rgba(255,218,125,0.9)",
-          boxShadow: reportDisabled ? "none" : "0 0 18px rgba(255,190,40,0.42)",
+          color: reportDisabled ? "#d8dde0" : "#ffffff",
+          opacity: reportDisabled ? 0.45 : 1,
+          filter: reportDisabled ? "saturate(0.15)" : "none",
+          background: reportDisabled ? neutralSurface : "#d4a52c",
+          border: reportDisabled ? neutralBorder : "2px solid rgba(255,255,255,0.88)",
+          boxShadow: reportDisabled ? "none" : buttonBase.boxShadow,
           cursor: reportDisabled ? "default" : "pointer",
         }}
       >
@@ -132,10 +128,12 @@ export default function GameActionBar(props: GameActionBarProps) {
         onClick={props.onUse}
         style={{
           ...buttonBase,
-          color: useDisabled ? "#c5cdd1" : "#e4ffff",
-          background: useDisabled ? neutralSurface : "radial-gradient(circle, rgba(35,125,145,0.98), rgba(17,58,70,0.98))",
-          border: useDisabled ? neutralBorder : "2px solid rgba(125,225,235,0.9)",
-          boxShadow: useDisabled ? "none" : "0 0 18px rgba(50,190,205,0.42)",
+          color: useDisabled ? "#d8dde0" : "#ffffff",
+          opacity: useDisabled ? 0.45 : 1,
+          filter: useDisabled ? "saturate(0.15)" : "none",
+          background: useDisabled ? neutralSurface : "#d4a52c",
+          border: useDisabled ? neutralBorder : "2px solid rgba(255,255,255,0.88)",
+          boxShadow: useDisabled ? "none" : buttonBase.boxShadow,
           cursor: useDisabled ? "default" : "pointer",
         }}
       >
