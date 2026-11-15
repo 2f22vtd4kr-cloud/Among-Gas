@@ -9,6 +9,7 @@ const document = getProductionCollisionDocument();
 const expected = [
   "north-cafeteria-upper-furniture-strip",
   "northwest-tank-machinery-enclosure",
+  "northeast-generator-room-machinery-footprint",
   "south-central-service-fixture-enclosure",
   "southwest-shop-shelving-interior",
 ] as const;
@@ -45,4 +46,4 @@ assert.equal(document.shapes.some(shape =>
   false,
   "C38 must not be filled with a guessed movement-blocking polygon or given an invented doorway");
 
-console.log("SOURCE-ART CANDIDATE OVERRIDES PASSED: four irregular movement-only contours; C38 remains provisional and separate");
+console.log("SOURCE-ART CANDIDATE OVERRIDES PASSED: five irregular movement-only contours; C38 remains provisional and separate");
