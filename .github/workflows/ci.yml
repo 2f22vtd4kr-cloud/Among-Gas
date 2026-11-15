@@ -74,6 +74,8 @@ jobs:
         run: pnpm --filter @workspace/scripts run test:vent-overlay
       - name: Test extracted meeting overlay presentation and permissions
         run: pnpm --filter @workspace/scripts run test:meeting-overlay
+      - name: Test extracted overview map presentation and markers
+        run: pnpm --filter @workspace/scripts run test:game-minimap
 
       - name: Test emergency meeting button
         run: pnpm --filter @workspace/scripts run test:emergency-button
