@@ -56,7 +56,7 @@ export const SABOTAGE_DEFS: Record<SabotageSystemId, SabotageDef> = {
   [SABOTAGE_O2]: {
     id: SABOTAGE_O2,
     name: 'O₂',
-    pads: [ref(105, 459), ref(235, 459)], // gas_station zone, two reachable, separate pads
+    pads: [ref(119, 453), ref(235, 459)], // gas_station zone; first pad moved to the shelving approach so the full player footprint can reach it
   },
   [SABOTAGE_REACTOR]: {
     id: SABOTAGE_REACTOR,
