@@ -785,7 +785,7 @@ async function main():Promise<void> {
   const errors=validateCollisionDocument(document); if(errors.length) throw new Error("invalid red-line geometry: "+errors.join("; "));
   const world=new CollisionWorld(shapes,MAP_W,MAP_H);
   let edgeCount=0,blocked=0;
-  const unblockedSamples:Array<{id:string;walkableRegion:boolean|undefined;point:Point;radius:number}>=[];
+  const unblockedSamples:Array<{id:string;walkableRegion:boolean|undefined;walkableRegionHole?:boolean;walkableRegionId?:string;point:Point;radius:number}>=[];
   for(const shape of shapes) {
     const count=shape.closed?shape.points.length:shape.points.length-1;
     for(let i=0;i<count;i++) {
