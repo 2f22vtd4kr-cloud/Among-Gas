@@ -30,6 +30,10 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
   const context = atlas.getContext('2d', { willReadFrequently: true });
   if (!context) throw new Error('Could not allocate the character palette canvas');
 
+  // Preserve the established renderer: every cell is rasterized directly at
+  // its final atlas offset before recoloring. Chromium's nearest-neighbour
+  // sampling can be offset-sensitive at exact half-pixel boundaries; the
+  // absolute destination is part of the pinned 162-cell visual contract.
   context.imageSmoothingEnabled = false;
   const sourceCellWidth = CHARACTER_SOURCE_SHEET_WIDTH / CHARACTER_SOURCE_SHEET_COLS;
   const paletteByColor = new Map(GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]));
@@ -66,7 +70,6 @@ export function createCharacterAtlas(source: HTMLImageElement): HTMLCanvasElemen
     }
     context.putImageData(pixels, destinationLeft, 0);
   }
-
   return atlas;
 }
 

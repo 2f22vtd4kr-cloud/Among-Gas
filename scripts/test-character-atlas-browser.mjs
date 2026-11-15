@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import { GENERATED_CHARACTER_PALETTES, recolorSuitPixel } from '@workspace/shared';
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? 'playwright-core');
 
-const atlasModulePath = 'artifacts/telegram-game/src/game/characterAtlas.ts';
+const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+const atlasModulePath = join(repoRoot, 'artifacts/telegram-game/src/game/characterAtlas.ts');
 if (!existsSync(atlasModulePath)) {
   console.log('Character atlas browser contract deferred: the runtime atlas implementation is not merged yet.');
   process.exit(0);
@@ -29,7 +31,7 @@ try {
   await page.goto(`${origin}/?mock=corpse-all-colors`, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => Boolean(window.__AG_CHARACTER_ATLAS), { timeout: 15_000 });
 
-  const sourceAssetPath = 'artifacts/telegram-game/public/sprites/characters.png';
+  const sourceAssetPath = join(repoRoot, 'artifacts/telegram-game/public/sprites/characters.png');
   const sourceAsset = readFileSync(sourceAssetPath);
   const sourceAssetGitBlobSha = createHash('sha1')
     .update(`blob ${sourceAsset.length}\0`)
@@ -154,9 +156,9 @@ try {
             sourceDecodeCandidates.sampledRoundTrip.maxDelta = Math.max(
               sourceDecodeCandidates.sampledRoundTrip.maxDelta, delta,
             );
-            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 12) {
+            if (sourceDecodeCandidates.sampledRoundTrip.samples.length < 64) {
               sourceDecodeCandidates.sampledRoundTrip.samples.push({
-                x, y, sourceX, channel, candidate, observed, alpha: sharpSource[sourceOffset + 3],
+                x, y, sourceX, channel, raw, candidate, observed, alpha: sharpSource[sourceOffset + 3],
               });
             }
           }
@@ -182,6 +184,51 @@ try {
     if (!referenceContext) throw new Error('Reference atlas has no readable 2D context');
     const referencePixels = referenceContext.getImageData(0, 0, atlas.width, atlas.height).data;
     const bakedPixels = context.getImageData(0, 0, atlas.width, atlas.height).data;
+
+    // Diagnostic-only reconstruction of the pre-refactor renderer from
+    // ae71a3f: draw each cell directly at its absolute atlas offset, then
+    // recolor generated palettes in place. Never use this output as runtime
+    // content; it exists only to identify which renderer the pinned frame
+    // fingerprint represents.
+    const legacyAtlas = document.createElement('canvas');
+    legacyAtlas.width = spriteModule.CHARACTER_SHEET_WIDTH;
+    legacyAtlas.height = spriteModule.CHARACTER_SHEET_HEIGHT;
+    const legacyContext = legacyAtlas.getContext('2d', { willReadFrequently: true });
+    if (!legacyContext) throw new Error('Could not allocate historical atlas diagnostic');
+    legacyContext.imageSmoothingEnabled = false;
+    const legacySourceCellWidth =
+      spriteModule.CHARACTER_SOURCE_SHEET_WIDTH / spriteModule.CHARACTER_SOURCE_SHEET_COLS;
+    const legacyPaletteByColor = new Map(
+      spriteModule.GENERATED_CHARACTER_PALETTES.map(palette => [palette.color, palette]),
+    );
+    for (let column = 0; column < spriteModule.CHARACTER_COLORS.length; column++) {
+      const color = spriteModule.CHARACTER_COLORS[column];
+      const sourceColumn = column < spriteModule.CHARACTER_SOURCE_SHEET_COLS ? column : 0;
+      const sourceLeft = Math.ceil(sourceColumn * legacySourceCellWidth);
+      const sourceRight = Math.floor((sourceColumn + 1) * legacySourceCellWidth);
+      const destinationLeft = column * spriteModule.CHARACTER_CELL_WIDTH;
+      legacyContext.drawImage(
+        sourceImage,
+        sourceLeft, 0, sourceRight - sourceLeft, spriteModule.CHARACTER_SHEET_HEIGHT,
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      );
+      const palette = legacyPaletteByColor.get(color);
+      if (!palette) continue;
+      const legacyPixels = legacyContext.getImageData(
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      );
+      for (let offset = 0; offset < legacyPixels.data.length; offset += 4) {
+        const recolored = atlasModule.recolorSuitPixel(
+          legacyPixels.data[offset], legacyPixels.data[offset + 1],
+          legacyPixels.data[offset + 2], legacyPixels.data[offset + 3], palette,
+        );
+        legacyPixels.data[offset] = recolored[0];
+        legacyPixels.data[offset + 1] = recolored[1];
+        legacyPixels.data[offset + 2] = recolored[2];
+        legacyPixels.data[offset + 3] = recolored[3];
+      }
+      legacyContext.putImageData(legacyPixels, destinationLeft, 0);
+    }
     let differentBytes = 0;
     let maxChannelDelta = 0;
     const channelDifferences = [0, 0, 0, 0];
@@ -224,8 +271,16 @@ try {
       if (alphaDiffers) alphaStats.alphaPixels++;
       mismatchByReferenceAlpha.set(alphaKey, alphaStats);
       if (mismatchSamples.length < 24) {
+        const localX = x % 161;
+        const sourcePixelOffset = (y * 161 + localX) * 4;
+        const sourcePixel = Array.from(browserScaledSource.slice(sourcePixelOffset, sourcePixelOffset + 4));
+        const paletteColor = spriteModule.CHARACTER_COLORS[column];
+        const palette = spriteModule.GENERATED_CHARACTER_PALETTES.find(item => item.color === paletteColor);
+        const directOutput = palette
+          ? atlasModule.recolorSuitPixel(...sourcePixel, palette)
+          : sourcePixel;
         mismatchSamples.push({
-          x, y, column,
+          x, y, column, localX, paletteColor, sourcePixel, directOutput,
           reference: Array.from(referencePixels.slice(pixelOffset, pixelOffset + 4)),
           baked: Array.from(bakedPixels.slice(pixelOffset, pixelOffset + 4)),
         });
@@ -283,11 +338,59 @@ try {
       probeCanvasNearestSampling(159, 161),
     ];
 
+    // The production legacy renderer draws each 160px source cell at an
+    // absolute atlas destination offset (column * 161), not at x=0. Compare
+    // those exact browser drawImage samples with the isolated x=0 ramp probe.
+    // This detects offset-dependent nearest-neighbour phase differences that
+    // a standalone 161px canvas cannot reveal.
+    const destinationOffsetProbeCanvas = document.createElement('canvas');
+    destinationOffsetProbeCanvas.width = spriteModule.CHARACTER_SHEET_WIDTH;
+    destinationOffsetProbeCanvas.height = spriteModule.CHARACTER_SHEET_HEIGHT;
+    const destinationOffsetProbeContext = destinationOffsetProbeCanvas.getContext('2d', {
+      willReadFrequently: true,
+    });
+    if (!destinationOffsetProbeContext) {
+      throw new Error('Could not allocate atlas destination-offset sampling probe');
+    }
+    destinationOffsetProbeContext.imageSmoothingEnabled = false;
+    const destinationOffsetSamplingProbe = [];
+    for (let column = spriteModule.CHARACTER_SOURCE_SHEET_COLS;
+      column < spriteModule.CHARACTER_COLORS.length; column++) {
+      const destinationLeft = column * spriteModule.CHARACTER_CELL_WIDTH;
+      destinationOffsetProbeContext.drawImage(
+        sourceImage,
+        0, 0, 160, spriteModule.CHARACTER_SHEET_HEIGHT,
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      );
+      const offsetPixels = destinationOffsetProbeContext.getImageData(
+        destinationLeft, 0, spriteModule.CHARACTER_CELL_WIDTH, spriteModule.CHARACTER_SHEET_HEIGHT,
+      ).data;
+      let differentBytes = 0;
+      const samples = [];
+      for (let offset = 0; offset < browserScaledSource.length; offset++) {
+        if (offsetPixels[offset] === browserScaledSource[offset]) continue;
+        differentBytes++;
+        if (samples.length < 8) {
+          const pixelOffset = offset - (offset % 4);
+          const pixel = pixelOffset / 4;
+          samples.push({
+            x: pixel % spriteModule.CHARACTER_CELL_WIDTH,
+            y: Math.floor(pixel / spriteModule.CHARACTER_CELL_WIDTH),
+            channel: offset % 4,
+            isolated: browserScaledSource[offset],
+            atlasOffset: offsetPixels[offset],
+          });
+        }
+      }
+      destinationOffsetSamplingProbe.push({ column, destinationLeft, differentBytes, samples });
+    }
+
     const bakedParityDiagnostics = {
       differentBytes,
       sourceDecodeCandidates,
       paletteImplementationProbe,
       canvasSamplingProbe,
+      destinationOffsetSamplingProbe,
       maxChannelDelta,
       channelDifferences,
       mismatchByColumn: mismatchByColumn.map((stats, column) => ({ column, ...stats })),
@@ -379,7 +482,59 @@ try {
           gameplayX, gameplayY, gameplayWidth, gameplayHeight);
       }
     }
+    const legacyFrames = [];
+    for (let row = 0; row < poseWindows.length; row++) {
+      const pose = poseWindows[row];
+      for (let column = 0; column < colors.length; column++) {
+        const x = column * cellWidth;
+        const height = pose.bottom - pose.top;
+        const pixels = legacyContext.getImageData(x, pose.top, cellWidth, height).data;
+        let opaquePixels = 0;
+        let minX = cellWidth, minY = height, maxX = -1, maxY = -1;
+        for (let offset = 0; offset < pixels.length; offset += 4) {
+          if (pixels[offset + 3] === 0) continue;
+          opaquePixels++;
+          const pixel = offset / 4;
+          const px = pixel % cellWidth;
+          const py = Math.floor(pixel / cellWidth);
+          minX = Math.min(minX, px);
+          minY = Math.min(minY, py);
+          maxX = Math.max(maxX, px);
+          maxY = Math.max(maxY, py);
+        }
+        const digest = await crypto.subtle.digest('SHA-256', pixels);
+        const hash = Array.from(new Uint8Array(digest), value => value.toString(16).padStart(2, '0')).join('');
+        legacyFrames.push({
+          color: colors[column], pose: pose.pose, hash, opaquePixels,
+          alphaBounds: opaquePixels > 0 ? { minX, minY, maxX, maxY } : null,
+        });
+      }
+    }
+    const legacyMaterial = legacyFrames.map(frame =>
+      `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
+    ).join("\n");
+    let legacyFingerprint = 14695981039346656037n;
+    for (let index = 0; index < legacyMaterial.length; index++) {
+      legacyFingerprint ^= BigInt(legacyMaterial.charCodeAt(index));
+      legacyFingerprint = BigInt.asUintN(64, legacyFingerprint * 1099511628211n);
+    }
+    const legacyFrameDifferences = legacyFrames.flatMap((frame, index) => {
+      const current = frames[index];
+      return frame.hash === current.hash &&
+        frame.opaquePixels === current.opaquePixels &&
+        JSON.stringify(frame.alphaBounds) === JSON.stringify(current.alphaBounds)
+        ? []
+        : [{
+            color: frame.color, pose: frame.pose,
+            legacyHash: frame.hash, currentHash: current.hash,
+            legacyOpaquePixels: frame.opaquePixels, currentOpaquePixels: current.opaquePixels,
+            legacyBounds: frame.alphaBounds, currentBounds: current.alphaBounds,
+          }];
+    });
     return {
+      legacyFingerprint: legacyFingerprint.toString(16).padStart(16, '0'),
+      legacyFrameDifferences: legacyFrameDifferences.slice(0, 36),
+      legacyDifferentFrameCount: legacyFrameDifferences.length,
       width: atlas.width,
       height: atlas.height,
       bakedAsset: atlasMetrics?.bakedAsset === true,
@@ -402,7 +557,33 @@ try {
     };
   }, { poseWindows, sourceAssetGitBlobSha, sourceRawBase64, nodeProbeInput, nodePaletteProbe });
 
-  console.log('Character atlas byte-parity diagnostics:', JSON.stringify(metrics.bakedParityDiagnostics));
+  const mismatchNodePaletteProbes = metrics.bakedParityDiagnostics.mismatchSamples.map(sample => {
+    const palette = GENERATED_CHARACTER_PALETTES.find(item => item.color === sample.paletteColor);
+    return {
+      x: sample.x, y: sample.y, column: sample.column, paletteColor: sample.paletteColor,
+      nodeOutput: palette ? recolorSuitPixel(...sample.sourcePixel, palette) : sample.sourcePixel,
+      browserOutput: sample.directOutput,
+    };
+  });
+  console.log('Character atlas byte-parity diagnostics:', JSON.stringify({
+    ...metrics.bakedParityDiagnostics, mismatchNodePaletteProbes,
+  }));
+  console.log('Historical atlas renderer comparison:', JSON.stringify({
+    legacyFingerprint: metrics.legacyFingerprint,
+    currentFingerprint: (() => {
+      const material = metrics.frames.map(frame =>
+        `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
+      ).join("\n");
+      let fingerprint = 14695981039346656037n;
+      for (let index = 0; index < material.length; index++) {
+        fingerprint ^= BigInt(material.charCodeAt(index));
+        fingerprint = BigInt.asUintN(64, fingerprint * 1099511628211n);
+      }
+      return fingerprint.toString(16).padStart(16, '0');
+    })(),
+    legacyDifferentFrameCount: metrics.legacyDifferentFrameCount,
+    legacyFrameDifferences: metrics.legacyFrameDifferences,
+  }));
   assert.equal(metrics.bakedAsset, true, 'runtime must load the build-time baked atlas, not recolor source art on mobile');
   assert.deepEqual(metrics.bakedParity, { differentBytes: 0, maxChannelDelta: 0 },
     'every baked RGBA byte must match the legacy in-memory renderer exactly');
