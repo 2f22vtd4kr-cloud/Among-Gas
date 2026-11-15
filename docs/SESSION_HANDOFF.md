@@ -44,7 +44,7 @@ No new weighted completion percentage is asserted. The previous ~45% estimate wa
 ## Next priorities
 
 1. Continue Phase 0 with behavior-neutral extraction of the remaining GameMap canvas scene/rendering responsibilities and regression coverage.
-2. Archive no geometry assumptions as truth: finish independent source tracing and review of zones A–E, including full-footprint route probes, doors, task/vent/button reachability, vision and shadows.
+2. Archive no geometry assumptions as truth: finish source-backed author tracing and independent review of all twelve zones Z01–Z12 and their seams; obtain explicit owner dispositions for C0/C20/C27/C38/C56; verify full-footprint routes, doors, task/vent/button reachability, vision and shadows.
 3. Complete the collision editor's reviewed workflow; only then perform the staged vision → client → server → bots cut-over in separate PRs.
 4. Produce genuine Stage-1 map SR and optional gated Stage-2 tile candidates; sharpened/baseline tiles alone are not regenerated artwork.
 5. Complete sprite side-by-side/anchor evaluation, minigame interaction/target-size acceptance, bot observation/chat evidence, asset clearance, and release/device evidence.
