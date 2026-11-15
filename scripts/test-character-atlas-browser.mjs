@@ -512,7 +512,7 @@ try {
     }
     const legacyMaterial = legacyFrames.map(frame =>
       `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
-    ).join("\\n");
+    ).join("\n");
     let legacyFingerprint = 14695981039346656037n;
     for (let index = 0; index < legacyMaterial.length; index++) {
       legacyFingerprint ^= BigInt(legacyMaterial.charCodeAt(index));
@@ -573,7 +573,7 @@ try {
     currentFingerprint: (() => {
       const material = metrics.frames.map(frame =>
         `${frame.color}:${frame.pose}:${frame.hash}:${frame.opaquePixels}:${frame.alphaBounds.minX},${frame.alphaBounds.minY},${frame.alphaBounds.maxX},${frame.alphaBounds.maxY}`,
-      ).join("\\n");
+      ).join("\n");
       let fingerprint = 14695981039346656037n;
       for (let index = 0; index < material.length; index++) {
         fingerprint ^= BigInt(material.charCodeAt(index));
