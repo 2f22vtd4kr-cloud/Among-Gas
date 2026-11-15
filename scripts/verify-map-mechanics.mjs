@@ -85,13 +85,13 @@ for (const run of runs) {
 assert.equal(cursor, cols * rows, 'Collision RLE does not fill the grid');
 
 const manualBlockedSection = collisionOverrides.match(
-  /export const MANUAL_BLOCKED_POLYGONS:[\\s\\S]*?=\\s*\\[([\\s\\S]*?)\\];/,
+  /export const MANUAL_BLOCKED_POLYGONS:[\s\S]*?=\s*\[([\s\S]*?)\];/,
 );
 assert.ok(manualBlockedSection, 'MANUAL_BLOCKED_POLYGONS must remain explicitly declared');
 const polygonBlocks = [...manualBlockedSection[1].matchAll(
-  /points:\\s*\\[((?:\\s*\\[\\s*\\d+\\s*,\\s*\\d+\\s*\\]\\s*,?)+)\\s*\\]/g,
+  /points:\s*\[((?:\s*\[\s*\d+\s*,\s*\d+\s*\]\s*,?)+)\s*\]/g,
 )].map(match =>
-  [...match[1].matchAll(/\\[\\s*(\\d+)\\s*,\\s*(\\d+)\\s*\\]/g)]
+  [...match[1].matchAll(/\[\s*(\d+)\s*,\s*(\d+)\s*\]/g)]
     .map(point => [Number(point[1]), Number(point[2])]),
 );
 assert.equal(polygonBlocks.length, 0, 'The decorative central garden must not be filled by a manual collision polygon');
