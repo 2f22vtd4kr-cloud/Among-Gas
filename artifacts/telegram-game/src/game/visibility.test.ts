@@ -3,6 +3,7 @@ import { FINE_COLS, FINE_ROWS } from "@workspace/shared/collisionMap";
 import {
   buildVisualOccluderSegmentIndex,
   computeVisibilityPolygon,
+  smoothVisibilityPolygon,
   type VisualOccluderSegment,
 } from "./visibility";
 
@@ -44,5 +45,41 @@ const customLeafIndex = buildVisualOccluderSegmentIndex(segments, 1);
 assert.deepEqual(computeVisibilityPolygon(
   origin.x, origin.y, radius, emptyFineGrid, [], false, segments, customLeafIndex,
 ), reference, "single-segment leaves must preserve exact ray results");
+
+// A non-finite smoothing window must fall back to the default instead of
+// emitting NaN vertices; finite windows remain clamped to the supported range.
+const smoothingFixture = Array.from({ length: 24 }, (_, index) => {
+  const angle = (index / 24) * Math.PI * 2;
+  const distance = index % 5 === 0 ? 70 : 100;
+  return { x: origin.x + Math.cos(angle) * distance, y: origin.y + Math.sin(angle) * distance };
+});
+const defaultSmoothed = smoothVisibilityPolygon(smoothingFixture, origin);
+assert.deepEqual(
+  smoothVisibilityPolygon(smoothingFixture, origin, Number.NaN),
+  defaultSmoothed,
+  "NaN smoothing window falls back to the documented default",
+);
+assert.deepEqual(
+  smoothVisibilityPolygon(smoothingFixture, origin, Number.POSITIVE_INFINITY),
+  smoothVisibilityPolygon(smoothingFixture, origin, 8),
+  "positive infinity clamps to the maximum supported smoothing window",
+);
+assert.deepEqual(
+  smoothVisibilityPolygon(smoothingFixture, origin, -Infinity),
+  smoothVisibilityPolygon(smoothingFixture, origin, 1),
+  "negative infinity clamps to the minimum supported smoothing window",
+);
+assert.ok(defaultSmoothed.every(point => Number.isFinite(point.x) && Number.isFinite(point.y)),
+  "smoothing always returns finite vertices for finite source geometry");
+assert.deepEqual(
+  smoothVisibilityPolygon([...smoothingFixture, { x: Number.NaN, y: 12 }], origin),
+  [],
+  "a contour containing NaN fails closed instead of returning a malformed polygon",
+);
+assert.deepEqual(
+  smoothVisibilityPolygon([{ x: 1, y: 2 }, { x: Number.POSITIVE_INFINITY, y: 3 }], origin),
+  [],
+  "a short contour containing infinity also fails closed",
+);
 
 console.log("VISION CONTOUR INDEX TESTS PASSED: exact indexed/brute-force parity, empty index and leaf-size edge case");

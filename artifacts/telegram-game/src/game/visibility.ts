@@ -328,10 +328,18 @@ export function smoothVisibilityPolygon(
   origin: VisionPoint,
   windowRadius = 3,
 ): VisionPoint[] {
+  // A malformed contour cannot produce a trustworthy closed polygon. Fail closed
+  // instead of allowing NaN/Infinity to poison the renderer's path coordinates.
+  if (points.some(point => !Number.isFinite(point.x) || !Number.isFinite(point.y))) {
+    return [];
+  }
   if (points.length < 3 || !Number.isFinite(origin.x) || !Number.isFinite(origin.y)) {
     return [...points];
   }
-  const radius = Math.max(1, Math.min(8, Math.floor(windowRadius)));
+  // Invalid caller input must not poison every output vertex with NaN.
+  // Keep the documented default window for non-finite values, then clamp finite input.
+  const requestedRadius = Number.isNaN(windowRadius) ? 3 : Math.floor(windowRadius);
+  const radius = Math.max(1, Math.min(8, requestedRadius));
   const sigma = Math.max(1, radius / 1.6);
   const distances = points.map(point => Math.hypot(point.x - origin.x, point.y - origin.y));
 
