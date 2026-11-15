@@ -30,7 +30,6 @@ import {
 } from '../game/characterAnimation';
 import Joystick from '../components/Joystick';
 import { Link } from 'wouter';
-import type { MeetingChatMessage } from '../context/GameContext';
 
 import {
   useGameState,
@@ -88,10 +87,9 @@ import GameEmergencyMeetingButton from '../components/GameEmergencyMeetingButton
 import { buildAdminTableAgents } from '../game/adminTableAgents';
 import TaskListPanel from '../components/TaskListPanel';
 import EmergencyCallSplash from '../components/EmergencyCallSplash';
-import MeetingChatPanel from '../components/MeetingChatPanel';
-import MeetingVotingPanel from '../components/MeetingVotingPanel';
 import KillAnimationOverlay from '../components/KillAnimationOverlay';
 import GameOverOverlay from '../components/GameOverOverlay';
+import GameMeetingOverlay from '../components/GameMeetingOverlay';
 import RoleRevealOverlay from '../components/RoleRevealOverlay';
 import { sabotageRu, slotColor, taskRu } from '../game/mapPresentation';
 
@@ -1819,69 +1817,23 @@ export default function GameMap() {
 
       {/* ── Meeting overlay: discussion → voting (Phase 6) ─────────────────── */}
       {meeting && (
-        <div style={{
-          position: 'fixed', inset: 0, zIndex: 60,
-          display: 'flex', flexDirection: 'column',
-          alignItems: 'center', justifyContent: 'center',
-          background: 'rgba(6,10,18,0.94)', backdropFilter: 'blur(4px)', padding: 24,
-          overflowY: 'auto',
-        }}>
-          <div style={{ textAlign: 'center', marginBottom: 22 }}>
-            <div style={{
-              fontSize: 11, color: 'rgba(255,255,255,0.45)', fontFamily: 'sans-serif',
-              letterSpacing: '0.25em', textTransform: 'uppercase', marginBottom: 8,
-            }}>
-              {meeting.bodySlot === NO_TARGET ? (en ? 'Emergency meeting' : 'Экстренное собрание') : (en ? 'Body reported' : 'Найдено тело')}
-            </div>
-            <div style={{ fontSize: 16, color: '#e8f0ff', fontFamily: 'sans-serif', fontWeight: 700 }}>
-              {meeting.bodySlot === NO_TARGET
-                ? `${playerName(meeting.reporterSlot)} ${en ? 'called an emergency meeting' : 'вызвал экстренное собрание'}`
-                : `${playerName(meeting.reporterSlot)} ${en ? 'reported' : 'нашёл тело'} ${playerName(meeting.bodySlot)}`}
-            </div>
-            <div style={{
-              marginTop: 14, fontSize: 32, fontWeight: 900, fontFamily: 'monospace',
-              color: inDiscussion ? '#8ab8cc' : '#ffd166',
-            }}>
-              {Math.ceil(meetingRemainingMs / 1000)}s
-            </div>
-            <div style={{
-              fontSize: 12, color: 'rgba(255,255,255,0.5)', fontFamily: 'sans-serif',
-              textTransform: 'uppercase', letterSpacing: '0.1em', marginTop: 4,
-            }}>
-              {inDiscussion ? (en ? 'Discussion' : 'Обсуждение') : (en ? 'Voting' : 'Голосование')}
-            </div>
-          </div>
-
-          {amIDead && (
-            <div style={{
-              color: 'rgba(200,220,255,0.6)', fontSize: 12, fontFamily: 'sans-serif', marginBottom: 12,
-            }}>
-              {en ? 'You are dead — spectating' : 'Вы мертвы — наблюдаете'}
-            </div>
-          )}
-
-          <MeetingChatPanel
-            messages={meetingMessages}
-            inDiscussion={inDiscussion}
-            isDead={amIDead}
-            english={en}
-            draft={chatDraft}
-            onDraftChange={setChatDraft}
-            playerName={playerName}
-            onSend={sendMeetingChat}
-          />
-
-          {!inDiscussion && !amIDead && (
-            <MeetingVotingPanel
-              players={players}
-              deadSlots={deadSlots}
-              hasVoted={hasVoted}
-              mySlot={mySlot}
-              english={en}
-              onVote={slot => { haptic.tap(); sfx('uiSelect', 0.3); castVote(slot); }}
-            />
-          )}
-        </div>
+        <GameMeetingOverlay
+          meeting={meeting}
+          remainingMs={meetingRemainingMs}
+          inDiscussion={inDiscussion}
+          isDead={amIDead}
+          english={en}
+          messages={meetingMessages}
+          players={players}
+          deadSlots={deadSlots}
+          hasVoted={hasVoted}
+          mySlot={mySlot}
+          draft={chatDraft}
+          onDraftChange={setChatDraft}
+          playerName={playerName}
+          onSendChat={sendMeetingChat}
+          onVote={slot => { haptic.tap(); sfx('uiSelect', 0.3); castVote(slot); }}
+        />
       )}
 
       {/* ── Task minigame overlay (Phase 7) ─────────────────────────────────── */}
