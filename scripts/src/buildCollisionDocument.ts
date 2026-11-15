@@ -26,7 +26,10 @@ const TOLERANCE = 0.5;
 // source pixel in that cell is blocked. Expanding the vector stroke by the
 // half-diagonal of that conservative cell footprint prevents false-walkable
 // slivers along the raster cell boundary.
-const RASTER_CELL_EXPANSION_SOURCE_PX = Math.SQRT2;
+// The reviewed raster uses a 35% wall-pixel vote per 2×2 source cell,
+// not an any-pixel rule. Approximate that threshold's boundary allowance;
+// the former half-diagonal expansion materially over-blocked thin corridors.
+const RASTER_CELL_EXPANSION_SOURCE_PX = 0.35;
 const WALKABLE_REGION_TOLERANCE = 1.25;
 
 async function hash(relative: string): Promise<string> {
