@@ -90,6 +90,9 @@ jobs:
       - name: Verify A* navigation rejects invalid map coordinates and preserves route safety
         run: pnpm --filter @workspace/scripts run test:pathfinding
 
+      - name: Verify zone review source evidence files, hashes and dimensions
+        run: pnpm --filter @workspace/scripts run verify:zone-source-evidence
+
       - name: Verify vector collision engine and mobile editor geometry helpers
         run: pnpm --filter @workspace/scripts run test:vector-collision
 
