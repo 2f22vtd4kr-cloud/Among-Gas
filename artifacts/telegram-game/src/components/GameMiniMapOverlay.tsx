@@ -11,6 +11,9 @@ interface GameMiniMapOverlayProps {
   playerPosition: { x: number; y: number };
   inVent: boolean;
   overviewSrc: string;
+  tick: number;
+  dialogRef: React.RefObject<HTMLDivElement | null>;
+  closeButtonRef: React.RefObject<HTMLButtonElement | null>;
   onClose: () => void;
 }
 
@@ -24,6 +27,9 @@ export default function GameMiniMapOverlay({
   playerPosition,
   inVent,
   overviewSrc,
+  tick,
+  dialogRef,
+  closeButtonRef,
   onClose,
 }: GameMiniMapOverlayProps) {
   if (!open) return null;
@@ -36,7 +42,8 @@ export default function GameMiniMapOverlay({
     : [];
 
   return (
-    <div style={{
+    <div ref={dialogRef} data-minimap-tick={tick} role="dialog" aria-modal="true"
+      aria-label={english ? 'Among Gas map' : 'Карта Among Gas'} onClick={onClose} style={{
       position: 'fixed', inset: 0, zIndex: 75,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       padding: 'max(12px, env(safe-area-inset-top, 12px)) 12px max(12px, env(safe-area-inset-bottom, 12px))',
@@ -58,7 +65,7 @@ export default function GameMiniMapOverlay({
                 : (english ? 'Map overview' : 'Обзор карты')}
             </div>
           </div>
-          <button onClick={onClose} aria-label={english ? 'Close map' : 'Закрыть карту'} style={{
+          <button ref={closeButtonRef} onClick={onClose} aria-label={english ? 'Close map' : 'Закрыть карту'} style={{
             width: 40, height: 40, flexShrink: 0, borderRadius: 10, border: '1px solid rgba(130,195,215,0.35)',
             background: 'rgba(255,255,255,0.07)', color: '#fff', fontSize: 23, fontWeight: 800, touchAction: 'manipulation',
           }}>×</button>
