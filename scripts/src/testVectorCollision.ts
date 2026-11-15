@@ -152,6 +152,8 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
   const joinedFloor = new CollisionWorld([leftFloor, rightFloor], 200, 200);
   assert.equal(joinedFloor.isWalkable(100, 100, 8), true,
     "a shared edge between adjacent authored floor regions is internal to their union");
+  assert.equal(joinedFloor.isPlayerWalkableAtFeet(100, 100), true,
+    "the production three-circle player footprint can straddle a shared floor-region seam");
   assert.deepEqual(joinedFloor.move(80, 100, 40, 0, 8), [120, 100],
     "swept movement must cross a shared floor-region seam without a phantom wall");
   assert.equal(joinedFloor.isWalkable(20, 100, 8), false,
