@@ -345,6 +345,7 @@ try {
       sourceDecodeCandidates,
       paletteImplementationProbe,
       canvasSamplingProbe,
+      destinationOffsetSamplingProbe,
       maxChannelDelta,
       channelDifferences,
       mismatchByColumn: mismatchByColumn.map((stats, column) => ({ column, ...stats })),
