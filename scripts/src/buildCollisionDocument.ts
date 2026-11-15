@@ -17,7 +17,7 @@ const root = path.resolve(import.meta.dirname, "../..");
 const referencePath = path.join(root, "attached_assets/IMG_2907_1783590932507.jpeg");
 const outputDir = path.join(root, "lib/shared/src/collision");
 const qaPath = path.join(root, "artifacts/telegram-game/collision-redline-vector-qa.png");
-const TOLERANCE = 1.25;
+const TOLERANCE = 0.5;
 
 async function hash(relative: string): Promise<string> {
   return createHash("sha256").update(await readFile(path.join(root, relative))).digest("hex");
@@ -662,7 +662,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:9,
+      kind:"redline-vector",generatorVersion:10,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
