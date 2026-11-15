@@ -288,7 +288,7 @@ export function validateCollisionDocument(value: unknown): string[] {
     if (source.walkableRegionExtraction !== undefined) {
       const extraction = source.walkableRegionExtraction;
       if (!Number.isInteger(extraction.morphologyKernelSourcePx) || extraction.morphologyKernelSourcePx < 3 ||
-          extraction.connectivity !== 8 || !Array.isArray(extraction.selectedRegions) ||
+          extraction.connectivity !== 4 || !Array.isArray(extraction.selectedRegions) ||
           extraction.selectedRegions.length < 1 || !Array.isArray(extraction.excludedDetachedCandidates)) {
         errors.push("source.walkableRegionExtraction must describe source-derived floor regions and pending detached candidates");
       }
