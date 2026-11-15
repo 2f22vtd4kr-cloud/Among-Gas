@@ -34,7 +34,26 @@ async function hash(relative: string): Promise<string> {
 }
 function red(data: Buffer, offset: number): boolean {
   const r=data[offset], g=data[offset+1], b=data[offset+2];
-  return r>=90 && r-g>=42 && r-b>=34 && r>g*1.35 && r>b*1.25;
+  // Match the reviewed fine-grid generator's source-pixel classification.
+  return r > 110 && r - g > 28 && r - b > 28 && g < 170 && b < 170;
+}
+function dilateRedMask(mask: Uint8Array, w: number, h: number, iterations: number): Uint8Array {
+  let current = mask;
+  for (let iteration = 0; iteration < iterations; iteration++) {
+    const next = new Uint8Array(mask.length);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const index = y * w + x;
+      if (current[index]) { next[index] = 1; continue; }
+      let hit = false;
+      for (let dy = -1; dy <= 1 && !hit; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx >= 0 && ny >= 0 && nx < w && ny < h && current[ny * w + nx]) { hit = true; break; }
+      }
+      if (hit) next[index] = 1;
+    }
+    current = next;
+  }
+  return current;
 }
 function thin(mask: Uint8Array, w: number, h: number): Uint8Array {
   let changed=true, rounds=0;
@@ -683,9 +702,14 @@ async function main():Promise<void> {
   const mask=new Uint8Array(info.width*info.height); let redCount=0;
   for(let i=0;i<mask.length;i++) if(red(data,i*info.channels)){mask[i]=1;redCount++;}
   if(redCount<1500) throw new Error("too few red reference pixels: "+redCount);
+  const wallMask=dilateRedMask(mask,info.width,info.height,2);
   const walkableRegionExtraction=extractSourceWalkableRegions(mask.slice(),info.width,info.height);
-  const strokeDistance=distanceToBackground(mask,info.width,info.height);
-  const skeleton=thin(mask,info.width,info.height); let skeletonCount=0;
+  // The reviewed fine-grid generator dilates the exact same red-pixel mask by
+  // two 8-neighbour iterations before flood-fill/downsampling. Trace and measure
+  // that dilated wall footprint too; omitting this step was the principal
+  // source of the repeated Z02 false-walkable band and broader parity drift.
+  const strokeDistance=distanceToBackground(wallMask,info.width,info.height);
+  const skeleton=thin(wallMask,info.width,info.height); let skeletonCount=0;
   for(const v of skeleton) skeletonCount+=v;
   if(skeletonCount<1000) throw new Error("red-line skeleton unexpectedly sparse: "+skeletonCount);
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
@@ -699,7 +723,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:13,
+      kind:"redline-vector",generatorVersion:14,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -722,6 +746,7 @@ async function main():Promise<void> {
         simplifiedPointCount:points,
         simplificationToleranceSourcePx:TOLERANCE,
         rasterCellExpansionSourcePx:RASTER_CELL_EXPANSION_SOURCE_PX,
+        redMaskDilationSourcePx:2,
         strokeWidthSampling:"per-edge-maximum",
         closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
