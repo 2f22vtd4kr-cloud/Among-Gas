@@ -18,6 +18,12 @@ import { getProductionCollisionWorld } from "../lib/shared/src/collision/product
 
 const raster = buildPreciseCollisionGrid();
 const vector = getProductionCollisionWorld();
+// Regression point from the Z02 upper-cafeteria wall: the reviewed raster
+// blocks this complete player footprint, so vector movement must not admit it.
+const upperCafeteriaRasterBlocked = !isPlayerPositionWalkable(raster, 1488, 104);
+assert.ok(upperCafeteriaRasterBlocked, "Z02 upper-cafeteria regression point must remain blocked in the reviewed raster");
+assert.equal(isPlayerPositionWalkable(vector, 1488, 104), false,
+  "Z02 upper-cafeteria vector wall must preserve the reviewed raster's player-footprint clearance");
 const SAMPLE_STEP_PX = 8;
 const MAX_REACHABLE_DIRECTIONAL_MISMATCH_PCT = 2;
 
