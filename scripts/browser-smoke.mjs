@@ -1654,6 +1654,11 @@ try {
   assert.equal(await reopenedRestrictedSettings.getByTestId('joystick-side-left').getAttribute('aria-pressed'), 'true',
     'in-memory joystick choice must stay in sync across mounted UI');
   await reopenedRestrictedSettings.getByRole('button', { name: 'English' }).waitFor({ state: 'visible' });
+  assert.equal(
+    (await reopenedRestrictedSettings.getByTestId('groq-api-key-status').innerText()).trim(),
+    'No Groq key configured — bots use the built-in fallback',
+    'the settings status must not imply that an unconfigured model provider is connected',
+  );
   await reopenedRestrictedSettings.getByRole('button', { name: 'Close settings' }).click();
 
   // Capture major non-roaming gameplay states as CI visual artifacts.

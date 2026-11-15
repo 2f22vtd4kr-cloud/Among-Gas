@@ -410,8 +410,8 @@ export default function SettingsDialog({
           </div>
           <div role="status" aria-live="polite" data-testid="groq-api-key-status" style={{ marginTop: 8, fontSize: 12, color: groqApiKeyConfigured ? '#80e3c1' : 'rgba(226,238,241,.55)' }}>
             {groqApiKeyConfigured
-              ? (en ? 'Groq connected for this lobby' : 'Groq подключён для этой комнаты')
-              : (en ? 'No Groq key confirmed — bots use built-in AI' : 'Ключ Groq не подтверждён — используется встроенный ИИ')}
+              ? (en ? 'Groq key accepted for this lobby; provider credentials have not been verified' : 'Ключ Groq принят для комнаты; подлинность у провайдера ещё не проверена')
+              : (en ? 'No Groq key configured — bots use the built-in fallback' : 'Ключ Groq не задан — используется встроенная логика ботов')}
           </div>
         </div>
 
