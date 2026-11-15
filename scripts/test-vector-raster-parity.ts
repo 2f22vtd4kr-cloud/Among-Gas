@@ -133,6 +133,55 @@ if (vectorOnlyExamples.length > 0) {
   console.log("[vector/raster mismatch diagnostics]", JSON.stringify(mismatchDiagnostics));
 }
 
+let reverseMismatchDiagnostics: unknown[] = [];
+if (rasterOnlyExamples.length > 0) {
+  const segmentDistance = (px: number, py: number, a: readonly number[], b: readonly number[]) => {
+    const dx = b[0] - a[0], dy = b[1] - a[1];
+    const lengthSquared = dx * dx + dy * dy;
+    const t = lengthSquared === 0 ? 0 : Math.max(0, Math.min(1,
+      ((px - a[0]) * dx + (py - a[1]) * dy) / lengthSquared));
+    return Math.hypot(px - a[0] - t * dx, py - a[1] - t * dy);
+  };
+  reverseMismatchDiagnostics = rasterOnlyExamples.slice(0, 8).map(position => {
+    const feetY = position.y + FEET_OFFSET_Y;
+    const circles = [position.x - PLAYER_HALF_WIDTH, position.x, position.x + PLAYER_HALF_WIDTH].map(cx => {
+      const vectorBlockedRingPoints: Array<{x:number;y:number}> = [];
+      const minCell = Math.min(MAP_W / 680, MAP_H / 392);
+      const samples = Math.max(8, Math.ceil((2 * Math.PI * PLAYER_RADIUS) / (minCell * 0.5)));
+      for (let index = 0; index < samples; index++) {
+        const angle = (index / samples) * Math.PI * 2;
+        const x = cx + Math.cos(angle) * PLAYER_RADIUS;
+        const y = feetY + Math.sin(angle) * PLAYER_RADIUS;
+        if (!vector.isWalkable(x, y, 0)) vectorBlockedRingPoints.push({x:Number(x.toFixed(2)),y:Number(y.toFixed(2))});
+      }
+      const nearest = vector.shapes.filter(shape => shape.blocksMove).flatMap(shape => {
+        const edgeCount = shape.closed ? shape.points.length : shape.points.length - 1;
+        const edges = [];
+        for (let edge = 0; edge < edgeCount; edge++) {
+          const a = shape.points[edge], b = shape.points[(edge + 1) % shape.points.length];
+          edges.push({
+            shape: shape.id,
+            strokeRadius: shape.strokeRadius ?? 0,
+            distance: segmentDistance(cx, feetY, a, b),
+            a, b,
+          });
+        }
+        return edges;
+      }).sort((a, b) => a.distance - b.distance).slice(0, 4);
+      return {
+        cx, feetY,
+        vectorWalkable: vector.isWalkable(cx, feetY, PLAYER_RADIUS),
+        vectorCenterWalkable: vector.isWalkable(cx, feetY, 0),
+        rasterWalkable: canMoveTo(raster, cx, feetY, PLAYER_RADIUS),
+        vectorBlockedRingPoints,
+        nearest,
+      };
+    });
+    return {position, feetY, circles};
+  });
+  console.log("[raster-only/vector-blocked diagnostics]", JSON.stringify(reverseMismatchDiagnostics));
+}
+
 const mapVectorOnlyPct = mapSamples > 0 ? (mapVectorOnly / mapSamples) * 100 : 0;
 const mapRasterOnlyPct = mapSamples > 0 ? (mapRasterOnly / mapSamples) * 100 : 0;
 const vectorOnlyPct = reachableSamples > 0 ? (reachableVectorOnly / reachableSamples) * 100 : 100;
@@ -185,6 +234,7 @@ await writeFile(
   JSON.stringify({
     ...summary,
     mismatchDiagnostics,
+    reverseMismatchDiagnostics,
     legend: {
       red: "candidate vector says walkable; reviewed fine-grid says blocked",
       cyan: "reviewed fine-grid says walkable; candidate vector says blocked",
