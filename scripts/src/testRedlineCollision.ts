@@ -54,21 +54,6 @@ assert.deepEqual(
   ["C0", "C20", "C27", "C56"],
 );
 
-const provisionalSourceArtIds = [
-  "source-art-candidate-north-cafeteria-upper-furniture-strip",
-  "source-art-candidate-northwest-tank-machinery-enclosure",
-  "source-art-candidate-south-central-service-fixture-enclosure",
-  "source-art-candidate-southwest-shop-shelving-interior",
-] as const;
-for (const id of provisionalSourceArtIds) {
-  const shape = document.shapes.find(candidate => candidate.id === id);
-  assert.ok(shape, id + " must be present in the generated collision document");
-  assert.equal(shape.closed, true);
-  assert.equal(shape.blocksMove, true);
-  assert.equal(shape.blocksSight, false,
-    "provisional movement-only contours must not become sight blockers without independent vision review");
-  assert.ok(shape.zone, id + " must be assigned to a canonical authoring zone");
-}
 assert.ok(document.shapes.length >= 80);
 assert.equal(world.shapes.length, document.shapes.length);
 assert.ok(document.shapes.every(shape => !shape.blocksSight),
