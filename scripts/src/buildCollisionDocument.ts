@@ -654,19 +654,8 @@ async function main():Promise<void> {
   const paths=trace(graphOf(skeleton,info.width,info.height),skeleton.length);
   const tracedShapes=makeShapes(paths,info.width,info.height,strokeDistance);
   const clippedShapes=applyWalkableReplacementZones(tracedShapes);
-  // These source-art obstacle polygons must be part of the actual collision
-  // document. Recording their IDs in geometryOverrides alone leaves the
-  // generator manifest claiming geometry that the collision world never sees.
-  const candidateSourceArtShapes: CollisionShape[] = CANDIDATE_SOURCE_ART_BLOCKED_POLYGONS.map(polygon => ({
-    id: "source-art-candidate-" + polygon.id,
-    points: polygon.points.map(([x, y]) => [x, y] as Point),
-    closed: true,
-    blocksMove: true,
-    blocksSight: false,
-    label: "provisional source-art movement contour: " + polygon.id,
-  }));
   const shapes=assignMapAuthoringZonesByCentroid({
-    shapes:[...clippedShapes,...walkableRegionExtraction.shapes,...candidateSourceArtShapes],
+    shapes:[...clippedShapes,...walkableRegionExtraction.shapes],
   }).shapes;
   const points=shapes.reduce((n,s)=>n+s.points.length,0);
   if(shapes.length<80||points<500) throw new Error("insufficient red-line geometry: "+shapes.length+" shapes / "+points+" points");
