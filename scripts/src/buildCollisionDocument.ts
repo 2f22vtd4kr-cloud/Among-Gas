@@ -465,6 +465,12 @@ function median(values: number[]): number {
   const middle = Math.floor(values.length / 2);
   return values.length % 2 ? values[middle] : (values[middle - 1] + values[middle]) / 2;
 }
+function quantile(values: number[], fraction: number): number {
+  if (!values.length) return 0;
+  const sorted = values.slice().sort((a, b) => a - b);
+  const index = Math.max(0, Math.min(sorted.length - 1, Math.ceil(fraction * sorted.length) - 1));
+  return sorted[index];
+}
 
 function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Array):CollisionShape[] {
   const shapes:CollisionShape[]=[];
@@ -482,7 +488,10 @@ function makeShapes(paths:number[][],w:number,h:number,strokeDistance:Float32Arr
     const points=selected.map(([x,y])=>[(x/(w-1))*MAP_W,(y/(h-1))*MAP_H] as Point);
     if(closed&&area(points)<1) continue;
     const scale = (MAP_W / w + MAP_H / h) / 2;
-    const sourceHalfWidth = median(path.map(index => strokeDistance[index]).filter(Number.isFinite));
+    // Use an upper-tail width estimate: the median systematically under-sized
+    // thick local wall runs when a traced path crossed both narrow and broad
+    // red strokes, producing reachable positions the conservative raster blocks.
+    const sourceHalfWidth = quantile(path.map(index => strokeDistance[index]).filter(Number.isFinite), 0.9);
     // The raster source blocks the full authored red stroke. Preserve its
     // measured half-width around the skeleton rather than treating a thick
     // wall marking as a zero-width mathematical line.
@@ -673,7 +682,7 @@ async function main():Promise<void> {
   const document:CollisionDocument={
     version:1,mapW:MAP_W,mapH:MAP_H,shapes,
     source:{
-      kind:"redline-vector",generatorVersion:11,
+      kind:"redline-vector",generatorVersion:12,
       sourceFiles:{
         redlineReference:{path:"attached_assets/IMG_2907_1783590932507.jpeg",sha256:await hash("attached_assets/IMG_2907_1783590932507.jpeg")},
         generator:{path:"scripts/src/buildCollisionDocument.ts",sha256:await hash("scripts/src/buildCollisionDocument.ts")},
@@ -696,6 +705,7 @@ async function main():Promise<void> {
         simplifiedPointCount:points,
         simplificationToleranceSourcePx:TOLERANCE,
         rasterCellExpansionSourcePx:RASTER_CELL_EXPANSION_SOURCE_PX,
+        strokeWidthQuantile:0.9,
         closedSolidCount:shapes.filter(s=>s.closed&&s.blocksMove).length,
         openBoundaryCount:shapes.filter(s=>!s.closed&&s.blocksMove).length,
         strokeRadiusMedianWorldPx:median(shapes.map(s=>s.strokeRadius ?? 0).filter(v=>v>0)),
