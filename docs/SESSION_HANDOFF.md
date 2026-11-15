@@ -2,7 +2,7 @@
 
 > Read this file at the start of each engineering session. Keep it concise and append dated entries under **Session updates** after meaningful work. Historical detail is preserved in [the archived handoff log](archive/handoff-2026-07-to-2026-11.md).
 
-Updated: 2026-11-10
+Updated: 2026-11-15
 
 ## Repository and architecture
 
@@ -21,13 +21,17 @@ Updated: 2026-11-10
 - A green build or candidate geometry is not proof of real-device playability.
 - Do not cut over collision/vision/bot navigation to vector geometry until all zones are traced, visually reviewed, route-tested, and accepted against the frozen baseline.
 
-## Plan 2 status — 2026-11-10
+## Plan 2 status — 2026-11-15
 
-Estimated weighted implementation progress: **approximately 45%** across the plan's S0–S16 workstream allocations. This is an engineering estimate, not release readiness.
+No new weighted completion percentage is asserted. The previous ~45% estimate was made on 2026-11-10 and has not been recalculated against every Plan 2 requirement.
 
-- Merged: 11 separate task minigames with a registry, extracted camera and keyboard/joystick input modules, tiled map renderer and QA pipeline, extensive map/gameplay/server CI.
-- Partial: map-art refinement tooling (no accepted SR/refined artwork), vector editor and candidate geometry, sprites/golden matrix, HUD polish, bot strategy, visual QA and GameMap decomposition.
-- Blocking: independently reviewed collision/vision tracing for all five zones; production vector cut-over; statue planter/pedestal outline and parking-line disposition; complete canvas render split; asset provenance clearance; real-device and two-client acceptance.
+- **Mainline engineering:** PRs #192–#195 have merged. They harden visibility smoothing and fog rendering, verify all twelve zone evidence files against tracked raster sources, and remove stale screenshot naming from functional browser smoke tests.
+- **Current exact-main verification:** main is at `8afbe98073ca7bd2e807793e1954f0c06a150b93`. Workflow run [43744350913](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43744350913) is in progress: the verify job has passed 50 steps and is running browser smoke; the separate 20-minute `plan2-soak` is running. No final green result is claimed yet.
+- **Additional focused PRs:** #196–#201 are open with exact-head CI running or queued. They cover fail-closed visibility inputs, screenshot-free QA documentation corrections, raster-only source evidence, BVH segment validation and fog transform validation. Merge only after each exact head passes.
+- **Screenshot-free policy:** current CI does not invoke `scripts/renderCollisionQa.ts`, capture Playwright screenshots, or upload image QA galleries. The static build and vector seed artifacts are source/build outputs, not screenshots. Do not invoke the opt-in visual renderer during this recovery.
+- **Server-backed gameplay evidence:** CI runs a three-client emergency meeting/discussion/chat/voting/ejection test and a four-client kill/body-report/meeting test. Browser UI fixtures separately cover meeting discussion/voting presentation. Physical-device acceptance remains open.
+- **Production collision:** the reviewed fine-grid raster remains authoritative. PR #138 is closed and unmerged; no vector geometry is promoted.
+- **Still blocking release:** all twelve zones remain untraced/unreviewed/unapproved; C0/C20/C27/C38/C56 still need explicit owner dispositions; independent source-backed vision/shadow review, full map route/parking classification, asset rights clearance, physical-device acceptance and live Groq-provider proof remain open.
 
 ## Engineering map
 
@@ -130,3 +134,22 @@ Append entries using this compact format:
 - Do not call the sharpened tile set super-resolution: genuine Stage-1 SR and optional Stage-2 image-to-image refinement remain outstanding.
 - Clear the creator/licence provenance of the remaining 66 `attached_assets` paths; obtain physical-device and two-real-client acceptance before release.
 - Respect issue #90: no Replit/Vercel workspace access, preview, publishing, deployment or production mutation. For operator setup, production requires `TELEGRAM_BOT_TOKEN` and `PORT`; live rooms are in-memory and must remain single-instance. Groq is optional per-session dialogue credential, not a mandatory Replit Secret.
+
+
+### 2026-11-15 — screenshot-free Plan 2 recovery continuation
+
+**Done**
+- Merged PRs #192–#195 to main: defensive visibility/fog guards, tracked-source evidence verification and stale screenshot-label cleanup.
+- Opened PRs #196–#201 for additional visibility/fog hardening, raster-format enforcement, BVH input validation and corrections to stale QA/release documentation.
+- Updated issue #90 with the actual work log and current blockers. No simulated agent activity is claimed.
+- Confirmed that the current CI workflow runs server-backed meeting/report protocol tests and does not invoke the screenshot renderer or capture Playwright screenshots.
+
+**Verification**
+- PR heads #192–#195 passed their full PR CI before merge.
+- Exact-main run 43744350913 is still running both verify and the 20-minute Plan 2 soak; no final pass is claimed.
+- PR CI run IDs: #196 43744413533; #197 43744528950; #198 43744587879; #199 43744782363; #200 43745154701; #201 43745355018 (queued at the time of this update).
+
+**Next**
+- Finish all exact-head CI, inspect any failures, merge only passing PRs, then verify main and the 20-minute soak.
+- Continue code-level Plan 2 work without generated screenshots, Replit/Vercel operations, speculative map geometry or unapproved vector cut-over.
+- Keep the remaining zone, detached-region, vision/shadow, rights, device and live-provider gates explicit; do not claim release readiness until they are genuinely satisfied.
