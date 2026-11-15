@@ -7,7 +7,7 @@
 
 - Four equal columns and three equal rows in canonical world coordinates.
 - Zone bounds use half-open ownership intervals `[minX,maxX) × [minY,maxY)`, except the final east/south edges include the map maximum. This gives every in-bounds point exactly one primary zone.
-- The existing CI 4×3 QA gallery uses overlapping 900×650 crops for visual context. Those crops are diagnostic images, not these non-overlapping authoring boundaries.
+- A historical opt-in QA renderer can emit overlapping 900×650 crops for visual context; it is not run by current CI and must not be invoked during the screenshot-free recovery work. Those crops are diagnostic images, not these non-overlapping authoring boundaries.
 - Every zone review must include at least 24 world-pixel context beyond its owned boundary, so walls, paths, shadows and vision contours crossing a seam can be checked in both adjacent zones.
 - A shape crossing a zone boundary has one primary owner (the zone containing its ground-footprint centroid); the adjacent zone reviewer must sign the seam continuity. No duplicate independent shapes across zones.
 - World-to-image comparisons must use the source manifest's independent X/Y transforms. Never trace from a scaled screenshot without recording its exact source rectangle and transform.
