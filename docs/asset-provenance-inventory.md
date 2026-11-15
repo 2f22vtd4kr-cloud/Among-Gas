@@ -3,6 +3,8 @@
 **Baseline:** `main` at `925a465458e8462cef8b6112daff90a0edc239b3` (2026-11-13).  
 **Inventory scope:** every tracked blob below `attached_assets/`; this is not a licence opinion.
 
+**Repository-level status:** no root `LICENSE` file is present. The private root workspace package is marked `UNLICENSED` until the rights holder selects and documents a project licence. This does not determine rights in any individual source image, audio, font, or other asset.
+
 ## Inventory result
 
 - **66 tracked files**, 53 unique Git blobs, 13 redundant duplicate paths.
