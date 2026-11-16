@@ -32,6 +32,7 @@ for (const id of DISCONNECTED_REGION_IDS) {
     reviewerName: "same person",
     decision: "intentionally-sealed" as const,
     evidenceSha256: "a".repeat(64),
+    evidencePath: "evidence/" + id + ".json",
     routeEvidenceComplete: true,
     notes: "Looks fine.",
   };
@@ -46,6 +47,7 @@ for (const id of DISCONNECTED_REGION_IDS) {
     reviewerName: "Independent Reviewer",
     decision: "accessible" as const,
     evidenceSha256: "a".repeat(64),
+    evidencePath: "evidence/" + id + ".json",
     routeEvidenceComplete: false,
     notes: "Source-backed decision.",
   };
