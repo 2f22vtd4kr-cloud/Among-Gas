@@ -459,7 +459,7 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           // Always reconcile this player's optimistic step with the server's
           // authoritative count, including rejected out-of-range/order requests.
           const completedSteps = lobbyManager.getPlayerTaskProgress(lobby, attackerSlot, taskId);
-          if (completedSteps !== null && ws.readyState === WebSocket.OPEN) {
+          if (completedSteps !== null && ws.readyState === 1) {
             ws.send(Buffer.from([0x26, taskId, completedSteps]));
           }
           return;
