@@ -6,7 +6,7 @@ import {
   type CollisionCutoverEvidence,
 } from "../lib/shared/src/collision/releaseReadiness.js";
 import { MAP_AUTHORING_ZONES } from "../lib/shared/src/collision/mapZones.js";
-import { createDefaultZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
+import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
 
 const digest = "a".repeat(64);
 const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
@@ -166,5 +166,25 @@ extraRegion.disconnectedRegions.push({
 assert.ok(validateCollisionCutoverEvidence(extraRegion).some((error) =>
   error.includes("Exactly 5 disconnected-region dispositions")),
   "duplicate region entries must not silently expand the release evidence set");
+
+
+const validSourceEvidence = {
+  sourcePath: "attached_assets/original-map.png",
+  sourceSha256: digest,
+  sourceWidth: 1652,
+  sourceHeight: 952,
+  sourceRect: [0, 0, 425.29776674937966, 329.6304269824184],
+  worldTransform: { scaleX: 3224 / 1652, scaleY: 1858 / 952, offsetX: 0, offsetY: 0 },
+};
+const validScaffold = { ...createDefaultZoneReviewRecord("Z01"), sourceEvidence: [validSourceEvidence] };
+assert.deepEqual(validateZoneReviewRecord(validScaffold, "Z01"), [],
+  "the canonical Z01 source crop with full seam context should remain valid");
+const clippedScaffold = structuredClone(validScaffold);
+(clippedScaffold.sourceEvidence[0] as { sourceRect: number[] }).sourceRect = [0, 0, 400, 300];
+assert.ok(validateZoneReviewRecord(clippedScaffold, "Z01").some(error => error.includes("24 world-pixel seam context")),
+  "a crop that omits the full zone/seam extent must not be accepted as review evidence");
+const wrongZoneScaffold = structuredClone(validScaffold);
+assert.ok(validateZoneReviewRecord(wrongZoneScaffold, "Z02").some(error => error.includes("24 world-pixel seam context")),
+  "a Z01 crop must not be reused as Z02 source evidence");
 
 console.log("COLLISION CUTOVER READINESS TESTS PASSED: 12 zones, 24 anchors, 5 disconnected regions, independent approvals and separate movement/sight/shadow evidence");
