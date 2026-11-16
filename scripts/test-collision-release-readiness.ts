@@ -46,7 +46,9 @@ const completeEvidence: CollisionCutoverEvidence = {
   zoneReviews: approvedZones,
   fullFootprintRasterVectorParity: {
     footprintContract: "three-circle-player-footprint",
-    sampleCount: 1_000,
+    sampleDomain: "union-of-raster-and-vector-spawn-reachable",
+    sampleStepPx: 8,
+    unionSpawnReachableSampleCount: 1_000,
     vectorWalkableRasterBlocked: 20,
     rasterWalkableVectorBlocked: 19,
     sampleSetSha256: digest,
@@ -137,10 +139,22 @@ assert.ok(validateCollisionCutoverEvidence(missingFootprintParity).some((error) 
   "boolean parity flags cannot substitute for numeric two-way footprint evidence");
 
 const emptyFootprintSampleSet: CollisionCutoverEvidence = structuredClone(completeEvidence);
-emptyFootprintSampleSet.fullFootprintRasterVectorParity.sampleCount = 0;
+emptyFootprintSampleSet.fullFootprintRasterVectorParity.unionSpawnReachableSampleCount = 999;
 assert.ok(validateCollisionCutoverEvidence(emptyFootprintSampleSet).some((error) =>
-  error.includes("at least one full-footprint position")),
-  "an empty sample set cannot satisfy raster/vector parity");
+  error.includes("at least 1,000 union-of-reachable")),
+  "a sparse or one-sided sample set cannot satisfy raster/vector parity");
+
+const oneSidedReachability: CollisionCutoverEvidence = structuredClone(completeEvidence);
+oneSidedReachability.fullFootprintRasterVectorParity.sampleDomain = "vector-only-spawn-reachable" as "union-of-raster-and-vector-spawn-reachable";
+assert.ok(validateCollisionCutoverEvidence(oneSidedReachability).some((error) =>
+  error.includes("union of raster- and vector-spawn-reachable")),
+  "the candidate graph alone must not define the parity denominator");
+
+const coarseParitySampling: CollisionCutoverEvidence = structuredClone(completeEvidence);
+coarseParitySampling.fullFootprintRasterVectorParity.sampleStepPx = 16;
+assert.ok(validateCollisionCutoverEvidence(coarseParitySampling).some((error) =>
+  error.includes("from 1px through 8px")),
+  "sampling coarser than the existing 8px lattice must not satisfy parity");
 
 const wrongFootprintContract: CollisionCutoverEvidence = structuredClone(completeEvidence);
 wrongFootprintContract.fullFootprintRasterVectorParity.footprintContract = "point-samples" as "three-circle-player-footprint";
