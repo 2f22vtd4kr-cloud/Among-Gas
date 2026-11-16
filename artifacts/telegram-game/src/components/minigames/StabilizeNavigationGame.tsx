@@ -56,6 +56,7 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
           border: '2px solid #ff6b42', boxShadow: '0 0 0 7px rgba(255,100,50,0.12)',
           display: 'grid', placeItems: 'center', color: '#ff9b79', fontSize: 24 }}>⌖</div>
         <button
+          data-testid="navigation-marker"
           onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); moveMarker(e.clientX,e.clientY); }}
           onPointerMove={e => { if (dragging) moveMarker(e.clientX,e.clientY); }}
           onPointerUp={() => setDragging(false)}
