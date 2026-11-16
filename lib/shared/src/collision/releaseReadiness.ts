@@ -24,6 +24,7 @@ export interface DisconnectedRegionDisposition {
   ownerName: string;
   decision: "accessible" | "intentionally-sealed" | "deferred";
   evidenceSha256: string;
+  evidencePath: string;
   routeEvidenceComplete: boolean;
   notes: string;
 }
