@@ -2,14 +2,14 @@
 
 **Audit date:** 2026-11-16  
 **Audited baseline:** main at 32c70aa6b1efb27b23fa7ff4f881d27fa1621ee4  
-**Implementation branch:** work/plan-v2-map-refinement-hardening  
+**Implementation branch:** mainline implementation plus the active screenshot-free recovery PRs  
 **Release status:** NOT READY. This audit does not authorize Replit/Vercel access, a production deployment, or live vector-collision cut-over.
 
 ## Executive result
 
 Plan v2 is partly implemented already. The most substantial completed work is the 2× tiled-map delivery path and its browser integration, the initial vector-collision engine/editor foundation, the 18-palette × 9-pose player sprite atlas, eleven independently imported task minigames, and several server-authoritative movement/bot/gameplay improvements. The main unfinished work is not another basic tile splitter or a generic collision-grid rewrite. It is (1) genuine source-preserving tile refinement beyond sharpening, (2) author-traced and independently reviewed map geometry, followed by route- and vision-validated runtime cut-over, (3) complete editor and HUD acceptance evidence, and (4) product refactoring, multi-client gameplay and release gates.
 
-This branch implements the safe tooling and lifecycle/test gaps that can be addressed without inventing map contours or breaching the active recovery restrictions. It intentionally does not promote any generated geometry or visual candidate into live gameplay.
+Mainline now contains the safe tooling and lifecycle/test improvements that can be completed without inventing map contours or breaching the active recovery restrictions. The active recovery PRs continue that work without promoting generated geometry or visual candidates into live gameplay.
 
 ## Requirement-by-requirement assessment
 
