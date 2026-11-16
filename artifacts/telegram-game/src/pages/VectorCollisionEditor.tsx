@@ -1405,7 +1405,7 @@ export default function VectorCollisionEditor() {
     }
   };
 
-  const loadRegionReview = async () => {
+  const loadRegionReview = async (): Promise<boolean> => {
     setZoneBusy(true);
     try {
       const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/regions/" + regionReviewId + "/review", {
@@ -1422,8 +1422,10 @@ export default function VectorCollisionEditor() {
       setStatus("Loaded " + regionReviewId + " detached-region record · " +
         (result.saved ? "saved review metadata" : "not started") +
         ". No access decision is inferred and no geometry is changed.");
+      return true;
     } catch (error) {
       setStatus("Detached-region review load failed: " + (error instanceof Error ? error.message : String(error)));
+      return false;
     } finally {
       setZoneBusy(false);
     }
@@ -1454,7 +1456,9 @@ export default function VectorCollisionEditor() {
       if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
         throw new Error("Detached-region review save did not return a valid SHA-256 digest");
       }
-      await loadRegionReview();
+      if (!(await loadRegionReview())) {
+        throw new Error("Record was saved, but reloading it failed; refresh before editing again");
+      }
       setStatus("Saved " + regionReviewId + " review record · " + result.status +
         " · SHA-256 " + result.contentHash.slice(0, 12) +
         " · " + (result.backupCount ?? 0) + " retained backups. This does not alter collision geometry.");
