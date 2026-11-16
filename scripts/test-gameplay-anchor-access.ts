@@ -86,7 +86,12 @@ assert.equal(ADMIN_TABLE_DEFS.length, 1, "the anchor matrix expects one Admin co
 assert.equal(anchors.length, 24, "the complete gameplay anchor matrix must contain exactly 24 entries");
 assert.equal(new Set(anchors.map(anchor => anchor.id)).size, 24, "anchor IDs must be unique");
 
+// Keep movement clearance and server-authoritative interaction LOS as
+// separate assertions. Both currently use the same fine raster grid in
+// LobbyManager; this test must not imply that independent vision geometry has
+// already been authored or approved.
 const movementGrid = buildPreciseCollisionGrid();
+const interactionGrid = buildPreciseCollisionGrid();
 const probe = new GameplayAnchorProbe();
 const failures: string[] = [];
 
@@ -95,7 +100,7 @@ for (const anchor of anchors) {
   const walkable = isPlayerPositionWalkable(movementGrid, approach.x, approach.y);
   const spawnConnected = isBotNavigationReachable(approach.x, approach.y + FEET_OFFSET_Y);
   const sightClear = isLineOfSightToInteractionTarget(
-    movementGrid,
+    interactionGrid,
     approach.x,
     approach.y + FEET_OFFSET_Y,
     anchor.target.x,
