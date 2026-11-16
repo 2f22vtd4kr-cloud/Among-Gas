@@ -972,6 +972,19 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
  *   [× N]:  slot(Uint8) + X(Int16LE) + Y(Int16LE)
  */
 
+/**
+ * Corpse coordinates for a reported body are required in an active meeting
+ * resume packet so the parser can validate meeting.bodySlot. They must not be
+ * restored into the roaming-world corpse list, where they would re-enable a
+ * stale Report prompt after reconnect.
+ */
+export function getRestorableCorpsePositions(
+  corpsePositions: readonly { slot: number; wireX: number; wireY: number }[],
+  activeMeetingBodySlot: number | null,
+): Array<{ slot: number; wireX: number; wireY: number }> {
+  return corpsePositions.filter(corpse => corpse.slot !== activeMeetingBodySlot);
+}
+
 // ── Provider ─────────────────────────────────────────────────────────────────
 
 export function GameProvider({ children }: { children: React.ReactNode }) {
@@ -1474,7 +1487,10 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             myVentId: snapshot.myVentId,
             meetingMessages: restoredMeetingMessages,
             emergencyMeetingUsed: snapshot.emergencyMeetingUsed,
-            corpsePositions: snapshot.corpsePositions.map(corpse => ({
+            corpsePositions: getRestorableCorpsePositions(
+              snapshot.corpsePositions,
+              snapshot.meeting?.bodySlot ?? null,
+            ).map(corpse => ({
               slot: corpse.slot,
               x: fromWire(corpse.wireX, MAP_W),
               y: fromWire(corpse.wireY, MAP_H),
