@@ -152,25 +152,20 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       }
       break;
     }
-    case 8: { // Read the five displayed reactor flashes, then repeat that sequence.
+    case 8: { // Repeat the five reactor flashes captured as they were shown to the player.
       const pads = dialog.getByTestId('reactor-pad');
       assert.equal(await pads.count(), 6, 'reactor must expose six input pads');
-      const sequence = [];
-      for (let flash = 0; flash < 5; flash++) {
-        await page.waitForFunction(() =>
-          [...document.querySelectorAll('[data-testid="reactor-pad"]')].some(pad => pad.dataset.lit === 'true'),
-        undefined, { timeout: 2_000 });
-        const lit = await pads.evaluateAll(elements =>
-          elements.findIndex(element => element.dataset.lit === 'true'),
-        );
-        assert.ok(lit >= 0 && lit < 6, 'each reactor flash must identify exactly one pad');
-        sequence.push(lit);
-        if (flash < 4) await page.waitForTimeout(850);
-      }
+      await page.waitForFunction(() => {
+        const values = window.__reactorSequenceCapture?.values;
+        return Array.isArray(values) && values.length === 5 && values.every(Number.isInteger);
+      }, undefined, { timeout: 8_000 });
+      const sequence = await page.evaluate(() => window.__reactorSequenceCapture.values);
+      assert.equal(sequence.length, 5, 'reactor must show exactly five flashes');
+      assert.ok(sequence.every(pad => pad >= 0 && pad < 6), 'each reactor flash must identify one of six pads');
       await page.waitForFunction(() => {
         const buttons = [...document.querySelectorAll('[data-testid="reactor-pad"]')];
         return buttons.length === 6 && buttons.every(button => !button.disabled);
-      }, undefined, { timeout: 3_000 });
+      }, undefined, { timeout: 4_000 });
       for (const pad of sequence) await touchTap(page, pads.nth(pad));
       break;
     }
@@ -1068,6 +1063,29 @@ try {
     [10, 'Clear Asteroids', 'Уничтожить астероиды'],
   ];
   for (const [taskId, englishName, russianName] of minigameGallery) {
+    if (taskId === 8) {
+      await page.addInitScript(() => {
+        if (!location.search.includes('taskId=8')) return;
+        const capture = { values: [] };
+        const observer = new MutationObserver(() => {
+          const active = document.querySelector('[data-testid="reactor-pad"][data-flash-index]');
+          if (!active) return;
+          const flashIndex = Number(active.getAttribute('data-flash-index'));
+          const padIndex = Number(active.getAttribute('data-pad-index'));
+          if (Number.isInteger(flashIndex) && Number.isInteger(padIndex)) {
+            capture.values[flashIndex] = padIndex;
+          }
+          if (capture.values.length === 5 && capture.values.every(Number.isInteger)) observer.disconnect();
+        });
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-flash-index'],
+          childList: true,
+          subtree: true,
+        });
+        window.__reactorSequenceCapture = capture;
+      });
+    }
     await page.goto(`${origin}/?mock=task-interaction-gallery&taskId=${taskId}`, {
       waitUntil: 'domcontentloaded',
     });
