@@ -284,3 +284,38 @@ PR #215 itself is this documentation reconciliation. PRs #206 and #208 are older
 - Physical phone/desktop acceptance, complete live-provider Groq verification, final merge/release dossier and deployment handoff remain open. No Replit/Vercel access, deployment, publishing or production mutation is authorized in this recovery pass.
 
 The exact-head passing PRs improve code and CI coverage but do not make Among Gas release-ready. Keep raster collision runtime authoritative; keep all vector/editor geometry candidate-only until the complete source, review, route, vision, parity and owner-approval gates pass.
+
+
+## 2026-11-16 21:05 UTC — successor exact-head reconciliation
+
+This addendum supersedes the earlier candidate-PR progress rows above. The audited production baseline remains current `main` at `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`; none of the following candidates has been merged. Exact-head workflow results were re-fetched against each PR's current head SHA:
+
+| PR | Current head | Exact-head verify | Separate soak | Integration state |
+|---|---|---|---|---|
+| #212 reconnect snapshot validation/restoration | `f6a44feb6bf8355bc7a12278a4a477c51299bc0f` | [43899329920](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43899329920), 58/58 passed | Skipped | Awaiting independent review |
+| #213 asset inventory integrity | `7c3ba4ffb7ba20848e598c2cddd2277158f3cd51` | [43839595038](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43839595038), passed | Not claimed | Awaiting independent review |
+| #214 detached-region review workflow | `08040f5b7db9a2fd89e2703e7d1b2a7bc8a9d646` | [43850807009](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43850807009), passed | Not claimed | Awaiting independent review; review records are not design approvals |
+| #215 this audit reconciliation | `e4930bcdd57b4df2e9cec862e83f260faa183651` | [43898682321](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43898682321), 57/57 passed | Skipped | Awaiting independent review |
+| #216 all 11 task minigame touch acceptance | `93e64a19f6758b6306dd167b9e8e751e7e82664d` | [43854277017](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43854277017), passed | Not claimed | Awaiting independent review; browser touch CI is not physical-device acceptance |
+| #217 GameMap task-overlay lifecycle extraction | `4988d7aae12a734fee0155815d04677b0d91a329` | [43851027258](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43851027258), passed | Not claimed | Awaiting independent review |
+| #218 geometry manifest reconciliation | `7ff4156c8344db9c469aa1242cb2a5cde6ca2f02` | [43897869288](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43897869288), 57/57 passed | Skipped | Awaiting independent review; documentation only |
+| #219 Unicode-safe public AI prompt sanitization | `ff7acbd3b0963845fc9f9fa66005fa9774737a9a` | [43898570860](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43898570860), 57/57 passed | Skipped | Marked ready for review; awaiting independent review |
+
+A skipped PR-specific `plan2-soak` is not a soak pass. Separately, exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960) passed on the baseline SHA with verify 57/57 and the 20-minute `plan2-soak` 12/12 (1,200,429 ms; 121 WebSocket lifecycle cycles; 484 authenticated sockets; 246 health probes; 2 ms p95 health latency; 117,088 KiB peak RSS; zero reported errors).
+
+### Review and merge status
+
+A fresh review-submission and inline-thread check found **zero submitted reviews and zero review threads on PRs #212–#219**. Therefore no independent approval has been obtained and none of these PRs is currently eligible for a review-gated integration decision. Do not manufacture reviewer identities or self-approve. A repository maintainer must assign an independent reviewer with appropriate expertise; after review, address comments, rerun exact-head CI if commits change, then merge in dependency order. Main is unchanged by this addendum.
+
+### Remaining human / external gates
+
+- All 12 map zones still need source-backed authored traces, independent review and owner disposition; the 24-anchor automated route/LOS result is not an independent source-authored vision review.
+- C0/C20/C27/C38/C56 detached-region decisions remain owner-deferred. PR #214 only supplies a fail-closed workflow and self-attested metadata; no route or geometry is approved by saving a record.
+- Movement collision, interaction LOS, vision/fog and decorative shadows still lack one complete canonical per-object source and independent sight/shadow contour review. Keep raster collision authoritative; no candidate geometry promotion.
+- Creator/rights-holder provenance and commercial redistribution permission for the map/reference inputs remain unresolved. PR #213 checks tracked inventory path/hash/size integrity only; it is not a licence clearance.
+- Physical iOS/Android/Telegram device acceptance remains unperformed. Screenshot generation remains prohibited by the active recovery policy.
+- Live Groq-provider verification with an owner-supplied credential remains outstanding. CI prompt sanitization and session-key packet tests are not a live provider acceptance test. Never add a real key to Git, issue comments, logs or CI artifacts.
+- The 20-minute soak is proven only for the exact main SHA above. The four latest candidate PR workflows skipped their separate soak jobs.
+- No Replit/Vercel access, deployment, publishing or production mutation is authorized. Prepare a release dossier only as an evidence-backed NOT READY dossier until all mandatory gates close.
+
+**Decision: NOT READY.** Green candidate CI is not a merged release. No PR in this ledger is merged, no independent review is recorded, and the remaining human/legal/device/provider gates remain release-blocking.
