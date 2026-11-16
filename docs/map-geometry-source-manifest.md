@@ -200,3 +200,17 @@ The current default branch was rechecked at `93b4b542273fa064f9ca0db59bf43ff3e98
 - Exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960) passed on `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`: `verify` completed 57/57 steps and `plan2-soak` completed 12/12 steps. The 20-minute local API/WebSocket soak measured 1,200,429 ms, 121 WebSocket cycles, 484 authenticated sockets, 246 health probes, 2 ms p95 health latency, 117,088 KiB peak RSS and zero reported errors. The separate live gameplay suites included authenticated lobby/role/sabotage checks, four-client kill/body-report flow, reconnect restoration, and a solo human-versus-four-bots contextual meeting reply. This is exact-baseline CI evidence, not physical-device acceptance or deployment verification.
 
 This is a documentation reconciliation only. It does not alter collision data, map art, runtime geometry or gameplay behavior.
+
+
+## 10. Source-level vision and shadow pipeline audit — 2026-11-16
+
+A code-only audit of current main's `artifacts/telegram-game/src/game/visibility.ts`, `scripts/src/buildCollisionDocument.ts` and `lib/shared/src/collision/vectorCollision.ts` confirms that the current sight/shadow implementation is still partly derived from movement occupancy; it is not a completed independently authored per-object contour system:
+
+- Runtime vision builds a fine shadow/occlusion grid from the fine movement collision grid. Large connected components (at least 8,000 fine cells) are copied into the architectural shadow mask; compact components from 4 through 7,999 cells are converted into merged boundary segments. Components smaller than four cells are omitted from that segment extraction.
+- The coarse-grid narrow-occluder pass recognizes four-cell 2×2 components and adds a manually measured upper-atrium lamp circle. The old offset statue circle is explicitly excluded because the statue's raster shadow is already painted into map art.
+- The generated vector-candidate builder also consumes the same fine movement grid for its movement shapes, then derives sight-area rectangles and sight-segment shapes from the shadow grid/segments. This generated candidate is diagnostic and is not imported by live gameplay.
+- The vector engine can represent separate movement, sight and shadow channels, and an explicit `castsShadow: false` can prevent a sight blocker from casting a presentation shadow. When `castsShadow` is omitted, the current engine defaults it to `blocksSight`; the editor exposes that as an explicit “Follow sight” mode. Thus the engine has an override channel, but omitted values still inherit sight semantics rather than proving a separately authored shadow decision.
+
+This source audit does not establish that any particular contour is visually correct. It identifies the remaining work precisely: author object/edge identities from rights-cleared source material; record independent movement, interaction-sight and presentation-shadow dispositions per object; then validate collision footprint, LOS, lighting/shadow behavior and route parity separately. In particular, do not convert a raster movement component or a red-line collision stroke into an approved vision/shadow contour by inference. The statue planter/pedestal and the 12 zone reviews remain unresolved.
+
+No runtime code, collision data, map art or geometry was changed. No screenshots, QA tiles or image artifacts were generated. Raster collision remains authoritative; candidate vector geometry remains unpromoted.
