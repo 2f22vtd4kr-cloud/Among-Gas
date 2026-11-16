@@ -48,6 +48,7 @@ export function AlignEngineGame({ onComplete }: MinigameProps) {
         <div data-testid="engine-alignment-target" style={{ position: 'absolute', left: `${target}%`, top: 0, bottom: 0, width: 3,
           background: '#61f59e', boxShadow: '0 0 14px #61f59e' }} />
         <button
+          data-testid="engine-alignment-lever"
           onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); move(e.clientX); }}
           onPointerMove={e => { if (dragging) move(e.clientX); }}
           onPointerUp={() => setDragging(false)}
