@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { parseResumeSnapshotV1 } from './GameContext';
+import { buildGroqApiKeyPacket, parseResumeSnapshotV1 } from './GameContext';
 
 const base = {
   version: 1,
@@ -48,6 +48,14 @@ function encode(value: unknown): ArrayBuffer {
   bytes.set(json, 2);
   return bytes.buffer;
 }
+
+assert.deepEqual([...buildGroqApiKeyPacket('  session-key  ')!],
+  [0x18, 11, ...new TextEncoder().encode('session-key')],
+  'Groq credentials are trimmed and encoded as a length-prefixed session packet');
+assert.equal(buildGroqApiKeyPacket('x'.repeat(241)), null,
+  'credentials larger than the server protocol limit must not be sent');
+assert.deepEqual([...buildGroqApiKeyPacket('')!], [0x18, 0],
+  'an empty credential packet can explicitly clear the server session key');
 
 const valid = parseResumeSnapshotV1(encode(base));
 assert.ok(valid, 'valid active meeting snapshot must parse');
