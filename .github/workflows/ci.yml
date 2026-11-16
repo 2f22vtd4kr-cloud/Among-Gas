@@ -130,6 +130,9 @@ jobs:
       - name: Verify base-game vision and wall occlusion
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-visibility.ts
 
+      - name: Verify all 24 gameplay anchors have spawn-connected movement and interaction LOS routes
+        run: pnpm --filter @workspace/scripts run test:gameplay-anchor-access
+
       - name: Verify client/server movement collision agreement, thin walls, corners and bounds
         run: pnpm --filter @workspace/api-server exec tsx ../../scripts/test-player-movement.ts
 
