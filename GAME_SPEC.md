@@ -110,7 +110,7 @@ No blanket application ACKs; authoritative gameplay transitions use explicit sta
 | `0x15` | Both | RPC/gameplay event: kill, task step/progress, sabotage trigger/repair |
 | `0x16` | S→C | Sabotage state: started, repair-pad fixed, resolved, Doors task-lock list |
 | `0x17` | C→S | Vent action: enter (`sub=1`), travel (`sub=2`), exit (`sub=3`) |
-| `0x18` | S→C | Vent state broadcast: enter, travel, or exit for a player slot |
+| `0x18` | Both | Client session-only Groq key set/clear; server key acknowledgement (`[0x18,0x01,configured]`) and vent-state broadcast (`[0x18,sub,slot,ventId]`) |
 | `0x19` | Both | Meeting chat: client submit (`sub=1`), server broadcast (`sub=2`) |
 | `0x1A` | S→C | Role reveal and round start information |
 | `0x1B` | S→C | Meeting started |
