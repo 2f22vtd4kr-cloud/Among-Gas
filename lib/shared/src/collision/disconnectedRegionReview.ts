@@ -69,6 +69,21 @@ export function validateDisconnectedRegionReviewRecord(
   if (typeof record.notes !== "string" || record.notes.length > 2_000) {
     errors.push("Review notes must be a string up to 2,000 characters");
   }
+  if (record.status === "not-started") {
+    if (record.decision !== "deferred") errors.push("A not-started record must remain deferred");
+    if (typeof record.reviewerName === "string" && record.reviewerName.trim()) {
+      errors.push("A not-started record cannot claim an independent reviewer");
+    }
+    if (typeof record.ownerName === "string" && record.ownerName.trim()) {
+      errors.push("A not-started record cannot claim a design-owner decision");
+    }
+    if (typeof record.evidenceSha256 === "string" && record.evidenceSha256.trim()) {
+      errors.push("A not-started record cannot claim source or route evidence");
+    }
+    if (record.routeEvidenceComplete === true) {
+      errors.push("A not-started record cannot claim completed route evidence");
+    }
+  }
   if (record.status === "approved") {
     const reviewer = typeof record.reviewerName === "string" ? record.reviewerName.trim() : "";
     const owner = typeof record.ownerName === "string" ? record.ownerName.trim() : "";
