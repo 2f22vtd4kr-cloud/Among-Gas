@@ -10,6 +10,7 @@ export interface DisconnectedRegionReviewRecord {
   ownerName: string;
   decision: DisconnectedRegionDecision;
   evidenceSha256: string;
+  evidencePath: string;
   routeEvidenceComplete: boolean;
   notes: string;
   updatedAt?: string;
@@ -31,6 +32,7 @@ export function createDefaultDisconnectedRegionReviewRecord(
     ownerName: "",
     decision: "deferred",
     evidenceSha256: "",
+    evidencePath: "",
     routeEvidenceComplete: false,
     notes: "Pending source-art review, full-footprint connectivity evidence and explicit design-owner decision. Do not infer accessibility from the raster component alone.",
   };
@@ -62,6 +64,11 @@ export function validateDisconnectedRegionReviewRecord(
   if (typeof record.evidenceSha256 !== "string" ||
       (record.evidenceSha256 !== "" && !/^[a-f0-9]{64}$/i.test(record.evidenceSha256))) {
     errors.push("Evidence SHA-256 must be empty or a 64-character hexadecimal digest");
+  }
+  if (typeof record.evidencePath !== "string" || record.evidencePath.length > 512 ||
+      (record.evidencePath !== "" && (record.evidencePath.startsWith("/") ||
+        record.evidencePath.split(/[\\\\/]/).some(part => part === ".." || part === ".")))) {
+    errors.push("Evidence path must be empty or a safe relative path within this region's evidence directory");
   }
   if (typeof record.routeEvidenceComplete !== "boolean") {
     errors.push("routeEvidenceComplete must be boolean");
@@ -96,6 +103,9 @@ export function validateDisconnectedRegionReviewRecord(
     }
     if (typeof record.evidenceSha256 !== "string" || !/^[a-f0-9]{64}$/i.test(record.evidenceSha256)) {
       errors.push("Approval requires a source and route evidence SHA-256");
+    }
+    if (typeof record.evidencePath !== "string" || !record.evidencePath.trim()) {
+      errors.push("Approval requires a relative path to the source and route evidence bundle");
     }
     if (record.routeEvidenceComplete !== true) {
       errors.push("Approval requires completed full-footprint connectivity evidence");
