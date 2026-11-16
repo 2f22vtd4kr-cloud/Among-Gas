@@ -28,8 +28,7 @@ function sanitizePublicVoteText(value: string, maxLength: number): string {
       : /[\p{Cf}\p{Cs}]/u.test(character) ? '' : character)
     .join('')
     .replace(/\s+/gu, ' ')
-    .trim()
-    ;
+    .trim();
   return Array.from(clean).slice(0, maxLength).join('');
 }
 
