@@ -154,7 +154,7 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       try {
         while (Date.now() < deadline) {
           const label = await progress.innerText().catch(() => '');
-          if (/30\\s*\\/\\s*30/.test(label)) {
+          if (label.includes('30/30')) {
             completed = true;
             break;
           }
