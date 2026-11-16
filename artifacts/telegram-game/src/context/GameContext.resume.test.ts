@@ -97,6 +97,21 @@ unknownMessageAuthor.meeting.messages[0].slot = 14;
 assert.equal(parseResumeSnapshotV1(encode(unknownMessageAuthor)), null,
   'meeting transcript authors must belong to the restored roster');
 
+const duplicatePlayer = structuredClone(base);
+duplicatePlayer.players.push({ slot: 1, username: 'Duplicate slot' });
+assert.equal(parseResumeSnapshotV1(encode(duplicatePlayer)), null,
+  'duplicate player slots must be rejected before client roster state is applied');
+
+const missingPlayerPosition = structuredClone(base);
+missingPlayerPosition.playerPositions.pop();
+assert.equal(parseResumeSnapshotV1(encode(missingPlayerPosition)), null,
+  'every restored player must have exactly one authoritative position');
+
+const duplicatePosition = structuredClone(base);
+duplicatePosition.playerPositions[2].slot = 1;
+assert.equal(parseResumeSnapshotV1(encode(duplicatePosition)), null,
+  'duplicate player positions must be rejected');
+
 const leakedImpostorRoster = structuredClone(base);
 leakedImpostorRoster.impostorSlots = [0];
 assert.equal(parseResumeSnapshotV1(encode(leakedImpostorRoster)), null,
