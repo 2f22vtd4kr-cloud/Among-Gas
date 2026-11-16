@@ -743,7 +743,7 @@ function isSlot(value: unknown): value is number {
 }
 
 /** Strictly validate server-supplied resume state before mutating live client state. */
-function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
+export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
   if (data.byteLength < 3) return null;
   const view = new DataView(data);
   if (view.getUint8(0) !== 0x25 || view.getUint8(1) !== 0x01) return null;
@@ -863,6 +863,19 @@ function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
           !isIntegerInRange(message.sentAtMs, 0, Number.MAX_SAFE_INTEGER)) return null;
       messages.push({ slot: message.slot, text: message.text, sentAtMs: message.sentAtMs });
     }
+    if (!players.some(player => player.slot === value.reporterSlot)) return null;
+    if (value.bodySlot !== NO_TARGET && !players.some(player => player.slot === value.bodySlot)) return null;
+    const voteSlots = new Set<number>();
+    for (const vote of votes) {
+      if (!players.some(player => player.slot === vote.slot) ||
+          (vote.targetSlot !== NO_TARGET && !players.some(player => player.slot === vote.targetSlot)) ||
+          voteSlots.has(vote.slot)) return null;
+      voteSlots.add(vote.slot);
+    }
+    if (value.hasVoted !== voteSlots.has(raw.mySlot as number)) return null;
+    for (const message of messages) {
+      if (!players.some(player => player.slot === message.slot)) return null;
+    }
     meeting = {
       reporterSlot: value.reporterSlot,
       bodySlot: value.bodySlot,
@@ -873,6 +886,7 @@ function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
       messages,
     };
   }
+  if ((raw.phase === 'MEETING') !== (meeting !== null)) return null;
 
   let gameOverResult: ResumeSnapshotV1['gameOverResult'] = null;
   if (raw.gameOverResult !== null) {
