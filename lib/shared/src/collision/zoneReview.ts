@@ -168,7 +168,9 @@ export function validateZoneReviewRecord(value: unknown, expectedZone: unknown):
     const hasSeamContext = record.sourceEvidence.some(item =>
       !!item && typeof item === "object" && !Array.isArray(item) &&
       evidenceCoversZoneWithSeamContext(item as Record<string, unknown>, String(expectedZone)));
-    if (!hasSeamContext) {
+    // Empty evidence is valid only for a not-yet-started draft. Submission and
+    // approval already require at least one source item in the status checks below.
+    if (record.sourceEvidence.length > 0 && !hasSeamContext) {
       errors.push("At least one source crop must cover the complete canonical zone plus 24 world-pixel seam context under its recorded transform");
     }
   }
