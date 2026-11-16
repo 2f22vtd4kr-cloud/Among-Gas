@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { buildGroqApiKeyPacket, parseResumeSnapshotV1 } from './GameContext';
 
-const base = {
+const base: Record<string, any> = {
   version: 1,
   roomCode: 'ABC234',
   phase: 'MEETING',
