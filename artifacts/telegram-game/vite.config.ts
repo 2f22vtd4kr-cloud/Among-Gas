@@ -303,7 +303,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
                   fs.unlinkSync(path.join(backupDirectory, stale));
                 }
               }
-              const serialized = JSON.stringify(record, null, 2) + '\\n';
+              const serialized = JSON.stringify(record, null, 2) + '\n';
               const contentHash = createHash('sha256').update(serialized).digest('hex');
               const temporaryPath = filePath + '.' + process.pid + '.' + randomUUID() + '.tmp';
               fs.writeFileSync(temporaryPath, serialized, { encoding: 'utf8', flag: 'wx' });
