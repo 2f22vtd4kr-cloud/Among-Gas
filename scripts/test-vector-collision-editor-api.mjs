@@ -392,8 +392,6 @@ try {
   const invalidRegionEndpoint = detachedRegionBase + "C99/review";
   assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
     "unknown detached-region IDs are rejected");
-  assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
-    "unknown detached-region IDs are rejected");
 
   const regionEvidenceDirectory = path.join(regionReviewDirectory, "evidence");
   fs.mkdirSync(regionEvidenceDirectory, { recursive: true });
