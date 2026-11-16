@@ -53,6 +53,25 @@ assert.equal(hostilePayload.recentPublicTranscript[0].text,
 assert.doesNotMatch(hostileUser, /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u,
   'voting prompt data must not retain invisible or control characters');
 assert.equal(hostilePayload.recentPublicTranscript[0].text.length <= 220, true);
+
+const boundedUnicodePrompt = buildPublicBotVoteMessages(
+  'A'.repeat(31) + '😀',
+  [{ slot: 0, username: 'B'.repeat(31) + '😀', alive: true }],
+  [{ slot: 0, text: 'C'.repeat(219) + '😀' }],
+);
+const boundedUnicodePayload = JSON.parse(
+  boundedUnicodePrompt.find(message => message.role === 'user')!.content,
+) as {
+  actingPlayer: string;
+  livingRoster: Array<{ slot: number; username: string }>;
+  recentPublicTranscript: Array<{ slot: number; text: string }>;
+};
+assert.equal(boundedUnicodePayload.actingPlayer, 'A'.repeat(31) + '😀',
+  'length bounds count Unicode code points and never split a surrogate pair');
+assert.equal(boundedUnicodePayload.livingRoster[0].username, 'B'.repeat(31) + '😀');
+assert.equal(boundedUnicodePayload.recentPublicTranscript[0].text, 'C'.repeat(219) + '😀');
+assert.doesNotMatch(boundedUnicodePrompt[1].content, /\\p{Cs}/u,
+  'bounded prompt data must not contain lone surrogate code points');
 assert.equal('role' in roster[0], false, 'the prompt input type contains no hidden role field');
 
 assert.equal(parsePublicBotVoteResponse('{"vote":2}', 0, roster), 2);
