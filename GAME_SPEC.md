@@ -118,6 +118,7 @@ No blanket application ACKs; authoritative gameplay transitions use explicit sta
 | `0x1D` | S→C | Assigned task IDs for this player |
 | `0x20` | S→C | Emergency button use confirmed for that player and round |
 | `0x21` | S→C | Immutable corpse position (`victimSlot`, `wireX`, `wireY`) |
+| `0x25` | S→C | Versioned reconnect state: `[0x25,0x00]` restores a waiting lobby; `[0x25,0x01,UTF-8 JSON]` restores active-match roster, positions, role-safe tasks, sabotage, meeting, votes and game-over state |
 | `0xFF` | S→C | Position/state delta for players currently visible outside vents |
 
 ### Server-side: Buffer only, no DataView
