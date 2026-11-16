@@ -70,6 +70,7 @@ async function touchDragTo(page, control, targetX, targetY, holdMs = 0) {
 }
 
 async function completeGalleryMinigameStep(page, dialog, taskId) {
+  console.log('MINIGAME INTERACTION START:', taskId);
   switch (taskId) {
     case 0: { // Wiring: connect each left colour to the matching right colour.
       for (const [english, russian] of [
@@ -210,10 +211,16 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       throw new Error('Unknown minigame gallery task ID: ' + taskId);
   }
 
-  await page.waitForFunction(() => {
-    const shell = document.querySelector('[data-testid="minigame-shell"]');
-    return !shell || /Step 2 of|Шаг 2 из/.test(shell.textContent || '');
-  }, undefined, { timeout: 12_000 });
+  try {
+    await page.waitForFunction(() => {
+      const shell = document.querySelector('[data-testid="minigame-shell"]');
+      return !shell || /Step 2 of|Шаг 2 из/.test(shell.textContent || '');
+    }, undefined, { timeout: 12_000 });
+  } catch (error) {
+    const shellText = await dialog.innerText().catch(() => '<overlay closed>');
+    throw new Error('Task ' + taskId + ' interaction did not advance; overlay: ' + shellText, { cause: error });
+  }
+  console.log('MINIGAME INTERACTION COMPLETE:', taskId);
 }
 
 try {
