@@ -70,7 +70,7 @@ assert.equal(boundedUnicodePayload.actingPlayer, 'A'.repeat(31) + '😀',
   'length bounds count Unicode code points and never split a surrogate pair');
 assert.equal(boundedUnicodePayload.livingRoster[0].username, 'B'.repeat(31) + '😀');
 assert.equal(boundedUnicodePayload.recentPublicTranscript[0].text, 'C'.repeat(219) + '😀');
-assert.doesNotMatch(boundedUnicodePrompt[1].content, /\\p{Cs}/u,
+assert.doesNotMatch(boundedUnicodePrompt[1].content, /\p{Cs}/u,
   'bounded prompt data must not contain lone surrogate code points');
 assert.equal('role' in roster[0], false, 'the prompt input type contains no hidden role field');
 
