@@ -114,8 +114,8 @@ assert.ok(parseResumeSnapshotV1(encode(validReportedBody)),
   'a dead reported player with authoritative corpse coordinates must restore');
 
 const deadVoter = structuredClone(base);
-deadVoter.deadSlots = [0];
-deadVoter.meeting.votes = [{ slot: 0, targetSlot: 255 }];
+deadVoter.deadSlots = [2];
+deadVoter.meeting.votes = [{ slot: 2, targetSlot: 255 }];
 assert.equal(parseResumeSnapshotV1(encode(deadVoter)), null,
   'dead players cannot appear as voters in a restored meeting');
 
