@@ -742,7 +742,6 @@ function isSlot(value: unknown): value is number {
   return isIntegerInRange(value, 0, 14);
 }
 
-/** Strictly validate server-supplied resume state before mutating live client state. */
 /** Encode a session-scoped Groq credential for the authenticated WebSocket. */
 export function buildGroqApiKeyPacket(apiKey: string): Uint8Array | null {
   const bytes = new TextEncoder().encode(apiKey.trim());
@@ -1362,6 +1361,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             // WAITING lobby: roster/slot have been restored; no match snapshot
             // is needed and normal lobby controls can be re-enabled.
             reconnectBarrierRef.current = false;
+            const apiKeyPacket = buildGroqApiKeyPacket(groqApiKeyRef.current);
+            if (apiKeyPacket) send(apiKeyPacket);
             setState(s => ({
               ...s,
               phase: 'lobby',
@@ -1685,6 +1686,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         // ── 0x18: vent state broadcast ──────────────────────────────────────
+        if (opcode === 0x18 && event.data.byteLength === 3 && view.getUint8(1) === 0x01) {
+          setState(s => ({ ...s, groqApiKeyConfigured: view.getUint8(2) === 1 }));
+          return;
+        }
+
         if (opcode === 0x18 && event.data.byteLength >= 4) {
           const sub = view.getUint8(1);
           const slot = view.getUint8(2);
