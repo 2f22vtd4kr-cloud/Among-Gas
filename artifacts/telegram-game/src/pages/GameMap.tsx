@@ -59,7 +59,7 @@ import {
 import { VENT_DEFS, VENT_INTERACTION_RANGE_PX, findVent } from '@workspace/shared/vents';
 import { buildFineShadowSegments, buildNarrowShadowOccluders, buildShadowGrid, buildVisualOccluderSegmentIndex, computeVisibilityPolygon, smoothVisibilityPolygon } from '../game/visibility';
 import { ADMIN_TABLE_DEFS, ADMIN_TABLE_INTERACTION_RANGE_PX } from '@workspace/shared/adminTable';
-import TaskMinigame from '../components/TaskMinigame';
+import GameTaskMinigameOverlay from '../components/GameTaskMinigameOverlay';
 import SettingsDialog from '../components/SettingsDialog';
 import GameTopHud from '../components/GameTopHud';
 import { useLanguage } from '../lib/language';
@@ -518,6 +518,7 @@ export default function GameMap() {
   const nearestTaskRef = useRef<number | null>(null);
   /** Which task minigame is currently open (null = none). */
   const [activeTaskId, setActiveTaskId] = useState<number | null>(null);
+  const closeActiveTask = useCallback(() => setActiveTaskId(null), []);
   const activeTaskOpenRef = useRef(activeTaskId !== null);
   activeTaskOpenRef.current = activeTaskId !== null;
 
@@ -1789,32 +1790,17 @@ export default function GameMap() {
       )}
 
       {/* ── Task minigame overlay (Phase 7) ─────────────────────────────────── */}
-      {activeTaskId !== null && (() => {
-        const myTask = myTasks.find(t => t.taskId === activeTaskId);
-        const def = TASK_DEFS[activeTaskId];
-        if (!myTask || !def || myTask.completedSteps >= def.steps) {
-          // Task is fully done or invalid — auto-close
-          setTimeout(() => setActiveTaskId(null), 0);
-          return null;
-        }
-        const stepIndex = myTask.completedSteps;
-        return (
-          <TaskMinigame
-            key={`${activeTaskId}-${stepIndex}`}
-            taskId={activeTaskId}
-            stepIndex={stepIndex}
-            onComplete={() => {
-              haptic.success();
-              sfx('taskComplete', 0.58);
-              completeTaskStep(activeTaskId, stepIndex);
-              // If this was the last step, close the panel
-              if (stepIndex + 1 >= def.steps) setActiveTaskId(null);
-              // Otherwise keep open — key change will remount for next step
-            }}
-            onClose={() => setActiveTaskId(null)}
-          />
-        );
-      })()}
+      <GameTaskMinigameOverlay
+        activeTaskId={activeTaskId}
+        myTasks={myTasks}
+        onClose={closeActiveTask}
+        onCompleteStep={(taskId, stepIndex, isLastStep) => {
+          haptic.success();
+          sfx('taskComplete', 0.58);
+          completeTaskStep(taskId, stepIndex);
+          if (isLastStep) closeActiveTask();
+        }}
+      />
 
       {/* ── Game over overlay (Phase 6) — Among Gas styled ──────────────────── */}
       {voteResult?.winner && (
