@@ -28,6 +28,7 @@ function expectedZoneBounds(zoneId) {
 }
 
 function coversZoneWithContext(evidence, zoneId) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return false;
   const rect = evidence.sourceRect;
   const transform = evidence.worldTransform;
   if (!Array.isArray(rect) || rect.length !== 4 ||
