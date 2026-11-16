@@ -96,6 +96,9 @@ jobs:
       - name: Verify vector collision engine and mobile editor geometry helpers
         run: pnpm --filter @workspace/scripts run test:vector-collision
 
+      - name: Measure two-way raster/vector full-footprint parity on union-reachable samples
+        run: pnpm --filter @workspace/scripts run test:vector-collision-parity
+
       - name: Typecheck shared collision and geometry projects
         run: pnpm run typecheck:libs
 
