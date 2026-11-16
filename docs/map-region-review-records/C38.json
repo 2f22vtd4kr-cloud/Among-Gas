@@ -1,0 +1,10 @@
+{
+  "id": "C38",
+  "status": "not-started",
+  "reviewerName": "",
+  "ownerName": "",
+  "decision": "deferred",
+  "evidenceSha256": "",
+  "routeEvidenceComplete": false,
+  "notes": "Pending source-art review, full-footprint connectivity evidence and explicit design-owner decision. Do not infer accessibility from the raster component alone."
+}
