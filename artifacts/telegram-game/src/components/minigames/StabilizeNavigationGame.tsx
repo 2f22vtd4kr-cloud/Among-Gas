@@ -51,7 +51,7 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
             top: `${(i * 29 + 17) % 91}%`, width: 2, height: 2, borderRadius: '50%',
             background: 'rgba(170,210,255,0.35)' }} />
         ))}
-        <div style={{ position: 'absolute', left: `${target.x}%`, top: `${target.y}%`,
+        <div data-testid="navigation-target" style={{ position: 'absolute', left: `${target.x}%`, top: `${target.y}%`,
           transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
           border: '2px solid #ff6b42', boxShadow: '0 0 0 7px rgba(255,100,50,0.12)',
           display: 'grid', placeItems: 'center', color: '#ff9b79', fontSize: 24 }}>⌖</div>
