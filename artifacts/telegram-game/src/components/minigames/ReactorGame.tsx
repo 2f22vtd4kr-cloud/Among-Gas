@@ -61,7 +61,7 @@ export function ReactorGame({ onComplete }: MinigameProps) {
         {REACTOR_COLORS.map((color, i) => {
           const lit = showSequence && currentLight === i;
           return (
-            <button key={i} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
+            <button key={i} data-testid="reactor-pad" data-lit={lit ? "true" : "false"} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
               style={{
                 minWidth: 0, height: 66, borderRadius: 11, border: `2px solid ${color}`,
                 background: lit ? color : `${color}30`,
