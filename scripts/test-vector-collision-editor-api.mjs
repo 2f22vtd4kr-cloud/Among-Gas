@@ -383,13 +383,24 @@ try {
   assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
     "unknown detached-region IDs are rejected");
 
+  const regionEvidenceDirectory = path.join(regionReviewDirectory, "evidence");
+  fs.mkdirSync(regionEvidenceDirectory, { recursive: true });
+  const regionEvidencePath = path.join(regionEvidenceDirectory, "C0-evidence.json");
+  const regionEvidenceBytes = JSON.stringify({
+    source: "API test fixture",
+    note: "Not real source art or route acceptance.",
+    samplePositions: [[100, 100], [108, 100]],
+  });
+  fs.writeFileSync(regionEvidencePath, regionEvidenceBytes);
+  const regionEvidenceSha256 = createHash("sha256").update(regionEvidenceBytes).digest("hex");
   const regionRecord = {
     id: "C0",
     status: "approved",
     reviewerName: "Independent reviewer",
     ownerName: "Design owner",
     decision: "intentionally-sealed",
-    evidenceSha256: "a".repeat(64),
+    evidenceSha256: regionEvidenceSha256,
+    evidencePath: "evidence/C0-evidence.json",
     routeEvidenceComplete: true,
     notes: "Test fixture only; not a real owner decision.",
   };
