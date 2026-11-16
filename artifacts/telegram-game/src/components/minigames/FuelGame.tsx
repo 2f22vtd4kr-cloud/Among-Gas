@@ -33,6 +33,8 @@ export function FuelGame({ onComplete }: MinigameProps) {
       </div>
       <div style={{ color: '#e8f0ff', fontFamily: 'monospace', fontSize: 13 }}>{Math.round(progress)}%</div>
       <button
+        data-testid="fuel-hold-control"
+        data-progress={progress}
         onPointerDown={e => { e.preventDefault(); setHolding(true); }}
         onPointerUp={() => setHolding(false)}
         onPointerCancel={() => setHolding(false)}
