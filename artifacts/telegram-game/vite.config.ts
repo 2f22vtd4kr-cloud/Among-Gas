@@ -132,9 +132,9 @@ function vectorCollisionEditorApiPlugin(): Plugin {
     configureServer(server) {
       server.middlewares.use('/__vector-collision-api', (req, res, next) => {
         const route = (req.url || '/').split('?')[0];
-        const reviewMatch = route.match(/^\\/zones\\/(Z(?:0[1-9]|1[0-2]))\\/review$/);
-        const zoneMatch = route.match(/^\\/zones\\/(Z(?:0[1-9]|1[0-2]))$/);
-        const regionReviewMatch = route.match(/^\\/regions\\/(C0|C20|C27|C38|C56)\\/review$/);
+        const reviewMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))\/review$/);
+        const zoneMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))$/);
+        const regionReviewMatch = route.match(/^\/regions\/(C0|C20|C27|C38|C56)\/review$/);
         const reviewRoute = Boolean(reviewMatch);
         const regionReviewRoute = Boolean(regionReviewMatch);
         const zoneCandidate = reviewMatch?.[1] ?? zoneMatch?.[1] ?? null;
