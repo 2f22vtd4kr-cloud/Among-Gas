@@ -92,6 +92,45 @@ duplicateVote.meeting.votes.push({ slot: 0, targetSlot: 2 });
 assert.equal(parseResumeSnapshotV1(encode(duplicateVote)), null,
   'a resume snapshot cannot contain duplicate votes from one player');
 
+const deadReporter = structuredClone(base);
+deadReporter.deadSlots = [0];
+assert.equal(parseResumeSnapshotV1(encode(deadReporter)), null,
+  'a restored meeting reporter must be alive');
+
+const bodyWithoutDeadPlayer = structuredClone(base);
+bodyWithoutDeadPlayer.meeting.bodySlot = 2;
+assert.equal(parseResumeSnapshotV1(encode(bodyWithoutDeadPlayer)), null,
+  'a reported body slot must identify a dead roster player');
+
+const bodyWithoutCorpse = structuredClone(base);
+bodyWithoutCorpse.deadSlots = [2];
+bodyWithoutCorpse.meeting.bodySlot = 2;
+assert.equal(parseResumeSnapshotV1(encode(bodyWithoutCorpse)), null,
+  'a reported body must have authoritative corpse coordinates');
+
+const validReportedBody = structuredClone(bodyWithoutCorpse);
+validReportedBody.corpsePositions = [{ slot: 2, wireX: 1500, wireY: 1600 }];
+assert.ok(parseResumeSnapshotV1(encode(validReportedBody)),
+  'a dead reported player with authoritative corpse coordinates must restore');
+
+const deadVoter = structuredClone(base);
+deadVoter.deadSlots = [0];
+deadVoter.meeting.votes = [{ slot: 0, targetSlot: 255 }];
+assert.equal(parseResumeSnapshotV1(encode(deadVoter)), null,
+  'dead players cannot appear as voters in a restored meeting');
+
+const deadVoteTarget = structuredClone(base);
+deadVoteTarget.deadSlots = [2];
+deadVoteTarget.meeting.votes = [{ slot: 0, targetSlot: 2 }];
+assert.equal(parseResumeSnapshotV1(encode(deadVoteTarget)), null,
+  'dead players cannot appear as vote targets in a restored meeting');
+
+const votesBeforeVotingOpens = structuredClone(base);
+votesBeforeVotingOpens.meeting.votingOpen = false;
+votesBeforeVotingOpens.meeting.votes = [{ slot: 0, targetSlot: 255 }];
+assert.equal(parseResumeSnapshotV1(encode(votesBeforeVotingOpens)), null,
+  'the server cannot restore votes before the authoritative voting window opens');
+
 const unknownMessageAuthor = structuredClone(base);
 unknownMessageAuthor.meeting.messages[0].slot = 14;
 assert.equal(parseResumeSnapshotV1(encode(unknownMessageAuthor)), null,
