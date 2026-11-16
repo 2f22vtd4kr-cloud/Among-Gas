@@ -196,7 +196,7 @@ export function AsteroidsGame({ onComplete }: MinigameProps) {
         ))}
         <div style={{ position: 'absolute', left: '50%', bottom: 5, transform: 'translateX(-50%)',
           fontSize: 25, filter: 'drop-shadow(0 0 5px rgba(80,190,255,0.4))', pointerEvents: 'none' }}>🚀</div>
-        <div style={{ position: 'absolute', left: 8, top: 8, padding: '4px 7px', borderRadius: 5,
+        <div data-testid="asteroid-progress" style={{ position: 'absolute', left: 8, top: 8, padding: '4px 7px', borderRadius: 5,
           background: 'rgba(0,0,0,0.6)', color: '#ffef93', fontFamily: 'monospace', fontSize: 12, pointerEvents: 'none' }}>
           {en ? 'TARGETS' : 'ЦЕЛИ'} {destroyed}/{ASTEROID_TARGET}
         </div>
