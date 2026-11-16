@@ -742,6 +742,13 @@ function isSlot(value: unknown): value is number {
   return isIntegerInRange(value, 0, 14);
 }
 
+/** Encode the session-scoped Groq credential for the authenticated WebSocket. */
+export function buildGroqApiKeyPacket(apiKey: string): Uint8Array | null {
+  const bytes = new TextEncoder().encode(apiKey.trim());
+  if (bytes.length > 240) return null;
+  return new Uint8Array([0x18, bytes.length, ...bytes]);
+}
+
 /** Strictly validate server-supplied resume state before mutating live client state. */
 export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | null {
   if (data.byteLength < 3) return null;
@@ -1008,12 +1015,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
     const normalized = apiKey.trim();
     groqApiKeyRef.current = normalized;
     if (state.mySlot === null) return;
-    const bytes = new TextEncoder().encode(normalized);
-    if (bytes.length > 240) {
+    const packet = buildGroqApiKeyPacket(normalized);
+    if (!packet) {
       setState(s => ({ ...s, groqApiKeyConfigured: false }));
       return;
     }
-    send(new Uint8Array([0x18, bytes.length, ...bytes]));
+    send(packet);
   }, [send, state.mySlot]);
 
   useEffect(() => {
@@ -1480,7 +1487,15 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
         // ── 0x24: server confirmed this player's gameplay readiness ───────
         if (opcode === 0x24 && event.data.byteLength >= 2 && view.getUint8(1) === 0x01) {
+          const wasResuming = reconnectBarrierRef.current;
           reconnectBarrierRef.current = false;
+          if (wasResuming) {
+            // The slot is intentionally stable across reconnects, so the
+            // state.mySlot effect does not rerun. Re-send the in-memory key
+            // only after the server releases the readiness barrier.
+            const apiKeyPacket = buildGroqApiKeyPacket(groqApiKeyRef.current);
+            if (apiKeyPacket) send(apiKeyPacket);
+          }
           setState(s => ({
             ...s,
             connectionStatus: 'online',
