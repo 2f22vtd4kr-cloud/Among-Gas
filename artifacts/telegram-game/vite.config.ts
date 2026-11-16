@@ -139,6 +139,9 @@ function vectorCollisionEditorApiPlugin(): Plugin {
         // CI injects a disposable path so the dev API can be tested without
         // leaving generated candidate geometry in the production source tree.
         const repositoryRoot = path.resolve(import.meta.dirname, '../..');
+        const regionReviewDirectory = process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY
+          ? path.resolve(process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY)
+          : path.join(repositoryRoot, 'docs/map-region-review-records');
         const baseFilePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
           ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
           : path.resolve(
@@ -146,14 +149,14 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               '../../lib/shared/src/collision/collision.v1.json',
             );
         const filePath = regionReviewRoute
-          ? path.join(repositoryRoot, 'docs/map-region-review-records', region + '.json')
+          ? path.join(regionReviewDirectory, region + '.json')
           : reviewRoute
             ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.review.v1.json')
             : zone
               ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
               : baseFilePath;
         const backupDirectory = regionReviewRoute
-          ? path.join(repositoryRoot, 'docs/map-region-review-records/.backups')
+          ? path.join(regionReviewDirectory, '.backups')
           : reviewRoute
             ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone + '-review')
             : zone
