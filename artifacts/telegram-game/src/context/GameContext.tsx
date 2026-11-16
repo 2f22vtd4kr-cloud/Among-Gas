@@ -1031,8 +1031,12 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (state.mySlot === null) return;
-    const bytes = new TextEncoder().encode(groqApiKeyRef.current);
-    send(new Uint8Array([0x18, bytes.length, ...bytes]));
+    const packet = buildGroqApiKeyPacket(groqApiKeyRef.current);
+    if (!packet) {
+      setState(s => ({ ...s, groqApiKeyConfigured: false }));
+      return;
+    }
+    send(packet);
   }, [state.mySlot, send]);
 
   const sendMove = useCallback((wireX: number, wireY: number) => {
