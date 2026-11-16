@@ -137,7 +137,15 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
           type: 'touchStart',
           touchPoints: [{ id: 0, x: box.x + box.width / 2, y: box.y + box.height / 2 }],
         });
-        await page.waitForTimeout(2_600);
+        try {
+          await page.waitForFunction(() => {
+            const control = document.querySelector('[data-testid="fuel-hold-control"]');
+            return Number(control?.getAttribute('data-progress')) >= 100;
+          }, undefined, { timeout: 6_000 });
+        } catch (error) {
+          const progress = await dialog.getByTestId('fuel-hold-control').getAttribute('data-progress');
+          throw new Error('Fuel hold progress stopped at ' + progress + '%', { cause: error });
+        }
       } finally {
         await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
         await client.detach();
