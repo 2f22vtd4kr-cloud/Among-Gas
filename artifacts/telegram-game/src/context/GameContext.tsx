@@ -1543,6 +1543,21 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        // ── 0x26: authoritative per-player task step reconciliation ─────────
+        if (opcode === 0x26 && event.data.byteLength === 3) {
+          const taskId = view.getUint8(1);
+          const completedSteps = view.getUint8(2);
+          const definition = TASK_DEFS.find(task => task.id === taskId);
+          if (!definition || completedSteps > definition.steps) return;
+          setState(s => ({
+            ...s,
+            myTasks: s.myTasks.map(task => task.taskId === taskId
+              ? { ...task, completedSteps }
+              : task),
+          }));
+          return;
+        }
+
         // ── 0xFF: delta sync — update remote player positions ───────────────
         if (opcode === 0xFF) {
           applyDeltaPacket(
