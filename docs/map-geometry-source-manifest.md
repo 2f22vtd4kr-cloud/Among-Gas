@@ -156,9 +156,9 @@ As of the current-main verification on 2026-11-16:
 **Promotion rule:** any future map-image, mask or outline replacement must state the exact source asset/hash, coordinate transform, generator version/parameters, output dimensions, before/after overlay evidence, full player-footprint path coverage, task/vent/admin/sabotage anchor checks, five-sector routes, and client/server parity. If any one of these is unknown, leave the production data unchanged and keep the release gate open.
 
 
-## 8. Current-main delta — 2026-11-13
+## 8. Historical mainline delta — 2026-11-13
 
-This historical inventory was originally checked against main at `aef0f099e8924ec1d58359521ce8d235b762c38d`. The following delta prevents its earlier runtime descriptions from being mistaken for the current state.
+This section records the 2026-11-13 snapshot only; Section 9 is the current-main reconciliation. This historical inventory was originally checked against main at `aef0f099e8924ec1d58359521ce8d235b762c38d`. The following delta prevents its earlier runtime descriptions from being mistaken for the current state.
 
 ### Current verified main baseline
 
@@ -172,7 +172,7 @@ This historical inventory was originally checked against main at `aef0f099e8924e
 
 ### Candidate vector geometry is a separate, provisional branch
 
-PR #138 (`work/redline-vector-collision-runtime-mainline`) is a draft review candidate, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. Its 370 movement-only shapes now carry centroid-assigned Z01–Z12 ownership metadata (26, 32, 22, 16, 22, 72, 40, 30, 14, 36, 44, 16 shapes respectively). This is not author tracing or independent review; all 12 zone evidence and sign-off records remain open.
+PR #138 (`work/redline-vector-collision-runtime-mainline`) is closed and unmerged; its candidate branch is historical review material, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. Its 370 movement-only shapes now carry centroid-assigned Z01–Z12 ownership metadata (26, 32, 22, 16, 22, 72, 40, 30, 14, 36, 44, 16 shapes respectively). This is not author tracing or independent review; all 12 zone evidence and sign-off records remain open.
 
 Do not infer sight or shadow boundaries from these movement shapes. The five detached-region dispositions C0/C20/C27/C38/C56 remain provisional and require explicit design-owner approval. The 12-zone source tracing/review, full named route matrix, parking-marking classification, and independent sight/shadow contour authoring are not complete.
 
