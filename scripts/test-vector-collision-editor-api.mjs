@@ -367,7 +367,17 @@ try {
     "saving a zone must never overwrite the full candidate file");
 
   // Detached-region decisions are stored separately from map zones and geometry.
-  const regionEndpoint = base.replace(/\\/$/, "") + "/__vector-collision-api/regions/C0/review";
+  const detachedRegionBase = base.replace(/\/$/, "") + "/__vector-collision-api/regions/";
+  for (const regionId of ["C0", "C20", "C27", "C38", "C56"]) {
+    const response = await fetch(detachedRegionBase + regionId + "/review", { cache: "no-store" });
+    assert.equal(response.status, 200, regionId + " review endpoint is available");
+    const result = await jsonResponse(response);
+    assert.equal(result.saved, false, regionId + " starts without an authored decision");
+    assert.equal(result.record.id, regionId);
+    assert.equal(result.record.status, "not-started");
+    assert.equal(result.record.decision, "deferred");
+  }
+  const regionEndpoint = detachedRegionBase + "C0/review";
   const regionFilePath = path.join(regionReviewDirectory, "C0.json");
   const regionBackupDirectory = path.join(regionReviewDirectory, ".backups");
   const defaultRegionResponse = await fetch(regionEndpoint, { cache: "no-store" });
@@ -379,7 +389,9 @@ try {
   assert.equal(defaultRegion.record.decision, "deferred");
   assert.equal(defaultRegion.record.routeEvidenceComplete, false);
 
-  const invalidRegionEndpoint = base.replace(/\\/$/, "") + "/__vector-collision-api/regions/C99/review";
+  const invalidRegionEndpoint = detachedRegionBase + "C99/review";
+  assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
+    "unknown detached-region IDs are rejected");
   assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
     "unknown detached-region IDs are rejected");
 
