@@ -155,10 +155,20 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
     case 8: { // Repeat the five reactor flashes captured as they were shown to the player.
       const pads = dialog.getByTestId('reactor-pad');
       assert.equal(await pads.count(), 6, 'reactor must expose six input pads');
-      await page.waitForFunction(() => {
-        const values = window.__reactorSequenceCapture?.values;
-        return Array.isArray(values) && values.length === 5 && values.every(Number.isInteger);
-      }, undefined, { timeout: 8_000 });
+      try {
+        await page.waitForFunction(() => {
+          const values = window.__reactorSequenceCapture?.values;
+          return Array.isArray(values) && values.filter(Number.isInteger).length === 5;
+        }, undefined, { timeout: 8_000 });
+      } catch (error) {
+        const capture = await page.evaluate(() => window.__reactorSequenceCapture?.values ?? null);
+        const padState = await pads.evaluateAll(elements => elements.map(element => ({
+          lit: element.dataset.lit,
+          flashIndex: element.dataset.flashIndex ?? null,
+          padIndex: element.dataset.padIndex ?? null,
+        })));
+        throw new Error('Reactor flash capture incomplete: ' + JSON.stringify({ capture, padState }), { cause: error });
+      }
       const sequence = await page.evaluate(() => window.__reactorSequenceCapture.values);
       assert.equal(sequence.length, 5, 'reactor must show exactly five flashes');
       assert.ok(sequence.every(pad => pad >= 0 && pad < 6), 'each reactor flash must identify one of six pads');
@@ -1063,29 +1073,6 @@ try {
     [10, 'Clear Asteroids', 'Уничтожить астероиды'],
   ];
   for (const [taskId, englishName, russianName] of minigameGallery) {
-    if (taskId === 8) {
-      await page.addInitScript(() => {
-        if (!location.search.includes('taskId=8')) return;
-        const capture = { values: [] };
-        const observer = new MutationObserver(() => {
-          const active = document.querySelector('[data-testid="reactor-pad"][data-flash-index]');
-          if (!active) return;
-          const flashIndex = Number(active.getAttribute('data-flash-index'));
-          const padIndex = Number(active.getAttribute('data-pad-index'));
-          if (Number.isInteger(flashIndex) && Number.isInteger(padIndex)) {
-            capture.values[flashIndex] = padIndex;
-          }
-          if (capture.values.length === 5 && capture.values.every(Number.isInteger)) observer.disconnect();
-        });
-        observer.observe(document.documentElement, {
-          attributes: true,
-          attributeFilter: ['data-flash-index'],
-          childList: true,
-          subtree: true,
-        });
-        window.__reactorSequenceCapture = capture;
-      });
-    }
     await page.goto(`${origin}/?mock=task-interaction-gallery&taskId=${taskId}`, {
       waitUntil: 'domcontentloaded',
     });
@@ -1100,6 +1087,28 @@ try {
       return button instanceof HTMLButtonElement &&
         !button.disabled && button.dataset.useAction === 'task';
     }, undefined, { timeout: 10_000 });
+    if (taskId === 8) {
+      await page.evaluate(() => {
+        const capture = { values: [] };
+        const observer = new MutationObserver(() => {
+          const active = document.querySelector('[data-testid="reactor-pad"][data-flash-index]');
+          if (!active) return;
+          const flashIndex = Number(active.getAttribute('data-flash-index'));
+          const padIndex = Number(active.getAttribute('data-pad-index'));
+          if (Number.isInteger(flashIndex) && Number.isInteger(padIndex)) {
+            capture.values[flashIndex] = padIndex;
+          }
+          if (capture.values.filter(Number.isInteger).length === 5) observer.disconnect();
+        });
+        observer.observe(document.body, {
+          attributes: true,
+          attributeFilter: ['data-flash-index'],
+          childList: true,
+          subtree: true,
+        });
+        window.__reactorSequenceCapture = capture;
+      });
+    }
     await galleryUse.click();
 
     const minigameDialog = page.getByTestId('minigame-shell');
