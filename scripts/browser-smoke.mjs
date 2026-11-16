@@ -34,16 +34,38 @@ async function waitForRoleRevealToFinish(page) {
   await roleLabel.waitFor({ state: 'hidden', timeout: 6_000 });
 }
 
-async function dragPointerTo(page, control, targetX, targetY, holdMs = 0) {
+async function touchTap(page, locator) {
+  const box = await locator.boundingBox();
+  assert.ok(box, 'touch control must have a measurable target');
+  await page.touchscreen.tap(box.x + box.width / 2, box.y + box.height / 2);
+}
+
+async function touchDragTo(page, control, targetX, targetY, holdMs = 0) {
   const start = await control.boundingBox();
   assert.ok(start, 'drag control must have a measurable touch target');
-  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
-  await page.mouse.down();
+  const client = await page.context().newCDPSession(page);
+  const startX = start.x + start.width / 2;
+  const startY = start.y + start.height / 2;
   try {
-    await page.mouse.move(targetX, targetY, { steps: 10 });
+    await client.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [{ id: 0, x: startX, y: startY }],
+    });
+    for (let step = 1; step <= 10; step++) {
+      await client.send('Input.dispatchTouchEvent', {
+        type: 'touchMove',
+        touchPoints: [{
+          id: 0,
+          x: startX + (targetX - startX) * step / 10,
+          y: startY + (targetY - startY) * step / 10,
+        }],
+      });
+      await page.waitForTimeout(16);
+    }
     if (holdMs > 0) await page.waitForTimeout(holdMs);
   } finally {
-    await page.mouse.up();
+    await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
+    await client.detach();
   }
 }
 
@@ -56,13 +78,13 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         let pair = dialog.getByRole('button', { name: english, exact: true });
         if (await pair.count() !== 2) pair = dialog.getByRole('button', { name: russian, exact: true });
         assert.equal(await pair.count(), 2, 'each wire colour must have one left and one right endpoint');
-        await pair.first().click();
-        await pair.last().click();
+        await touchTap(page, pair.first());
+        await touchTap(page, pair.last());
       }
       break;
     }
     case 1: // Download completes only after the player starts it.
-      await dialog.getByRole('button', { name: /Download|Скачать/ }).click();
+      await touchTap(page, dialog.getByRole('button', { name: /Download|Скачать/ }));
       break;
     case 2: { // Wait for the deterministic green calibration window.
       const control = dialog.getByTestId('calibrate-control');
@@ -71,7 +93,7 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         const angle = Number(button?.getAttribute('data-angle'));
         return Number.isFinite(angle) && angle >= 55 && angle <= 95;
       }, undefined, { timeout: 8_000 });
-      await control.click();
+      await touchTap(page, control);
       break;
     }
     case 3: { // Pull the garbage lever to the bottom of its track.
@@ -80,19 +102,19 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         const rect = element.parentElement.getBoundingClientRect();
         return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
       });
-      await dragPointerTo(page, lever, track.x + track.width / 2, track.y + track.height - 2);
+      await touchDragTo(page, lever, track.x + track.width / 2, track.y + track.height - 2);
       break;
     }
     case 4: // Clean every dirty filter tile.
       for (let i = 0; i < 5; i++) {
-        await dialog.getByRole('button', { name: /Dirty filter|Грязный фильтр/ }).first().click();
+        await touchTap(page, dialog.getByRole('button', { name: /Dirty filter|Грязный фильтр/ }).first());
       }
       break;
     case 5: { // Move the marker onto the randomized target and hold it there.
       const marker = dialog.getByTestId('navigation-marker');
       const target = await dialog.getByTestId('navigation-target').boundingBox();
       assert.ok(target, 'navigation target must be visible');
-      await dragPointerTo(page, marker, target.x + target.width / 2, target.y + target.height / 2, 2_650);
+      await touchDragTo(page, marker, target.x + target.width / 2, target.y + target.height / 2, 2_650);
       break;
     }
     case 6: { // Move the WiFi lever to ON.
@@ -101,17 +123,24 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         const rect = element.parentElement.getBoundingClientRect();
         return { x: rect.x, y: rect.y, width: rect.width };
       });
-      await dragPointerTo(page, lever, track.x + track.width / 2, track.y + 5);
+      await touchDragTo(page, lever, track.x + track.width / 2, track.y + 5);
       break;
     }
     case 7: { // Hold the fuel transfer control until the bar reaches 100%.
       const hold = dialog.getByRole('button', { name: /HOLD|ДЕРЖАТЬ/ });
       const box = await hold.boundingBox();
       assert.ok(box, 'fuel hold control must be visible');
-      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-      await page.mouse.down();
-      await page.waitForTimeout(2_600);
-      await page.mouse.up();
+      const client = await page.context().newCDPSession(page);
+      try {
+        await client.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{ id: 0, x: box.x + box.width / 2, y: box.y + box.height / 2 }],
+        });
+        await page.waitForTimeout(2_600);
+      } finally {
+        await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
+        await client.detach();
+      }
       break;
     }
     case 8: { // Read the five displayed reactor flashes, then repeat that sequence.
@@ -133,25 +162,28 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         const buttons = [...document.querySelectorAll('[data-testid="reactor-pad"]')];
         return buttons.length === 6 && buttons.every(button => !button.disabled);
       }, undefined, { timeout: 3_000 });
-      for (const pad of sequence) await pads.nth(pad).click();
+      for (const pad of sequence) await touchTap(page, pads.nth(pad));
       break;
     }
     case 9: { // Align the lever with the target and maintain the alignment.
       const lever = dialog.getByTestId('engine-alignment-lever');
       const target = await dialog.getByTestId('engine-alignment-target').boundingBox();
       assert.ok(target, 'engine alignment target must be visible');
-      await dragPointerTo(page, lever, target.x + target.width / 2, target.y + target.height / 2, 1_650);
+      await touchDragTo(page, lever, target.x + target.width / 2, target.y + target.height / 2, 1_650);
       break;
     }
     case 10: { // Track the moving asteroids while holding fire.
       const progress = dialog.getByTestId('asteroid-progress');
       const firstTarget = await dialog.getByTestId('asteroid-target').first().boundingBox();
       assert.ok(firstTarget, 'asteroid field must start with visible targets');
-      await page.mouse.move(firstTarget.x + firstTarget.width / 2, firstTarget.y + firstTarget.height / 2);
-      await page.mouse.down();
+      const client = await page.context().newCDPSession(page);
       let completed = false;
       const deadline = Date.now() + 25_000;
       try {
+        await client.send('Input.dispatchTouchEvent', {
+          type: 'touchStart',
+          touchPoints: [{ id: 0, x: firstTarget.x + firstTarget.width / 2, y: firstTarget.y + firstTarget.height / 2 }],
+        });
         while (Date.now() < deadline) {
           const label = await progress.innerText().catch(() => '');
           if (label.includes('30/30')) {
@@ -160,12 +192,16 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
           }
           const target = await dialog.getByTestId('asteroid-target').first().boundingBox().catch(() => null);
           if (target) {
-            await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+            await client.send('Input.dispatchTouchEvent', {
+              type: 'touchMove',
+              touchPoints: [{ id: 0, x: target.x + target.width / 2, y: target.y + target.height / 2 }],
+            });
           }
           await page.waitForTimeout(100);
         }
       } finally {
-        await page.mouse.up();
+        await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
+        await client.detach();
       }
       assert.ok(completed, 'holding fire while tracking moving targets must destroy all 30 asteroids');
       break;
