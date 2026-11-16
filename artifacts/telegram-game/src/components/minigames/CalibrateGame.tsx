@@ -64,6 +64,8 @@ export function CalibrateGame({ stepIndex, onComplete }: MinigameProps) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '8px 0' }}>
       <button
+        data-testid="calibrate-control"
+        data-angle={angle}
         onClick={handleTap}
         style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 4 }}
         aria-label={en ? 'Tap when needle is in green zone' : 'Нажмите, когда стрелка в зелёной зоне'}
