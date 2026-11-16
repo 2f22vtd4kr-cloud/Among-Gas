@@ -44,6 +44,15 @@ const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
 const completeEvidence: CollisionCutoverEvidence = {
   candidateSha256: digest,
   zoneReviews: approvedZones,
+  fullFootprintRasterVectorParity: {
+    footprintContract: "three-circle-player-footprint",
+    sampleDomain: "union-of-raster-and-vector-spawn-reachable",
+    sampleStepPx: 8,
+    unionSpawnReachableSampleCount: 1_000,
+    vectorWalkableRasterBlocked: 20,
+    rasterWalkableVectorBlocked: 19,
+    sampleSetSha256: digest,
+  },
   gameplayAnchors: COLLISION_CUTOVER_REQUIRED_ANCHORS.map((id) => ({
     id,
     authorName: "Map Author",
@@ -110,6 +119,55 @@ const deferredBay: CollisionCutoverEvidence = structuredClone(completeEvidence);
 deferredBay.disconnectedRegions[3].decision = "deferred";
 assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) => error.includes("C38: design disposition remains deferred")),
   "the ambiguous vehicle-service bay must remain blocked from cut-over while deferred");
+
+const vectorOverParityLimit: CollisionCutoverEvidence = structuredClone(completeEvidence);
+vectorOverParityLimit.fullFootprintRasterVectorParity.vectorWalkableRasterBlocked = 21;
+assert.ok(validateCollisionCutoverEvidence(vectorOverParityLimit).some((error) =>
+  error.includes("Vector-walkable/raster-blocked") && error.includes("2%")),
+  "the vector-only walkable disagreement must fail above 2%");
+
+const rasterOverParityLimit: CollisionCutoverEvidence = structuredClone(completeEvidence);
+rasterOverParityLimit.fullFootprintRasterVectorParity.rasterWalkableVectorBlocked = 21;
+assert.ok(validateCollisionCutoverEvidence(rasterOverParityLimit).some((error) =>
+  error.includes("Raster-walkable/vector-blocked") && error.includes("2%")),
+  "the raster-only walkable disagreement must fail above 2%");
+
+const missingFootprintParity = structuredClone(completeEvidence) as Partial<CollisionCutoverEvidence>;
+delete missingFootprintParity.fullFootprintRasterVectorParity;
+assert.ok(validateCollisionCutoverEvidence(missingFootprintParity).some((error) =>
+  error.includes("Two-way raster/vector full-player-footprint parity evidence")),
+  "boolean parity flags cannot substitute for numeric two-way footprint evidence");
+
+const emptyFootprintSampleSet: CollisionCutoverEvidence = structuredClone(completeEvidence);
+emptyFootprintSampleSet.fullFootprintRasterVectorParity.unionSpawnReachableSampleCount = 999;
+assert.ok(validateCollisionCutoverEvidence(emptyFootprintSampleSet).some((error) =>
+  error.includes("at least 1,000 union-of-reachable")),
+  "a sparse or one-sided sample set cannot satisfy raster/vector parity");
+
+const oneSidedReachability: CollisionCutoverEvidence = structuredClone(completeEvidence);
+oneSidedReachability.fullFootprintRasterVectorParity.sampleDomain = "vector-only-spawn-reachable" as "union-of-raster-and-vector-spawn-reachable";
+assert.ok(validateCollisionCutoverEvidence(oneSidedReachability).some((error) =>
+  error.includes("union of raster- and vector-spawn-reachable")),
+  "the candidate graph alone must not define the parity denominator");
+
+const coarseParitySampling: CollisionCutoverEvidence = structuredClone(completeEvidence);
+coarseParitySampling.fullFootprintRasterVectorParity.sampleStepPx = 16;
+assert.ok(validateCollisionCutoverEvidence(coarseParitySampling).some((error) =>
+  error.includes("from 1px through 8px")),
+  "sampling coarser than the existing 8px lattice must not satisfy parity");
+
+const wrongFootprintContract: CollisionCutoverEvidence = structuredClone(completeEvidence);
+wrongFootprintContract.fullFootprintRasterVectorParity.footprintContract = "point-samples" as "three-circle-player-footprint";
+assert.ok(validateCollisionCutoverEvidence(wrongFootprintContract).some((error) =>
+  error.includes("production three-circle player footprint")),
+  "point samples cannot be substituted for full-player-footprint parity");
+
+const overlappingDisagreements: CollisionCutoverEvidence = structuredClone(completeEvidence);
+overlappingDisagreements.fullFootprintRasterVectorParity.vectorWalkableRasterBlocked = 600;
+overlappingDisagreements.fullFootprintRasterVectorParity.rasterWalkableVectorBlocked = 500;
+assert.ok(validateCollisionCutoverEvidence(overlappingDisagreements).some((error) =>
+  error.includes("cannot exceed the shared sample set")),
+  "the two directional mismatch sets cannot overlap beyond the common sample count");
 
 const noSightParity: CollisionCutoverEvidence = structuredClone(completeEvidence);
 noSightParity.parity.interactionLineOfSight = false;

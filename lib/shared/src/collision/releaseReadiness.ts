@@ -22,9 +22,27 @@ export interface DisconnectedRegionDisposition {
   notes: string;
 }
 
+export interface FullFootprintRasterVectorParity {
+  /** The same production three-circle feet footprint is applied to both worlds. */
+  footprintContract: "three-circle-player-footprint";
+  /** Both spawn graphs are included; neither direction may define the other side's denominator. */
+  sampleDomain: "union-of-raster-and-vector-spawn-reachable";
+  /** Maximum lattice spacing of the deterministic position sample. */
+  sampleStepPx: number;
+  /** Number of unique positions in the union of the two spawn-reachable graphs. */
+  unionSpawnReachableSampleCount: number;
+  /** Vector says walkable while the raster says blocked. */
+  vectorWalkableRasterBlocked: number;
+  /** Raster says walkable while the vector says blocked. */
+  rasterWalkableVectorBlocked: number;
+  /** SHA-256 of the deterministic full-footprint sample set and its ordering. */
+  sampleSetSha256: string;
+}
+
 export interface CollisionCutoverEvidence {
   candidateSha256: string;
   zoneReviews: unknown[];
+  fullFootprintRasterVectorParity: FullFootprintRasterVectorParity;
   gameplayAnchors: GameplayAnchorDisposition[];
   disconnectedRegions: DisconnectedRegionDisposition[];
   parity: {
@@ -47,6 +65,7 @@ const REQUIRED_ANCHORS = [
   ...Array.from({ length: 6 }, (_, index) => `sabotage-${index + 1}`),
 ] as const;
 const REQUIRED_REGIONS = ["C0", "C20", "C27", "C38", "C56"] as const;
+export const MAX_RASTER_VECTOR_DISAGREEMENT_RATIO = 0.02;
 const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 const nonEmpty = (value: unknown): value is string =>
@@ -169,6 +188,49 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       if (!isSha256(region.evidenceSha256)) errors.push(`${id}: source evidence SHA-256 is required`);
       if (region.routeEvidenceComplete !== true) errors.push(`${id}: full-footprint connectivity evidence is incomplete`);
       if (!nonEmpty(region.notes)) errors.push(`${id}: design decision rationale is required`);
+    }
+  }
+
+  const footprintParity = input.fullFootprintRasterVectorParity;
+  if (!footprintParity || typeof footprintParity !== "object") {
+    errors.push("Two-way raster/vector full-player-footprint parity evidence is required");
+  } else {
+    if (footprintParity.footprintContract !== "three-circle-player-footprint") {
+      errors.push("Raster/vector parity must use the production three-circle player footprint");
+    }
+    if (!isSha256(footprintParity.sampleSetSha256)) {
+      errors.push("Raster/vector parity needs a SHA-256 for its deterministic sample set");
+    }
+    if (footprintParity.sampleDomain !== "union-of-raster-and-vector-spawn-reachable") {
+      errors.push("Raster/vector parity must sample the union of raster- and vector-spawn-reachable positions");
+    }
+    if (!Number.isSafeInteger(footprintParity.sampleStepPx) ||
+        footprintParity.sampleStepPx < 1 || footprintParity.sampleStepPx > 8) {
+      errors.push("Raster/vector parity sample spacing must be an integer from 1px through 8px");
+    }
+    const counts = [
+      footprintParity.unionSpawnReachableSampleCount,
+      footprintParity.vectorWalkableRasterBlocked,
+      footprintParity.rasterWalkableVectorBlocked,
+    ];
+    if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) {
+      errors.push("Raster/vector parity sample and disagreement counts must be non-negative safe integers");
+    } else if (footprintParity.unionSpawnReachableSampleCount < 1_000) {
+      errors.push("Raster/vector parity must compare at least 1,000 union-of-reachable full-footprint positions");
+    } else {
+      const { unionSpawnReachableSampleCount, vectorWalkableRasterBlocked, rasterWalkableVectorBlocked } = footprintParity;
+      if (vectorWalkableRasterBlocked > unionSpawnReachableSampleCount ||
+          rasterWalkableVectorBlocked > unionSpawnReachableSampleCount ||
+          vectorWalkableRasterBlocked + rasterWalkableVectorBlocked > unionSpawnReachableSampleCount) {
+        errors.push("Raster/vector directional disagreement counts cannot exceed the shared sample set");
+      } else {
+        if (vectorWalkableRasterBlocked / unionSpawnReachableSampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
+          errors.push("Vector-walkable/raster-blocked full-footprint disagreement exceeds the unchanged 2% limit");
+        }
+        if (rasterWalkableVectorBlocked / unionSpawnReachableSampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
+          errors.push("Raster-walkable/vector-blocked full-footprint disagreement exceeds the unchanged 2% limit");
+        }
+      }
     }
   }
 
