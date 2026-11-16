@@ -36,6 +36,8 @@ for (let index = 0; index < 12; index++) {
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
+const regionReviewDirectory = process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY;
+assert.ok(regionReviewDirectory, "DISCONNECTED_REGION_REVIEW_DIRECTORY must point to a disposable test directory");
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.v1.json");
 const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01");
@@ -103,6 +105,7 @@ try {
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
   fs.rmSync(finalZoneFilePath, { force: true });
   fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(regionReviewDirectory, { recursive: true, force: true });
 
   const initialResponse = await fetch(endpoint, { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
@@ -362,7 +365,69 @@ try {
   assert.equal(zoneReload.document.shapes[0].label, "Zone Z01 rotation 20");
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20",
     "saving a zone must never overwrite the full candidate file");
-  console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global and per-zone candidate versioning");
+
+  // Detached-region decisions are stored separately from map zones and geometry.
+  const regionEndpoint = base.replace(/\\/$/, "") + "/__vector-collision-api/regions/C0/review";
+  const regionFilePath = path.join(regionReviewDirectory, "C0.json");
+  const regionBackupDirectory = path.join(regionReviewDirectory, ".backups");
+  const defaultRegionResponse = await fetch(regionEndpoint, { cache: "no-store" });
+  assert.equal(defaultRegionResponse.status, 200);
+  const defaultRegion = await jsonResponse(defaultRegionResponse);
+  assert.equal(defaultRegion.saved, false);
+  assert.equal(defaultRegion.record.id, "C0");
+  assert.equal(defaultRegion.record.status, "not-started");
+  assert.equal(defaultRegion.record.decision, "deferred");
+  assert.equal(defaultRegion.record.routeEvidenceComplete, false);
+
+  const invalidRegionEndpoint = base.replace(/\\/$/, "") + "/__vector-collision-api/regions/C99/review";
+  assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
+    "unknown detached-region IDs are rejected");
+
+  const regionRecord = {
+    id: "C0",
+    status: "approved",
+    reviewerName: "Independent reviewer",
+    ownerName: "Design owner",
+    decision: "intentionally-sealed",
+    evidenceSha256: "a".repeat(64),
+    routeEvidenceComplete: true,
+    notes: "Test fixture only; not a real owner decision.",
+  };
+  const selfApprovedRegion = { ...regionRecord, reviewerName: regionRecord.ownerName };
+  const selfRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(selfApprovedRegion),
+  });
+  assert.equal(selfRegionResponse.status, 400, "the design owner cannot self-review a detached-region decision");
+
+  const incompleteRegion = { ...regionRecord, routeEvidenceComplete: false };
+  const incompleteRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(incompleteRegion),
+  });
+  assert.equal(incompleteRegionResponse.status, 400, "approval requires completed full-footprint connectivity evidence");
+
+  const firstRegionSave = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify({ ...regionRecord, status: "in-review" }),
+  });
+  assert.equal(firstRegionSave.status, 200, "an in-review record can be saved without claiming approval");
+  const firstRegionResult = await jsonResponse(firstRegionSave);
+  assert.equal(firstRegionResult.status, "in-review");
+  assert.match(firstRegionResult.contentHash, /^[a-f0-9]{64}$/);
+  assert.ok(fs.existsSync(regionFilePath), "detached-region record is stored in its isolated directory");
+
+  const secondRegionSave = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify({ ...regionRecord, status: "in-review", notes: "Updated test fixture." }),
+  });
+  assert.equal(secondRegionSave.status, 200);
+  assert.equal((await jsonResponse(secondRegionSave)).backupCount, 1,
+    "detached-region review saves retain the previous record separately from zone backups");
+  assert.equal(fs.readdirSync(regionBackupDirectory).filter(name => name.endsWith(".json")).length, 1);
+
+  const regionReload = await jsonResponse(await fetch(regionEndpoint, { cache: "no-store" }));
+  assert.equal(regionReload.saved, true);
+  assert.equal(regionReload.record.status, "in-review");
+  assert.equal(regionReload.record.notes, "Updated test fixture.");
+
+  console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global, per-zone and detached-region review storage");
 } finally {
   fs.rmSync(documentPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
@@ -370,4 +435,5 @@ try {
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
   fs.rmSync(finalZoneFilePath, { force: true });
   fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(regionReviewDirectory, { recursive: true, force: true });
 }
