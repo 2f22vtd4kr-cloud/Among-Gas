@@ -21,7 +21,7 @@ const base: Record<string, any> = {
   impostorSlots: [],
   deadSlots: [],
   corpsePositions: [],
-  myTasks: [{ taskId: 1, completedSteps: 2 }],
+  myTasks: [{ taskId: 1, completedSteps: 1 }],
   globalTaskProgress: 10,
   killCooldownMs: 0,
   sabotageCooldownMs: 0,
@@ -116,6 +116,100 @@ const leakedImpostorRoster = structuredClone(base);
 leakedImpostorRoster.impostorSlots = [0];
 assert.equal(parseResumeSnapshotV1(encode(leakedImpostorRoster)), null,
   'crew resume snapshot must not expose impostor identities');
+
+const duplicateDeadSlot = structuredClone(base);
+duplicateDeadSlot.deadSlots = [2, 2];
+assert.equal(parseResumeSnapshotV1(encode(duplicateDeadSlot)), null,
+  'dead-player slots must be unique');
+
+const unknownDeadSlot = structuredClone(base);
+unknownDeadSlot.deadSlots = [14];
+assert.equal(parseResumeSnapshotV1(encode(unknownDeadSlot)), null,
+  'dead-player slots must belong to the restored roster');
+
+const orphanCorpse = structuredClone(base);
+orphanCorpse.corpsePositions = [{ slot: 2, wireX: 1500, wireY: 1600 }];
+assert.equal(parseResumeSnapshotV1(encode(orphanCorpse)), null,
+  'corpse positions must belong to a roster player already marked dead');
+
+const duplicateCorpse = structuredClone(base);
+duplicateCorpse.deadSlots = [2];
+duplicateCorpse.corpsePositions = [
+  { slot: 2, wireX: 1500, wireY: 1600 },
+  { slot: 2, wireX: 1501, wireY: 1601 },
+];
+assert.equal(parseResumeSnapshotV1(encode(duplicateCorpse)), null,
+  'a restored player cannot have multiple corpse positions');
+
+const unknownTask = structuredClone(base);
+unknownTask.myTasks = [{ taskId: 99, completedSteps: 0 }];
+assert.equal(parseResumeSnapshotV1(encode(unknownTask)), null,
+  'only canonical task IDs may be restored');
+
+const overCompletedTask = structuredClone(base);
+overCompletedTask.myTasks = [{ taskId: 1, completedSteps: 2 }];
+assert.equal(parseResumeSnapshotV1(encode(overCompletedTask)), null,
+  'task progress cannot exceed the canonical task step count');
+
+const duplicateTask = structuredClone(base);
+duplicateTask.myTasks.push({ taskId: 1, completedSteps: 1 });
+assert.equal(parseResumeSnapshotV1(encode(duplicateTask)), null,
+  'a task assignment cannot appear more than once in a resume snapshot');
+
+const impostorWithTasks = structuredClone(base);
+impostorWithTasks.myRole = 'impostor';
+impostorWithTasks.impostorSlots = [1];
+assert.equal(parseResumeSnapshotV1(encode(impostorWithTasks)), null,
+  'an impostor resume snapshot must not restore crewmate task assignments');
+
+const impostorWithoutSelf = structuredClone(base);
+impostorWithoutSelf.phase = 'ROAMING';
+impostorWithoutSelf.meeting = null;
+impostorWithoutSelf.myRole = 'impostor';
+impostorWithoutSelf.impostorSlots = [0];
+impostorWithoutSelf.myTasks = [];
+assert.equal(parseResumeSnapshotV1(encode(impostorWithoutSelf)), null,
+  'an impostor roster must include the reconnecting impostor');
+
+const validImpostor = structuredClone(impostorWithoutSelf);
+validImpostor.impostorSlots = [0, 1];
+assert.ok(parseResumeSnapshotV1(encode(validImpostor)),
+  'a valid impostor snapshot must preserve the private impostor roster');
+
+const missingGameOverResult = structuredClone(base);
+missingGameOverResult.phase = 'GAMEOVER';
+missingGameOverResult.meeting = null;
+assert.equal(parseResumeSnapshotV1(encode(missingGameOverResult)), null,
+  'GAMEOVER phase must include the authoritative game result');
+
+const gameOverResultInRoaming = structuredClone(base);
+gameOverResultInRoaming.phase = 'ROAMING';
+gameOverResultInRoaming.meeting = null;
+gameOverResultInRoaming.gameOverResult = { ejectedSlot: 255, winFlag: 1 };
+assert.equal(parseResumeSnapshotV1(encode(gameOverResultInRoaming)), null,
+  'a game-over result cannot be attached to a roaming snapshot');
+
+const validGameOver = structuredClone(missingGameOverResult);
+validGameOver.gameOverResult = { ejectedSlot: 255, winFlag: 1 };
+assert.ok(parseResumeSnapshotV1(encode(validGameOver)),
+  'a valid GAMEOVER snapshot must restore its result');
+
+const invalidEjectedSlot = structuredClone(validGameOver);
+invalidEjectedSlot.deadSlots = [];
+invalidEjectedSlot.gameOverResult = { ejectedSlot: 2, winFlag: 1 };
+assert.equal(parseResumeSnapshotV1(encode(invalidEjectedSlot)), null,
+  'an ejected player must belong to the roster and be marked dead');
+
+const inconsistentVent = structuredClone(base);
+inconsistentVent.playerPositions[1].inVent = true;
+inconsistentVent.playerPositions[1].ventId = 4;
+assert.equal(parseResumeSnapshotV1(encode(inconsistentVent)), null,
+  'the local vent ID must agree with the restored local position');
+
+const validVent = structuredClone(inconsistentVent);
+validVent.myVentId = 4;
+assert.ok(parseResumeSnapshotV1(encode(validVent)),
+  'a consistent local vent state must be restored');
 
 assert.equal(parseResumeSnapshotV1(new ArrayBuffer(2)), null,
   'truncated resume packets must be rejected');
