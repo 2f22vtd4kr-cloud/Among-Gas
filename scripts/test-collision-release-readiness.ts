@@ -64,6 +64,7 @@ const completeEvidence: CollisionCutoverEvidence = {
   })),
   disconnectedRegions: COLLISION_CUTOVER_REQUIRED_REGIONS.map((id) => ({
     id,
+    status: "approved" as const,
     reviewerName: "Independent Reviewer",
     ownerName: "Design Owner",
     decision: "intentionally-sealed",
