@@ -33,6 +33,23 @@ const sanitized = observeVisiblePlayers(
 );
 assert.equal(sanitized[0].username, 'Bad Name with a long suffix that', 'untrusted labels are control-stripped and bounded');
 
+const unicodeBoundaryObservation = observeVisiblePlayers(
+  0, 0, 0,
+  [{ slot: 1, username: 'A'.repeat(31) + '😀', x: 10, y: 0, alive: true }],
+  100,
+  () => true,
+);
+assert.equal(unicodeBoundaryObservation[0].username, 'A'.repeat(31) + '😀',
+  'strategic observation labels must not split supplementary Unicode characters');
+const unicodeTaskPrompt = buildCrewTaskPlanningMessages({
+  username: 'B'.repeat(31) + '😀',
+  availableTasks: [],
+  nearbyPlayers: [],
+});
+assert.equal(JSON.parse(unicodeTaskPrompt[1].content).actingPlayer, 'B'.repeat(31) + '😀');
+assert.doesNotMatch(unicodeTaskPrompt[1].content, /\\p{Cs}/u,
+  'strategic prompts must not contain lone surrogate code points at length boundaries');
+
 const crewMessages = buildCrewTaskPlanningMessages({
   username: 'Nova',
   availableTasks: [
