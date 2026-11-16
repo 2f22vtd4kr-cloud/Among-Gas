@@ -823,6 +823,18 @@ export class LobbyManager {
     return true;
   }
 
+  /** Return authoritative completed steps for one of a player's assigned tasks. */
+  getPlayerTaskProgress(lobby: Lobby, playerSlot: number, taskId: number): number | null {
+    const player = lobby.players.get(playerSlot);
+    const definition = TASK_DEFS.find(task => task.id === taskId);
+    if (!player || !definition || !player.assignedTasks.includes(taskId)) return null;
+    let completedSteps = 0;
+    for (let step = 0; step < definition.steps; step++) {
+      if (lobby.completedTaskSteps.has(playerSlot + ':' + taskId + ':' + step)) completedSteps++;
+    }
+    return completedSteps;
+  }
+
   private _broadcastTaskProgress(lobby: Lobby): void {
     const percent = lobby.totalTaskSteps > 0
       ? Math.round((lobby.completedTaskSteps.size / lobby.totalTaskSteps) * 100)

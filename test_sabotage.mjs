@@ -131,6 +131,19 @@ async function main() {
     for (const player of players) send(player, [0x23]);
     await Promise.all(players.map(player => waitFor(player, b => b[0] === 0x24 && b[1] === 0x01, 2_000)));
 
+    const assignedTasks = crew.msgs.find(packet => packet[0] === 0x1D);
+    assert.ok(assignedTasks && assignedTasks[1] > 0, 'crewmate receives a private task assignment');
+    const firstTaskId = assignedTasks[2];
+    send(crew, [0x15, 0x03, firstTaskId, 0xFF]);
+    const rejectedTaskState = await waitFor(crew,
+      packet => packet[0] === 0x26 && packet[1] === firstTaskId,
+    );
+    assert.equal(rejectedTaskState[2], 0,
+      'server acknowledges rejected task-step requests with the unchanged authoritative step count');
+    assert.ok(players.filter(player => player !== crew).every(player =>
+      !player.msgs.some(packet => packet[0] === 0x26 && packet[1] === firstTaskId)),
+      'per-player task progress acknowledgements are private to the assigned player');
+
     console.log('--- Reject a forged movement teleport and return an authoritative correction ---');
     // Allow the server's 12ms packet interval guard to elapse after game start.
     await sleep(25);

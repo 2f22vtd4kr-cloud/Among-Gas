@@ -514,6 +514,10 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   victim.player.y = TASK_DEFS[0].y;
   assert.equal(manager.handleTaskStep(lobby, 1, 0, 0), true, 'dead crewmate may complete the first assigned step');
   assert.equal(manager.handleTaskStep(lobby, 1, 0, 0), false, 'completed ghost task steps cannot be replayed');
+  assert.equal(manager.getPlayerTaskProgress(lobby, 1, 0), 1,
+    'server task acknowledgement reports the accepted ghost step');
+  assert.equal(manager.getPlayerTaskProgress(lobby, 1, 1), null,
+    'server task acknowledgement does not disclose unassigned task state');
   assert.ok(killer.packets.some(packet => packet[0] === 0x21 && packet[1] === 1), 'corpse location is broadcast');
   manager.disposeLobby(lobby);
 }
