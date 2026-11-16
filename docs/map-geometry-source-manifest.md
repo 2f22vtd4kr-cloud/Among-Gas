@@ -98,19 +98,27 @@ The compact and fine masks are two different rasters derived from the same refer
 
 ## 4. Manual geometry overrides
 
-Production overrides live in `lib/shared/src/collisionOverrides.ts`, in 3224×1858 world coordinates:
+The **current main** production overrides are defined in `lib/shared/src/collisionOverrides.ts` in 3224×1858 world coordinates:
 
 | ID | Bounds | Current purpose |
 |---|---|---|
-| `green-service-van-bay` | [1985,1055,2260,1260] | Preserve the bay's internal walkable clearance; the hand-traced van body/wheel silhouette remains blocked. The recovered source art shows a continuous perimeter with no authored entrance, but whether this region is intended to be inaccessible remains pending explicit design-owner sign-off. |
-| `east-generator-approach-aisle` | [2780,850,3100,950] | Restore the visually open central aisle in the east generator room; perimeter equipment and lower generator bank remain outside the replacement zone. |
-| `north-cafeteria-upper-furniture-strip` | [1337,19,2138,270] | Provisional source-art contour around the upper cafeteria furniture strip; whether all of the enclosed floor should remain inaccessible is pending explicit design-owner sign-off. |
-| `northwest-tank-machinery-enclosure` | [590,500,932,808] | Provisional source-art contour around the tank/pipe machinery footprint; intended playability of the enclosed floor remains pending explicit design-owner sign-off. |
-| `south-central-playground-service-fixture-enclosure` | [590,671,1652,1538] | Provisional source-art contour around the lower-central playground/equipment enclosure; intended playability of the enclosed floor remains pending explicit design-owner sign-off. |
-| `southwest-shop-shelving-interior` | [145,1197,434,1562] | Provisional source-art contour around the shelving/canister display interior; adjacent shop/pump floor remains walkable, while intended accessibility of the enclosed area remains pending explicit design-owner sign-off. |
-| `east-office-vehicle-service-bay` | [1821,801,2589,1327] | Provisional isolated region: internal floor and van clearance stay walkable for movement/vision tests behind the current source-art perimeter; no door, vent, teleport or other entry/exit mechanic is currently authored. Intended accessibility remains unapproved pending explicit design-owner sign-off. |
+| `green-service-van-bay` | [1985,1055,2260,1260] | Walkable replacement region around the service van; its surrounding source-art room walls remain governed by the fine raster. |
+| `east-generator-approach-aisle` | [2780,850,3100,950] | Restore the measured, visually open central aisle in the east generator room while leaving perimeter equipment and the lower generator bank outside the replacement zone. |
+| `green-service-van-silhouette` | [2026,1100,2233,1240] | The single explicit manual blocked polygon inside the green service-van replacement region, following the van body/wheel footprint. |
 
-The four currently applied prop/furniture contours are stored in `MANUAL_BLOCKED_POLYGONS`. The five review candidates are recorded separately as `SOURCE_ART_SEALED_REGION_CANDIDATES` and `SOURCE_ART_ISOLATED_REGION_CANDIDATES`; these names record current source-art geometry, not approved game-design intent. The C38 east office/service bay retains its internal walkable floor behind the current perimeter, rather than receiving an invented entry or a production collision hole. The van silhouette is also exposed through `MANUAL_BLOCKED_POLYGONS`. These are targeted overrides, not a comprehensive vector description of every map object, doorway, light blocker and shadow caster.
+The current main `MANUAL_BLOCKED_POLYGONS` array contains only the green service-van silhouette. The current main `MANUAL_WALKABLE_REPLACEMENT_ZONES` array contains only the two zones above.
+
+The following source-art interpretations are **candidate-only** and are not present in current main's production overrides:
+
+| Candidate | World bounds | Candidate interpretation | Design status |
+|---|---|---|---|
+| C0 / north cafeteria upper furniture strip | [1337,19,2138,270] | Irregular furniture/partition contour | Owner sign-off pending |
+| C20 / northwest tank machinery enclosure | [597,507,929,801] | Irregular tank/pipe machinery contour | Owner sign-off pending |
+| C27 / south-central playground/service fixtures | [597,673,1645,1531] | Irregular equipment/fixture contour | Owner sign-off pending |
+| C38 / east office vehicle-service bay | [1821,801,2589,1327] | Continuous perimeter with internally visible floor and van clearance; no doorway visible in the source references | Owner sign-off pending |
+| C56 / southwest shelving interior | [147,1209,427,1555] | Diagonal shelving/display boundary | Owner sign-off pending |
+
+These five candidates are diagnostic source-art regions, not runtime identifiers or approved accessibility decisions. Do not copy their recovery-branch geometry into main or describe them as production collision. The four prop/furniture contours and the C38 interpretation require source-backed tracing, independent review and explicit design-owner decisions before any production change.
 
 ## 5. Gameplay anchors are separate sources
 
@@ -137,20 +145,20 @@ These anchor files currently do not refer to a common per-object vector-geometry
 
 ## 7. Current audit decision and open questions
 
-As of the recovery branch review:
+As of the current-main verification on 2026-11-16:
 
 1. World/image coordinates remain test-covered for PNG and WebP. The original 1652×952 source is recovered, and a deterministic PNG/WebP verification generator records hashes, transform parameters and explicit pixel-error tolerances. Runtime image assets remain unchanged.
-2. Fine movement and client/server paths use the same shared helpers. The connectivity regression verifies all 24 defined gameplay anchors and five named sector targets have spawn-connected full-footprint approaches.
-3. All five large detached components have source-art classifications against both the red-line reference and original artwork: four prop/furniture regions are currently blocked by named irregular contours; the east office/vehicle-service room remains internally walkable behind its continuous source-art wall, with no entry/exit mechanic currently authored. These are provisional geometry treatments, not approved design dispositions; explicit owner sign-off is still required.
-4. Raster-derived collision remains the base for much of the map. Four reviewed contours plus the van silhouette and generator-aisle/van-bay zones are targeted corrections, not a complete hand-authored map.
-5. Collision, vision and shadow share parts of the raster/override pipeline, but there is not yet a single complete canonical per-object geometry source that drives all three.
+2. Fine movement and client/server paths use the same shared helpers. The mainline 24-anchor CI regression now exercises full-footprint approaches, spawn-connected bot routes, interaction LOS and reverse returns; that automated result does not replace human anchor review.
+3. The five detached source-art components have visual classifications against the red-line reference and recovered artwork, but their design intent remains unresolved. The candidate-only C0/C20/C27/C38/C56 contours are not current-main production geometry and still require explicit owner decisions.
+4. Current main retains raster-derived collision as the base, with two walkable replacement zones and the single manual green-service-van silhouette described in Section 4. This is not a complete hand-authored per-object map.
+5. Collision, vision and shadow do not yet share one complete canonical per-object geometry source. Movement, interaction sight and presentation shadow must remain independently authored and tested.
 
 **Promotion rule:** any future map-image, mask or outline replacement must state the exact source asset/hash, coordinate transform, generator version/parameters, output dimensions, before/after overlay evidence, full player-footprint path coverage, task/vent/admin/sabotage anchor checks, five-sector routes, and client/server parity. If any one of these is unknown, leave the production data unchanged and keep the release gate open.
 
 
-## 8. Current-main delta — 2026-11-13
+## 8. Historical mainline delta — 2026-11-13
 
-This historical inventory was originally checked against main at `aef0f099e8924ec1d58359521ce8d235b762c38d`. The following delta prevents its earlier runtime descriptions from being mistaken for the current state.
+This section records the 2026-11-13 snapshot only; Section 9 is the current-main reconciliation. This historical inventory was originally checked against main at `aef0f099e8924ec1d58359521ce8d235b762c38d`. The following delta prevents its earlier runtime descriptions from being mistaken for the current state.
 
 ### Current verified main baseline
 
@@ -164,7 +172,7 @@ This historical inventory was originally checked against main at `aef0f099e8924e
 
 ### Candidate vector geometry is a separate, provisional branch
 
-PR #138 (`work/redline-vector-collision-runtime-mainline`) is a draft review candidate, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. Its 370 movement-only shapes now carry centroid-assigned Z01–Z12 ownership metadata (26, 32, 22, 16, 22, 72, 40, 30, 14, 36, 44, 16 shapes respectively). This is not author tracing or independent review; all 12 zone evidence and sign-off records remain open.
+PR #138 (`work/redline-vector-collision-runtime-mainline`) is closed and unmerged; its candidate branch is historical review material, not the main production source. Its generated red-line document currently has 370 movement-only shapes (14 closed, 356 open), all `blocksMove:true`, with zero `blocksSight:true` and zero `castsShadow:true`. Its 370 movement-only shapes now carry centroid-assigned Z01–Z12 ownership metadata (26, 32, 22, 16, 22, 72, 40, 30, 14, 36, 44, 16 shapes respectively). This is not author tracing or independent review; all 12 zone evidence and sign-off records remain open.
 
 Do not infer sight or shadow boundaries from these movement shapes. The five detached-region dispositions C0/C20/C27/C38/C56 remain provisional and require explicit design-owner approval. The 12-zone source tracing/review, full named route matrix, parking-marking classification, and independent sight/shadow contour authoring are not complete.
 
@@ -172,10 +180,23 @@ Do not infer sight or shadow boundaries from these movement shapes. The five det
 
 The original map and red-line reference hashes and historical transform recipes above remain the recorded source evidence. The tiled runtime adds a derivative layer; any regenerated overview or detail tile must record the exact source hash, tile manifest, generator version/parameters and pixel-fidelity report. Do not replace source art, collision masks or production runtime geometry from a screenshot-only inference.
 
-This manifest is a provenance record, not an approval of any collision/vision/shadow contour. Promotion still requires before/after region captures, full three-circle-footprint routes, client/server parity, and author plus independent reviewer dispositions. Where intent is unresolved, preserve main's existing geometry.
+This manifest is a provenance record, not an approval of any collision/vision/shadow contour. Promotion still requires source-backed traces, full three-circle-footprint routes, client/server parity, independent author/reviewer dispositions, and explicit design-owner approval. Under the current screenshot-free recovery policy, do not generate screenshot or image-gallery artifacts; retain existing geometry wherever intent is unresolved.
 
 
 **Mainline note (2026-11-13):** The provenance/review documentation was merged in PR #144 at main SHA `a8ccf734066d16178c0c7f8537bf82d82f3aef13`. This was documentation-only; the geometry source/runtime baseline recorded above remains `925a465458e8462cef8b6112daff90a0edc239b3`.
 
 
 **Candidate metadata reconciliation (2026-11-14):** The latest PR #138 candidate assigns all 370 movement-only shapes to Z01–Z12 by centroid. The candidate still contains 14 closed and 356 open shapes; every shape blocks movement, none blocks sight, and no shadow-casting semantics have been authored. This supersedes the earlier A–E metadata description only. It does not satisfy the 12-zone source tracing, independent review, detached-region disposition, anchor-route, parking classification, or owner-approval gates.
+
+## 9. Current-main reconciliation — 2026-11-16
+
+The current default branch was rechecked at `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
+
+- `lib/shared/src/collisionOverrides.ts` contains exactly two walkable replacement zones (`green-service-van-bay`, `east-generator-approach-aisle`) and one manual blocked polygon (`green-service-van-silhouette`). The four cafeteria/tank/playground/shop contours and the C38 bay interpretation listed above are not in current main.
+- All twelve `collision.zone-Z01.review.v1.json` through `collision.zone-Z12.review.v1.json` records remain `not-started`; no author trace, independent review or owner approval is recorded.
+- PR #138 is closed and unmerged. Its 370-shape candidate is not production geometry.
+- PR #210's exact-head CI passed the automated 24-anchor route/interaction checks, but distinct human author/reviewer dispositions and source-evidence hashes remain outstanding.
+- PR #211 adds a fail-closed numeric parity evidence requirement; it does not establish that a candidate currently passes the two-way 2% comparison.
+- A 20-minute mainline API/WebSocket soak passed earlier in workflow [43806034437](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43806034437) on its then-current baseline; this historical result is not a soak attestation for `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`. It is CI evidence, not physical-device acceptance.
+
+This is a documentation reconciliation only. It does not alter collision data, map art, runtime geometry or gameplay behavior.
