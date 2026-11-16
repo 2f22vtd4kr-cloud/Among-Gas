@@ -891,12 +891,20 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
           !isIntegerInRange(message.sentAtMs, 0, Number.MAX_SAFE_INTEGER)) return null;
       messages.push({ slot: message.slot, text: message.text, sentAtMs: message.sentAtMs });
     }
-    if (!players.some(player => player.slot === value.reporterSlot)) return null;
-    if (value.bodySlot !== NO_TARGET && !players.some(player => player.slot === value.bodySlot)) return null;
+    const deadSlotSet = new Set(deadSlots);
+    const corpseSlotSet = new Set(corpsePositions.map(corpse => corpse.slot));
+    if (!players.some(player => player.slot === value.reporterSlot) ||
+        deadSlotSet.has(value.reporterSlot)) return null;
+    if (value.bodySlot !== NO_TARGET &&
+        (!players.some(player => player.slot === value.bodySlot) ||
+          !deadSlotSet.has(value.bodySlot) || !corpseSlotSet.has(value.bodySlot))) return null;
+    if (!value.votingOpen && votes.length > 0) return null;
     const voteSlots = new Set<number>();
     for (const vote of votes) {
       if (!players.some(player => player.slot === vote.slot) ||
-          (vote.targetSlot !== NO_TARGET && !players.some(player => player.slot === vote.targetSlot)) ||
+          deadSlotSet.has(vote.slot) ||
+          (vote.targetSlot !== NO_TARGET &&
+            (!players.some(player => player.slot === vote.targetSlot) || deadSlotSet.has(vote.targetSlot))) ||
           voteSlots.has(vote.slot)) return null;
       voteSlots.add(vote.slot);
     }
