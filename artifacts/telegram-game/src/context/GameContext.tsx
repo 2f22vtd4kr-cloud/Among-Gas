@@ -1330,6 +1330,8 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
             // WAITING lobby: roster/slot have been restored; no match snapshot
             // is needed and normal lobby controls can be re-enabled.
             reconnectBarrierRef.current = false;
+            const apiKeyPacket = buildGroqApiKeyPacket(groqApiKeyRef.current);
+            if (apiKeyPacket) send(apiKeyPacket);
             setState(s => ({
               ...s,
               phase: 'lobby',
