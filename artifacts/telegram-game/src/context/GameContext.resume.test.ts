@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildGroqApiKeyPacket, parseResumeSnapshotV1 } from './GameContext';
+import { buildGroqApiKeyPacket, getRestorableCorpsePositions, parseResumeSnapshotV1 } from './GameContext';
 
 const trimmedKeyPacket = buildGroqApiKeyPacket('  test-key  ');
 assert.ok(trimmedKeyPacket, 'a session Groq key should encode within the wire limit');
@@ -123,6 +123,19 @@ const validReportedBody = structuredClone(bodyWithoutCorpse);
 validReportedBody.corpsePositions = [{ slot: 2, wireX: 1500, wireY: 1600 }];
 assert.ok(parseResumeSnapshotV1(encode(validReportedBody)),
   'a dead reported player with authoritative corpse coordinates must restore');
+
+const parsedReportedBody = parseResumeSnapshotV1(encode(validReportedBody));
+assert.ok(parsedReportedBody);
+assert.deepEqual(
+  getRestorableCorpsePositions(parsedReportedBody.corpsePositions, parsedReportedBody.meeting?.bodySlot ?? null),
+  [],
+  'the body being discussed is retained for snapshot validation but hidden from restored roaming-world prompts',
+);
+assert.deepEqual(
+  getRestorableCorpsePositions(parsedReportedBody.corpsePositions, 255),
+  parsedReportedBody.corpsePositions,
+  'an emergency meeting must not hide unrelated unreported corpses',
+);
 
 const deadVoter = structuredClone(base);
 deadVoter.deadSlots = [2];
