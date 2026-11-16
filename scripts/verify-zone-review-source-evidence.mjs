@@ -72,7 +72,11 @@ for (const zoneId of zoneIds) {
     continue;
   }
 
-  if (!record.sourceEvidence.some(evidence => coversZoneWithContext(evidence, zoneId))) {\n    errors.push(`${zoneId}: at least one source crop must cover its complete canonical 4×3 zone plus ${SEAM_CONTEXT_WORLD_PX} world-pixel seam context under its recorded transform`);\n  }\n\n  for (let index = 0; index < record.sourceEvidence.length; index++) {
+  if (!record.sourceEvidence.some(evidence => coversZoneWithContext(evidence, zoneId))) {
+    errors.push(`${zoneId}: at least one source crop must cover its complete canonical 4×3 zone plus ${SEAM_CONTEXT_WORLD_PX} world-pixel seam context under its recorded transform`);
+  }
+
+  for (let index = 0; index < record.sourceEvidence.length; index++) {
     const evidence = record.sourceEvidence[index];
     const label = `${zoneId} evidence ${index + 1}`;
     if (!evidence || typeof evidence !== "object" || typeof evidence.sourcePath !== "string" || !evidence.sourcePath.trim()) {
