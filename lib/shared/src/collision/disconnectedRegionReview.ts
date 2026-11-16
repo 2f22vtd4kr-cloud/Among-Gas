@@ -75,7 +75,7 @@ export function validateDisconnectedRegionReviewRecord(
     if (!reviewer || !owner || reviewer.toLowerCase() === owner.toLowerCase()) {
       errors.push("Approval requires distinct non-empty independent reviewer and design-owner names");
     }
-    if (record.decision === "deferred") errors.push("Design disposition remains deferred");
+    if (record.decision === "deferred") errors.push("design disposition remains deferred");
     if (record.decision !== "accessible" && record.decision !== "intentionally-sealed" && record.decision !== "deferred") {
       errors.push("Approval requires an explicit accessible or intentionally-sealed decision");
     }
