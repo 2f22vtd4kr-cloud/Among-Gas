@@ -127,14 +127,14 @@ export async function requestGroqDialogue(
 }
 
 function sanitizePublicDialogueText(value: string, maxLength: number): string {
-  return Array.from(String(value ?? ''))
+  const clean = Array.from(String(value ?? ''))
     .map(character => /[\p{Cc}\p{Zl}\p{Zp}]/u.test(character)
       ? ' '
       : /[\p{Cf}\p{Cs}]/u.test(character) ? '' : character)
     .join('')
     .replace(/\s+/gu, ' ')
-    .trim()
-    .slice(0, maxLength);
+    .trim();
+  return Array.from(clean).slice(0, maxLength).join('');
 }
 
 export interface PublicBotDialogueContext {
