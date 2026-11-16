@@ -1686,6 +1686,11 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
         }
 
         // ── 0x18: vent state broadcast ──────────────────────────────────────
+        if (opcode === 0x18 && event.data.byteLength === 2 && view.getUint8(1) === 0x00) {
+          setState(s => ({ ...s, groqApiKeyConfigured: false }));
+          return;
+        }
+
         if (opcode === 0x18 && event.data.byteLength === 3 && view.getUint8(1) === 0x01) {
           setState(s => ({ ...s, groqApiKeyConfigured: view.getUint8(2) === 1 }));
           return;
