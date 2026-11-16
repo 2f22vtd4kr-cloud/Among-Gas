@@ -100,6 +100,17 @@ for (const point of openPolygon) {
     const distance = 100 / Math.cos(angle);
     return { x: distance * Math.cos(angle), y: distance * Math.sin(angle) };
   });
+  assert.deepEqual(smoothVisibilityPolygon(straightWall, { x: Number.NaN, y: 0 }), [],
+    'invalid smoothing origins fail closed instead of preserving an untrusted polygon');
+  assert.deepEqual(smoothVisibilityPolygon([straightWall[0], null as never, straightWall[2]], straightOrigin), [],
+    'malformed runtime vertices fail closed instead of throwing or emitting an invalid polygon');
+  assert.deepEqual(smoothVisibilityPolygon(straightWall, straightOrigin, Number.NaN),
+    smoothVisibilityPolygon(straightWall, straightOrigin, 3),
+    'NaN smoothing windows use the documented default');
+  assert.equal(smoothVisibilityPolygon(straightWall, straightOrigin, Number.POSITIVE_INFINITY).length, straightWall.length,
+    'positive infinite smoothing windows clamp to the supported maximum');
+  assert.equal(smoothVisibilityPolygon(straightWall, straightOrigin, Number.NEGATIVE_INFINITY).length, straightWall.length,
+    'negative infinite smoothing windows clamp to the supported minimum');
   const smoothedWall = smoothVisibilityPolygon(straightWall, straightOrigin, 6);
   assert.deepEqual(smoothedWall.slice(6, 35), straightWall.slice(6, 35),
     'interior collinear wall intersections do not bow inward; only the open test segment endpoints wrap');
