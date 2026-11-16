@@ -71,6 +71,37 @@ function distinctName(name: string, other: string | null): boolean {
   return other === null || name.trim().toLocaleLowerCase() !== other.trim().toLocaleLowerCase();
 }
 
+/** A zone review must retain enough original-map context to judge both seams. */
+function evidenceCoversZoneWithSeamContext(evidence: Record<string, unknown>, zoneId: string): boolean {
+  const index = Number(zoneId.slice(1)) - 1;
+  if (!/^Z(?:0[1-9]|1[0-2])$/.test(zoneId) || index < 0 || index >= 12) return false;
+  const rect = evidence.sourceRect;
+  const transform = evidence.worldTransform;
+  if (!Array.isArray(rect) || rect.length !== 4 || !rect.every(Number.isFinite) ||
+      !transform || typeof transform !== "object" || Array.isArray(transform)) return false;
+  const t = transform as Record<string, unknown>;
+  if (![t.scaleX, t.scaleY, t.offsetX, t.offsetY].every(Number.isFinite) ||
+      (t.scaleX as number) <= 0 || (t.scaleY as number) <= 0) return false;
+  const [left, top, right, bottom] = rect as number[];
+  if (left < 0 || top < 0 || right > Number(evidence.sourceWidth) ||
+      bottom > Number(evidence.sourceHeight) || right <= left || bottom <= top) return false;
+  const worldLeft = left * (t.scaleX as number) + (t.offsetX as number);
+  const worldTop = top * (t.scaleY as number) + (t.offsetY as number);
+  const worldRight = right * (t.scaleX as number) + (t.offsetX as number);
+  const worldBottom = bottom * (t.scaleY as number) + (t.offsetY as number);
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  const zoneLeft = column * MAP_W / 4;
+  const zoneRight = (column + 1) * MAP_W / 4;
+  const zoneTop = row * MAP_H / 3;
+  const zoneBottom = (row + 1) * MAP_H / 3;
+  const context = 24;
+  return worldLeft <= Math.max(0, zoneLeft - context) + 0.5 &&
+    worldTop <= Math.max(0, zoneTop - context) + 0.5 &&
+    worldRight >= Math.min(MAP_W, zoneRight + context) - 0.5 &&
+    worldBottom >= Math.min(MAP_H, zoneBottom + context) - 0.5;
+}
+
 function validateEvidence(value: unknown, index: number): string[] {
   const errors: string[] = [];
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -132,7 +163,17 @@ export function validateZoneReviewRecord(value: unknown, expectedZone: unknown):
   if (record.zone !== expectedZone) errors.push("Zone review record must match the requested zone");
   if (!statuses.includes(record.status as ZoneReviewStatus)) errors.push("Unknown zone review status");
   if (!Array.isArray(record.sourceEvidence)) errors.push("Source evidence must be an array");
-  else record.sourceEvidence.forEach((item, index) => errors.push(...validateEvidence(item, index + 1)));
+  else {
+    record.sourceEvidence.forEach((item, index) => errors.push(...validateEvidence(item, index + 1)));
+    const hasSeamContext = record.sourceEvidence.some(item =>
+      !!item && typeof item === "object" && !Array.isArray(item) &&
+      evidenceCoversZoneWithSeamContext(item as Record<string, unknown>, String(expectedZone)));
+    // Empty evidence is valid only for a not-yet-started draft. Submission and
+    // approval already require at least one source item in the status checks below.
+    if (record.sourceEvidence.length > 0 && !hasSeamContext) {
+      errors.push("At least one source crop must cover the complete canonical zone plus 24 world-pixel seam context under its recorded transform");
+    }
+  }
   if (typeof record.notes !== "string") errors.push("Zone review notes must be text");
 
   const author = record.author as Record<string, unknown> | null;
