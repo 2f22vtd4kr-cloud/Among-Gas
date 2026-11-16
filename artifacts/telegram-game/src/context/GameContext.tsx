@@ -770,21 +770,28 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
   if (raw.myRole !== 'crewmate' && raw.myRole !== 'impostor') return null;
   if (!Array.isArray(raw.players) || raw.players.length < 1 || raw.players.length > 15) return null;
   const players: LobbyPlayer[] = [];
+  const playerSlots = new Set<number>();
   for (const entry of raw.players) {
     if (!isRecord(entry) || !isSlot(entry.slot) ||
-        typeof entry.username !== 'string' || entry.username.length > 96) return null;
+        typeof entry.username !== 'string' || entry.username.length > 96 ||
+        playerSlots.has(entry.slot)) return null;
+    playerSlots.add(entry.slot);
     players.push({ slot: entry.slot, username: entry.username });
   }
-  if (!players.some(player => player.slot === raw.mySlot)) return null;
+  if (!players.some(player => player.slot === raw.mySlot) ||
+      !players.some(player => player.slot === raw.hostSlot)) return null;
 
-  if (!Array.isArray(raw.playerPositions) || raw.playerPositions.length > 15) return null;
+  if (!Array.isArray(raw.playerPositions) || raw.playerPositions.length !== players.length) return null;
   const playerPositions: ResumeSnapshotV1['playerPositions'] = [];
+  const positionSlots = new Set<number>();
   for (const entry of raw.playerPositions) {
-    if (!isRecord(entry) || !isSlot(entry.slot) ||
+    if (!isRecord(entry) || !isSlot(entry.slot) || !playerSlots.has(entry.slot) ||
+        positionSlots.has(entry.slot) ||
         !isIntegerInRange(entry.wireX, 0, 32_000) ||
         !isIntegerInRange(entry.wireY, 0, 32_000) ||
         typeof entry.inVent !== 'boolean') return null;
     if (entry.ventId !== undefined && !isIntegerInRange(entry.ventId, 0, 255)) return null;
+    positionSlots.add(entry.slot);
     playerPositions.push({
       slot: entry.slot,
       wireX: entry.wireX,
@@ -793,7 +800,6 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
       ...(entry.ventId !== undefined ? { ventId: entry.ventId as number } : {}),
     });
   }
-  if (!playerPositions.some(position => position.slot === raw.mySlot)) return null;
 
   const parseSlots = (value: unknown): number[] | null => {
     if (!Array.isArray(value) || value.length > 15 || !value.every(isSlot)) return null;
