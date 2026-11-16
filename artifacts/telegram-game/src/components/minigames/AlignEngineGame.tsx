@@ -7,7 +7,7 @@ export function AlignEngineGame({ onComplete }: MinigameProps) {
   const { language } = useLanguage();
   const en = language === 'en';
   const [target] = useState(() => 22 + Math.random() * 56);
-  const [slider, setSlider] = useState(18);
+  const [slider, setSlider] = useState(5);
   const [dragging, setDragging] = useState(false);
   const [stableMs, setStableMs] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
