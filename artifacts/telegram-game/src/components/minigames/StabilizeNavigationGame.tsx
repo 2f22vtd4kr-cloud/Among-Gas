@@ -6,7 +6,7 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
   const { language } = useLanguage();
   const en = language === 'en';
   const [target] = useState(() => ({ x: 28 + Math.random() * 48, y: 22 + Math.random() * 45 }));
-  const [marker, setMarker] = useState({ x: 22, y: 68 });
+  const [marker, setMarker] = useState({ x: 10, y: 90 });
   const [dragging, setDragging] = useState(false);
   const [stableMs, setStableMs] = useState(0);
   const areaRef = useRef<HTMLDivElement>(null);
