@@ -791,6 +791,7 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
         !isIntegerInRange(entry.wireY, 0, 32_000) ||
         typeof entry.inVent !== 'boolean') return null;
     if (entry.ventId !== undefined && !isIntegerInRange(entry.ventId, 0, 255)) return null;
+    if (entry.inVent !== (entry.ventId !== undefined)) return null;
     positionSlots.add(entry.slot);
     playerPositions.push({
       slot: entry.slot,
@@ -803,36 +804,50 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
 
   const parseSlots = (value: unknown): number[] | null => {
     if (!Array.isArray(value) || value.length > 15 || !value.every(isSlot)) return null;
-    return value as number[];
+    const slots = value as number[];
+    if (new Set(slots).size !== slots.length || !slots.every(slot => playerSlots.has(slot))) return null;
+    return slots;
   };
   const impostorSlots = parseSlots(raw.impostorSlots);
   const deadSlots = parseSlots(raw.deadSlots);
   if (!impostorSlots || !deadSlots) return null;
-  // A crewmate snapshot must never expose the impostor roster.
+  // Preserve role asymmetry while requiring an impostor to see their own role roster.
   if (raw.myRole === 'crewmate' && impostorSlots.length !== 0) return null;
+  if (raw.myRole === 'impostor' && !impostorSlots.includes(raw.mySlot as number)) return null;
 
   if (!Array.isArray(raw.corpsePositions) || raw.corpsePositions.length > 15) return null;
   const corpsePositions: ResumeSnapshotV1['corpsePositions'] = [];
+  const corpseSlots = new Set<number>();
   for (const entry of raw.corpsePositions) {
-    if (!isRecord(entry) || !isSlot(entry.slot) ||
+    if (!isRecord(entry) || !isSlot(entry.slot) || !playerSlots.has(entry.slot) ||
+        !deadSlots.includes(entry.slot) || corpseSlots.has(entry.slot) ||
         !isIntegerInRange(entry.wireX, 0, 32_000) ||
         !isIntegerInRange(entry.wireY, 0, 32_000)) return null;
+    corpseSlots.add(entry.slot);
     corpsePositions.push({ slot: entry.slot, wireX: entry.wireX, wireY: entry.wireY });
   }
 
   if (!Array.isArray(raw.myTasks) || raw.myTasks.length > 32) return null;
   const myTasks: MyTask[] = [];
+  const taskIds = new Set<number>();
   for (const task of raw.myTasks) {
     if (!isRecord(task) || !isIntegerInRange(task.taskId, 0, 255) ||
-        !isIntegerInRange(task.completedSteps, 0, 255)) return null;
+        !isIntegerInRange(task.completedSteps, 0, 255) || taskIds.has(task.taskId)) return null;
+    const definition = TASK_DEFS.find(candidate => candidate.id === task.taskId);
+    if (!definition || task.completedSteps > definition.steps) return null;
+    taskIds.add(task.taskId);
     myTasks.push({ taskId: task.taskId, completedSteps: task.completedSteps });
   }
+  if (raw.myRole === 'impostor' && myTasks.length !== 0) return null;
 
   if (!isIntegerInRange(raw.globalTaskProgress, 0, 100) ||
       !isIntegerInRange(raw.killCooldownMs, 0, 600_000) ||
       !isIntegerInRange(raw.sabotageCooldownMs, 0, 600_000) ||
       !(raw.myVentId === null || isIntegerInRange(raw.myVentId, 0, 255)) ||
       typeof raw.emergencyMeetingUsed !== 'boolean') return null;
+  const ownPosition = playerPositions.find(position => position.slot === raw.mySlot);
+  if (!ownPosition || ownPosition.inVent !== (raw.myVentId !== null) ||
+      (ownPosition.inVent && ownPosition.ventId !== raw.myVentId)) return null;
 
   let sabotage: ResumeSnapshotV1['sabotage'] = null;
   if (raw.sabotage !== null) {
@@ -906,9 +921,12 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
     const value = raw.gameOverResult;
     if (!isRecord(value) ||
         !isIntegerInRange(value.ejectedSlot, 0, 255) ||
-        !isIntegerInRange(value.winFlag, 0, 2)) return null;
+        !isIntegerInRange(value.winFlag, 0, 2) ||
+        (value.ejectedSlot !== NO_TARGET &&
+          (!playerSlots.has(value.ejectedSlot) || !deadSlots.includes(value.ejectedSlot)))) return null;
     gameOverResult = { ejectedSlot: value.ejectedSlot, winFlag: value.winFlag as 0 | 1 | 2 };
   }
+  if ((raw.phase === 'GAMEOVER') !== (gameOverResult !== null)) return null;
 
   return {
     version: 1,
