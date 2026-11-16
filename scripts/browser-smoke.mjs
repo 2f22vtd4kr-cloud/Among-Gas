@@ -127,7 +127,7 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         );
         assert.ok(lit >= 0 && lit < 6, 'each reactor flash must identify exactly one pad');
         sequence.push(lit);
-        if (flash < 4) await page.waitForTimeout(700);
+        if (flash < 4) await page.waitForTimeout(850);
       }
       await page.waitForFunction(() => {
         const buttons = [...document.querySelectorAll('[data-testid="reactor-pad"]')];
