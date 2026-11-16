@@ -91,7 +91,7 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       await page.waitForFunction(() => {
         const button = document.querySelector('[data-testid="calibrate-control"]');
         const angle = Number(button?.getAttribute('data-angle'));
-        return Number.isFinite(angle) && angle >= 55 && angle <= 95;
+        return Number.isFinite(angle) && angle >= 65 && angle <= 85;
       }, undefined, { timeout: 8_000 });
       await touchTap(page, control);
       break;
