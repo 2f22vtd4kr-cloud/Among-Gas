@@ -93,6 +93,9 @@ jobs:
       - name: Verify zone review source evidence files, hashes and dimensions
         run: pnpm --filter @workspace/scripts run verify:zone-source-evidence
 
+      - name: Verify every retained source asset against the provenance inventory
+        run: pnpm --filter @workspace/scripts run verify:asset-provenance
+
       - name: Verify vector collision engine and mobile editor geometry helpers
         run: pnpm --filter @workspace/scripts run test:vector-collision
 
