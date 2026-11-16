@@ -923,6 +923,9 @@ export function parseResumeSnapshotV1(data: ArrayBuffer): ResumeSnapshotV1 | nul
     };
   }
   if ((raw.phase === 'MEETING') !== (meeting !== null)) return null;
+  // callMeeting rejects active sabotage and forcibly releases every vented player.
+  if (raw.phase === 'MEETING' &&
+      (sabotage !== null || playerPositions.some(position => position.inVent))) return null;
 
   let gameOverResult: ResumeSnapshotV1['gameOverResult'] = null;
   if (raw.gameOverResult !== null) {
