@@ -37,6 +37,10 @@ export function drawVisionFogOverlay({
   visionRadiusScreenPx,
   visiblePolygon,
 }: MapVisionFogOptions): void {
+  if (!Number.isInteger(canvasWidth) || canvasWidth <= 0 ||
+      !Number.isInteger(canvasHeight) || canvasHeight <= 0) {
+    throw new RangeError('Fog canvas dimensions must be positive integers');
+  }
   if (fogCanvas.width !== canvasWidth || fogCanvas.height !== canvasHeight) {
     fogCanvas.width = canvasWidth;
     fogCanvas.height = canvasHeight;
@@ -54,10 +58,15 @@ export function drawVisionFogOverlay({
   // Reveal only inside the ray-cast polygon; destination-out acts on this
   // offscreen fog buffer, never the map/player pixels on the main canvas.
   const hasValidPolygon = visiblePolygon.length > 2 &&
-    visiblePolygon.every(point => Number.isFinite(point.x) && Number.isFinite(point.y));
+    visiblePolygon.every(point => !!point && typeof point === 'object' &&
+      Number.isFinite(point.x) && Number.isFinite(point.y));
+  const hasValidRevealTransform = Number.isFinite(cameraX) && Number.isFinite(cameraY) &&
+    Number.isFinite(scale) && scale > 0 && Number.isFinite(playerScreenX) &&
+    Number.isFinite(playerScreenY) && Number.isFinite(visionRadiusScreenPx) &&
+    visionRadiusScreenPx > 0;
   fogContext.save();
   fogContext.globalCompositeOperation = 'destination-out';
-  if (hasValidPolygon) {
+  if (hasValidPolygon && hasValidRevealTransform) {
     fogContext.beginPath();
     for (let i = 0; i < visiblePolygon.length; i++) {
       const point = visiblePolygon[i];

@@ -114,4 +114,56 @@ const polygon = [
     'invalid geometry must retain the conservative full-fog fallback');
 }
 
+{
+  const { context, calls } = recordingContext();
+  const { context: mainContext, calls: mainCalls } = recordingContext();
+  const { canvas } = recordingCanvas(640, 480);
+  drawVisionFogOverlay({
+    context: mainContext, fogContext: context, fogCanvas: canvas,
+    canvasWidth: 640, canvasHeight: 480, cameraX: 0, cameraY: 0, scale: Number.NaN,
+    playerScreenX: 20, playerScreenY: 20, visionRadiusScreenPx: 80,
+    visiblePolygon: polygon,
+  });
+  assert.ok(!calls.some(call => ['moveTo', 'lineTo', 'clip', 'createRadialGradient'].includes(call.name)),
+    'invalid camera transforms must preserve full fog rather than feed non-finite coordinates to canvas');
+  assert.equal(mainCalls.filter(call => call.name === 'drawImage').length, 1);
+}
+
+{
+  const { context, calls } = recordingContext();
+  const { context: mainContext } = recordingContext();
+  const { canvas } = recordingCanvas(640, 480);
+  drawVisionFogOverlay({
+    context: mainContext, fogContext: context, fogCanvas: canvas,
+    canvasWidth: 640, canvasHeight: 480, cameraX: 0, cameraY: 0, scale: 1,
+    playerScreenX: 20, playerScreenY: 20, visionRadiusScreenPx: Number.POSITIVE_INFINITY,
+    visiblePolygon: polygon,
+  });
+  assert.ok(!calls.some(call => ['moveTo', 'lineTo', 'clip', 'createRadialGradient'].includes(call.name)),
+    'invalid reveal radii must preserve full fog rather than construct an invalid gradient');
+}
+
+{
+  const { context, calls } = recordingContext();
+  const { context: mainContext } = recordingContext();
+  const { canvas } = recordingCanvas(640, 480);
+  drawVisionFogOverlay({
+    context: mainContext, fogContext: context, fogCanvas: canvas,
+    canvasWidth: 640, canvasHeight: 480, cameraX: 0, cameraY: 0, scale: 1,
+    playerScreenX: 20, playerScreenY: 20, visionRadiusScreenPx: 80,
+    visiblePolygon: [polygon[0], null as never, polygon[2]],
+  });
+  assert.ok(!calls.some(call => ['moveTo', 'lineTo', 'clip', 'createRadialGradient'].includes(call.name)),
+    'malformed runtime polygon vertices must fail closed without throwing');
+}
+
+assert.throws(() => drawVisionFogOverlay({
+  context: recordingContext().context,
+  fogContext: recordingContext().context,
+  fogCanvas: recordingCanvas(0, 0).canvas,
+  canvasWidth: 0, canvasHeight: 480, cameraX: 0, cameraY: 0, scale: 1,
+  playerScreenX: 20, playerScreenY: 20, visionRadiusScreenPx: 80,
+  visiblePolygon: polygon,
+}), /positive integers/, 'invalid canvas dimensions must be rejected before resizing');
+
 console.log('Map vision fog renderer passed (buffer resize, camera transform, clipped gradient, iOS filter reset, degenerate-polygon fallback).');
