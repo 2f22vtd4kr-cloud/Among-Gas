@@ -34,8 +34,7 @@
     "test:vent-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameVentOverlay.test.tsx",
     "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx",
     "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx",
-    "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
-    "test:client-resume-snapshot": "tsx ../artifacts/telegram-game/src/context/GameContext.resume.test.ts"
+    "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx"
   },
   "devDependencies": {
     "@types/node": "catalog:",
