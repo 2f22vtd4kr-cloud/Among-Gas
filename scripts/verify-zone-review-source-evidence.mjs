@@ -9,6 +9,47 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const realRepoRoot = await realpath(repoRoot);
 const collisionDir = resolve(repoRoot, "lib/shared/src/collision");
 const zoneIds = Array.from({ length: 12 }, (_, index) => `Z${String(index + 1).padStart(2, "0")}`);
+const MAP_WIDTH = 3224;
+const MAP_HEIGHT = 1858;
+const ZONE_COLUMNS = 4;
+const ZONE_ROWS = 3;
+const SEAM_CONTEXT_WORLD_PX = 24;
+
+function expectedZoneBounds(zoneId) {
+  const index = Number(zoneId.slice(1)) - 1;
+  const column = index % ZONE_COLUMNS;
+  const row = Math.floor(index / ZONE_COLUMNS);
+  return {
+    left: column * MAP_WIDTH / ZONE_COLUMNS,
+    top: row * MAP_HEIGHT / ZONE_ROWS,
+    right: (column + 1) * MAP_WIDTH / ZONE_COLUMNS,
+    bottom: (row + 1) * MAP_HEIGHT / ZONE_ROWS,
+  };
+}
+
+function coversZoneWithContext(evidence, zoneId) {
+  if (!evidence || typeof evidence !== "object" || Array.isArray(evidence)) return false;
+  const rect = evidence.sourceRect;
+  const transform = evidence.worldTransform;
+  if (!Array.isArray(rect) || rect.length !== 4 ||
+      !rect.every(Number.isFinite) || !transform || typeof transform !== "object") return false;
+  const values = [transform.scaleX, transform.scaleY, transform.offsetX, transform.offsetY];
+  if (!values.every(Number.isFinite) || transform.scaleX <= 0 || transform.scaleY <= 0) return false;
+  const [left, top, right, bottom] = rect;
+  if (left < 0 || top < 0 || right > evidence.sourceWidth || bottom > evidence.sourceHeight ||
+      right <= left || bottom <= top) return false;
+  const world = {
+    left: left * transform.scaleX + transform.offsetX,
+    top: top * transform.scaleY + transform.offsetY,
+    right: right * transform.scaleX + transform.offsetX,
+    bottom: bottom * transform.scaleY + transform.offsetY,
+  };
+  const zone = expectedZoneBounds(zoneId);
+  return world.left <= Math.max(0, zone.left - SEAM_CONTEXT_WORLD_PX) + 0.5 &&
+    world.top <= Math.max(0, zone.top - SEAM_CONTEXT_WORLD_PX) + 0.5 &&
+    world.right >= Math.min(MAP_WIDTH, zone.right + SEAM_CONTEXT_WORLD_PX) - 0.5 &&
+    world.bottom >= Math.min(MAP_HEIGHT, zone.bottom + SEAM_CONTEXT_WORLD_PX) - 0.5;
+}
 const expectedRecords = new Set(zoneIds.map(id => `collision.zone-${id}.review.v1.json`));
 const entries = (await readdir(collisionDir)).filter(name => /^collision\.zone-Z\d{2}\.review\.v1\.json$/.test(name));
 const errors = [];
@@ -30,6 +71,10 @@ for (const zoneId of zoneIds) {
   if (!Array.isArray(record.sourceEvidence) || record.sourceEvidence.length === 0) {
     errors.push(`${zoneId}: source evidence is missing`);
     continue;
+  }
+
+  if (!record.sourceEvidence.some(evidence => coversZoneWithContext(evidence, zoneId))) {
+    errors.push(`${zoneId}: at least one source crop must cover its complete canonical 4×3 zone plus ${SEAM_CONTEXT_WORLD_PX} world-pixel seam context under its recorded transform`);
   }
 
   for (let index = 0; index < record.sourceEvidence.length; index++) {
