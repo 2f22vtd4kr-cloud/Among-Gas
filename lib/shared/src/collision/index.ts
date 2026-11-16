@@ -16,3 +16,16 @@ export type { ZoneReviewStatus, ZoneSourceEvidence, ZoneReviewRecord } from "./z
 
 export { validateCollisionCutoverEvidence, COLLISION_CUTOVER_REQUIRED_ANCHORS, COLLISION_CUTOVER_REQUIRED_REGIONS } from "./releaseReadiness.js";
 export type { CollisionCutoverEvidence, GameplayAnchorDisposition, DisconnectedRegionDisposition } from "./releaseReadiness.js";
+
+export {
+  DISCONNECTED_REGION_IDS,
+  isDisconnectedRegionId,
+  createDefaultDisconnectedRegionReviewRecord,
+  validateDisconnectedRegionReviewRecord,
+} from "./disconnectedRegionReview.js";
+export type {
+  DisconnectedRegionId,
+  DisconnectedRegionDecision,
+  DisconnectedRegionReviewStatus,
+  DisconnectedRegionReviewRecord,
+} from "./disconnectedRegionReview.js";
