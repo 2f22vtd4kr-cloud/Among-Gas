@@ -35,9 +35,27 @@ export function FuelGame({ onComplete }: MinigameProps) {
       <button
         data-testid="fuel-hold-control"
         data-progress={progress}
-        onPointerDown={e => { e.preventDefault(); setHolding(true); }}
-        onPointerUp={() => setHolding(false)}
-        onPointerCancel={() => setHolding(false)}
+        onPointerDown={e => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setHolding(true);
+        }}
+        onPointerMove={e => {
+          if (!holding) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+            setHolding(false);
+          }
+        }}
+        onPointerUp={e => {
+          setHolding(false);
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onPointerCancel={e => {
+          setHolding(false);
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onLostPointerCapture={() => setHolding(false)}
         onPointerLeave={() => setHolding(false)}
         style={{
           width: 132, height: 64, borderRadius: 12,
