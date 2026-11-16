@@ -88,7 +88,7 @@ const unicodeBoundaryPayload = JSON.parse(unicodeBoundaryPrompt[1].content) as {
 assert.equal(unicodeBoundaryPayload.actingPlayer, 'A'.repeat(31) + '😀');
 assert.equal(unicodeBoundaryPayload.livingPlayers, 'B'.repeat(511) + '😀');
 assert.equal(unicodeBoundaryPayload.recentPublicTranscript, 'C'.repeat(2_399) + '😀');
-assert.doesNotMatch(unicodeBoundaryPrompt[1].content, /\\p{Cs}/u,
+assert.doesNotMatch(unicodeBoundaryPrompt[1].content, /\p{Cs}/u,
   'dialogue prompt truncation must never split a supplementary Unicode character');
 
 
