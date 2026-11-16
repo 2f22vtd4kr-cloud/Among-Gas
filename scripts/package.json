@@ -16,7 +16,7 @@
     "test:character-atlas-browser": "tsx ./test-character-atlas-browser.mjs",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
     "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./test-collision-release-readiness.ts",
-    "test:vector-collision-parity": "pnpm run build:collision && tsx ./src/testRasterVectorParity.ts",
+    "test:vector-collision-parity": "pnpm run build:collision && tsx ./testRasterVectorParity.ts",
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
     "build:map-tiles": "tsx src/buildMapTiles.ts",
     "test:map-tiles": "tsx src/testMapTiles.ts",
