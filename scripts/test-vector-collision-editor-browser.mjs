@@ -35,7 +35,7 @@ try {
   assert.equal(savedScratchReview.status, "tracing", "review metadata persists separately from geometry");
 
   await page.getByText("Detached-region owner decisions · C0 / C20 / C27 / C38 / C56").click();
-  await page.getByLabel("Detached region").selectOption("C38");
+  await page.getByRole("combobox", { name: "Detached region", exact: true }).selectOption("C38");
   await page.getByRole("button", { name: "Load region review" }).click();
   const regionEditor = page.getByTestId("detached-region-review-record");
   await regionEditor.waitFor({ state: "visible" });
