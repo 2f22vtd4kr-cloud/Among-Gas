@@ -33,7 +33,7 @@ The recovered review compared each listed boundary with both source references. 
 | C38 | [1821,801,2589,1327] | East office / vehicle-service bay; internal floor and van silhouette are visible behind a continuous perimeter, with no doorway visible in the references | Preserve the bay interior and van clearance, but keep the current perimeter blocked; do not invent an entry | **Owner sign-off pending** |
 | C56 | [147,1209,427,1555] | Southwest shelving/canister display interior behind a diagonal wall | Irregular shelving/display contour; keep adjacent shop floor open | **Owner sign-off pending** |
 
-The C0/C20/C27/C38/C56 identifiers are retained from the review register as diagnostic labels. They are scan-order component IDs, not runtime identifiers. The table does not treat any of these areas as approved inaccessible or approved accessible spaces.
+The C0/C20/C27/C38/C56 identifiers are retained from the review register as diagnostic labels. They are scan-order component IDs, not runtime identifiers. The table does not treat any of these areas as approved inaccessible or approved accessible spaces. Their structured review scaffolds and dev-editor workflow are documented in [map-region-review-records/README.md](map-region-review-records/README.md); all five records remain `not-started` and `deferred` until explicit source-backed owner decisions are recorded.
 
 The 12-zone authoring/review partition is tracked in [map-zone-review-register.md](map-zone-review-register.md); all 12 zones are currently untraced and unreviewed. The five sector approach targets A–E are a separate acceptance set. They must continue to have full-player-footprint, spawn-connected routes; they are not the same thing as the five detached candidate pockets above.
 
