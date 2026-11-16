@@ -4,13 +4,14 @@ function sanitizePromptLabel(value: string): string {
   // Display names are user-controlled. Strip Unicode control/format characters
   // (including bidi overrides and zero-width formatting) before they enter a
   // model prompt; JSON quoting alone does not prevent misleading prompt text.
-  return Array.from(String(value))
+  const clean = Array.from(String(value))
     .map(character => /[\p{Cc}\p{Zl}\p{Zp}]/u.test(character)
       ? ' '
       : /[\p{Cf}\p{Cs}]/u.test(character) ? '' : character)
     .join('')
     .replace(/\s+/gu, ' ')
-    .slice(0, 32).trim();
+    .trim();
+  return Array.from(clean).slice(0, 32).join('');
 }
 
 export interface VisiblePlayerSource {
