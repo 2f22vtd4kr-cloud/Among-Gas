@@ -135,6 +135,22 @@ for (const anchor of anchors) {
   if (!spawnConnected) failures.push(`${anchor.id}: approach point is not in the spawn-connected bot graph`);
   if (!sightClear) failures.push(`${anchor.id}: interaction line of sight is blocked`);
   if (!arrived) failures.push(`${anchor.id}: production bot path follower did not reach the approach point`);
+  const reversePlayer = { x: approach.x, y: approach.y } as LobbyPlayer;
+  let returnedToSpawn = false;
+  let reverseStalledTicks = 0;
+  let reverseRouteTicks = 0;
+  for (; reverseRouteTicks < 400; reverseRouteTicks++) {
+    const before = { x: reversePlayer.x, y: reversePlayer.y };
+    returnedToSpawn = probe.advance(reversePlayer, { x: SPAWN_X, y: SPAWN_Y });
+    if (returnedToSpawn) break;
+    const displacement = Math.hypot(reversePlayer.x - before.x, reversePlayer.y - before.y);
+    reverseStalledTicks = displacement < 0.01 ? reverseStalledTicks + 1 : 0;
+    if (reverseStalledTicks >= 20) break;
+  }
+  if (!returnedToSpawn) {
+    failures.push(`${anchor.id}: production bot path follower could not return from the approach to spawn`);
+  }
+
 }
 
 assert.deepEqual(failures, [],
