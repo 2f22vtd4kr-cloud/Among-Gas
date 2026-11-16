@@ -416,6 +416,18 @@ try {
   });
   assert.equal(incompleteRegionResponse.status, 400, "approval requires completed full-footprint connectivity evidence");
 
+  const badRegionEvidenceHash = { ...regionRecord, status: "in-review", evidenceSha256: "b".repeat(64) };
+  const badRegionEvidenceResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(badRegionEvidenceHash),
+  });
+  assert.equal(badRegionEvidenceResponse.status, 400, "detached-region evidence bytes must match their recorded SHA-256");
+
+  const escapingRegionEvidence = { ...regionRecord, status: "in-review", evidencePath: "../outside.json" };
+  const escapingRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(escapingRegionEvidence),
+  });
+  assert.equal(escapingRegionResponse.status, 400, "detached-region evidence paths cannot escape their evidence directory");
+
   const firstRegionSave = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify({ ...regionRecord, status: "in-review" }),
   });
