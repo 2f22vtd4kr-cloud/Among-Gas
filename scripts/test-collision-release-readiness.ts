@@ -69,6 +69,7 @@ const completeEvidence: CollisionCutoverEvidence = {
     ownerName: "Design Owner",
     decision: "intentionally-sealed",
     evidenceSha256: digest,
+    evidencePath: "evidence/" + id + ".json",
     routeEvidenceComplete: true,
     notes: "Source-art review and full-footprint route evidence support this disposition.",
   })),
