@@ -168,7 +168,10 @@ assert.ok(validateCollisionCutoverEvidence(extraRegion).some((error) =>
   "duplicate region entries must not silently expand the release evidence set");
 
 
-assert.deepEqual(validateZoneReviewRecord(createDefaultZoneReviewRecord("Z01"), "Z01"), [],\n  "a new untouched review record must be loadable before source evidence is attached");\n\nconst validSourceEvidence = {
+assert.deepEqual(validateZoneReviewRecord(createDefaultZoneReviewRecord("Z01"), "Z01"), [],
+  "a new untouched review record must be loadable before source evidence is attached");
+
+const validSourceEvidence = {
   sourcePath: "attached_assets/original-map.png",
   sourceSha256: digest,
   sourceWidth: 1652,
