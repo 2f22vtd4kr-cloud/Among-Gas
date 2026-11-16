@@ -131,6 +131,22 @@ votesBeforeVotingOpens.meeting.votes = [{ slot: 0, targetSlot: 255 }];
 assert.equal(parseResumeSnapshotV1(encode(votesBeforeVotingOpens)), null,
   'the server cannot restore votes before the authoritative voting window opens');
 
+const sabotageDuringMeeting = structuredClone(base);
+sabotageDuringMeeting.sabotage = {
+  systemId: 1,
+  elapsedMs: 100,
+  fixedPads: [],
+  lockedTaskIds: [],
+};
+assert.equal(parseResumeSnapshotV1(encode(sabotageDuringMeeting)), null,
+  'the server cannot restore an active sabotage alongside a meeting');
+
+const playerStillVentedDuringMeeting = structuredClone(base);
+playerStillVentedDuringMeeting.playerPositions[0].inVent = true;
+playerStillVentedDuringMeeting.playerPositions[0].ventId = 4;
+assert.equal(parseResumeSnapshotV1(encode(playerStillVentedDuringMeeting)), null,
+  'calling a meeting forcibly releases every vented player before the meeting snapshot is built');
+
 const unknownMessageAuthor = structuredClone(base);
 unknownMessageAuthor.meeting.messages[0].slot = 14;
 assert.equal(parseResumeSnapshotV1(encode(unknownMessageAuthor)), null,
