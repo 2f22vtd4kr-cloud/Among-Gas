@@ -16,6 +16,11 @@ for (const id of DISCONNECTED_REGION_IDS) {
   assert.ok(validateDisconnectedRegionReviewRecord(draft, id).length === 0,
     "an honest not-started scaffold is structurally valid and cannot be mistaken for approval");
 
+  const prematureDraft = { ...draft, decision: "accessible" };
+  assert.ok(validateDisconnectedRegionReviewRecord(prematureDraft, id)
+    .some(error => error.includes("not-started record must remain deferred")),
+  "a not-started scaffold cannot contain a tentative access decision");
+
   const wrongId = { ...draft, id: "C99" };
   assert.ok(validateDisconnectedRegionReviewRecord(wrongId, id).some(error => error.includes("does not match")),
     "a record cannot be saved under a different diagnostic component ID");
