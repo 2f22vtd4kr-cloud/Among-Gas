@@ -456,6 +456,12 @@ export function attachWsServer(httpServer: HttpServer): WebSocketServer {
           const taskId = raw.readUInt8(2);
           const stepIndex = raw.readUInt8(3);
           lobbyManager.applyTaskStep(lobby, attackerSlot, taskId, stepIndex);
+          // Always reconcile this player's optimistic step with the server's
+          // authoritative count, including rejected out-of-range/order requests.
+          const completedSteps = lobbyManager.getPlayerTaskProgress(lobby, attackerSlot, taskId);
+          if (completedSteps !== null && ws.readyState === WebSocket.OPEN) {
+            ws.send(Buffer.from([0x26, taskId, completedSteps]));
+          }
           return;
         }
 
