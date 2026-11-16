@@ -1,6 +1,17 @@
 import assert from 'node:assert/strict';
 import { buildGroqApiKeyPacket, parseResumeSnapshotV1 } from './GameContext';
 
+const trimmedKeyPacket = buildGroqApiKeyPacket('  test-key  ');
+assert.ok(trimmedKeyPacket, 'a session Groq key should encode within the wire limit');
+assert.equal(trimmedKeyPacket[0], 0x18, 'Groq key uses the authenticated session-key opcode');
+assert.equal(trimmedKeyPacket[1], 8, 'Groq key packet declares its UTF-8 byte length');
+assert.equal(new TextDecoder().decode(trimmedKeyPacket.slice(2)), 'test-key',
+  'Groq key packet trims surrounding whitespace without logging or persisting the key');
+assert.deepEqual(Array.from(buildGroqApiKeyPacket('') ?? []), [0x18, 0],
+  'an empty key sends the explicit clear-key packet');
+assert.equal(buildGroqApiKeyPacket('k'.repeat(241)), null,
+  'keys larger than the protocol byte cap must be rejected before sending');
+
 const base: Record<string, any> = {
   version: 1,
   roomCode: 'ABC234',
