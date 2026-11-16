@@ -257,3 +257,30 @@ The first run's parity step passed before the later typecheck failure. This meas
 No screenshot, golden-image, image-gallery or collision-QA screenshot artifacts are required or produced by this recovery. Browser smoke uses functional DOM, accessibility, pointer/touch and gameplay-state assertions. The opt-in `scripts/renderCollisionQa.ts` remains outside CI and must not be invoked under the current policy.
 
 **Decision: NOT READY.** The latest mainline contains meaningful implementation and new automated gates, but the map's human source/design decisions, legal rights, device acceptance and release authorization remain open. Do not promote PR #138 or any raster-derived vector seed into live gameplay.
+
+
+## 2026-11-16 continuation addendum — exact-head status
+
+This addendum supersedes only the earlier active-PR and validation status above; the audited production baseline remains `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`. Candidate branches do not change that baseline until reviewed and merged.
+
+| PR | Scope | Exact-head status | Integration boundary |
+|---|---|---|---|
+| #212 | Strict reconnect snapshot validation and session credential restoration | `verify` passed on `7f9bbbb0fc9e25bb1b6d1ca73eb7e1015f19f532`; ready for review | Not merged; preserve #209 authoritative task-step acknowledgement semantics. |
+| #213 | Asset provenance inventory path/hash integrity | `verify` passed on `7c3ba4ffb7ba20848e598c2cddd2277158f3cd51`; ready for review | Inventory integrity is not a licence or commercial-rights opinion. |
+| #214 | Detached-region candidate editor/API and five-region review workflow | Full `verify` passed on `08040f5b7db9a2fd89e2703e7d1b2a7bc8a9d646`; ready for review | No owner decisions or geometry approval are implied. |
+| #216 | Real-touch interaction acceptance for all 11 task minigames | Full 57-step `verify` passed on `93e64a19f6758b6306dd167b9e8e751e7e82664d`; ready for review | Browser CI is not physical-device acceptance. |
+| #217 | Extract task minigame overlay lifecycle from GameMap | Full `verify` passed on `4988d7aae12a734fee0155815d04677b0d91a329`; ready for review | Behavior-preserving refactor; not merged. |
+
+PR #215 itself is this documentation reconciliation. PRs #206 and #208 are older draft branches behind current main and are not merge-ready; their content must be reconciled against current main before any integration. PR #138 remains closed unmerged and quarantined. The exact-main baseline has not been changed by these candidate PRs.
+
+### Remaining Plan 2 blockers (unchanged)
+
+- All 12 map zones still require source-backed object/obstacle traces, an identified author, independent reviewer and design-owner disposition. The editor's JSON/API and diagnostic overlays are authoring infrastructure, not approved geometry.
+- All 24 gameplay anchors require documented independent author/reviewer dispositions and evidence hashes in addition to the automated reachability/LOS/bot-route checks. The 24-anchor test uses the current shared fine raster and does not prove independent vision geometry.
+- C0, C20, C27, C38 and C56 still require source evidence, independent review and explicit owner decisions. No centroid ownership or editor save is an approval.
+- Statue planter/pedestal, parking-line semantics, object-specific collision/vision/shadow contours, and the shared canonical geometry contract remain unresolved.
+- Stage-2 AI/context-aware map-art refinement has tooling only; no model output or owner-approved candidate exists. The owner must choose baseline versus sharpened art and any illustrator budget.
+- Asset inventory checksums are verified, but creator provenance, commercial-use permission and redistribution rights remain uncleared for relevant map/reference inputs.
+- Physical phone/desktop acceptance, complete live-provider Groq verification, final merge/release dossier and deployment handoff remain open. No Replit/Vercel access, deployment, publishing or production mutation is authorized in this recovery pass.
+
+The exact-head passing PRs improve code and CI coverage but do not make Among Gas release-ready. Keep raster collision runtime authoritative; keep all vector/editor geometry candidate-only until the complete source, review, route, vision, parity and owner-approval gates pass.
