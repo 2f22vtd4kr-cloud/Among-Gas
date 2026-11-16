@@ -319,3 +319,10 @@ A fresh review-submission and inline-thread check found **zero submitted reviews
 - No Replit/Vercel access, deployment, publishing or production mutation is authorized. Prepare a release dossier only as an evidence-backed NOT READY dossier until all mandatory gates close.
 
 **Decision: NOT READY.** Green candidate CI is not a merged release. No PR in this ledger is merged, no independent review is recorded, and the remaining human/legal/device/provider gates remain release-blocking.
+
+
+### Follow-on source audit and documentation-head update — 2026-11-16 21:08 UTC
+
+After the table above was written, PR #218 received a further documentation-only source audit at head `74dd52c079e8e248994fe3b06257455d6e06fc5e`. It records the exact current-main sight/shadow derivation: runtime occlusion still derives large masks and compact outlines from fine movement occupancy; the vector candidate builder also derives sight geometry from that source; and the vector engine's omitted `castsShadow` value currently inherits `blocksSight` (the editor labels this explicit mode “Follow sight”). This is not independent per-object source authoring or approval. PR #218's new head requires its own exact-head CI run.
+
+The audit document itself was subsequently extended in this commit; its prior exact-head result applies to the prior head `ebbc4caedc0a9b8b3e03648061ed74bf33076e95` only. The new document head also requires exact-head CI. All candidate PRs remain unmerged and none has an independent review submission. The production baseline remains `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
