@@ -133,14 +133,16 @@ Implemented inside `artifacts/api-server/src/sim/` (not `scripts/` as originally
 - **Speed strategy — batched concurrency, not clock-warp.** Games run genuinely concurrently (`--concurrency`, default 25) inside one `LobbyManager`, sharing its real 25 Hz delta / 5 Hz bot-tick loops unmodified. A batch of N games therefore finishes in roughly the wall-clock time of one game, not N×, without threading a scaled clock through every `Date.now()`/`setTimeout` call in the live timing code (meeting/sabotage countdowns, kill cooldowns) — those have a history of subtle bugs (see `.agents/memory/`) and stay completely untouched.
 - Per-game safety timeout (`--timeoutMs`, default 120000ms) — a game that never reaches `GAMEOVER` is recorded as `"timeout"` rather than hanging the batch forever.
 
-Run it via `pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 5 --impostors 1`. Aggregate summary (also emitted as a machine-readable `{"type":"summary",...}` NDJSON line on stdout):
+Run it via `pnpm --filter @workspace/api-server run simulate -- --games 100 --bots 5 --impostors 1`.
+
+**Historical first-run snapshot (pre-Phase E; superseded, not current acceptance evidence):**
 ```
 ── Simulation results (100 games, 3m10s wall-clock) ──
 Crewmate win rate: 61%   Impostor win rate: 39%
 Avg game length:   0m42s   Avg tasks completed: 0.0   Avg kills/game: 1.0   Avg meetings/game: 2.3
 ```
 
-**Finding from first real runs:** every simulated game's `tasksCompleted` came back `0`, and `meetings` climbed steadily instead of games ending quickly. Root cause: a dead body is never marked "already reported" (no `reported` flag on the player, no removal from the map), so any crewmate bot that wanders near an old corpse re-triggers a fresh meeting — even minutes after it was already voted on. Crewmate bots also prioritize body-reporting over tasks, so once the first kill happens (usually within ~15s), the group gets stuck in a report → inconclusive-vote → wander → re-report loop and never touches tasks again. This is a real gameplay bug (not a simulator artifact — it reproduces with `--games 1`), and it directly bears on the proposed "tune bot difficulty for a fair, competitive solo mode" task: a solo game currently can only end via a lucky ejection or a sabotage timeout, never via tasks. Flagged for a follow-up fix rather than patched here, since it touches live meeting/report logic outside Phase D's scope.
+The initial simulation exposed a real repeated-body-report loop: a killed player's corpse remained reportable after its meeting had finished, so bots could trigger repeated meetings instead of returning to tasks. **This defect was subsequently fixed in Phase E**: the server stores immutable corpse coordinates, validates reports against the corpse's range and line of sight, marks an accepted corpse as `bodyReported`, and both the bot's corpse selection and client corpse UI exclude already-reported bodies. Ejected ghosts without a killed-body position cannot be reported. Regression coverage in `artifacts/api-server/src/test_gameplay_invariants.ts` verifies successful bot reporting, the reported flag, immutable corpse location, rejected ejected-ghost reports and authoritative range/LOS checks.
 
 ---
 
