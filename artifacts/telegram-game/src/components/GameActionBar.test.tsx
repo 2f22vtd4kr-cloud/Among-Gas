@@ -68,7 +68,7 @@ assert.match(ghost, /disabled=""/);
 assert.match(ghost, /aria-label="Use unavailable"/);
 
 // Context-specific actions retain distinct semantic kinds for accessible client assertions.
-for (const kind of ['repair', 'vent', 'admin']) {
+for (const kind of ['repair', 'vent', 'admin'] as const) {
   const html = render({ useAvailable: true, useActionKind: kind });
   assert.match(html, new RegExp(`data-use-action="${kind}"`));
   assert.match(html, /aria-label="Use"/);
