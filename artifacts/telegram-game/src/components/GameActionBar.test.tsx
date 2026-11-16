@@ -11,7 +11,7 @@ const common = {
   killAvailable: false,
   reportAvailable: false,
   useAvailable: false,
-  useActionKind: null as string | null,
+  useActionKind: null as 'task' | 'repair' | 'vent' | 'admin' | null,
   english: true,
   positionStyle: {},
   onKill: () => undefined,
