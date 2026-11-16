@@ -179,7 +179,7 @@ export function AsteroidsGame({ onComplete }: MinigameProps) {
             background: 'rgba(220,240,255,0.7)', pointerEvents: 'none' }} />
         ))}
         {asteroidsRef.current.map(asteroid => (
-          <div key={asteroid.id} style={{
+          <div key={asteroid.id} data-testid="asteroid-target" data-asteroid-id={asteroid.id} style={{
             position: 'absolute', left: `${asteroid.x * 100}%`, top: `${asteroid.y * 100}%`,
             width: `${asteroid.size * 100}%`, aspectRatio: '1', display: 'grid', placeItems: 'center',
             borderRadius: '37% 54% 44% 57%', transform: `rotate(${asteroid.id * 29 % 360}deg)`,
