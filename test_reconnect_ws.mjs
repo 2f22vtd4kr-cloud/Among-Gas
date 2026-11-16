@@ -89,6 +89,7 @@ async function main() {
   try {
     const hostId = 981_001;
     const guestId = 981_002;
+    const thirdId = 981_003;
     const host = await connect(hostId, 'ReconnectHost');
     sockets.push(host);
     send(host, [0x10, 0x01]);
@@ -107,6 +108,15 @@ async function main() {
     assert.equal(guestSlot[2], 1, 'guest joins slot 1');
     await waitFor(guest, packet =>
       packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 2,
+    );
+
+    const third = await connect(thirdId, 'ReconnectThird');
+    sockets.push(third);
+    send(third, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const thirdSlot = await waitFor(third, packet => packet[0] === 0x10 && packet[1] === 0x05);
+    assert.equal(thirdSlot[2], 2, 'third player joins slot 2');
+    await waitFor(third, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
     );
 
     send(host, [0x12]);
@@ -146,8 +156,8 @@ async function main() {
     assert.ok(Array.isArray(snapshot.players));
     assert.deepEqual(
       snapshot.players.map(player => player.slot).sort((a, b) => a - b),
-      [0, 1],
-      'snapshot roster preserves the same two slots',
+      [0, 1, 2],
+      'snapshot roster preserves all three original slots',
     );
     assert.ok(Array.isArray(snapshot.playerPositions));
     const ownPosition = snapshot.playerPositions.find(position => position.slot === 0);
@@ -189,7 +199,70 @@ async function main() {
       'a late reconnect must not rebroadcast readiness and disturb connected players',
     );
 
-    console.log('PASS: live active-match WebSocket reconnect, same-slot identity, 0x25/v1 snapshot, old-socket retirement and targeted readiness');
+    // Continue the same live match into a real emergency meeting. Reconnect a
+    // different player while the server-owned discussion/voting state is live.
+    send(replacement, [0x13, 0xFF]);
+    const meetingStarts = await Promise.all([replacement, guest, third].map(socket =>
+      waitFor(socket, packet => packet[0] === 0x1B, 5000, 'emergency meeting start'),
+    ));
+    assert.ok(meetingStarts.every(packet => packet[2] === 0xFF),
+      'meeting start must identify an emergency call rather than a body report');
+
+    const chat = 'I saw the suspect near the east generator.';
+    const chatBytes = Buffer.from(chat, 'utf8');
+    send(third, [0x19, 0x01, chatBytes.length, ...chatBytes]);
+    const chatBroadcasts = await Promise.all([replacement, guest, third].map(socket =>
+      waitFor(socket, packet => packet[0] === 0x19 && packet[1] === 0x02 && packet[2] === 2,
+        5000, 'meeting chat broadcast'),
+    ));
+    assert.ok(chatBroadcasts.every(packet => packet.subarray(4).toString('utf8') === chat),
+      'all connected clients receive identical meeting chat text');
+
+    // Let the server's 15-second discussion timer open voting. The reconnect
+    // must receive this existing phase, not restart the meeting.
+    await new Promise(resolve => setTimeout(resolve, 15_250));
+    guest.ws.close();
+    await waitForClose(guest);
+    const returningGuest = await connect(guestId, 'ReconnectGuest');
+    sockets.push(returningGuest);
+    send(returningGuest, [0x10, 0x02, ...Buffer.from(roomCode, 'ascii')]);
+    const returningSlot = await waitFor(returningGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x05,
+    );
+    assert.equal(returningSlot[2], 1, 'meeting reconnect must retain the guest original slot');
+    await waitFor(returningGuest, packet =>
+      packet[0] === 0x10 && packet[1] === 0x03 && packet[2] === 3,
+    );
+    const meetingResumeFrame = await waitFor(returningGuest, packet => packet[0] === 0x25);
+    const meetingSnapshot = JSON.parse(meetingResumeFrame.subarray(2).toString('utf8'));
+    assert.equal(meetingSnapshot.phase, 'MEETING', 'resume snapshot preserves the active meeting phase');
+    assert.ok(meetingSnapshot.meeting, 'resume snapshot includes the active meeting');
+    assert.equal(meetingSnapshot.meeting.votingOpen, true,
+      'resume snapshot preserves the server-owned discussion-to-voting transition');
+    assert.equal(meetingSnapshot.meeting.hasVoted, false,
+      'a reconnecting player with no vote remains eligible to vote');
+    assert.ok(meetingSnapshot.meeting.elapsedMs >= 15_000,
+      'meeting elapsed time continues across reconnect');
+    assert.ok(meetingSnapshot.meeting.messages.some(message => message.text === chat),
+      'meeting transcript survives disconnect and is included in the resume snapshot');
+
+    const readyBeforeMeeting = returningGuest.msgs.filter(packet => packet[0] === 0x24 && packet[1] === 0x01).length;
+    send(returningGuest, [0x23]);
+    await waitFor(returningGuest, packet => packet[0] === 0x24 && packet[1] === 0x01,
+      3000, 'meeting reconnect readiness');
+    assert.equal(returningGuest.msgs.filter(packet => packet[0] === 0x24 && packet[1] === 0x01).length,
+      readyBeforeMeeting + 1, 'meeting reconnect receives one targeted readiness acknowledgement');
+
+    for (const voter of [replacement, returningGuest, third]) send(voter, [0x14, 0xFF]);
+    const results = await Promise.all([replacement, returningGuest, third].map(socket =>
+      waitFor(socket, packet => packet[0] === 0x1C, 5000, 'meeting vote result'),
+    ));
+    assert.ok(results.every(packet => packet[1] === 0xFF),
+      'all players receive the skip result after the restored player votes');
+    assert.ok(results.every(packet => packet[2] === 0),
+      'a unanimous skip does not falsely declare a winner');
+
+    console.log('PASS: active-match reconnect restores roaming and live meeting/voting snapshots, transcript, timer phase, slot identity and targeted readiness');
   } finally {
     for (const socket of sockets) {
       try { socket.ws.close(); } catch {}
