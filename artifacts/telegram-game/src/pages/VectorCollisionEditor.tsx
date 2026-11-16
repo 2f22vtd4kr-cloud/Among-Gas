@@ -317,7 +317,7 @@ export default function VectorCollisionEditor() {
   const [zoneReviewJson, setZoneReviewJson] = useState("");
   const [regionReviewId, setRegionReviewId] = useState<DisconnectedRegionId>("C0");
   const [regionReviewJson, setRegionReviewJson] = useState("");
-  const [walkPoints, setWalkPoints = useState<Point[]>([]);
+  const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
   const [visionOrigin, setVisionOrigin] = useState<Point | null>(null);
