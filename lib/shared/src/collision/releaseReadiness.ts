@@ -25,8 +25,12 @@ export interface DisconnectedRegionDisposition {
 export interface FullFootprintRasterVectorParity {
   /** The same production three-circle feet footprint is applied to both worlds. */
   footprintContract: "three-circle-player-footprint";
-  /** Number of identical world positions tested against both collision worlds. */
-  sampleCount: number;
+  /** Both spawn graphs are included; neither direction may define the other side's denominator. */
+  sampleDomain: "union-of-raster-and-vector-spawn-reachable";
+  /** Maximum lattice spacing of the deterministic position sample. */
+  sampleStepPx: number;
+  /** Number of unique positions in the union of the two spawn-reachable graphs. */
+  unionSpawnReachableSampleCount: number;
   /** Vector says walkable while the raster says blocked. */
   vectorWalkableRasterBlocked: number;
   /** Raster says walkable while the vector says blocked. */
@@ -197,26 +201,33 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     if (!isSha256(footprintParity.sampleSetSha256)) {
       errors.push("Raster/vector parity needs a SHA-256 for its deterministic sample set");
     }
+    if (footprintParity.sampleDomain !== "union-of-raster-and-vector-spawn-reachable") {
+      errors.push("Raster/vector parity must sample the union of raster- and vector-spawn-reachable positions");
+    }
+    if (!Number.isSafeInteger(footprintParity.sampleStepPx) ||
+        footprintParity.sampleStepPx < 1 || footprintParity.sampleStepPx > 8) {
+      errors.push("Raster/vector parity sample spacing must be an integer from 1px through 8px");
+    }
     const counts = [
-      footprintParity.sampleCount,
+      footprintParity.unionSpawnReachableSampleCount,
       footprintParity.vectorWalkableRasterBlocked,
       footprintParity.rasterWalkableVectorBlocked,
     ];
     if (!counts.every((count) => Number.isSafeInteger(count) && count >= 0)) {
       errors.push("Raster/vector parity sample and disagreement counts must be non-negative safe integers");
-    } else if (footprintParity.sampleCount === 0) {
-      errors.push("Raster/vector parity must compare at least one full-footprint position");
+    } else if (footprintParity.unionSpawnReachableSampleCount < 1_000) {
+      errors.push("Raster/vector parity must compare at least 1,000 union-of-reachable full-footprint positions");
     } else {
-      const { sampleCount, vectorWalkableRasterBlocked, rasterWalkableVectorBlocked } = footprintParity;
-      if (vectorWalkableRasterBlocked > sampleCount ||
-          rasterWalkableVectorBlocked > sampleCount ||
-          vectorWalkableRasterBlocked + rasterWalkableVectorBlocked > sampleCount) {
+      const { unionSpawnReachableSampleCount, vectorWalkableRasterBlocked, rasterWalkableVectorBlocked } = footprintParity;
+      if (vectorWalkableRasterBlocked > unionSpawnReachableSampleCount ||
+          rasterWalkableVectorBlocked > unionSpawnReachableSampleCount ||
+          vectorWalkableRasterBlocked + rasterWalkableVectorBlocked > unionSpawnReachableSampleCount) {
         errors.push("Raster/vector directional disagreement counts cannot exceed the shared sample set");
       } else {
-        if (vectorWalkableRasterBlocked / sampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
+        if (vectorWalkableRasterBlocked / unionSpawnReachableSampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
           errors.push("Vector-walkable/raster-blocked full-footprint disagreement exceeds the unchanged 2% limit");
         }
-        if (rasterWalkableVectorBlocked / sampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
+        if (rasterWalkableVectorBlocked / unionSpawnReachableSampleCount > MAX_RASTER_VECTOR_DISAGREEMENT_RATIO) {
           errors.push("Raster-walkable/vector-blocked full-footprint disagreement exceeds the unchanged 2% limit");
         }
       }
