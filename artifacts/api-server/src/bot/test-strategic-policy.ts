@@ -47,7 +47,7 @@ const unicodeTaskPrompt = buildCrewTaskPlanningMessages({
   nearbyPlayers: [],
 });
 assert.equal(JSON.parse(unicodeTaskPrompt[1].content).actingPlayer, 'B'.repeat(31) + '😀');
-assert.doesNotMatch(unicodeTaskPrompt[1].content, /\\p{Cs}/u,
+assert.doesNotMatch(unicodeTaskPrompt[1].content, /\p{Cs}/u,
   'strategic prompts must not contain lone surrogate code points at length boundaries');
 
 const crewMessages = buildCrewTaskPlanningMessages({
