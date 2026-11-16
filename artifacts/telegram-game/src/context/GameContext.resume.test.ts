@@ -69,7 +69,7 @@ const voted = structuredClone(base);
 voted.meeting.hasVoted = true;
 voted.meeting.votes.push({ slot: 1, targetSlot: 2 });
 const validVoted = parseResumeSnapshotV1(encode(voted));
-assert.ok(validVoted, 'a snapshot with the returning player's vote must parse');
+assert.ok(validVoted, "a snapshot with the returning player's vote must parse");
 assert.equal(validVoted.meeting?.hasVoted, true);
 
 const missingMeeting = structuredClone(base);
