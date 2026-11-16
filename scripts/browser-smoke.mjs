@@ -33,6 +33,153 @@ async function waitForRoleRevealToFinish(page) {
   }
   await roleLabel.waitFor({ state: 'hidden', timeout: 6_000 });
 }
+
+async function dragPointerTo(page, control, targetX, targetY, holdMs = 0) {
+  const start = await control.boundingBox();
+  assert.ok(start, 'drag control must have a measurable touch target');
+  await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+  await page.mouse.down();
+  try {
+    await page.mouse.move(targetX, targetY, { steps: 10 });
+    if (holdMs > 0) await page.waitForTimeout(holdMs);
+  } finally {
+    await page.mouse.up();
+  }
+}
+
+async function completeGalleryMinigameStep(page, dialog, taskId) {
+  switch (taskId) {
+    case 0: { // Wiring: connect each left colour to the matching right colour.
+      for (const [english, russian] of [
+        ['Red', 'Красный'], ['Yellow', 'Жёлтый'], ['Green', 'Зелёный'], ['Blue', 'Синий'],
+      ]) {
+        let pair = dialog.getByRole('button', { name: english, exact: true });
+        if (await pair.count() !== 2) pair = dialog.getByRole('button', { name: russian, exact: true });
+        assert.equal(await pair.count(), 2, 'each wire colour must have one left and one right endpoint');
+        await pair.first().click();
+        await pair.last().click();
+      }
+      break;
+    }
+    case 1: // Download completes only after the player starts it.
+      await dialog.getByRole('button', { name: /Download|Скачать/ }).click();
+      break;
+    case 2: { // Wait for the deterministic green calibration window.
+      const control = dialog.getByTestId('calibrate-control');
+      await page.waitForFunction(() => {
+        const button = document.querySelector('[data-testid="calibrate-control"]');
+        const angle = Number(button?.getAttribute('data-angle'));
+        return Number.isFinite(angle) && angle >= 55 && angle <= 95;
+      }, undefined, { timeout: 8_000 });
+      await control.click();
+      break;
+    }
+    case 3: { // Pull the garbage lever to the bottom of its track.
+      const lever = dialog.getByRole('button', { name: /Drag garbage lever|Потяните рычаг мусора/ });
+      const track = await lever.evaluate(element => {
+        const rect = element.parentElement.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      });
+      await dragPointerTo(page, lever, track.x + track.width / 2, track.y + track.height - 2);
+      break;
+    }
+    case 4: // Clean every dirty filter tile.
+      for (let i = 0; i < 5; i++) {
+        await dialog.getByRole('button', { name: /Dirty filter|Грязный фильтр/ }).first().click();
+      }
+      break;
+    case 5: { // Move the marker onto the randomized target and hold it there.
+      const marker = dialog.getByTestId('navigation-marker');
+      const target = await dialog.getByTestId('navigation-target').boundingBox();
+      assert.ok(target, 'navigation target must be visible');
+      await dragPointerTo(page, marker, target.x + target.width / 2, target.y + target.height / 2, 2_650);
+      break;
+    }
+    case 6: { // Move the WiFi lever to ON.
+      const lever = dialog.getByRole('button', { name: /Drag WiFi lever|Перетащите рычаг связи/ });
+      const track = await lever.evaluate(element => {
+        const rect = element.parentElement.getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width };
+      });
+      await dragPointerTo(page, lever, track.x + track.width / 2, track.y + 5);
+      break;
+    }
+    case 7: { // Hold the fuel transfer control until the bar reaches 100%.
+      const hold = dialog.getByRole('button', { name: /HOLD|ДЕРЖАТЬ/ });
+      const box = await hold.boundingBox();
+      assert.ok(box, 'fuel hold control must be visible');
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.waitForTimeout(2_600);
+      await page.mouse.up();
+      break;
+    }
+    case 8: { // Read the five displayed reactor flashes, then repeat that sequence.
+      const pads = dialog.getByTestId('reactor-pad');
+      assert.equal(await pads.count(), 6, 'reactor must expose six input pads');
+      const sequence = [];
+      for (let flash = 0; flash < 5; flash++) {
+        await page.waitForFunction(() =>
+          [...document.querySelectorAll('[data-testid="reactor-pad"]')].some(pad => pad.dataset.lit === 'true'),
+        undefined, { timeout: 2_000 });
+        const lit = await pads.evaluateAll(elements =>
+          elements.findIndex(element => element.dataset.lit === 'true'),
+        );
+        assert.ok(lit >= 0 && lit < 6, 'each reactor flash must identify exactly one pad');
+        sequence.push(lit);
+        if (flash < 4) await page.waitForTimeout(700);
+      }
+      await page.waitForFunction(() => {
+        const buttons = [...document.querySelectorAll('[data-testid="reactor-pad"]')];
+        return buttons.length === 6 && buttons.every(button => !button.disabled);
+      }, undefined, { timeout: 3_000 });
+      for (const pad of sequence) await pads.nth(pad).click();
+      break;
+    }
+    case 9: { // Align the lever with the target and maintain the alignment.
+      const lever = dialog.getByTestId('engine-alignment-lever');
+      const target = await dialog.getByTestId('engine-alignment-target').boundingBox();
+      assert.ok(target, 'engine alignment target must be visible');
+      await dragPointerTo(page, lever, target.x + target.width / 2, target.y + target.height / 2, 1_650);
+      break;
+    }
+    case 10: { // Track the moving asteroids while holding fire.
+      const progress = dialog.getByTestId('asteroid-progress');
+      const firstTarget = await dialog.getByTestId('asteroid-target').first().boundingBox();
+      assert.ok(firstTarget, 'asteroid field must start with visible targets');
+      await page.mouse.move(firstTarget.x + firstTarget.width / 2, firstTarget.y + firstTarget.height / 2);
+      await page.mouse.down();
+      let completed = false;
+      const deadline = Date.now() + 25_000;
+      try {
+        while (Date.now() < deadline) {
+          const label = await progress.innerText().catch(() => '');
+          if (/30\\s*\\/\\s*30/.test(label)) {
+            completed = true;
+            break;
+          }
+          const target = await dialog.getByTestId('asteroid-target').first().boundingBox().catch(() => null);
+          if (target) {
+            await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2);
+          }
+          await page.waitForTimeout(100);
+        }
+      } finally {
+        await page.mouse.up();
+      }
+      assert.ok(completed, 'holding fire while tracking moving targets must destroy all 30 asteroids');
+      break;
+    }
+    default:
+      throw new Error('Unknown minigame gallery task ID: ' + taskId);
+  }
+
+  await page.waitForFunction(() => {
+    const shell = document.querySelector('[data-testid="minigame-shell"]');
+    return !shell || /Step 2 of|Шаг 2 из/.test(shell.textContent || '');
+  }, undefined, { timeout: 12_000 });
+}
+
 try {
   const page = await createPage({
     viewport: { width: 390, height: 844 },
@@ -915,8 +1062,11 @@ try {
       `task ${taskId} dialog must stay inside the ${viewport.width}×${viewport.height} phone viewport; got ${JSON.stringify(dialogBox)}`,
     );
 
-    await minigameDialog.getByRole('button', { name: /^(Close|Закрыть)$/ }).click();
-    await minigameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
+    await completeGalleryMinigameStep(page, minigameDialog, taskId);
+    if (await minigameDialog.isVisible().catch(() => false)) {
+      await minigameDialog.getByRole('button', { name: /^(Close|Закрыть)$/ }).click();
+      await minigameDialog.waitFor({ state: 'hidden', timeout: 5_000 });
+    }
   }
 
   // Verify impostor actions are visible and proximity-gated in their real spawn coordinates.
