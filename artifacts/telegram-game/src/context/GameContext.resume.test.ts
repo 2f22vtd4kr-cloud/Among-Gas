@@ -255,7 +255,11 @@ invalidEjectedSlot.gameOverResult = { ejectedSlot: 2, winFlag: 1 };
 assert.equal(parseResumeSnapshotV1(encode(invalidEjectedSlot)), null,
   'an ejected player must belong to the roster and be marked dead');
 
+// Vent state can only be restored during roaming: the authoritative meeting
+// transition ejects every player from vents before the meeting snapshot exists.
 const inconsistentVent = structuredClone(base);
+inconsistentVent.phase = 'ROAMING';
+inconsistentVent.meeting = null;
 inconsistentVent.playerPositions[1].inVent = true;
 inconsistentVent.playerPositions[1].ventId = 4;
 assert.equal(parseResumeSnapshotV1(encode(inconsistentVent)), null,
@@ -264,7 +268,7 @@ assert.equal(parseResumeSnapshotV1(encode(inconsistentVent)), null,
 const validVent = structuredClone(inconsistentVent);
 validVent.myVentId = 4;
 assert.ok(parseResumeSnapshotV1(encode(validVent)),
-  'a consistent local vent state must be restored');
+  'a consistent local vent state must be restored during roaming');
 
 assert.equal(parseResumeSnapshotV1(new ArrayBuffer(2)), null,
   'truncated resume packets must be rejected');
