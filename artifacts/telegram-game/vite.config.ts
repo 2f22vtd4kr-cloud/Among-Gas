@@ -16,6 +16,37 @@ import {
   validateDisconnectedRegionReviewRecord,
 } from '../../lib/shared/src/collision/disconnectedRegionReview';
 
+function validateDisconnectedRegionEvidenceFile(record: unknown, evidenceRoot: string): string[] {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return ['Detached-region review record must be an object'];
+  const value = record as Record<string, unknown>;
+  const evidencePath = value.evidencePath;
+  if (typeof evidencePath !== 'string' || !evidencePath.trim()) {
+    return value.status === 'approved' ? ['Approved detached-region record requires an evidence bundle path'] : [];
+  }
+  if (path.isAbsolute(evidencePath) || evidencePath.split(/[\\\\/]/).some(part => part === '..' || part === '.')) {
+    return ['Detached-region evidence path must be relative and remain inside its region evidence directory'];
+  }
+  try {
+    const candidate = path.resolve(evidenceRoot, evidencePath);
+    const realPath = fs.realpathSync(candidate);
+    const relative = path.relative(evidenceRoot, realPath);
+    if (!relative || relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {
+      return ['Detached-region evidence path must remain inside its region evidence directory'];
+    }
+    const stat = fs.statSync(realPath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 5 * 1024 * 1024) {
+      return ['Detached-region evidence bundle must be a non-empty file no larger than 5 MiB'];
+    }
+    const actualSha256 = createHash('sha256').update(fs.readFileSync(realPath)).digest('hex');
+    if (actualSha256 !== String(value.evidenceSha256).toLowerCase()) {
+      return ['Detached-region evidence SHA-256 does not match the current evidence bundle bytes'];
+    }
+  } catch {
+    return ['Detached-region evidence bundle does not exist or cannot be read'];
+  }
+  return [];
+}
+
 function validateZoneReviewSourceFiles(record: unknown, repositoryRoot: string): string[] {
   if (!record || typeof record !== 'object' || !Array.isArray((record as { sourceEvidence?: unknown }).sourceEvidence)) {
     return [];
@@ -180,6 +211,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               const reviewErrors = regionReviewRoute
                 ? validateDisconnectedRegionReviewRecord(record, region!)
                 : validateZoneReviewRecord(record, zone);
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(record, regionReviewDirectory));
               if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(record, repositoryRoot));
               if (reviewErrors.length) {
                 respond(500, { error: 'Saved review record is invalid: ' + reviewErrors.slice(0, 8).join('; ') });
@@ -251,6 +283,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               const reviewErrors = regionReviewRoute
                 ? validateDisconnectedRegionReviewRecord(candidate, region!)
                 : validateZoneReviewRecord(candidate, zone);
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(candidate, regionReviewDirectory));
               if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(candidate, repositoryRoot));
               if (reviewErrors.length) {
                 respond(400, { error: reviewErrors.slice(0, 12).join('; ') });
