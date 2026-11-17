@@ -419,6 +419,17 @@ try {
     routeEvidenceComplete: true,
     notes: "Test fixture only; not a real owner decision.",
   };
+  const inReviewRegion = {
+    ...regionRecord,
+    status: "in-review",
+    reviewerName: "",
+    reviewerReviewedAt: "",
+    reviewerDisposition: "unresolved",
+    ownerName: "",
+    ownerDecidedAt: "",
+    decision: "deferred",
+  };
+
   const selfApprovedRegion = { ...regionRecord, reviewerName: regionRecord.authorName };
   const selfRegionResponse = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify(selfApprovedRegion),
@@ -449,20 +460,20 @@ try {
   });
   assert.equal(incompleteRegionResponse.status, 400, "approval requires completed full-footprint connectivity evidence");
 
-  const badRegionEvidenceHash = { ...regionRecord, status: "in-review", evidenceSha256: "b".repeat(64) };
+  const badRegionEvidenceHash = { ...inReviewRegion, evidenceSha256: "b".repeat(64) };
   const badRegionEvidenceResponse = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify(badRegionEvidenceHash),
   });
   assert.equal(badRegionEvidenceResponse.status, 400, "detached-region evidence bytes must match their recorded SHA-256");
 
-  const escapingRegionEvidence = { ...regionRecord, status: "in-review", evidencePath: "../outside.json" };
+  const escapingRegionEvidence = { ...inReviewRegion, evidencePath: "../outside.json" };
   const escapingRegionResponse = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify(escapingRegionEvidence),
   });
   assert.equal(escapingRegionResponse.status, 400, "detached-region evidence paths cannot escape their evidence directory");
 
   const firstRegionSave = await fetch(regionEndpoint, {
-    method: "POST", headers, body: JSON.stringify({ ...regionRecord, status: "in-review" }),
+    method: "POST", headers, body: JSON.stringify(inReviewRegion),
   });
   assert.equal(firstRegionSave.status, 200, "an in-review record can be saved without claiming approval");
   const firstRegionResult = await jsonResponse(firstRegionSave);
@@ -471,7 +482,7 @@ try {
   assert.ok(fs.existsSync(regionFilePath), "detached-region record is stored in its isolated directory");
 
   const secondRegionSave = await fetch(regionEndpoint, {
-    method: "POST", headers, body: JSON.stringify({ ...regionRecord, status: "in-review", notes: "Updated test fixture." }),
+    method: "POST", headers, body: JSON.stringify({ ...inReviewRegion, notes: "Updated test fixture." }),
   });
   assert.equal(secondRegionSave.status, 200);
   assert.equal((await jsonResponse(secondRegionSave)).backupCount, 1,
