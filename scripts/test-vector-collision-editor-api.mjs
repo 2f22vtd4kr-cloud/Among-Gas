@@ -393,16 +393,25 @@ try {
   assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
     "unknown detached-region IDs are rejected");
 
-  const regionEvidenceDirectory = path.join(regionReviewDirectory, "evidence");
+  const regionEvidenceDirectory = path.join(regionReviewDirectory, "C0", "evidence");
+  const otherRegionEvidenceDirectory = path.join(regionReviewDirectory, "C20", "evidence");
   fs.mkdirSync(regionEvidenceDirectory, { recursive: true });
+  fs.mkdirSync(otherRegionEvidenceDirectory, { recursive: true });
   const regionEvidencePath = path.join(regionEvidenceDirectory, "C0-evidence.json");
+  const otherRegionEvidencePath = path.join(otherRegionEvidenceDirectory, "C20-evidence.json");
   const regionEvidenceBytes = JSON.stringify({
     source: "API test fixture",
     note: "Not real source art or route acceptance.",
     samplePositions: [[100, 100], [108, 100]],
   });
+  const otherRegionEvidenceBytes = JSON.stringify({
+    source: "C20 API test fixture",
+    note: "Must not be readable from the C0 evidence namespace.",
+  });
   fs.writeFileSync(regionEvidencePath, regionEvidenceBytes);
+  fs.writeFileSync(otherRegionEvidencePath, otherRegionEvidenceBytes);
   const regionEvidenceSha256 = createHash("sha256").update(regionEvidenceBytes).digest("hex");
+  const otherRegionEvidenceSha256 = createHash("sha256").update(otherRegionEvidenceBytes).digest("hex");
   const regionRecord = {
     id: "C0",
     status: "approved",
@@ -471,6 +480,17 @@ try {
     method: "POST", headers, body: JSON.stringify(escapingRegionEvidence),
   });
   assert.equal(escapingRegionResponse.status, 400, "detached-region evidence paths cannot escape their evidence directory");
+
+  const crossRegionEvidence = {
+    ...inReviewRegion,
+    evidenceSha256: otherRegionEvidenceSha256,
+    evidencePath: "C20/evidence/C20-evidence.json",
+  };
+  const crossRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(crossRegionEvidence),
+  });
+  assert.equal(crossRegionResponse.status, 400,
+    "a C0 review record cannot read a C20 evidence bundle through the shared review root");
 
   const firstRegionSave = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify(inReviewRegion),
