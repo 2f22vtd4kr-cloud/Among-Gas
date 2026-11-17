@@ -20,8 +20,13 @@ export interface GameplayAnchorDisposition {
 export interface DisconnectedRegionDisposition {
   id: typeof DISCONNECTED_REGION_IDS[number];
   status: DisconnectedRegionReviewStatus;
+  authorName: string;
+  authorCompletedAt: string;
   reviewerName: string;
+  reviewerReviewedAt: string;
+  reviewerDisposition: "accepted" | "changes-requested" | "unresolved";
   ownerName: string;
+  ownerDecidedAt: string;
   decision: "accessible" | "intentionally-sealed" | "deferred";
   evidenceSha256: string;
   evidencePath: string;
