@@ -406,19 +406,42 @@ try {
   const regionRecord = {
     id: "C0",
     status: "approved",
+    authorName: "Source author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
     reviewerName: "Independent reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    reviewerDisposition: "accepted",
     ownerName: "Design owner",
+    ownerDecidedAt: "2026-11-14T08:20:00.000Z",
     decision: "intentionally-sealed",
     evidenceSha256: regionEvidenceSha256,
     evidencePath: "evidence/C0-evidence.json",
     routeEvidenceComplete: true,
     notes: "Test fixture only; not a real owner decision.",
   };
-  const selfApprovedRegion = { ...regionRecord, reviewerName: regionRecord.ownerName };
+  const selfApprovedRegion = { ...regionRecord, reviewerName: regionRecord.authorName };
   const selfRegionResponse = await fetch(regionEndpoint, {
     method: "POST", headers, body: JSON.stringify(selfApprovedRegion),
   });
-  assert.equal(selfRegionResponse.status, 400, "the design owner cannot self-review a detached-region decision");
+  assert.equal(selfRegionResponse.status, 400, "the source author cannot self-review a detached-region decision");
+
+  const ownerIsReviewer = { ...regionRecord, ownerName: regionRecord.reviewerName };
+  const ownerIsReviewerResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(ownerIsReviewer),
+  });
+  assert.equal(ownerIsReviewerResponse.status, 400, "the independent reviewer cannot also act as design owner");
+
+  const reviewBeforeAuthor = { ...regionRecord, reviewerReviewedAt: "2026-11-14T07:59:59.000Z" };
+  const reviewBeforeAuthorResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(reviewBeforeAuthor),
+  });
+  assert.equal(reviewBeforeAuthorResponse.status, 400, "independent review cannot predate source authoring");
+
+  const ownerBeforeReview = { ...regionRecord, ownerDecidedAt: "2026-11-14T08:09:59.000Z" };
+  const ownerBeforeReviewResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(ownerBeforeReview),
+  });
+  assert.equal(ownerBeforeReviewResponse.status, 400, "design-owner decision cannot predate independent review");
 
   const incompleteRegion = { ...regionRecord, routeEvidenceComplete: false };
   const incompleteRegionResponse = await fetch(regionEndpoint, {
