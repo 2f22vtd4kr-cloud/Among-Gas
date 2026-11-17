@@ -47,6 +47,8 @@ try {
   assert.equal(regionScratch.id, "C38");
   assert.equal(regionScratch.status, "not-started");
   regionScratch.status = "in-review";
+  regionScratch.authorName = "Browser smoke source author";
+  regionScratch.authorCompletedAt = "2026-11-14T08:00:00.000Z";
   regionScratch.notes = "Browser smoke scratch record; not a real owner decision.";
   await regionEditor.fill(JSON.stringify(regionScratch, null, 2));
   await page.getByRole("button", { name: "Save region review" }).click();
