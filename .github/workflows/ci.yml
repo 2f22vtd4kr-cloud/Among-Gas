@@ -142,6 +142,19 @@ jobs:
       - name: Enforce screenshot-free code QA
         run: node scripts/test-no-visual-artifacts.mjs
 
+      - name: Render source-backed 12-zone diagnostic crops
+        env:
+          COLLISION_QA_OUTPUT_DIR: ${{ runner.temp }}/among-gas-zone-review-crops
+        run: pnpm --filter @workspace/scripts run render:collision-qa
+
+      - name: Archive source-backed 12-zone diagnostic crops
+        uses: actions/upload-artifact@v7
+        with:
+          name: map-zone-review-crops
+          path: ${{ runner.temp }}/among-gas-zone-review-crops/map-zone-review-crops/
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Verify the eleven task minigames render through independent modules
         run: pnpm --filter @workspace/scripts run test:minigame-registry
 
