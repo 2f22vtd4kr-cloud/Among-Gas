@@ -211,7 +211,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               const reviewErrors = regionReviewRoute
                 ? validateDisconnectedRegionReviewRecord(record, region!)
                 : validateZoneReviewRecord(record, zone);
-              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(record, regionReviewDirectory));
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(record, path.join(regionReviewDirectory, region!)));
               if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(record, repositoryRoot));
               if (reviewErrors.length) {
                 respond(500, { error: 'Saved review record is invalid: ' + reviewErrors.slice(0, 8).join('; ') });
@@ -283,7 +283,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               const reviewErrors = regionReviewRoute
                 ? validateDisconnectedRegionReviewRecord(candidate, region!)
                 : validateZoneReviewRecord(candidate, zone);
-              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(candidate, regionReviewDirectory));
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(candidate, path.join(regionReviewDirectory, region!)));
               if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(candidate, repositoryRoot));
               if (reviewErrors.length) {
                 respond(400, { error: reviewErrors.slice(0, 12).join('; ') });
