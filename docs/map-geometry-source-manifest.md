@@ -1,6 +1,6 @@
 # Map geometry source manifest
 
-Status: **baseline inventory, reviewed against `main` at `aef0f099e8924ec1d58359521ce8d235b762c38d` on 2026-11-01**.
+Status: **baseline inventory, revalidated against `main` at `93b4b542273fa064f9ca0db59bf43ff3e982cf9c` on 2026-11-17; no geometry approval or production cut-over**.
 
 This document records the files and transforms that currently participate in the map rendering and spatial-geometry pipeline. It is an inventory, not approval of every collision boundary. A matching filename or matching aspect ratio is not proof that two images are the same source or that a mask is visually correct.
 
@@ -214,3 +214,24 @@ A code-only audit of current main's `artifacts/telegram-game/src/game/visibility
 This source audit does not establish that any particular contour is visually correct. It identifies the remaining work precisely: author object/edge identities from rights-cleared source material; record independent movement, interaction-sight and presentation-shadow dispositions per object; then validate collision footprint, LOS, lighting/shadow behavior and route parity separately. In particular, do not convert a raster movement component or a red-line collision stroke into an approved vision/shadow contour by inference. The statue planter/pedestal and the 12 zone reviews remain unresolved.
 
 No runtime code, collision data, map art or geometry was changed. No screenshots, QA tiles or image artifacts were generated. Raster collision remains authoritative; candidate vector geometry remains unpromoted.
+
+
+## 9. Current-main evidence refresh — 2026-11-17
+
+- Revalidated main: `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
+- Exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960) passed `verify` 57/57 and the separate 20-minute `plan2-soak` 12/12. This is build/gameplay/soak evidence, not a visual map-art approval.
+- PR #210 is merged; its exact-head run [43822989346](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43822989346) passed the automated 24-anchor approach, route-follow, reverse-return and interaction-LOS gate. The movement and interaction checks still use the same fine raster; they do not constitute independent human anchor dispositions or independent vision geometry.
+- PR #211 is merged at this main baseline. It hardens the future raster/vector comparison to use the union of both spawn-reachable graphs, the production three-circle footprint, a maximum 8 px sample lattice, and separate directional disagreement counts under the unchanged 2% ceiling. It is a fail-closed evidence contract, not a claim that a candidate vector runtime has passed it.
+- PR #186 is merged with exact zero-byte browser RGBA parity and the unchanged 162-cell fingerprint `5988b3d64df78b5e`. PR #138 is closed and unmerged; its branch is 139 commits ahead and 59 behind current main, with broad overlap across movement, bots, map rendering, visibility, collision, CI and tests. It remains quarantined.
+
+### Historical visual QA artifact inspection (not current-head acceptance)
+
+I inspected the 12 collision, 12 vision and 12 shadow zone tiles plus eight detailed source-red-line/production-overlay comparisons from [workflow 43700262396](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43700262396), artifact 14156546884. That run was on main `c0a110abfb34b288b52364ac48bfd803e90fb8f5` (2026-11-15), before the later mainline merges; it is historical diagnostic evidence, not a current-main acceptance run.
+
+Observed limitations:
+- Collision overlays contain broad filled magenta regions in places where the source reference is a thin red stroke or a complex object silhouette. A red-line stroke cannot be treated as the filled physical footprint, and a broad rectangle cannot be accepted as a contour without source-backed tracing.
+- The 12 vision tiles show sparse cyan probe regions rather than a complete per-object authored sight-blocker set.
+- The 12 shadow tiles show broad blue diagnostic occupancy, not independently authored per-object shadow casters.
+- The detailed comparisons cover the central atrium/planter, gas forecourt, northwest garage, service-van/generator area, south lobby threshold, upper-right entry/technical area and west pipe room. Door gaps, floor interiors, furniture, machinery and decorative markings still need separate classification.
+
+No new geometry was inferred from those images, and no zone was marked approved. The historical artifact does not replace fresh source-art crops, the 12-zone author/reviewer/owner process, anchor dispositions or physical-device visual acceptance.
