@@ -1,5 +1,6 @@
 import sharp from 'sharp';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -56,12 +57,17 @@ console.log('[collision-qa] payload source: ' + (useCandidatePayload ? 'generate
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
 const referencePath = path.join(root, 'attached_assets/IMG_2907_1783632830477.jpeg');
-const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
-const outputShadowPath = path.join(root, 'artifacts/telegram-game/collision-shadow-qa-overlay.png');
-const outputVisionPath = path.join(root, 'artifacts/telegram-game/collision-vision-qa-overlay.png');
-const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay-webp.png');
-const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
-const tileDir = path.join(root, 'artifacts/telegram-game/collision-qa-tiles');
+const originalPath = path.join(root, 'attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png');
+const outputDir = process.env.COLLISION_QA_OUTPUT_DIR
+  ? path.resolve(process.env.COLLISION_QA_OUTPUT_DIR)
+  : path.join(root, 'artifacts/telegram-game');
+mkdirSync(outputDir, { recursive: true });
+const outputPath = path.join(outputDir, 'collision-qa-overlay.png');
+const outputShadowPath = path.join(outputDir, 'collision-shadow-qa-overlay.png');
+const outputVisionPath = path.join(outputDir, 'collision-vision-qa-overlay.png');
+const outputWebpPath = path.join(outputDir, 'collision-qa-overlay-webp.png');
+const referenceOutputPath = path.join(outputDir, 'collision-reference-overlay.png');
+const tileDir = path.join(outputDir, 'collision-qa-tiles');
 
 const grid = useCandidatePayload && candidatePayload ? buildPreciseCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
 const shadowGrid = buildShadowGrid(grid);
@@ -72,7 +78,9 @@ const metadata = await map.metadata();
 const webpMetadata = await sharp(webpPath).metadata();
 const reference = sharp(referencePath);
 const referenceMeta = await reference.metadata();
-for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['reference', referenceMeta]] as const) {
+const original = sharp(originalPath);
+const originalMeta = await original.metadata();
+for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['reference', referenceMeta], ['original artwork', originalMeta]] as const) {
   if (!meta.width || !meta.height) throw new Error(label + ' map image dimensions unavailable');
 }
 const scaleFor = (width: number, height: number, label: string, requireUpscale = true) => {
@@ -87,6 +95,7 @@ const scaleFor = (width: number, height: number, label: string, requireUpscale =
 const pngScale = scaleFor(metadata.width!, metadata.height!, 'PNG');
 const webpScale = scaleFor(webpMetadata.width!, webpMetadata.height!, 'WebP');
 const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference', false);
+const originalScale = scaleFor(originalMeta.width!, originalMeta.height!, 'original map artwork', false);
 
 function makeOverlaySvg(
   sourceGrid: Uint8Array,
@@ -99,6 +108,7 @@ function makeOverlaySvg(
   includeSpawn: boolean,
   offsetX = 0,
   offsetY = 0,
+  includeManualPolygons = true,
 ): Buffer {
   const cellWidth = (MAP_W / FINE_COLS) * scaleX;
   const cellHeight = (MAP_H / FINE_ROWS) * scaleY;
@@ -124,13 +134,13 @@ function makeOverlaySvg(
     }
   }
 
-  const polygonLines = MANUAL_BLOCKED_POLYGONS.map(polygon => {
+  const polygonLines = includeManualPolygons ? MANUAL_BLOCKED_POLYGONS.map(polygon => {
     const points = polygon.points.map(([x, y]) =>
       (x * scaleX - offsetX).toFixed(2) + ',' + (y * scaleY - offsetY).toFixed(2),
     ).join(' ');
     return '<polygon points="' + points + '" fill="none" stroke="#ffd740" stroke-width="' +
       (3 * scaleX) + '" stroke-linejoin="round"/>';
-  }).join('');
+  }).join('') : '';
 
   let spawn = '';
   if (includeSpawn) {
@@ -393,6 +403,268 @@ for (const region of detailRegions) {
   ]).png().toFile(path.join(tileDir, 'detail-' + region.id + '-comparison.png'));
 }
 
+
+/**
+ * Produce exact, non-overlapping 4×3 authoring-zone evidence crops.
+ * These are diagnostic comparisons only: they do not author geometry,
+ * approve a zone, or establish asset rights.
+ */
+const zoneCropDirectory = path.join(outputDir, 'map-zone-review-crops');
+mkdirSync(zoneCropDirectory, { recursive: true });
+const originalRelativePath = 'attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png';
+const redlineRelativePath = 'attached_assets/IMG_2907_1783632830477.jpeg';
+const originalBytes = readFileSync(originalPath);
+const redlineBytes = readFileSync(referencePath);
+const runtimeMapBytes = readFileSync(mapPath);
+const originalSha256 = createHash('sha256').update(originalBytes).digest('hex');
+const redlineSha256 = createHash('sha256').update(redlineBytes).digest('hex');
+const runtimeMapSha256 = createHash('sha256').update(runtimeMapBytes).digest('hex');
+const expectedOriginalSha256 = 'c840fdafe3a1667616a44f6c64bb79fb5ba23c2ad54ba70461416dae153d1a80';
+if (originalSha256 !== expectedOriginalSha256) {
+  throw new Error('Recovered original map artwork SHA-256 changed; refuse to render stale source evidence');
+}
+const anchorAccessSource = readFileSync(path.join(root, 'scripts/test-gameplay-anchor-access.ts'), 'utf8');
+const sharedInteractionGrid = anchorAccessSource.includes('const movementGrid = buildPreciseCollisionGrid();') &&
+  anchorAccessSource.includes('const interactionGrid = buildPreciseCollisionGrid();');
+if (!sharedInteractionGrid) {
+  throw new Error('Gameplay-anchor interaction LOS grid changed; update the provenance notes in this diagnostic renderer');
+}
+function clampExtract(left: number, top: number, right: number, bottom: number, width: number, height: number) {
+  const x0 = Math.max(0, Math.min(width - 1, Math.floor(left)));
+  const y0 = Math.max(0, Math.min(height - 1, Math.floor(top)));
+  const x1 = Math.max(x0 + 1, Math.min(width, Math.ceil(right)));
+  const y1 = Math.max(y0 + 1, Math.min(height, Math.ceil(bottom)));
+  return { left: x0, top: y0, width: x1 - x0, height: y1 - y0 };
+}
+function xmlText(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+const panelWidth = 480;
+const panelHeight = 380;
+const panelHeaderHeight = 42;
+const panelGap = 16;
+const sheetWidth = panelWidth * 3 + panelGap * 2;
+const sheetHeight = (panelHeight + panelHeaderHeight) * 2 + panelGap;
+const zoneManifest: Array<Record<string, unknown>> = [];
+const zoneSheetBuffers: Array<{ zone: string; buffer: Buffer }> = [];
+for (let index = 0; index < 12; index++) {
+  const zoneId = 'Z' + String(index + 1).padStart(2, '0');
+  const reviewPath = path.join(root, 'lib/shared/src/collision/collision.zone-' + zoneId + '.review.v1.json');
+  const reviewRecord = JSON.parse(readFileSync(reviewPath, 'utf8')) as Record<string, any>;
+  if (reviewRecord.zone !== zoneId || !Array.isArray(reviewRecord.sourceEvidence) || !reviewRecord.sourceEvidence.length) {
+    throw new Error(zoneId + ': missing canonical source-art review scaffold');
+  }
+  const evidence = reviewRecord.sourceEvidence[0] as Record<string, any>;
+  if (evidence.sourcePath !== originalRelativePath ||
+      evidence.sourceSha256 !== originalSha256 ||
+      evidence.sourceWidth !== originalMeta.width ||
+      evidence.sourceHeight !== originalMeta.height) {
+    throw new Error(zoneId + ': source-art evidence does not match the exact recovered original map bytes');
+  }
+  const rect = evidence.sourceRect as number[];
+  const transform = evidence.worldTransform as Record<string, number>;
+  if (!Array.isArray(rect) || rect.length !== 4 ||
+      !rect.every(Number.isFinite) ||
+      !transform || ![transform.scaleX, transform.scaleY, transform.offsetX, transform.offsetY].every(Number.isFinite) ||
+      transform.scaleX <= 0 || transform.scaleY <= 0) {
+    throw new Error(zoneId + ': malformed source crop or world transform');
+  }
+  const worldRect = {
+    left: rect[0] * transform.scaleX + transform.offsetX,
+    top: rect[1] * transform.scaleY + transform.offsetY,
+    right: rect[2] * transform.scaleX + transform.offsetX,
+    bottom: rect[3] * transform.scaleY + transform.offsetY,
+  };
+  const column = index % 4;
+  const row = Math.floor(index / 4);
+  const expectedBounds = {
+    left: column * MAP_W / 4,
+    top: row * MAP_H / 3,
+    right: (column + 1) * MAP_W / 4,
+    bottom: (row + 1) * MAP_H / 3,
+  };
+  const context = 24;
+  if (worldRect.left > Math.max(0, expectedBounds.left - context) + 0.5 ||
+      worldRect.top > Math.max(0, expectedBounds.top - context) + 0.5 ||
+      worldRect.right < Math.min(MAP_W, expectedBounds.right + context) - 0.5 ||
+      worldRect.bottom < Math.min(MAP_H, expectedBounds.bottom + context) - 0.5) {
+    throw new Error(zoneId + ': recorded source crop omits required 24px world seam context');
+  }
+  const originalRect = clampExtract(rect[0], rect[1], rect[2], rect[3], originalMeta.width!, originalMeta.height!);
+  const redlineRect = clampExtract(
+    worldRect.left / refScale.x, worldRect.top / refScale.y,
+    worldRect.right / refScale.x, worldRect.bottom / refScale.y,
+    referenceMeta.width!, referenceMeta.height!,
+  );
+  const runtimeRect = clampExtract(
+    worldRect.left * pngScale.x, worldRect.top * pngScale.y,
+    worldRect.right * pngScale.x, worldRect.bottom * pngScale.y,
+    metadata.width!, metadata.height!,
+  );
+  const localVisionSamples = visionSamples.filter(sample =>
+    sample.origin.x >= worldRect.left && sample.origin.x <= worldRect.right &&
+    sample.origin.y >= worldRect.top && sample.origin.y <= worldRect.bottom);
+  const [originalCrop, redlineCrop, movementCrop, shadowCrop, visionCrop] = await Promise.all([
+    sharp(originalPath).extract(originalRect)
+      .resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+      .png().toBuffer(),
+    sharp(referencePath).extract(redlineRect)
+      .resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+      .png().toBuffer(),
+    sharp(mapPath).extract(runtimeRect).composite([{
+      input: makeOverlaySvg(grid, runtimeRect.width, runtimeRect.height, pngScale.x, pngScale.y,
+        '#ff1744', 0.32, false, runtimeRect.left, runtimeRect.top),
+    }]).resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+      .png().toBuffer(),
+    sharp(mapPath).extract(runtimeRect).composite([{
+      input: makeOverlaySvg(shadowGrid, runtimeRect.width, runtimeRect.height, pngScale.x, pngScale.y,
+        '#00b0ff', 0.38, false, runtimeRect.left, runtimeRect.top, false),
+    }]).resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+      .png().toBuffer(),
+    sharp(mapPath).extract(runtimeRect).composite([{
+      input: makeVisionSvg(localVisionSamples, runtimeRect.width, runtimeRect.height,
+        pngScale.x, pngScale.y, runtimeRect.left, runtimeRect.top),
+    }]).resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+      .png().toBuffer(),
+  ]);
+  const boundsText = 'x ' + expectedBounds.left.toFixed(1) + '–' + expectedBounds.right.toFixed(1) +
+    ' · y ' + expectedBounds.top.toFixed(1) + '–' + expectedBounds.bottom.toFixed(1);
+  const infoLines = [
+    zoneId + ' — ' + String(reviewRecord.status || 'unknown'),
+    boundsText,
+    'Author trace: ' + (reviewRecord.author?.name || 'not recorded'),
+    'Independent review: ' + (reviewRecord.reviewer?.name || 'not recorded'),
+    'Design owner: ' + (reviewRecord.ownerDecision?.name || 'not recorded'),
+    'Original art: ' + originalMeta.width + '×' + originalMeta.height,
+    'Original SHA-256: ' + originalSha256.slice(0, 24) + '…',
+    'Red-line SHA-256: ' + redlineSha256.slice(0, 24) + '…',
+    'Crop includes ≥24px world seam context',
+    'Diagnostic only — no geometry approval',
+    'Asset rights remain unresolved',
+    'Interaction LOS test uses same fine grid as movement',
+    'Vision/occlusion panel is derived from fine grid',
+    'Presentation-shadow approval is separate and open',
+  ];
+  const infoSvg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + panelWidth + '" height="' + panelHeight + '">' +
+    '<rect width="100%" height="100%" fill="#101820"/>' +
+    infoLines.map((line, lineIndex) =>
+      '<text x="14" y="' + (28 + lineIndex * 24) + '" font-family="sans-serif" font-size="17" fill="#ffffff">' +
+      xmlText(line) + '</text>').join('') + '</svg>',
+  );
+  const panelBuffers = [
+    { title: 'ORIGINAL SOURCE ART', buffer: originalCrop },
+    { title: 'RED-LINE REFERENCE', buffer: redlineCrop },
+    { title: 'FINE MOVEMENT MASK', buffer: movementCrop },
+    { title: 'DERIVED SHADOW / OCCLUSION', buffer: shadowCrop },
+    { title: 'DERIVED WORLD-VISION SAMPLES', buffer: visionCrop },
+    { title: 'REVIEW STATE / PROVENANCE', buffer: infoSvg },
+  ];
+  const renderedPanels = await Promise.all(panelBuffers.map(async panel => {
+    const header = Buffer.from(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="' + panelWidth + '" height="' + panelHeaderHeight + '">' +
+      '<rect width="100%" height="100%" fill="#243342"/>' +
+      '<text x="12" y="28" font-family="sans-serif" font-size="17" font-weight="bold" fill="#ffffff">' +
+      xmlText(panel.title) + '</text></svg>',
+    );
+    return sharp({
+      create: { width: panelWidth, height: panelHeight + panelHeaderHeight, channels: 3, background: '#101820' },
+    }).composite([{ input: header, left: 0, top: 0 }, { input: panel.buffer, left: 0, top: panelHeaderHeight }])
+      .png().toBuffer();
+  }));
+  const zoneSheet = await sharp({
+    create: { width: sheetWidth, height: sheetHeight, channels: 3, background: '#101820' },
+  }).composite(renderedPanels.map((buffer, panelIndex) => ({
+    input: buffer,
+    left: (panelIndex % 3) * (panelWidth + panelGap),
+    top: Math.floor(panelIndex / 3) * (panelHeight + panelHeaderHeight + panelGap),
+  }))).png().toBuffer();
+  const zoneFile = path.join(zoneCropDirectory, 'zone-' + zoneId + '-review.png');
+  writeFileSync(zoneFile, zoneSheet);
+  zoneSheetBuffers.push({ zone: zoneId, buffer: zoneSheet });
+  zoneManifest.push({
+    zone: zoneId,
+    status: reviewRecord.status,
+    worldBounds: expectedBounds,
+    worldCropWithContext: worldRect,
+    sourceEvidence: {
+      sourcePath: evidence.sourcePath,
+      sourceSha256: evidence.sourceSha256,
+      sourceWidth: evidence.sourceWidth,
+      sourceHeight: evidence.sourceHeight,
+      sourceRect: evidence.sourceRect,
+      worldTransform: evidence.worldTransform,
+    },
+    redlineReference: { path: redlineRelativePath, sha256: redlineSha256, width: referenceMeta.width, height: referenceMeta.height },
+    runtimeMap: { path: 'artifacts/telegram-game/public/map-hires.png', sha256: runtimeMapSha256, width: metadata.width, height: metadata.height },
+    cropPixels: { original: originalRect, redline: redlineRect, runtimeMap: runtimeRect },
+    visionSampleCount: localVisionSamples.length,
+    output: 'zone-' + zoneId + '-review.png',
+  });
+}
+const contactTileWidth = 420;
+const contactTileHeight = 245;
+const contactHeaderHeight = 30;
+const contactGap = 12;
+const contactWidth = contactTileWidth * 4 + contactGap * 3;
+const contactHeight = (contactTileHeight + contactHeaderHeight) * 3 + contactGap * 2;
+const contactTiles = await Promise.all(zoneSheetBuffers.map(async item => {
+  const thumbnail = await sharp(item.buffer).resize({
+    width: contactTileWidth, height: contactTileHeight, fit: 'contain', background: '#101820',
+  }).png().toBuffer();
+  const header = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + contactTileWidth + '" height="' + contactHeaderHeight + '">' +
+    '<rect width="100%" height="100%" fill="#243342"/>' +
+    '<text x="12" y="21" font-family="sans-serif" font-size="17" font-weight="bold" fill="#ffffff">' +
+    item.zone + ' — diagnostic crop</text></svg>',
+  );
+  return sharp({
+    create: { width: contactTileWidth, height: contactTileHeight + contactHeaderHeight, channels: 3, background: '#101820' },
+  }).composite([{ input: header, left: 0, top: 0 }, { input: thumbnail, left: 0, top: contactHeaderHeight }])
+    .png().toBuffer();
+}));
+const contactSheet = await sharp({
+  create: { width: contactWidth, height: contactHeight, channels: 3, background: '#101820' },
+}).composite(contactTiles.map((buffer, index) => ({
+  input: buffer,
+  left: (index % 4) * (contactTileWidth + contactGap),
+  top: Math.floor(index / 4) * (contactTileHeight + contactHeaderHeight + contactGap),
+}))).png().toBuffer();
+const contactSheetPath = path.join(zoneCropDirectory, 'zone-review-contact-sheet.png');
+writeFileSync(contactSheetPath, contactSheet);
+const zoneReviewManifest = {
+  kind: 'diagnostic-only',
+  mainSha: process.env.GITHUB_SHA || null,
+  runtimeGeometryModified: false,
+  geometryApproval: 'none; every zone retains its checked-in review status',
+  sourceMapArt: { path: originalRelativePath, sha256: originalSha256, width: originalMeta.width, height: originalMeta.height },
+  redlineReference: { path: redlineRelativePath, sha256: redlineSha256, width: referenceMeta.width, height: referenceMeta.height },
+  movement: { source: 'buildPreciseCollisionGrid() and current fine-grid overrides', output: 'FINE MOVEMENT MASK panel' },
+  interactionLineOfSight: {
+    test: 'scripts/test-gameplay-anchor-access.ts',
+    movementGrid: 'buildPreciseCollisionGrid()',
+    interactionGrid: 'buildPreciseCollisionGrid()',
+    sameFineRaster: true,
+    note: 'Automated 24-anchor approach/LOS evidence is separate from movement routing, but currently uses the same fine raster; it is not independent authored sight geometry.',
+  },
+  worldVision: {
+    source: 'buildShadowGrid(grid), buildNarrowShadowOccluders(grid, true), and buildFineShadowSegments(grid)',
+    independentlyAuthoredContours: false,
+    note: 'Derived from the current fine movement grid for diagnostics; not a source-backed independent vision contour set.',
+  },
+  presentationShadows: {
+    included: false,
+    note: 'Presentation-shadow renderer acceptance remains a separate open gate and is not represented by the derived occlusion panel.',
+  },
+  assetRights: {
+    status: 'unresolved',
+    note: 'Source hashes and dimensions establish technical provenance only, not ownership, license or commercial-use permission.',
+  },
+  zones: zoneManifest,
+  contactSheet: 'zone-review-contact-sheet.png',
+};
+writeFileSync(path.join(zoneCropDirectory, 'zone-review-manifest.json'), JSON.stringify(zoneReviewManifest, null, 2) + '\n');
+
 console.log(JSON.stringify({
   collision: outputPath,
   shadow: outputShadowPath,
@@ -400,6 +672,9 @@ console.log(JSON.stringify({
   reference: referenceOutputPath,
   tileDirectory: tileDir,
   tileCount: visionSamples.length,
+  zoneReviewCrops: zoneManifest.length,
+  zoneReviewContactSheet: path.join(zoneCropDirectory, 'zone-review-contact-sheet.png'),
+  zoneReviewManifest: path.join(zoneCropDirectory, 'zone-review-manifest.json'),
   detailCount: detailRegions.length,
   detailScale: detailScale + 'x',
   tileDimensions: tileWidth + 'x' + tileHeight,
