@@ -124,7 +124,8 @@ assert.ok(validateCollisionCutoverEvidence(selfApproved).some((error) => error.i
 
 const deferredBay: CollisionCutoverEvidence = structuredClone(completeEvidence);
 deferredBay.disconnectedRegions[3].decision = "deferred";
-assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) => error.includes("C38: design disposition remains deferred")),
+assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) =>
+  error.includes("C38: Approval requires an explicit design-owner decision and date")),
   "the ambiguous vehicle-service bay must remain blocked from cut-over while deferred");
 
 const vectorOverParityLimit: CollisionCutoverEvidence = structuredClone(completeEvidence);
