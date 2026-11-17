@@ -72,10 +72,18 @@ const completeEvidence: CollisionCutoverEvidence = {
     notes: "Source-art review and full-footprint route evidence support this disposition.",
   })),
   parity: {
-    clientServerMovement: true,
-    botNavigation: true,
-    interactionLineOfSight: true,
-    presentationShadow: true,
+    clientServerMovement: { passed: true, evidenceSha256: digest },
+    botNavigation: { passed: true, evidenceSha256: digest },
+    interactionLineOfSight: { passed: true, evidenceSha256: digest },
+    worldVision: { passed: true, evidenceSha256: digest },
+    presentationShadow: { passed: true, evidenceSha256: digest },
+  },
+  sourceMapArt: { sourceSha256: digest, transformSha256: digest },
+  assetRights: {
+    status: "cleared",
+    rightsHolder: "Map asset rights holder",
+    license: "Written commercial-use permission",
+    evidenceSha256: digest,
   },
   visualReview: {
     allTwelveZonesInspected: true,
@@ -170,9 +178,29 @@ assert.ok(validateCollisionCutoverEvidence(overlappingDisagreements).some((error
   "the two directional mismatch sets cannot overlap beyond the common sample count");
 
 const noSightParity: CollisionCutoverEvidence = structuredClone(completeEvidence);
-noSightParity.parity.interactionLineOfSight = false;
-assert.ok(validateCollisionCutoverEvidence(noSightParity).some((error) => error.includes("line-of-sight parity")),
+noSightParity.parity.interactionLineOfSight.passed = false;
+assert.ok(validateCollisionCutoverEvidence(noSightParity).some((error) => error.includes("Interaction line-of-sight parity")),
   "movement acceptance cannot stand in for interaction sight acceptance");
+
+const noWorldVision: CollisionCutoverEvidence = structuredClone(completeEvidence);
+noWorldVision.parity.worldVision.passed = false;
+assert.ok(validateCollisionCutoverEvidence(noWorldVision).some((error) => error.includes("World vision occlusion parity")),
+  "interaction LOS acceptance cannot stand in for the separate world-vision occlusion review");
+
+const unresolvedSourceRights: CollisionCutoverEvidence = structuredClone(completeEvidence);
+unresolvedSourceRights.assetRights.status = "unresolved";
+assert.ok(validateCollisionCutoverEvidence(unresolvedSourceRights).some((error) => error.includes("asset rights are not explicitly cleared")),
+  "source-map rights cannot be inferred from technical image provenance");
+
+const missingSourceRightsEvidence: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingSourceRightsEvidence.assetRights.evidenceSha256 = "";
+assert.ok(validateCollisionCutoverEvidence(missingSourceRightsEvidence).some((error) => error.includes("rights evidence SHA-256")),
+  "source-map commercial-use clearance must carry a traceable evidence digest");
+
+const missingTransformEvidence: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingTransformEvidence.sourceMapArt.transformSha256 = "";
+assert.ok(validateCollisionCutoverEvidence(missingTransformEvidence).some((error) => error.includes("world/image transform evidence SHA-256")),
+  "source-art provenance cannot substitute for a separately verified world/image transform");
 
 const reviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
 (reviewChronology.zoneReviews[0] as Record<string, unknown>).ownerDecision = {
