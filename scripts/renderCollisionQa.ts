@@ -466,8 +466,15 @@ for (let index = 0; index < 12; index++) {
   if (!Array.isArray(rect) || rect.length !== 4 ||
       !rect.every(Number.isFinite) ||
       !transform || ![transform.scaleX, transform.scaleY, transform.offsetX, transform.offsetY].every(Number.isFinite) ||
-      transform.scaleX <= 0 || transform.scaleY <= 0) {
-    throw new Error(zoneId + ': malformed source crop or world transform');
+      transform.scaleX <= 0 || transform.scaleY <= 0 ||
+      rect[0] < 0 || rect[1] < 0 || rect[2] > originalMeta.width! || rect[3] > originalMeta.height! ||
+      rect[2] <= rect[0] || rect[3] <= rect[1]) {
+    throw new Error(zoneId + ': malformed or out-of-bounds source crop or world transform');
+  }
+  if (Math.abs(transform.scaleX - originalScale.x) > 1e-10 ||
+      Math.abs(transform.scaleY - originalScale.y) > 1e-10 ||
+      Math.abs(transform.offsetX) > 1e-10 || Math.abs(transform.offsetY) > 1e-10) {
+    throw new Error(zoneId + ': recorded world transform differs from the canonical original-art transform');
   }
   const worldRect = {
     left: rect[0] * transform.scaleX + transform.offsetX,
