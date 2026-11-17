@@ -147,7 +147,13 @@ export function validateDisconnectedRegionReviewRecord(
       errors.push("An in-review record must leave the design-owner decision deferred and unrecorded");
     }
     if (reviewerName) {
+      if (!distinctName(authorName, reviewerName)) {
+        errors.push("Independent reviewer must be different from the source author");
+      }
       if (reviewerAt === null) errors.push("A named reviewer requires a review date");
+      if (authorAt !== null && reviewerAt !== null && reviewerAt < authorAt) {
+        errors.push("Independent review cannot predate the source author's completed trace");
+      }
       if (record.reviewerDisposition !== "accepted" && record.reviewerDisposition !== "changes-requested") {
         errors.push("A named reviewer requires an explicit accepted or changes-requested disposition");
       }
