@@ -46,10 +46,21 @@ export interface CollisionCutoverEvidence {
   gameplayAnchors: GameplayAnchorDisposition[];
   disconnectedRegions: DisconnectedRegionDisposition[];
   parity: {
-    clientServerMovement: boolean;
-    botNavigation: boolean;
-    interactionLineOfSight: boolean;
-    presentationShadow: boolean;
+    clientServerMovement: { passed: boolean; evidenceSha256: string };
+    botNavigation: { passed: boolean; evidenceSha256: string };
+    interactionLineOfSight: { passed: boolean; evidenceSha256: string };
+    worldVision: { passed: boolean; evidenceSha256: string };
+    presentationShadow: { passed: boolean; evidenceSha256: string };
+  };
+  sourceMapArt: {
+    sourceSha256: string;
+    transformSha256: string;
+  };
+  assetRights: {
+    status: "cleared" | "unresolved" | "rejected";
+    rightsHolder: string;
+    license: string;
+    evidenceSha256: string;
   };
   visualReview: {
     allTwelveZonesInspected: boolean;
@@ -235,10 +246,44 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   }
 
   const parity = input.parity;
-  if (!parity || parity.clientServerMovement !== true) errors.push("Client/server movement parity has not passed");
-  if (!parity || parity.botNavigation !== true) errors.push("Bot navigation parity has not passed");
-  if (!parity || parity.interactionLineOfSight !== true) errors.push("Interaction line-of-sight parity has not passed");
-  if (!parity || parity.presentationShadow !== true) errors.push("Independent presentation-shadow review has not passed");
+  const parityChannels = [
+    ["clientServerMovement", "Client/server movement"],
+    ["botNavigation", "Bot navigation"],
+    ["interactionLineOfSight", "Interaction line-of-sight"],
+    ["worldVision", "World vision occlusion"],
+    ["presentationShadow", "Presentation shadow"],
+  ] as const;
+  for (const [key, label] of parityChannels) {
+    const evidence = parity?.[key];
+    if (!evidence || typeof evidence !== "object") {
+      errors.push(label + " evidence is required");
+      continue;
+    }
+    if (evidence.passed !== true) errors.push(label + " parity has not passed");
+    if (!isSha256(evidence.evidenceSha256)) errors.push(label + " evidence SHA-256 is required");
+  }
+
+  const sourceMapArt = input.sourceMapArt;
+  if (!sourceMapArt || !isSha256(sourceMapArt.sourceSha256)) {
+    errors.push("Canonical source-map art SHA-256 is required");
+  }
+  if (!sourceMapArt || !isSha256(sourceMapArt.transformSha256)) {
+    errors.push("Source-map world/image transform evidence SHA-256 is required");
+  }
+
+  const assetRights = input.assetRights;
+  if (!assetRights || assetRights.status !== "cleared") {
+    errors.push("Source-map asset rights are not explicitly cleared");
+  }
+  if (!assetRights || !nonEmpty(assetRights.rightsHolder)) {
+    errors.push("Source-map rights-holder identity is required");
+  }
+  if (!assetRights || !nonEmpty(assetRights.license)) {
+    errors.push("Source-map license or written permission reference is required");
+  }
+  if (!assetRights || !isSha256(assetRights.evidenceSha256)) {
+    errors.push("Source-map rights evidence SHA-256 is required");
+  }
 
   const visual = input.visualReview;
   if (!visual || visual.allTwelveZonesInspected !== true) errors.push("All twelve zone QA crops must be inspected");
