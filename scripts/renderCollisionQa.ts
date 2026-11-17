@@ -471,8 +471,8 @@ for (let index = 0; index < 12; index++) {
       rect[2] <= rect[0] || rect[3] <= rect[1]) {
     throw new Error(zoneId + ': malformed or out-of-bounds source crop or world transform');
   }
-  if (Math.abs(transform.scaleX - originalScale.x) > 1e-10 ||
-      Math.abs(transform.scaleY - originalScale.y) > 1e-10 ||
+  if (Math.abs(transform.scaleX - 1 / originalScale.x) > 1e-10 ||
+      Math.abs(transform.scaleY - 1 / originalScale.y) > 1e-10 ||
       Math.abs(transform.offsetX) > 1e-10 || Math.abs(transform.offsetY) > 1e-10) {
     throw new Error(zoneId + ': recorded world transform differs from the canonical original-art transform');
   }
