@@ -86,6 +86,31 @@ for (const id of DISCONNECTED_REGION_IDS) {
   assert.deepEqual(validateDisconnectedRegionReviewRecord(inReview, id), [],
     "an in-review record must identify its source author but leave reviewer and owner decisions open");
 
+  const reviewedInReview = {
+    ...inReview,
+    reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    reviewerDisposition: "accepted" as const,
+  };
+  assert.deepEqual(validateDisconnectedRegionReviewRecord(reviewedInReview, id), [],
+    "an in-review record may carry a later, distinct independent review while the owner decision remains deferred");
+
+  const selfReviewedInReview = {
+    ...reviewedInReview,
+    reviewerName: reviewedInReview.authorName,
+  };
+  assert.ok(validateDisconnectedRegionReviewRecord(selfReviewedInReview, id)
+    .some(error => error.includes("Independent reviewer must be different")),
+  "a source author cannot self-review while a detached-region record is in review");
+
+  const prematureInReview = {
+    ...reviewedInReview,
+    reviewerReviewedAt: "2026-11-14T07:59:59.000Z",
+  };
+  assert.ok(validateDisconnectedRegionReviewRecord(prematureInReview, id)
+    .some(error => error.includes("review cannot predate")),
+  "an in-review review date cannot predate the completed source trace");
+
   const releaseShape = {
     ...inReview,
     status: "in-review" as const,
