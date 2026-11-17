@@ -1,11 +1,16 @@
 {
   "id": "C27",
   "status": "not-started",
+  "authorName": "",
+  "authorCompletedAt": "",
   "reviewerName": "",
+  "reviewerReviewedAt": "",
+  "reviewerDisposition": "unresolved",
   "ownerName": "",
+  "ownerDecidedAt": "",
   "decision": "deferred",
   "evidenceSha256": "",
+  "evidencePath": "",
   "routeEvidenceComplete": false,
-  "notes": "Pending source-art review, full-footprint connectivity evidence and explicit design-owner decision. Do not infer accessibility from the raster component alone.",
-  "evidencePath": ""
+  "notes": "Pending source-art review, full-footprint connectivity evidence and explicit design-owner decision. Do not infer accessibility from the raster component alone."
 }
