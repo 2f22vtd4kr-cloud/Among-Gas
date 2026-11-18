@@ -41,17 +41,32 @@ const redlineCandidate = {
 
 assert.deepEqual(validateIndependentRedlineSource(redlineCandidate, "a".repeat(64)), [],
   "the canonical current-main red-line source and matching bytes should be accepted");
-const staleRedlineCandidate = structuredClone(redlineCandidate);
-staleRedlineCandidate.source.sourceFiles.redlineReference.path =
-  "attached_assets/IMG_2907_1783590932507.jpeg";
+const staleRedlineCandidate = {
+  ...redlineCandidate,
+  source: {
+    ...redlineCandidate.source,
+    sourceFiles: {
+      ...redlineCandidate.source.sourceFiles,
+      redlineReference: {
+        ...redlineCandidate.source.sourceFiles.redlineReference,
+        path: "attached_assets/IMG_2907_1783590932507.jpeg",
+      },
+    },
+  },
+} as Parameters<typeof validateIndependentRedlineSource>[0];
 assert.ok(validateIndependentRedlineSource(staleRedlineCandidate, "a".repeat(64)).some(error =>
   error.includes("canonical current-main red-line image path")),
   "a historical red-line path must not be accepted as current source evidence");
 assert.ok(validateIndependentRedlineSource(redlineCandidate, "b".repeat(64)).some(error =>
   error.includes("does not match the canonical tracked image bytes")),
   "a self-declared source digest must match the actual tracked image bytes");
-const wrongRedlineDimensions = structuredClone(redlineCandidate);
-wrongRedlineDimensions.source.referenceImage.width = 1358;
+const wrongRedlineDimensions = {
+  ...redlineCandidate,
+  source: {
+    ...redlineCandidate.source,
+    referenceImage: { ...redlineCandidate.source.referenceImage, width: 1358 },
+  },
+} as Parameters<typeof validateIndependentRedlineSource>[0];
 assert.ok(validateIndependentRedlineSource(wrongRedlineDimensions, "a".repeat(64)).some(error =>
   error.includes("canonical 1359x784 image")),
   "a candidate traced from a different source-image geometry must be rejected");
