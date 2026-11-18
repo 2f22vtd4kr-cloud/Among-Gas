@@ -12,6 +12,7 @@ export function ReactorGame({ onComplete }: MinigameProps) {
   const [sequence] = useState(() => Array.from({ length: 5 }, () => Math.floor(Math.random() * 6)));
   const [showSequence, setShowSequence] = useState(true);
   const [currentLight, setCurrentLight] = useState<number | null>(sequence[0]);
+  const [currentFlashIndex, setCurrentFlashIndex] = useState(0);
   const [input, setInput] = useState<number[]>([]);
   const [error, setError] = useState(false);
   const completeRef = useRef(false);
@@ -21,6 +22,7 @@ export function ReactorGame({ onComplete }: MinigameProps) {
   useEffect(() => {
     if (!showSequence) return;
     let index = 0;
+    setCurrentFlashIndex(0);
     setCurrentLight(sequence[0]);
     const interval = setInterval(() => {
       index += 1;
@@ -31,6 +33,7 @@ export function ReactorGame({ onComplete }: MinigameProps) {
         setError(false);
         return;
       }
+      setCurrentFlashIndex(index);
       setCurrentLight(sequence[index]);
     }, 700);
     return () => clearInterval(interval);
@@ -61,7 +64,7 @@ export function ReactorGame({ onComplete }: MinigameProps) {
         {REACTOR_COLORS.map((color, i) => {
           const lit = showSequence && currentLight === i;
           return (
-            <button key={i} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
+            <button key={i} data-testid="reactor-pad" data-pad-index={i} data-flash-index={lit ? currentFlashIndex : undefined} data-lit={lit ? "true" : "false"} onClick={() => pressPad(i)} disabled={showSequence || completeRef.current}
               style={{
                 minWidth: 0, height: 66, borderRadius: 11, border: `2px solid ${color}`,
                 background: lit ? color : `${color}30`,

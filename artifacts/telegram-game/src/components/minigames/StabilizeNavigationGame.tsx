@@ -6,7 +6,7 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
   const { language } = useLanguage();
   const en = language === 'en';
   const [target] = useState(() => ({ x: 28 + Math.random() * 48, y: 22 + Math.random() * 45 }));
-  const [marker, setMarker] = useState({ x: 22, y: 68 });
+  const [marker, setMarker] = useState({ x: 10, y: 90 });
   const [dragging, setDragging] = useState(false);
   const [stableMs, setStableMs] = useState(0);
   const areaRef = useRef<HTMLDivElement>(null);
@@ -51,11 +51,12 @@ export function StabilizeNavigationGame({ onComplete }: MinigameProps) {
             top: `${(i * 29 + 17) % 91}%`, width: 2, height: 2, borderRadius: '50%',
             background: 'rgba(170,210,255,0.35)' }} />
         ))}
-        <div style={{ position: 'absolute', left: `${target.x}%`, top: `${target.y}%`,
+        <div data-testid="navigation-target" style={{ position: 'absolute', left: `${target.x}%`, top: `${target.y}%`,
           transform: 'translate(-50%,-50%)', width: 42, height: 42, borderRadius: '50%',
           border: '2px solid #ff6b42', boxShadow: '0 0 0 7px rgba(255,100,50,0.12)',
           display: 'grid', placeItems: 'center', color: '#ff9b79', fontSize: 24 }}>⌖</div>
         <button
+          data-testid="navigation-marker"
           onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); moveMarker(e.clientX,e.clientY); }}
           onPointerMove={e => { if (dragging) moveMarker(e.clientX,e.clientY); }}
           onPointerUp={() => setDragging(false)}

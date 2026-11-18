@@ -7,7 +7,7 @@ export function AlignEngineGame({ onComplete }: MinigameProps) {
   const { language } = useLanguage();
   const en = language === 'en';
   const [target] = useState(() => 22 + Math.random() * 56);
-  const [slider, setSlider] = useState(18);
+  const [slider, setSlider] = useState(5);
   const [dragging, setDragging] = useState(false);
   const [stableMs, setStableMs] = useState(0);
   const trackRef = useRef<HTMLDivElement>(null);
@@ -45,9 +45,10 @@ export function AlignEngineGame({ onComplete }: MinigameProps) {
         background: 'linear-gradient(180deg,#283a40,#111c24)', border: '1px solid rgba(100,220,160,0.35)', touchAction: 'none' }}>
         <div style={{ position: 'absolute', left: '5%', right: '5%', top: '50%', height: 8,
           transform: 'translateY(-50%)', borderRadius: 8, background: '#070e12' }} />
-        <div style={{ position: 'absolute', left: `${target}%`, top: 0, bottom: 0, width: 3,
+        <div data-testid="engine-alignment-target" style={{ position: 'absolute', left: `${target}%`, top: 0, bottom: 0, width: 3,
           background: '#61f59e', boxShadow: '0 0 14px #61f59e' }} />
         <button
+          data-testid="engine-alignment-lever"
           onPointerDown={e => { e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); setDragging(true); move(e.clientX); }}
           onPointerMove={e => { if (dragging) move(e.clientX); }}
           onPointerUp={() => setDragging(false)}

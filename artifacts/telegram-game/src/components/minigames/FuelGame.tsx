@@ -8,22 +8,28 @@ export function FuelGame({ onComplete }: MinigameProps) {
   const en = language === 'en';
   const [progress, setProgress] = useState(0);
   const [holding, setHolding] = useState(false);
+  const progressRef = useRef(0);
   const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!holding || completedRef.current) return;
     const id = setInterval(() => {
-      setProgress(current => {
-        const next = Math.min(100, current + 2.5);
-        if (next >= 100 && !completedRef.current) {
-          completedRef.current = true;
-          setTimeout(onComplete, 250);
-        }
-        return next;
-      });
+      const next = Math.min(100, progressRef.current + 2.5);
+      progressRef.current = next;
+      setProgress(next);
+      if (next >= 100 && !completedRef.current) {
+        completedRef.current = true;
+        clearInterval(id);
+        setTimeout(() => onCompleteRef.current(), 250);
+      }
     }, 60);
     return () => clearInterval(id);
-  }, [holding, onComplete]);
+  }, [holding]);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, padding: '18px 0' }}>
@@ -33,9 +39,29 @@ export function FuelGame({ onComplete }: MinigameProps) {
       </div>
       <div style={{ color: '#e8f0ff', fontFamily: 'monospace', fontSize: 13 }}>{Math.round(progress)}%</div>
       <button
-        onPointerDown={e => { e.preventDefault(); setHolding(true); }}
-        onPointerUp={() => setHolding(false)}
-        onPointerCancel={() => setHolding(false)}
+        data-testid="fuel-hold-control"
+        data-progress={progress}
+        onPointerDown={e => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          setHolding(true);
+        }}
+        onPointerMove={e => {
+          if (!holding) return;
+          const rect = e.currentTarget.getBoundingClientRect();
+          if (e.clientX < rect.left || e.clientX > rect.right || e.clientY < rect.top || e.clientY > rect.bottom) {
+            setHolding(false);
+          }
+        }}
+        onPointerUp={e => {
+          setHolding(false);
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onPointerCancel={e => {
+          setHolding(false);
+          if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+        }}
+        onLostPointerCapture={() => setHolding(false)}
         onPointerLeave={() => setHolding(false)}
         style={{
           width: 132, height: 64, borderRadius: 12,
