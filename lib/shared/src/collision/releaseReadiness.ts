@@ -1,11 +1,6 @@
 import { MAP_AUTHORING_ZONES } from "./mapZones.js";
 import { MAP_H, MAP_W } from "../coords.js";
 import { validateZoneReviewRecord } from "./zoneReview.js";
-import {
-  DISCONNECTED_REGION_IDS,
-  validateDisconnectedRegionReviewRecord,
-  type DisconnectedRegionReviewStatus,
-} from "./disconnectedRegionReview.js";
 
 export interface GameplayAnchorDisposition {
   id: string;
@@ -18,18 +13,11 @@ export interface GameplayAnchorDisposition {
 }
 
 export interface DisconnectedRegionDisposition {
-  id: typeof DISCONNECTED_REGION_IDS[number];
-  status: DisconnectedRegionReviewStatus;
-  authorName: string;
-  authorCompletedAt: string;
+  id: "C0" | "C20" | "C27" | "C38" | "C56";
   reviewerName: string;
-  reviewerReviewedAt: string;
-  reviewerDisposition: "accepted" | "changes-requested" | "unresolved";
   ownerName: string;
-  ownerDecidedAt: string;
   decision: "accessible" | "intentionally-sealed" | "deferred";
   evidenceSha256: string;
-  evidencePath: string;
   routeEvidenceComplete: boolean;
   notes: string;
 }
@@ -58,10 +46,21 @@ export interface CollisionCutoverEvidence {
   gameplayAnchors: GameplayAnchorDisposition[];
   disconnectedRegions: DisconnectedRegionDisposition[];
   parity: {
-    clientServerMovement: boolean;
-    botNavigation: boolean;
-    interactionLineOfSight: boolean;
-    presentationShadow: boolean;
+    clientServerMovement: { passed: boolean; evidenceSha256: string };
+    botNavigation: { passed: boolean; evidenceSha256: string };
+    interactionLineOfSight: { passed: boolean; evidenceSha256: string };
+    worldVision: { passed: boolean; evidenceSha256: string };
+    presentationShadow: { passed: boolean; evidenceSha256: string };
+  };
+  sourceMapArt: {
+    sourceSha256: string;
+    transformSha256: string;
+  };
+  assetRights: {
+    status: "cleared" | "unresolved" | "rejected";
+    rightsHolder: string;
+    license: string;
+    evidenceSha256: string;
   };
   visualReview: {
     allTwelveZonesInspected: boolean;
@@ -76,7 +75,7 @@ const REQUIRED_ANCHORS = [
   "admin-table",
   ...Array.from({ length: 6 }, (_, index) => `sabotage-${index + 1}`),
 ] as const;
-const REQUIRED_REGIONS = DISCONNECTED_REGION_IDS;
+const REQUIRED_REGIONS = ["C0", "C20", "C27", "C38", "C56"] as const;
 export const MAX_RASTER_VECTOR_DISAGREEMENT_RATIO = 0.02;
 const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
@@ -189,8 +188,17 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         continue;
       }
       const region = matches[0];
-      errors.push(...validateDisconnectedRegionReviewRecord(region, id).map(error => `${id}: ${error}`));
-      if (region.status !== "approved") errors.push(`${id}: explicit design-owner review is not approved`);
+      if (!nonEmpty(region.reviewerName) || !nonEmpty(region.ownerName) ||
+          region.reviewerName.trim().toLowerCase() === region.ownerName.trim().toLowerCase()) {
+        errors.push(`${id}: distinct independent reviewer and design owner are required`);
+      }
+      if (region.decision === "deferred") errors.push(`${id}: design disposition remains deferred`);
+      if (region.decision !== "accessible" && region.decision !== "intentionally-sealed" && region.decision !== "deferred") {
+        errors.push(`${id}: unknown design disposition`);
+      }
+      if (!isSha256(region.evidenceSha256)) errors.push(`${id}: source evidence SHA-256 is required`);
+      if (region.routeEvidenceComplete !== true) errors.push(`${id}: full-footprint connectivity evidence is incomplete`);
+      if (!nonEmpty(region.notes)) errors.push(`${id}: design decision rationale is required`);
     }
   }
 
@@ -238,10 +246,44 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   }
 
   const parity = input.parity;
-  if (!parity || parity.clientServerMovement !== true) errors.push("Client/server movement parity has not passed");
-  if (!parity || parity.botNavigation !== true) errors.push("Bot navigation parity has not passed");
-  if (!parity || parity.interactionLineOfSight !== true) errors.push("Interaction line-of-sight parity has not passed");
-  if (!parity || parity.presentationShadow !== true) errors.push("Independent presentation-shadow review has not passed");
+  const parityChannels = [
+    ["clientServerMovement", "Client/server movement"],
+    ["botNavigation", "Bot navigation"],
+    ["interactionLineOfSight", "Interaction line-of-sight"],
+    ["worldVision", "World vision occlusion"],
+    ["presentationShadow", "Presentation shadow"],
+  ] as const;
+  for (const [key, label] of parityChannels) {
+    const evidence = parity?.[key];
+    if (!evidence || typeof evidence !== "object") {
+      errors.push(label + " evidence is required");
+      continue;
+    }
+    if (evidence.passed !== true) errors.push(label + " parity has not passed");
+    if (!isSha256(evidence.evidenceSha256)) errors.push(label + " evidence SHA-256 is required");
+  }
+
+  const sourceMapArt = input.sourceMapArt;
+  if (!sourceMapArt || !isSha256(sourceMapArt.sourceSha256)) {
+    errors.push("Canonical source-map art SHA-256 is required");
+  }
+  if (!sourceMapArt || !isSha256(sourceMapArt.transformSha256)) {
+    errors.push("Source-map world/image transform evidence SHA-256 is required");
+  }
+
+  const assetRights = input.assetRights;
+  if (!assetRights || assetRights.status !== "cleared") {
+    errors.push("Source-map asset rights are not explicitly cleared");
+  }
+  if (!assetRights || !nonEmpty(assetRights.rightsHolder)) {
+    errors.push("Source-map rights-holder identity is required");
+  }
+  if (!assetRights || !nonEmpty(assetRights.license)) {
+    errors.push("Source-map license or written permission reference is required");
+  }
+  if (!assetRights || !isSha256(assetRights.evidenceSha256)) {
+    errors.push("Source-map rights evidence SHA-256 is required");
+  }
 
   const visual = input.visualReview;
   if (!visual || visual.allTwelveZonesInspected !== true) errors.push("All twelve zone QA crops must be inspected");
