@@ -528,11 +528,18 @@ for (let index = 0; index < 12; index++) {
         '#00b0ff', 0.38, false, runtimeRect.left, runtimeRect.top, false),
     }]).resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
       .png().toBuffer(),
-    sharp(mapPath).extract(runtimeRect).composite([{
-      input: makeVisionSvg(localVisionSamples, runtimeRect.width, runtimeRect.height,
-        pngScale.x, pngScale.y, runtimeRect.left, runtimeRect.top),
-    }]).resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
-      .png().toBuffer(),
+    (async () => {
+      // Rasterize the SVG overlay to the exact integer crop dimensions before
+      // compositing. librsvg may otherwise report an SVG raster size that is
+      // one pixel larger than Sharp's extracted source rectangle.
+      const visionOverlay = await sharp(makeVisionSvg(
+        localVisionSamples, runtimeRect.width, runtimeRect.height,
+        pngScale.x, pngScale.y, runtimeRect.left, runtimeRect.top,
+      )).resize(runtimeRect.width, runtimeRect.height, { fit: 'fill' }).png().toBuffer();
+      return sharp(mapPath).extract(runtimeRect).composite([{ input: visionOverlay }])
+        .resize({ width: panelWidth, height: panelHeight, fit: 'contain', background: '#101820', kernel: 'lanczos3' })
+        .png().toBuffer();
+    })(),
   ]);
   const boundsText = 'x ' + expectedBounds.left.toFixed(1) + '–' + expectedBounds.right.toFixed(1) +
     ' · y ' + expectedBounds.top.toFixed(1) + '–' + expectedBounds.bottom.toFixed(1);
