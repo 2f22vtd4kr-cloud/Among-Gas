@@ -1,15 +1,15 @@
 # Plan v2 implementation audit
 
-**Audit date:** 2026-11-08  
-**Audited baseline:** main at 82433bc5adf65f427c113f5a9d6df6e26ecf6139  
-**Implementation branch:** work/plan-v2-map-refinement-hardening  
+**Audit date:** 2026-11-16  
+**Audited baseline:** main at 93b4b542273fa064f9ca0db59bf43ff3e982cf9c (2026-11-16)  
+**Implementation branch:** current mainline plus active screenshot-free Plan 2 implementation PRs #212–#214  
 **Release status:** NOT READY. This audit does not authorize Replit/Vercel access, a production deployment, or live vector-collision cut-over.
 
 ## Executive result
 
-Plan v2 is partly implemented already. The most substantial completed work is the 2× tiled-map delivery path and its browser integration, the initial vector-collision engine/editor foundation, the player sprite atlas, the five existing minigames, and several server-authoritative movement/bot/gameplay improvements. The main unfinished work is not another basic tile splitter or a generic collision-grid rewrite. It is (1) genuine source-preserving tile refinement beyond sharpening, (2) author-traced and independently reviewed map geometry, followed by route- and vision-validated runtime cut-over, (3) complete editor and HUD acceptance evidence, and (4) product refactoring, multi-client gameplay and release gates.
+Plan v2 is partly implemented already. The most substantial completed work is the 2× tiled-map delivery path and its browser integration, the initial vector-collision engine/editor foundation, the 18-palette × 9-pose player sprite atlas, eleven independently imported task minigames, and several server-authoritative movement/bot/gameplay improvements. The main unfinished work is not another basic tile splitter or a generic collision-grid rewrite. It is (1) genuine source-preserving tile refinement beyond sharpening, (2) author-traced and independently reviewed map geometry, followed by route- and vision-validated runtime cut-over, (3) complete editor and HUD acceptance evidence, and (4) product refactoring, multi-client gameplay and release gates.
 
-This branch implements the safe tooling and lifecycle/test gaps that can be addressed without inventing map contours or breaching the active recovery restrictions. It intentionally does not promote any generated geometry or visual candidate into live gameplay.
+Mainline now contains the safe tooling and lifecycle/test improvements that can be completed without inventing map contours or breaching the active recovery restrictions. The active recovery PRs continue that work without promoting generated geometry or visual candidates into live gameplay.
 
 ## Requirement-by-requirement assessment
 
@@ -27,14 +27,14 @@ This branch implements the safe tooling and lifecycle/test gaps that can be addr
 | 4×3 collision/map QA gallery | OPT-IN DIAGNOSTIC SCRIPT EXISTS; NOT IN CURRENT CI | `scripts/renderCollisionQa.ts` remains a diagnostic utility that can emit 12 overlapping 900×650 region tiles and source-vs-collision comparisons. Current `.github/workflows/ci.yml` does not invoke it or upload an image gallery; screenshot-free QA is enforced by `scripts/test-no-visual-artifacts.mjs`. | Do not run the image renderer during the current screenshot-free recovery. No visual screenshot/gallery review is claimed. Keep the five detached-region decisions, 12 zone author/reviewer/owner approvals, and route/vision evidence as explicit open gates. |
 | Statue planter and pedestal sight contour | NOT DONE in current main | The old misplaced statue offset circle has already been removed; visibility.ts explicitly warns that the baked raster shadow must not be duplicated. The current buildCollisionDocument.ts also excludes that obsolete circle, and collisionOverrides.ts contains the van silhouette but no statue planter/pedestal polygon. Inspection of the generated central-atrium QA comparison confirms the red-line source traces a closed planter outline while the current production collision overlay has no corresponding authored vector contour. The older Plan v2 seed note gave an estimated pedestal rectangle (1700–1790 × 464–531), not a reviewed contour. | Author-trace the actual planter ring and pedestal from the map source, decide separately whether to retain the painted shadow, and obtain independent sight/route review. Do not promote the estimate as canonical geometry. |
 | Parking lines and other map connectivity defects | NOT DONE | Current collision overrides contain the existing green service van footprint and east-generator approach aisle. | Parking paint/line collision and the other identified regions still need visual classification and author review. Painted markings must remain walkable unless a visible physical obstacle supports a collider. |
-| HUD action bar | PARTLY DONE; visual states not accepted | Kill is impostor-only, disabled without target/on cooldown, shows a countdown and conic cooldown sweep. Report is persistently visible for living players and disabled without a reportable body. Use is persistently visible and disabled when no contextual action is available. Position uses the game control layout preferences. | This branch adds the requested disabled-Kill opacity of 45% and desaturation. Context-specific task/repair/vent/admin Use iconography and a VENT label are now implemented, reusing the existing server-authoritative enterVent callback. The six-state screenshot matrix and visual acceptance remain outstanding. No visual acceptance is claimed without running-browser screenshots. |
-| GameMap modularization | NOT DONE | The main file retains the map rendering, camera, pointer/input, gameplay overlay and HUD responsibilities together. | Split into stable render/camera/input/HUD boundaries with no gameplay changes. This remains a large, separately testable refactor. |
-| Minigame modularization | NOT DONE | TaskMinigame.tsx contains the current five implemented minigames and their shared overlay logic. | Extract independent minigame components/shared primitives and create functional and visual regression coverage. The presence of working minigames is not completion of the refactor/gallery requirement. |
-| Sprites and animation | PARTLY DONE | Authored character source, an atlas loading path, runtime palette expansion and character geometry/animation tests already exist. | Complete the full 18-palette × 9-frame baked/golden-image review with visor/filter, suit shading, feet anchor, corpse bone and walk-pose comparisons. Existing extraction previews alone are not acceptance. |
+| HUD action bar | PARTLY DONE; visual states not accepted | Kill is impostor-only, disabled without target/on cooldown, shows a countdown and conic cooldown sweep. Report is persistently visible for living players and disabled without a reportable body. Use is persistently visible and disabled when no contextual action is available. Position uses the game control layout preferences. | Mainline implements the requested disabled-Kill opacity of 45% and desaturation. Context-specific task/repair/vent/admin Use iconography and a VENT label are implemented, reusing the existing server-authoritative enterVent callback. A screenshot-free six-state DOM/accessibility matrix and physical-device acceptance remain outstanding; no screenshot artifacts are generated. |
+| GameMap modularization | PARTLY DONE | `GameMap.tsx` still owns a large orchestration component, but base map drawing, markers, world details, local/remote player drawing, vision fog, camera math and player canvas positioning have separate modules with focused regression tests. | Continue extracting input/gesture state, scene orchestration and HUD/action state into stable boundaries; preserve the current canvas contracts and add behavior-level tests for each extraction. |
+| Minigame modularization | COMPONENT MODULARIZATION DONE; INTERACTION ACCEPTANCE PARTIAL | `TaskMinigame.tsx` maps all 11 canonical tasks to 11 distinct imported components under `components/minigames/`, using the shared `MinigameShell`. CI's registry test verifies all 11 render, preserve task ordering, reject unknown IDs and expose the shared accessible 48px close target. | Add focused interaction/completion regression tests for every minigame and verify keyboard/touch operation and step transitions. Do not describe this as five minigames or as a finished visual acceptance gallery. |
+| Sprites and animation | 18×9 ATLAS BUILT AND GEOMETRY-TESTED; VISUAL ACCEPTANCE PARTIAL | Runtime exposes 18 unique palette columns × 9 authored pose rows (162 palette/pose combinations); the builder bakes the 18-column atlas. CI checks crop bounds, all 18 unique palette slots, nine pose windows, feet anchor, corpse bone and material-preserving recolour behavior for the 11 generated palettes. | Complete source-to-baked browser byte parity and visual quality review for every palette/pose, including visor/filter isolation, suit shading and animation readability. No screenshot artifacts are to be generated during this recovery; use existing non-image tests and reserve any required visual approval for an explicitly authorized review method. |
 | Bots and strategic behaviour | PARTLY DONE | Recent merged work includes role-scoped strategic AI, seeded balance evaluation and a solo human/bot movement verification path. Server authority and shared raster movement contracts remain. | Prove bots on the final reviewed map, with grounded visibility/event reactions, path reachability and human-vs-bot balance. A solo simulation or mock does not replace full live-game acceptance. |
-| Meetings, reports, voting and multi-client networking | SERVER-BACKED PROTOCOL INTEGRATION TESTS PRESENT; UI/device acceptance incomplete | CI starts the API server and runs `test_sabotage.mjs` (three real WebSocket clients: emergency meeting, duplicate-call rejection, public chat, discussion timing, voting and ejection) plus `test_report_body.mjs` (four real clients: kill, corpse broadcast, out-of-range report rejection, in-range corpse report and meeting broadcast). | Preserve these protocol tests. Add browser-client verification of UI synchronization and meeting/voting disconnect-reconnect behavior; physical-device acceptance remains separate. |
+| Meetings, reports, voting and multi-client networking | SERVER-BACKED PROTOCOL INTEGRATION TESTS PRESENT; UI/device acceptance incomplete | CI starts the API server and runs `test_sabotage.mjs` (three real WebSocket clients: emergency meeting, duplicate-call rejection, public chat, discussion timing, voting and ejection) plus `test_report_body.mjs` (four real clients: kill, corpse broadcast, out-of-range report rejection, in-range corpse report and meeting broadcast). | PR #207 adds a three-client active-meeting reconnect test that restores transcript/voting state and completes the vote. PR #208 adds client resume-parser and screenshot-free meeting-overlay DOM tests (pending exact-head CI). Full live browser WebSocket/UI synchronization and physical-device acceptance remain separate. |
 | Asset provenance | INCOMPLETE | ASSETS.md records project-authored assets and identifies the legacy au-assets directory as not cleared for commercial redistribution. | Replace or license the uncleared runtime assets, record provenance/attribution and remove reliance on uncleared art before commercial release. Do not delete assets blindly where historic fixtures depend on them. |
-| Real device, Replit/Vercel and release verification | BLOCKED / NOT DONE | Repository-level and browser automation exist. | Active recovery issue #90 prohibits Replit/Vercel access and publishing. No real-phone acceptance, 20-minute soak or release dossier is claimed. Resume only when the owner explicitly clears that gate. |
+| Real device, Replit/Vercel and release verification | CI SOAK PASSED; REAL-DEVICE AND RELEASE ACCEPTANCE OPEN | Exact-main CI completed the separate 20-minute local API/WebSocket soak successfully (run 43744350913) and its verify job passed. PR exact-head CI also passed for the merged hardening batches #192–#202. | Physical-phone acceptance, provider-backed Groq verification and a release dossier remain open. Recovery issue #90 prohibits Replit/Vercel workspace access and publishing; do not perform those actions without explicit owner clearance. |
 
 ## Changes made on this branch
 
@@ -71,12 +71,12 @@ This branch implements the safe tooling and lifecycle/test gaps that can be addr
 ## Required next acceptance sequence
 
 1. Run exact-head repository CI and fix all regressions without weakening tests.
-2. Review the baseline and any Stage-2 image-to-image gallery at mobile/desktop scale; retain only candidates that pass the QA gate and owner visual review.
-3. Establish source-map provenance; inspect the already-generated 4×3 / 12-image QA gallery and eight detail comparisons; record independent author/reviewer dispositions for all 24 gameplay anchors and five candidate disconnected regions.
+2. Review the existing source assets and tile-build outputs without generating screenshots or image QA galleries; retain only candidates that pass objective geometry/asset checks and owner review.
+3. Establish source-map provenance from tracked original assets and verified crop transforms. Do not generate screenshots or image QA galleries during this recovery. Record independent author/reviewer dispositions for all twelve zones, all 24 gameplay anchors and five candidate disconnected regions.
 4. Trace statue/prop outlines and doors with explicit blocksMove/blocksSight flags; resolve parking-line and connectivity defects; run full three-circle-footprint routes for every gameplay anchor and all cross-zone paths.
 5. Add visibility/shadow tests from the required viewpoints; profile on a mid-range phone; prove that low props remain move-only where appropriate.
 6. Only after geometry review, test vector/raster parity for client, server and bots, then plan a separately reviewed production cut-over.
-7. Complete the HUD six-state screenshot matrix, touch editor acceptance, GameMap/TaskMinigame modularization, sprite golden images, asset provenance, two-client E2E, balance matrix and soak.
+7. Complete a screenshot-free six-state HUD matrix using DOM, accessibility and state-transition assertions; finish remaining GameMap orchestration extraction (the eleven task minigames are already modularized); complete source-to-baked sprite parity and non-image frame metrics; clear asset provenance; add active-meeting reconnect UI/protocol coverage; and retain balance/soak verification. Do not generate screenshot or golden-image artifacts.
 8. Obtain explicit owner clearance for the recovery restriction before any Replit/Vercel or target-device integration. Issue #90 remains controlling until then.
 
 **Decision:** this branch advances the map refinement tooling and runtime resource management, but Plan v2 is not complete and the game is not release-ready.
@@ -91,7 +91,7 @@ This addendum supersedes stale status rows above where later merged PRs changed 
 
 | Area | Verified current state | Remaining acceptance |
 |---|---|---|
-| Mainline baseline | Main is `925a465458e8462cef8b6112daff90a0edc239b3`. Main CI run [43358830692](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43358830692) passed all 45 verify steps. Its three 100-game cohorts were 58%, 66% and 58% crew wins, zero timeouts, with 0.9/1.0/1.0 average kills. | The mainline baseline is green; it does not verify the separate PR #138 vector candidate. |
+| Mainline baseline | This audit snapshot is based on main `32c70aa6b1efb27b23fa7ff4f881d27fa1621ee4` (PRs #192–#202). The separate 20-minute Plan 2 soak passed on run [43801244686](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43801244686); its verify job was superseded by later mainline pushes after browser smoke passed. PRs #203, #204, #205, #207 and #209 have since merged. #203 adds tracked raster crop/hash/dimension checks plus canonical-zone and 24px seam-context coverage; #209 adds private authoritative task-step acknowledgements. Exact-main verification and the 20-minute soak are being rerun on the newer head. PR #208 remains under exact-head CI. | Refresh the baseline SHA and exact main verify/soak status after the active recovery PRs merge. The soak does not verify or promote the separate PR #138 vector candidate. |
 | Tiled map | Runtime now uses the 1612×929 overview and 28 viewport-detail tiles; CI has tile lifecycle, retry/fallback, seam and mobile/desktop capture coverage. | The optional sharpened set is not neural super-resolution. No model-generated detail candidate or owner-approved artwork switch exists. |
 | Minigames | All 11 task minigames are independent modules under `components/minigames/`, behind a registry. The registry test and CI browser gallery mount all 11. | Continue per-game functional/visual review; the previous statement that the minigames remain a single monolith is stale. |
 | GameMap and input/render refactors | Camera, keyboard lifecycle, map base layer, task/sabotage markers, HUD actions, sprite projection/rendering and vision overlay have been incrementally extracted across merged PRs. | `GameMap.tsx` remains a large module (roughly 2.7k lines at the last measured baseline). A complete behavior-preserving scene/render decomposition remains open. |
@@ -189,3 +189,140 @@ PR #171 is the remaining safe integration PR in this pass. It moves the existing
 ## Current QA policy correction (2026-11-15)
 
 This audit predates the current screenshot-free recovery policy. Any earlier statement that CI invokes `renderCollisionQa.ts`, uploads map screenshot galleries, or requires generated screenshots is superseded. The current CI performs code-level, geometry, browser-functional, and gameplay checks; it enforces `scripts/test-no-visual-artifacts.mjs` and does not capture screenshots or run the map image renderer. Do not invoke the opt-in renderer as part of this recovery. This does not waive independent map review, design-owner decisions, or physical-device acceptance; those remain unverified and must not be represented as complete.
+
+
+## Current-main reconciliation — 2026-11-16
+
+This addendum supersedes the older main-SHA and open-PR status statements above. It records code and CI evidence only; it does not claim that source tracing, independent review, physical-device acceptance or release approval have been completed.
+
+### Current baseline and merged work
+
+**Audited main SHA:** `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
+
+| PR | Mainline result | Verified scope and limit |
+|---|---|---|
+| #203 | Merged as `2eabca62ca58b831942d27e5ebd21e04ba6eb303` | Checks all 12 tracked raster source crops against actual Git-tracked files, dimensions, SHA-256 and transforms, including canonical zone coverage plus 24px seam context. This proves evidence-file integrity and crop coverage, not collision tracing or approval. |
+| #204 | Merged as `51c9eef782134cd61492e83679236cd71a936c51` | Enforces source seam coverage when saving zone review records. |
+| #205 | Merged as `cefba687571e81eafe07d31b6091abd230c482ad` | Requires bidirectional full-player-footprint routes for gameplay anchors. |
+| #207 | Merged as `a8c4b108a1bfe4d2532582ad5ecc9322daa4b5ce` | Three-client server test reconnects during an active meeting, restores transcript/voting state and completes the vote. This is protocol-level integration, not physical-device UI acceptance. |
+| #209 | Merged as `7ff82ba376b8ec2a49436ea458dfdc38bff33bd3` | Reconciles optimistic task progress with server-authoritative acknowledgement; includes a rejected-step regression. |
+| #210 | Merged as `386be72f079b916d6cbd9f3adac67fbca54f0742` | Exact-head CI passed all 24 gameplay-anchor movement routes and interaction line-of-sight routes. |
+| #211 | Merged as `93b4b542273fa064f9ca0db59bf43ff3e982cf9c` | Makes release metadata require two-way full-footprint parity counts, the union-reachable sample domain and a sample-set SHA-256. This is a metadata gate; it does not itself generate the evidence. |
+
+The exact-head PR #210 and #211 verification runs passed. The mainline verify and 20-minute local API/WebSocket soak for SHA `93b4b542273fa064f9ca0db59bf43ff3e982cf9c` are still active at the time of this audit; do not describe that run as passed until both jobs complete.
+
+### Active implementation PRs
+
+| PR | Scope | Current status / acceptance boundary |
+|---|---|---|
+| #212 | Strict client reconnect-snapshot validation; session Groq-key resend/ack; screenshot-free HUD DOM matrix; meeting overlay resume fixture; reproducible raster/vector parity sampler | A first exact-head run passed the new 8px union-spawn-reachable parity measurement, then failed TypeScript because the runner was inside the scripts package's narrow rootDir. The runner has been moved outside that root and given its own strict tsconfig; the corrected exact-head run is queued/in progress. No merge until that exact head passes. |
+| #213 | Verify every tracked `attached_assets/` file against the provenance inventory's path, Git blob SHA and byte size | Its exact-head CI passed the inventory-verifier step; full job remains in progress. This is inventory completeness, not legal ownership/licence clearance. |
+| #214 | Typed review records and editor workflow for detached components C0/C20/C27/C38/C56 | Exact-head CI queued/in progress. Records start `not-started` and `deferred`; API and UI do not change collision geometry. Names are self-attested, not authenticated. No design decision is prefilled. |
+
+The older PR #208 branch is a stale predecessor of #212 and must not be merged separately; #212 is the current-mainline port that preserves #209's already-merged task acknowledgement. PR #206's older audit-only branch is superseded by this reconciliation.
+
+### New measured collision evidence
+
+PR #212 adds a deterministic parity runner that:
+- builds the raster-derived vector seed using the existing candidate builder;
+- evaluates the production three-circle player footprint in both raster and vector worlds;
+- constructs separate raster and vector spawn-reachable graphs using an 8px lattice and 2px path samples;
+- compares the union of both reachable domains in both directions; and
+- emits sample count, directional disagreement counts/ratios, candidate digest and deterministic sample-set SHA-256.
+
+The first run's parity step passed before the later typecheck failure. This measures the **raster-derived seed**, not PR #138's separately authored vector candidate. It cannot be used to authorize cut-over or to claim that hand-authored geometry is within 2%.
+
+### Remaining Plan 2 work — implementation vs decisions
+
+**Code/automation still being completed:**
+1. Complete exact-head CI for #212–#214 and fix any failures without weakening acceptance thresholds.
+2. Add end-to-end client UI assertions for reconnecting during active meeting/voting and verify the new parser rejects malformed or internally contradictory snapshots.
+3. Keep the detached-region workflow, five review scaffolds and release-readiness integration. Validate all five records and their backup/API/browser lifecycle.
+4. Complete the all-assets inventory integrity check and keep the legal rights status explicitly unresolved.
+5. Continue behavior-preserving GameMap orchestration/render/input decomposition and add per-minigame interaction/completion tests beyond the existing 11-component registry coverage.
+6. Finish non-image sprite source-to-baked parity/metrics and provider-backed Groq key lifecycle tests; the reconnect key resend must be verified on the exact current head.
+7. Keep the measured parity runner deterministic, typed and CI-enforced. It must consume the same candidate revision as any future release attestation; a baseline seed measurement is not a candidate sign-off.
+
+**Work that cannot be honestly completed by an autonomous code change:**
+1. The 12 zones have tracked source crops with verified dimensions, hashes, transforms and seam coverage, but the actual collision contours remain untraced/unreviewed/unapproved. The editor can record the work; it cannot authenticate a human's design decision.
+2. C0/C20/C27/C38/C56 remain deferred until the design owner decides accessible vs intentionally sealed using source and route evidence. PR #214 only provides a workflow.
+3. Parking paint/line classification, vehicle clearance, statue/planter/pedestal movement-vs-sight-vs-shadow semantics and all remaining contour interpretations require source-backed authoring and independent review. Do not infer doors or paths from a connected-component label.
+4. Independent vision/LOS and decorative-shadow authoring/review remain separate from movement geometry. Movement-only polygons must not silently become occluders.
+5. Asset provenance verification can prove which bytes are tracked and inventoried; it cannot establish copyright ownership, licence grant, attribution sufficiency or commercial redistribution rights. Rights-holder evidence is still required.
+6. Real-device iOS/Android/Telegram acceptance and live Groq-provider verification are not performed by static CI. Issue #90 still restricts Replit/Vercel access, publishing and deployment; do not bypass it.
+7. A full release dossier and production cut-over remain blocked until all source, route, vision, parity, rights, balance, device and owner-approval gates pass on one immutable candidate SHA.
+
+### Screenshot-free policy
+
+No screenshot, golden-image, image-gallery or collision-QA screenshot artifacts are required or produced by this recovery. Browser smoke uses functional DOM, accessibility, pointer/touch and gameplay-state assertions. The opt-in `scripts/renderCollisionQa.ts` remains outside CI and must not be invoked under the current policy.
+
+**Decision: NOT READY.** The latest mainline contains meaningful implementation and new automated gates, but the map's human source/design decisions, legal rights, device acceptance and release authorization remain open. Do not promote PR #138 or any raster-derived vector seed into live gameplay.
+
+
+## 2026-11-16 continuation addendum — exact-head status
+
+This addendum supersedes only the earlier active-PR and validation status above; the audited production baseline remains `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`. Candidate branches do not change that baseline until reviewed and merged.
+
+| PR | Scope | Exact-head status | Integration boundary |
+|---|---|---|---|
+| #212 | Strict reconnect snapshot validation and session credential restoration | `verify` passed on `7f9bbbb0fc9e25bb1b6d1ca73eb7e1015f19f532`; ready for review | Not merged; preserve #209 authoritative task-step acknowledgement semantics. |
+| #213 | Asset provenance inventory path/hash integrity | `verify` passed on `7c3ba4ffb7ba20848e598c2cddd2277158f3cd51`; ready for review | Inventory integrity is not a licence or commercial-rights opinion. |
+| #214 | Detached-region candidate editor/API and five-region review workflow | Full `verify` passed on `08040f5b7db9a2fd89e2703e7d1b2a7bc8a9d646`; ready for review | No owner decisions or geometry approval are implied. |
+| #216 | Real-touch interaction acceptance for all 11 task minigames | Full 57-step `verify` passed on `93e64a19f6758b6306dd167b9e8e751e7e82664d`; ready for review | Browser CI is not physical-device acceptance. |
+| #217 | Extract task minigame overlay lifecycle from GameMap | Full `verify` passed on `4988d7aae12a734fee0155815d04677b0d91a329`; ready for review | Behavior-preserving refactor; not merged. |
+
+PR #215 itself is this documentation reconciliation. PRs #206 and #208 are older draft branches behind current main and are not merge-ready; their content must be reconciled against current main before any integration. PR #138 remains closed unmerged and quarantined. The exact-main baseline has not been changed by these candidate PRs.
+
+### Remaining Plan 2 blockers (unchanged)
+
+- All 12 map zones still require source-backed object/obstacle traces, an identified author, independent reviewer and design-owner disposition. The editor's JSON/API and diagnostic overlays are authoring infrastructure, not approved geometry.
+- All 24 gameplay anchors require documented independent author/reviewer dispositions and evidence hashes in addition to the automated reachability/LOS/bot-route checks. The 24-anchor test uses the current shared fine raster and does not prove independent vision geometry.
+- C0, C20, C27, C38 and C56 still require source evidence, independent review and explicit owner decisions. No centroid ownership or editor save is an approval.
+- Statue planter/pedestal, parking-line semantics, object-specific collision/vision/shadow contours, and the shared canonical geometry contract remain unresolved.
+- Stage-2 AI/context-aware map-art refinement has tooling only; no model output or owner-approved candidate exists. The owner must choose baseline versus sharpened art and any illustrator budget.
+- Asset inventory checksums are verified, but creator provenance, commercial-use permission and redistribution rights remain uncleared for relevant map/reference inputs.
+- Physical phone/desktop acceptance, complete live-provider Groq verification, final merge/release dossier and deployment handoff remain open. No Replit/Vercel access, deployment, publishing or production mutation is authorized in this recovery pass.
+
+The exact-head passing PRs improve code and CI coverage but do not make Among Gas release-ready. Keep raster collision runtime authoritative; keep all vector/editor geometry candidate-only until the complete source, review, route, vision, parity and owner-approval gates pass.
+
+
+## 2026-11-16 21:05 UTC — successor exact-head reconciliation
+
+This addendum supersedes the earlier candidate-PR progress rows above. The audited production baseline remains current `main` at `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`; none of the following candidates has been merged. Exact-head workflow results were re-fetched against each PR's current head SHA:
+
+| PR | Current head | Exact-head verify | Separate soak | Integration state |
+|---|---|---|---|---|
+| #212 reconnect snapshot validation/restoration | `f6a44feb6bf8355bc7a12278a4a477c51299bc0f` | [43899329920](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43899329920), 58/58 passed | Skipped | Awaiting independent review |
+| #213 asset inventory integrity | `7c3ba4ffb7ba20848e598c2cddd2277158f3cd51` | [43839595038](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43839595038), passed | Not claimed | Awaiting independent review |
+| #214 detached-region review workflow | `08040f5b7db9a2fd89e2703e7d1b2a7bc8a9d646` | [43850807009](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43850807009), passed | Not claimed | Awaiting independent review; review records are not design approvals |
+| #215 this audit reconciliation | `e4930bcdd57b4df2e9cec862e83f260faa183651` | [43898682321](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43898682321), 57/57 passed | Skipped | Awaiting independent review |
+| #216 all 11 task minigame touch acceptance | `93e64a19f6758b6306dd167b9e8e751e7e82664d` | [43854277017](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43854277017), passed | Not claimed | Awaiting independent review; browser touch CI is not physical-device acceptance |
+| #217 GameMap task-overlay lifecycle extraction | `4988d7aae12a734fee0155815d04677b0d91a329` | [43851027258](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43851027258), passed | Not claimed | Awaiting independent review |
+| #218 geometry manifest reconciliation | `7ff4156c8344db9c469aa1242cb2a5cde6ca2f02` | [43897869288](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43897869288), 57/57 passed | Skipped | Awaiting independent review; documentation only |
+| #219 Unicode-safe public AI prompt sanitization | `ff7acbd3b0963845fc9f9fa66005fa9774737a9a` | [43898570860](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43898570860), 57/57 passed | Skipped | Marked ready for review; awaiting independent review |
+
+A skipped PR-specific `plan2-soak` is not a soak pass. Separately, exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960) passed on the baseline SHA with verify 57/57 and the 20-minute `plan2-soak` 12/12 (1,200,429 ms; 121 WebSocket lifecycle cycles; 484 authenticated sockets; 246 health probes; 2 ms p95 health latency; 117,088 KiB peak RSS; zero reported errors).
+
+### Review and merge status
+
+A fresh review-submission and inline-thread check found **zero submitted reviews and zero review threads on PRs #212–#219**. Therefore no independent approval has been obtained and none of these PRs is currently eligible for a review-gated integration decision. Do not manufacture reviewer identities or self-approve. A repository maintainer must assign an independent reviewer with appropriate expertise; after review, address comments, rerun exact-head CI if commits change, then merge in dependency order. Main is unchanged by this addendum.
+
+### Remaining human / external gates
+
+- All 12 map zones still need source-backed authored traces, independent review and owner disposition; the 24-anchor automated route/LOS result is not an independent source-authored vision review.
+- C0/C20/C27/C38/C56 detached-region decisions remain owner-deferred. PR #214 only supplies a fail-closed workflow and self-attested metadata; no route or geometry is approved by saving a record.
+- Movement collision, interaction LOS, vision/fog and decorative shadows still lack one complete canonical per-object source and independent sight/shadow contour review. Keep raster collision authoritative; no candidate geometry promotion.
+- Creator/rights-holder provenance and commercial redistribution permission for the map/reference inputs remain unresolved. PR #213 checks tracked inventory path/hash/size integrity only; it is not a licence clearance.
+- Physical iOS/Android/Telegram device acceptance remains unperformed. Screenshot generation remains prohibited by the active recovery policy.
+- Live Groq-provider verification with an owner-supplied credential remains outstanding. CI prompt sanitization and session-key packet tests are not a live provider acceptance test. Never add a real key to Git, issue comments, logs or CI artifacts.
+- The 20-minute soak is proven only for the exact main SHA above. The four latest candidate PR workflows skipped their separate soak jobs.
+- No Replit/Vercel access, deployment, publishing or production mutation is authorized. Prepare a release dossier only as an evidence-backed NOT READY dossier until all mandatory gates close.
+
+**Decision: NOT READY.** Green candidate CI is not a merged release. No PR in this ledger is merged, no independent review is recorded, and the remaining human/legal/device/provider gates remain release-blocking.
+
+
+### Follow-on source audit and documentation-head update — 2026-11-16 21:08 UTC
+
+After the table above was written, PR #218 received a further documentation-only source audit at head `74dd52c079e8e248994fe3b06257455d6e06fc5e`. It records the exact current-main sight/shadow derivation: runtime occlusion still derives large masks and compact outlines from fine movement occupancy; the vector candidate builder also derives sight geometry from that source; and the vector engine's omitted `castsShadow` value currently inherits `blocksSight` (the editor labels this explicit mode “Follow sight”). This is not independent per-object source authoring or approval. PR #218's new head requires its own exact-head CI run.
+
+The audit document itself was subsequently extended in this commit; its prior exact-head result applies to the prior head `ebbc4caedc0a9b8b3e03648061ed74bf33076e95` only. The new document head also requires exact-head CI. All candidate PRs remain unmerged and none has an independent review submission. The production baseline remains `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
