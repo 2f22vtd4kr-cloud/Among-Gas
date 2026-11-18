@@ -1707,11 +1707,6 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        if (opcode === 0x18 && event.data.byteLength === 3 && view.getUint8(1) === 0x01) {
-          setState(s => ({ ...s, groqApiKeyConfigured: view.getUint8(2) === 1 }));
-          return;
-        }
-
         if (opcode === 0x18 && event.data.byteLength >= 4) {
           const sub = view.getUint8(1);
           const slot = view.getUint8(2);
