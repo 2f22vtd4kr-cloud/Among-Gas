@@ -9,6 +9,7 @@ import { MAP_AUTHORING_ZONES } from "../lib/shared/src/collision/mapZones.js";
 import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
 
 const digest = "a".repeat(64);
+const sightDigest = "b".repeat(64);
 const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
   ...createDefaultZoneReviewRecord(zone.id),
   status: "approved" as const,
@@ -56,9 +57,14 @@ const completeEvidence: CollisionCutoverEvidence = {
   gameplayAnchors: COLLISION_CUTOVER_REQUIRED_ANCHORS.map((id) => ({
     id,
     authorName: "Map Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
     reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
     disposition: "accepted",
-    evidenceSha256: digest,
+    movementEvidencePath: `evidence/gameplay-anchors/${id}/movement/route.json`,
+    movementEvidenceSha256: digest,
+    sightEvidencePath: `evidence/gameplay-anchors/${id}/sight/interaction-los.json`,
+    sightEvidenceSha256: sightDigest,
     movementRoutePassed: true,
     sightApproachPassed: true,
   })),
@@ -234,9 +240,14 @@ const extraAnchor: CollisionCutoverEvidence = structuredClone(completeEvidence);
 extraAnchor.gameplayAnchors.push({
   id: "task-extra",
   authorName: "Map Author",
+  authorCompletedAt: "2026-11-14T08:00:00.000Z",
   reviewerName: "Independent Reviewer",
+  reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
   disposition: "accepted",
-  evidenceSha256: digest,
+  movementEvidencePath: "evidence/gameplay-anchors/task-extra/movement/route.json",
+  movementEvidenceSha256: digest,
+  sightEvidencePath: "evidence/gameplay-anchors/task-extra/sight/interaction-los.json",
+  sightEvidenceSha256: sightDigest,
   movementRoutePassed: true,
   sightApproachPassed: true,
 });
@@ -246,6 +257,44 @@ assert.ok(validateCollisionCutoverEvidence(extraAnchor).some((error) =>
 assert.ok(validateCollisionCutoverEvidence(extraAnchor).some((error) =>
   error.includes("Unknown gameplay-anchor disposition")),
   "unexpected gameplay-anchor identifiers must be rejected");
+
+const anchorReviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorReviewChronology.gameplayAnchors[0].reviewerReviewedAt = "2026-11-14T07:59:00.000Z";
+assert.ok(validateCollisionCutoverEvidence(anchorReviewChronology).some((error) =>
+  error.includes("independent review cannot predate the completed route/sight trace")),
+  "anchor review cannot predate the author's completed trace");
+
+const anchorSelfReview: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorSelfReview.gameplayAnchors[0].reviewerName = "Map Author";
+assert.ok(validateCollisionCutoverEvidence(anchorSelfReview).some((error) =>
+  error.includes("distinct author and independent reviewer")),
+  "anchor source author cannot independently review the same evidence");
+
+const anchorEvidenceTraversal: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorEvidenceTraversal.gameplayAnchors[0].movementEvidencePath =
+  "evidence/gameplay-anchors/task-1/movement/../../C20/owner.json";
+assert.ok(validateCollisionCutoverEvidence(anchorEvidenceTraversal).some((error) =>
+  error.includes("movement evidence path must be inside its anchor-specific movement bundle")),
+  "anchor evidence paths cannot escape their anchor/channel bundle");
+
+const anchorEvidenceAliased: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorEvidenceAliased.gameplayAnchors[0].sightEvidenceSha256 =
+  anchorEvidenceAliased.gameplayAnchors[0].movementEvidenceSha256;
+assert.ok(validateCollisionCutoverEvidence(anchorEvidenceAliased).some((error) =>
+  error.includes("movement and interaction-sight evidence must be separately hashed")),
+  "movement and interaction-sight evidence must be independently identified");
+
+const anchorMovementFailed: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorMovementFailed.gameplayAnchors[0].movementRoutePassed = false;
+assert.ok(validateCollisionCutoverEvidence(anchorMovementFailed).some((error) =>
+  error.includes("task-1: full-footprint movement route has not passed")),
+  "failed movement route evidence cannot be accepted");
+
+const anchorSightFailed: CollisionCutoverEvidence = structuredClone(completeEvidence);
+anchorSightFailed.gameplayAnchors[0].sightApproachPassed = false;
+assert.ok(validateCollisionCutoverEvidence(anchorSightFailed).some((error) =>
+  error.includes("task-1: interaction sight approach has not passed")),
+  "failed interaction sight evidence cannot be accepted");
 
 const extraRegion: CollisionCutoverEvidence = structuredClone(completeEvidence);
 extraRegion.disconnectedRegions.push({
