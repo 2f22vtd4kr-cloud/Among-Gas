@@ -43,16 +43,19 @@ const redlineCandidate = {
   },
 } as Parameters<typeof validateIndependentRedlineSource>[0];
 
+const redlineSource = redlineCandidate.source;
+assert.ok(redlineSource && redlineSource.kind === "redline-vector");
+
 assert.deepEqual(validateIndependentRedlineSource(redlineCandidate, "a".repeat(64)), [],
   "the canonical current-main red-line source and matching bytes should be accepted");
 const staleRedlineCandidate = {
   ...redlineCandidate,
   source: {
-    ...redlineCandidate.source,
+    ...redlineSource,
     sourceFiles: {
-      ...redlineCandidate.source.sourceFiles,
+      ...redlineSource.sourceFiles,
       redlineReference: {
-        ...redlineCandidate.source.sourceFiles.redlineReference,
+        ...redlineSource.sourceFiles.redlineReference,
         path: "attached_assets/IMG_2907_1783590932507.jpeg",
       },
     },
@@ -67,8 +70,8 @@ assert.ok(validateIndependentRedlineSource(redlineCandidate, "b".repeat(64)).som
 const wrongRedlineDimensions = {
   ...redlineCandidate,
   source: {
-    ...redlineCandidate.source,
-    referenceImage: { ...redlineCandidate.source.referenceImage, width: 1358 },
+    ...redlineSource,
+    referenceImage: { ...redlineSource.referenceImage, width: 1358 },
   },
 } as Parameters<typeof validateIndependentRedlineSource>[0];
 assert.ok(validateIndependentRedlineSource(wrongRedlineDimensions, "a".repeat(64)).some(error =>
