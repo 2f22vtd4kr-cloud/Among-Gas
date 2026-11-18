@@ -65,7 +65,14 @@ function validateDevelopmentWaiver(output) {
   ) {
     process.stderr.write(output);
     throw new Error(
-      "Development audit found an unapproved or additional advisory. Only the single documented picomatch GHSA may be temporarily tolerated.",
+      "Development audit found an unapproved or additional advisory. " +
+      JSON.stringify({
+        advisories,
+        hasSingleHighFinding,
+        isPicomatch,
+        affectedRangeMatches,
+        normalizedTail: normalized.slice(-1200),
+      }),
     );
   }
 
