@@ -1,6 +1,11 @@
 import { MAP_AUTHORING_ZONES } from "./mapZones.js";
 import { MAP_H, MAP_W } from "../coords.js";
 import { validateZoneReviewRecord } from "./zoneReview.js";
+import {
+  DISCONNECTED_REGION_IDS,
+  validateDisconnectedRegionReviewRecord,
+  type DisconnectedRegionReviewStatus,
+} from "./disconnectedRegionReview.js";
 
 export interface GameplayAnchorDisposition {
   id: string;
@@ -13,11 +18,18 @@ export interface GameplayAnchorDisposition {
 }
 
 export interface DisconnectedRegionDisposition {
-  id: "C0" | "C20" | "C27" | "C38" | "C56";
+  id: typeof DISCONNECTED_REGION_IDS[number];
+  status: DisconnectedRegionReviewStatus;
+  authorName: string;
+  authorCompletedAt: string;
   reviewerName: string;
+  reviewerReviewedAt: string;
+  reviewerDisposition: "accepted" | "changes-requested" | "unresolved";
   ownerName: string;
+  ownerDecidedAt: string;
   decision: "accessible" | "intentionally-sealed" | "deferred";
   evidenceSha256: string;
+  evidencePath: string;
   routeEvidenceComplete: boolean;
   notes: string;
 }
@@ -75,7 +87,7 @@ const REQUIRED_ANCHORS = [
   "admin-table",
   ...Array.from({ length: 6 }, (_, index) => `sabotage-${index + 1}`),
 ] as const;
-const REQUIRED_REGIONS = ["C0", "C20", "C27", "C38", "C56"] as const;
+const REQUIRED_REGIONS = DISCONNECTED_REGION_IDS;
 export const MAX_RASTER_VECTOR_DISAGREEMENT_RATIO = 0.02;
 const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
@@ -188,17 +200,8 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         continue;
       }
       const region = matches[0];
-      if (!nonEmpty(region.reviewerName) || !nonEmpty(region.ownerName) ||
-          region.reviewerName.trim().toLowerCase() === region.ownerName.trim().toLowerCase()) {
-        errors.push(`${id}: distinct independent reviewer and design owner are required`);
-      }
-      if (region.decision === "deferred") errors.push(`${id}: design disposition remains deferred`);
-      if (region.decision !== "accessible" && region.decision !== "intentionally-sealed" && region.decision !== "deferred") {
-        errors.push(`${id}: unknown design disposition`);
-      }
-      if (!isSha256(region.evidenceSha256)) errors.push(`${id}: source evidence SHA-256 is required`);
-      if (region.routeEvidenceComplete !== true) errors.push(`${id}: full-footprint connectivity evidence is incomplete`);
-      if (!nonEmpty(region.notes)) errors.push(`${id}: design decision rationale is required`);
+      errors.push(...validateDisconnectedRegionReviewRecord(region, id).map(error => `${id}: ${error}`));
+      if (region.status !== "approved") errors.push(`${id}: explicit design-owner review is not approved`);
     }
   }
 
