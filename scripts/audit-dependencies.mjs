@@ -58,7 +58,7 @@ function validateDevelopmentWaiver(output) {
 
   if (
     advisories.length !== 1 ||
-    advisories[0]?.toUpperCase() !== WAIVED_GHSA ||
+    advisories[0]?.toLowerCase() !== WAIVED_GHSA.toLowerCase() ||
     !hasSingleHighFinding ||
     !isPicomatch ||
     !affectedRangeMatches
