@@ -21,6 +21,17 @@ export interface VotePromptMessage {
  * only the public roster and meeting transcript; role, position, kill history,
  * private events, and server state are not representable in this input type.
  */
+function sanitizePublicVoteText(value: string, maxLength: number): string {
+  const clean = Array.from(String(value ?? ''))
+    .map(character => /[\p{Cc}\p{Zl}\p{Zp}]/u.test(character)
+      ? ' '
+      : /[\p{Cf}\p{Cs}]/u.test(character) ? '' : character)
+    .join('')
+    .replace(/\s+/gu, ' ')
+    .trim();
+  return Array.from(clean).slice(0, maxLength).join('');
+}
+
 export function buildPublicBotVoteMessages(
   username: string,
   roster: readonly PublicVoteCandidate[],
@@ -28,10 +39,10 @@ export function buildPublicBotVoteMessages(
 ): VotePromptMessage[] {
   const publicRoster = roster
     .filter(player => player.alive)
-    .map(({ slot, username: name }) => ({ slot, username: name }));
+    .map(({ slot, username: name }) => ({ slot, username: sanitizePublicVoteText(name, 32) }));
   const publicTranscript = transcript.slice(-12).map(({ slot, text }) => ({
     slot,
-    text: String(text).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 220),
+    text: sanitizePublicVoteText(text, 220),
   }));
 
   return [
@@ -50,7 +61,7 @@ export function buildPublicBotVoteMessages(
     {
       role: 'user',
       content: JSON.stringify({
-        actingPlayer: username,
+        actingPlayer: sanitizePublicVoteText(username, 32),
         livingRoster: publicRoster,
         recentPublicTranscript: publicTranscript,
       }),

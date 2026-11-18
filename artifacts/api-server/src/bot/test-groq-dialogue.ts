@@ -74,6 +74,24 @@ assert.equal(hostileData.recentPublicTranscript, 'Player2: I saw someone leave S
 assert.doesNotMatch(hostileUser, /[\p{Cc}\p{Cf}\p{Cs}\p{Zl}\p{Zp}]/u,
   'the structured user data must not retain invisible or control characters');
 
+const unicodeBoundaryPrompt = buildPublicBotDialogueMessages({
+  username: 'A'.repeat(31) + '😀',
+  livingRoster: 'B'.repeat(511) + '😀',
+  meetingType: 'body report',
+  publicTranscript: 'C'.repeat(2_399) + '😀',
+});
+const unicodeBoundaryPayload = JSON.parse(unicodeBoundaryPrompt[1].content) as {
+  actingPlayer: string;
+  livingPlayers: string;
+  recentPublicTranscript: string;
+};
+assert.equal(unicodeBoundaryPayload.actingPlayer, 'A'.repeat(31) + '😀');
+assert.equal(unicodeBoundaryPayload.livingPlayers, 'B'.repeat(511) + '😀');
+assert.equal(unicodeBoundaryPayload.recentPublicTranscript, 'C'.repeat(2_399) + '😀');
+assert.doesNotMatch(unicodeBoundaryPrompt[1].content, /\p{Cs}/u,
+  'dialogue prompt truncation must never split a supplementary Unicode character');
+
+
 const originalFetch = globalThis.fetch;
 const captured: Array<{ url: string; init?: RequestInit }> = [];
 try {
