@@ -192,7 +192,11 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       assert.ok(firstTarget, 'asteroid field must start with visible targets');
       const client = await page.context().newCDPSession(page);
       let completed = false;
-      const deadline = Date.now() + 25_000;
+      let lastProgress = '';
+      // This interaction runs after ten other real minigames in the same
+      // headless mobile browser. Give moving targets enough wall-clock time
+      // under parallel CI load, and report the actual progress on failure.
+      const deadline = Date.now() + 60_000;
       try {
         await client.send('Input.dispatchTouchEvent', {
           type: 'touchStart',
@@ -200,6 +204,10 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
         });
         while (Date.now() < deadline) {
           const label = await progress.innerText().catch(() => '');
+          if (label !== lastProgress) {
+            lastProgress = label;
+            console.log('ASTEROID INTERACTION PROGRESS:', label);
+          }
           if (label.includes('30/30')) {
             completed = true;
             break;
@@ -211,13 +219,13 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
               touchPoints: [{ id: 0, x: target.x + target.width / 2, y: target.y + target.height / 2 }],
             });
           }
-          await page.waitForTimeout(100);
+          await page.waitForTimeout(50);
         }
       } finally {
         await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
         await client.detach();
       }
-      assert.ok(completed, 'holding fire while tracking moving targets must destroy all 30 asteroids');
+      assert.ok(completed, `holding fire while tracking moving targets must destroy all 30 asteroids; progress: ${lastProgress || 'unavailable'}`);
       break;
     }
     default:

@@ -10,9 +10,14 @@ import {
 export interface GameplayAnchorDisposition {
   id: string;
   authorName: string;
+  authorCompletedAt: string;
   reviewerName: string;
+  reviewerReviewedAt: string;
   disposition: "accepted" | "changes-requested" | "unresolved";
-  evidenceSha256: string;
+  movementEvidencePath: string;
+  movementEvidenceSha256: string;
+  sightEvidencePath: string;
+  sightEvidenceSha256: string;
   movementRoutePassed: boolean;
   sightApproachPassed: boolean;
 }
@@ -58,10 +63,21 @@ export interface CollisionCutoverEvidence {
   gameplayAnchors: GameplayAnchorDisposition[];
   disconnectedRegions: DisconnectedRegionDisposition[];
   parity: {
-    clientServerMovement: boolean;
-    botNavigation: boolean;
-    interactionLineOfSight: boolean;
-    presentationShadow: boolean;
+    clientServerMovement: { passed: boolean; evidenceSha256: string };
+    botNavigation: { passed: boolean; evidenceSha256: string };
+    interactionLineOfSight: { passed: boolean; evidenceSha256: string };
+    worldVision: { passed: boolean; evidenceSha256: string };
+    presentationShadow: { passed: boolean; evidenceSha256: string };
+  };
+  sourceMapArt: {
+    sourceSha256: string;
+    transformSha256: string;
+  };
+  assetRights: {
+    status: "cleared" | "unresolved" | "rejected";
+    rightsHolder: string;
+    license: string;
+    evidenceSha256: string;
   };
   visualReview: {
     allTwelveZonesInspected: boolean;
@@ -82,6 +98,16 @@ const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
+const validDate = (value: unknown): value is string =>
+  nonEmpty(value) && Number.isFinite(Date.parse(value));
+function safeAnchorEvidencePath(value: unknown, anchorId: string, channel: "movement" | "sight"): boolean {
+  if (!nonEmpty(value) || value.length > 512) return false;
+  const path = value.replace(/\\/g, "/");
+  return path.startsWith(`evidence/gameplay-anchors/${anchorId}/${channel}/`) &&
+    !path.startsWith("/") &&
+    !/^[a-z]:/i.test(path) &&
+    !path.split("/").some(part => part === "." || part === "..");
+}
 
 /**
  * Fail-closed evidence gate for a future vector-collision cut-over.
@@ -159,12 +185,38 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         continue;
       }
       const anchor = matches[0];
-      if (!nonEmpty(anchor.authorName) || !nonEmpty(anchor.reviewerName) ||
-          anchor.authorName.trim().toLowerCase() === anchor.reviewerName.trim().toLowerCase()) {
+      const authorName = nonEmpty(anchor.authorName) ? anchor.authorName.trim() : "";
+      const reviewerName = nonEmpty(anchor.reviewerName) ? anchor.reviewerName.trim() : "";
+      if (!authorName || !reviewerName || authorName.toLocaleLowerCase("en-US") === reviewerName.toLocaleLowerCase("en-US")) {
         errors.push(`${id}: distinct author and independent reviewer are required`);
       }
+      if (!validDate(anchor.authorCompletedAt)) {
+        errors.push(`${id}: source author completion date is required`);
+      }
+      if (!validDate(anchor.reviewerReviewedAt)) {
+        errors.push(`${id}: independent reviewer date is required`);
+      }
+      if (validDate(anchor.authorCompletedAt) && validDate(anchor.reviewerReviewedAt) &&
+          Date.parse(anchor.reviewerReviewedAt) < Date.parse(anchor.authorCompletedAt)) {
+        errors.push(`${id}: independent review cannot predate the completed route/sight trace`);
+      }
       if (anchor.disposition !== "accepted") errors.push(`${id}: disposition is not accepted`);
-      if (!isSha256(anchor.evidenceSha256)) errors.push(`${id}: source/route evidence SHA-256 is required`);
+      if (!safeAnchorEvidencePath(anchor.movementEvidencePath, id, "movement")) {
+        errors.push(`${id}: movement evidence path must be inside its anchor-specific movement bundle`);
+      }
+      if (!safeAnchorEvidencePath(anchor.sightEvidencePath, id, "sight")) {
+        errors.push(`${id}: sight evidence path must be inside its anchor-specific sight bundle`);
+      }
+      if (!isSha256(anchor.movementEvidenceSha256)) {
+        errors.push(`${id}: full-footprint movement evidence SHA-256 is required`);
+      }
+      if (!isSha256(anchor.sightEvidenceSha256)) {
+        errors.push(`${id}: interaction sight evidence SHA-256 is required`);
+      }
+      if (isSha256(anchor.movementEvidenceSha256) && isSha256(anchor.sightEvidenceSha256) &&
+          anchor.movementEvidenceSha256.toLowerCase() === anchor.sightEvidenceSha256.toLowerCase()) {
+        errors.push(`${id}: movement and interaction-sight evidence must be separately hashed`);
+      }
       if (anchor.movementRoutePassed !== true) errors.push(`${id}: full-footprint movement route has not passed`);
       if (anchor.sightApproachPassed !== true) errors.push(`${id}: interaction sight approach has not passed`);
     }
@@ -238,10 +290,70 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   }
 
   const parity = input.parity;
-  if (!parity || parity.clientServerMovement !== true) errors.push("Client/server movement parity has not passed");
-  if (!parity || parity.botNavigation !== true) errors.push("Bot navigation parity has not passed");
-  if (!parity || parity.interactionLineOfSight !== true) errors.push("Interaction line-of-sight parity has not passed");
-  if (!parity || parity.presentationShadow !== true) errors.push("Independent presentation-shadow review has not passed");
+  const parityChannels = [
+    ["clientServerMovement", "Client/server movement"],
+    ["botNavigation", "Bot navigation"],
+    ["interactionLineOfSight", "Interaction line-of-sight"],
+    ["worldVision", "World vision occlusion"],
+    ["presentationShadow", "Presentation shadow"],
+  ] as const;
+  const parityDigests: string[] = [];
+  for (const [key, label] of parityChannels) {
+    const evidence = parity?.[key];
+    if (!evidence || typeof evidence !== "object") {
+      errors.push(label + " evidence is required");
+      continue;
+    }
+    if (evidence.passed !== true) errors.push(label + " parity has not passed");
+    if (!isSha256(evidence.evidenceSha256)) {
+      errors.push(label + " evidence SHA-256 is required");
+    } else {
+      parityDigests.push(evidence.evidenceSha256.toLowerCase());
+    }
+  }
+  if (new Set(parityDigests).size !== parityDigests.length) {
+    errors.push("Each parity channel must have its own independently hashed evidence");
+  }
+
+  const sourceMapArt = input.sourceMapArt;
+  if (!sourceMapArt || !isSha256(sourceMapArt.sourceSha256)) {
+    errors.push("Canonical source-map art SHA-256 is required");
+  }
+  if (!sourceMapArt || !isSha256(sourceMapArt.transformSha256)) {
+    errors.push("Source-map world/image transform evidence SHA-256 is required");
+  }
+  if (sourceMapArt && isSha256(sourceMapArt.sourceSha256) &&
+      isSha256(sourceMapArt.transformSha256) &&
+      sourceMapArt.sourceSha256.toLowerCase() === sourceMapArt.transformSha256.toLowerCase()) {
+    errors.push("Source-map art and world/image transform must have separate evidence hashes");
+  }
+
+  const assetRights = input.assetRights;
+  if (!assetRights || assetRights.status !== "cleared") {
+    errors.push("Source-map asset rights are not explicitly cleared");
+  }
+  if (!assetRights || !nonEmpty(assetRights.rightsHolder)) {
+    errors.push("Source-map rights-holder identity is required");
+  }
+  if (!assetRights || !nonEmpty(assetRights.license)) {
+    errors.push("Source-map license or written permission reference is required");
+  }
+  if (!assetRights || !isSha256(assetRights.evidenceSha256)) {
+    errors.push("Source-map rights evidence SHA-256 is required");
+  }
+  if (assetRights && isSha256(assetRights.evidenceSha256)) {
+    const rightsDigest = assetRights.evidenceSha256.toLowerCase();
+    const sourceDigest = sourceMapArt && isSha256(sourceMapArt.sourceSha256)
+      ? sourceMapArt.sourceSha256.toLowerCase()
+      : null;
+    const transformDigest = sourceMapArt && isSha256(sourceMapArt.transformSha256)
+      ? sourceMapArt.transformSha256.toLowerCase()
+      : null;
+    if (rightsDigest === sourceDigest || rightsDigest === transformDigest ||
+        parityDigests.includes(rightsDigest)) {
+      errors.push("Commercial-rights evidence must be independently hashed from art, transform and runtime parity evidence");
+    }
+  }
 
   const visual = input.visualReview;
   if (!visual || visual.allTwelveZonesInspected !== true) errors.push("All twelve zone QA crops must be inspected");
