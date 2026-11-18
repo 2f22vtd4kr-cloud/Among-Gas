@@ -10,9 +10,14 @@ import {
 export interface GameplayAnchorDisposition {
   id: string;
   authorName: string;
+  authorCompletedAt: string;
   reviewerName: string;
+  reviewerReviewedAt: string;
   disposition: "accepted" | "changes-requested" | "unresolved";
-  evidenceSha256: string;
+  movementEvidencePath: string;
+  movementEvidenceSha256: string;
+  sightEvidencePath: string;
+  sightEvidenceSha256: string;
   movementRoutePassed: boolean;
   sightApproachPassed: boolean;
 }
@@ -93,6 +98,16 @@ const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
 const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
+const validDate = (value: unknown): value is string =>
+  nonEmpty(value) && Number.isFinite(Date.parse(value));
+function safeAnchorEvidencePath(value: unknown, anchorId: string, channel: "movement" | "sight"): boolean {
+  if (!nonEmpty(value) || value.length > 512) return false;
+  const path = value.replace(/\\/g, "/");
+  return path.startsWith(`evidence/gameplay-anchors/${anchorId}/${channel}/`) &&
+    !path.startsWith("/") &&
+    !/^[a-z]:/i.test(path) &&
+    !path.split("/").some(part => part === "." || part === "..");
+}
 
 /**
  * Fail-closed evidence gate for a future vector-collision cut-over.
@@ -170,12 +185,38 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         continue;
       }
       const anchor = matches[0];
-      if (!nonEmpty(anchor.authorName) || !nonEmpty(anchor.reviewerName) ||
-          anchor.authorName.trim().toLowerCase() === anchor.reviewerName.trim().toLowerCase()) {
+      const authorName = nonEmpty(anchor.authorName) ? anchor.authorName.trim() : "";
+      const reviewerName = nonEmpty(anchor.reviewerName) ? anchor.reviewerName.trim() : "";
+      if (!authorName || !reviewerName || authorName.toLocaleLowerCase("en-US") === reviewerName.toLocaleLowerCase("en-US")) {
         errors.push(`${id}: distinct author and independent reviewer are required`);
       }
+      if (!validDate(anchor.authorCompletedAt)) {
+        errors.push(`${id}: source author completion date is required`);
+      }
+      if (!validDate(anchor.reviewerReviewedAt)) {
+        errors.push(`${id}: independent reviewer date is required`);
+      }
+      if (validDate(anchor.authorCompletedAt) && validDate(anchor.reviewerReviewedAt) &&
+          Date.parse(anchor.reviewerReviewedAt) < Date.parse(anchor.authorCompletedAt)) {
+        errors.push(`${id}: independent review cannot predate the completed route/sight trace`);
+      }
       if (anchor.disposition !== "accepted") errors.push(`${id}: disposition is not accepted`);
-      if (!isSha256(anchor.evidenceSha256)) errors.push(`${id}: source/route evidence SHA-256 is required`);
+      if (!safeAnchorEvidencePath(anchor.movementEvidencePath, id, "movement")) {
+        errors.push(`${id}: movement evidence path must be inside its anchor-specific movement bundle`);
+      }
+      if (!safeAnchorEvidencePath(anchor.sightEvidencePath, id, "sight")) {
+        errors.push(`${id}: sight evidence path must be inside its anchor-specific sight bundle`);
+      }
+      if (!isSha256(anchor.movementEvidenceSha256)) {
+        errors.push(`${id}: full-footprint movement evidence SHA-256 is required`);
+      }
+      if (!isSha256(anchor.sightEvidenceSha256)) {
+        errors.push(`${id}: interaction sight evidence SHA-256 is required`);
+      }
+      if (isSha256(anchor.movementEvidenceSha256) && isSha256(anchor.sightEvidenceSha256) &&
+          anchor.movementEvidenceSha256.toLowerCase() === anchor.sightEvidenceSha256.toLowerCase()) {
+        errors.push(`${id}: movement and interaction-sight evidence must be separately hashed`);
+      }
       if (anchor.movementRoutePassed !== true) errors.push(`${id}: full-footprint movement route has not passed`);
       if (anchor.sightApproachPassed !== true) errors.push(`${id}: interaction sight approach has not passed`);
     }
