@@ -1701,7 +1701,7 @@ export function GameProvider({ children }: { children: React.ReactNode }) {
           return;
         }
 
-        // ── 0x18: vent state broadcast ──────────────────────────────────────
+        // ── 0x18: rejected or cleared session-key acknowledgement ────────
         if (opcode === 0x18 && event.data.byteLength === 2 && view.getUint8(1) === 0x00) {
           setState(s => ({ ...s, groqApiKeyConfigured: false }));
           return;
