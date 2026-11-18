@@ -10,6 +10,13 @@ import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/
 
 const digest = "a".repeat(64);
 const sightDigest = "b".repeat(64);
+const botDigest = "c".repeat(64);
+const losDigest = "d".repeat(64);
+const visionDigest = "e".repeat(64);
+const shadowDigest = "f".repeat(64);
+const sourceArtDigest = "1".repeat(64);
+const transformDigest = "2".repeat(64);
+const rightsDigest = "3".repeat(64);
 const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
   ...createDefaultZoneReviewRecord(zone.id),
   status: "approved" as const,
@@ -86,17 +93,17 @@ const completeEvidence: CollisionCutoverEvidence = {
   })),
   parity: {
     clientServerMovement: { passed: true, evidenceSha256: digest },
-    botNavigation: { passed: true, evidenceSha256: digest },
-    interactionLineOfSight: { passed: true, evidenceSha256: digest },
-    worldVision: { passed: true, evidenceSha256: digest },
-    presentationShadow: { passed: true, evidenceSha256: digest },
+    botNavigation: { passed: true, evidenceSha256: botDigest },
+    interactionLineOfSight: { passed: true, evidenceSha256: losDigest },
+    worldVision: { passed: true, evidenceSha256: visionDigest },
+    presentationShadow: { passed: true, evidenceSha256: shadowDigest },
   },
-  sourceMapArt: { sourceSha256: digest, transformSha256: digest },
+  sourceMapArt: { sourceSha256: sourceArtDigest, transformSha256: transformDigest },
   assetRights: {
     status: "cleared",
     rightsHolder: "Map asset rights holder",
     license: "Written commercial-use permission",
-    evidenceSha256: digest,
+    evidenceSha256: rightsDigest,
   },
   visualReview: {
     allTwelveZonesInspected: true,
@@ -215,6 +222,25 @@ const missingTransformEvidence: CollisionCutoverEvidence = structuredClone(compl
 missingTransformEvidence.sourceMapArt.transformSha256 = "";
 assert.ok(validateCollisionCutoverEvidence(missingTransformEvidence).some((error) => error.includes("world/image transform evidence SHA-256")),
   "source-art provenance cannot substitute for a separately verified world/image transform");
+
+const aliasedParityEvidence: CollisionCutoverEvidence = structuredClone(completeEvidence);
+aliasedParityEvidence.parity.worldVision.evidenceSha256 =
+  aliasedParityEvidence.parity.interactionLineOfSight.evidenceSha256;
+assert.ok(validateCollisionCutoverEvidence(aliasedParityEvidence).some((error) =>
+  error.includes("Each parity channel must have its own independently hashed evidence")),
+  "world vision must not reuse interaction LOS evidence");
+
+const aliasedTransformEvidence: CollisionCutoverEvidence = structuredClone(completeEvidence);
+aliasedTransformEvidence.sourceMapArt.transformSha256 = aliasedTransformEvidence.sourceMapArt.sourceSha256;
+assert.ok(validateCollisionCutoverEvidence(aliasedTransformEvidence).some((error) =>
+  error.includes("art and world/image transform must have separate evidence hashes")),
+  "source image provenance must not substitute for transform verification");
+
+const aliasedRightsEvidence: CollisionCutoverEvidence = structuredClone(completeEvidence);
+aliasedRightsEvidence.assetRights.evidenceSha256 = aliasedRightsEvidence.sourceMapArt.sourceSha256;
+assert.ok(validateCollisionCutoverEvidence(aliasedRightsEvidence).some((error) =>
+  error.includes("Commercial-rights evidence must be independently hashed")),
+  "commercial-use rights evidence must be independent from source-art provenance");
 
 const reviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
 (reviewChronology.zoneReviews[0] as Record<string, unknown>).ownerDecision = {
