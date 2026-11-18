@@ -371,12 +371,14 @@ try {
   // Use viewport-relative positions. Fixed +320/+340 CSS-pixel offsets can
   // land outside the 390px mobile canvas after device-pixel-ratio scaling.
   const floorStart = {
-    x: bounds.x + bounds.width * 0.55,
-    y: bounds.y + bounds.height * 0.48,
+    x: bounds.x + bounds.width * 0.48,
+    y: bounds.y + bounds.height * 0.25,
   };
+  const floorDeltaX = Math.min(100, bounds.width * 0.35);
+  const floorDeltaY = Math.min(80, bounds.height * 0.45);
   await touchTap(floorStart.x, floorStart.y);
-  await touchTap(floorStart.x + 100, floorStart.y);
-  await touchTap(floorStart.x + 100, floorStart.y + 100);
+  await touchTap(floorStart.x + floorDeltaX, floorStart.y);
+  await touchTap(floorStart.x + floorDeltaX, floorStart.y + floorDeltaY);
   await touchTap(floorStart.x + 2, floorStart.y + 2);
   try {
     await page.waitForFunction(() => document.querySelector("canvas")?.getAttribute("data-shape-count") === "3", null, { timeout: 10000 });
@@ -394,7 +396,7 @@ try {
   await page.getByLabel("Walkable region ID").fill("smoke-floor");
   bounds = await canvas.boundingBox();
   const holeStart = { x: floorStart.x + 40, y: floorStart.y + 15 };
-  assert.ok(holeStart.x + 25 < floorStart.x + 100 && holeStart.y + 25 < floorStart.y + 100,
+  assert.ok(holeStart.x + 25 < floorStart.x + floorDeltaX && holeStart.y + 25 < floorStart.y + floorDeltaY,
     "the linked hole is fully inside its authored floor polygon");
   // Keep every hole vertex clear of the floor edges and the editor's 12px
   // snapping radius, so the gesture cannot snap onto the parent boundary.
