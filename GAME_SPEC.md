@@ -120,12 +120,12 @@ No blanket application ACKs; authoritative gameplay transitions use explicit sta
 | `0x21` | S→C | Immutable corpse position (`victimSlot`, `wireX`, `wireY`) |
 | `0x25` | S→C | Versioned reconnect state: `[0x25,0x00]` restores a waiting lobby; `[0x25,0x01,UTF-8 JSON]` restores active-match roster, positions, role-safe tasks, sabotage, meeting, votes and game-over state |
 | `0x26` | S→C | Private per-player task-step acknowledgement: `[0x26, taskId, authoritativeCompletedSteps]`; sent after accepted or rejected assigned-task requests to reconcile optimistic UI state |
+| `0xFF` | S→C | Position/state delta for players currently visible outside vents |
 
 **Opcode `0x18` payloads (direction-sensitive):**
 - Client → server session key: `[0x18, utf8Length(UInt8), utf8Bytes...]`. A zero length clears the authenticated player's key; non-empty keys are limited to 240 UTF-8 bytes and validated server-side. The key is held only on the in-memory player session and is never logged, persisted, broadcast to other players, or included in reconnect snapshots.
 - Server → client key acknowledgement: `[0x18, 0x00]` means the key was rejected/unavailable; `[0x18, 0x01, configured(UInt8)]` reports whether a valid key is configured.
 - Server → client vent state: `[0x18, sub, slot, ventId]`, with `sub=1` enter, `sub=2` travel and `sub=3` exit. These frames are at least four bytes; they remain distinct from the two-/three-byte key acknowledgements.
-| `0xFF` | S→C | Position/state delta for players currently visible outside vents |
 
 ### Server-side: Buffer only, no DataView
 ```typescript
