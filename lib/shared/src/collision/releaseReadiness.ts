@@ -297,6 +297,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     ["worldVision", "World vision occlusion"],
     ["presentationShadow", "Presentation shadow"],
   ] as const;
+  const parityDigests: string[] = [];
   for (const [key, label] of parityChannels) {
     const evidence = parity?.[key];
     if (!evidence || typeof evidence !== "object") {
@@ -304,7 +305,14 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       continue;
     }
     if (evidence.passed !== true) errors.push(label + " parity has not passed");
-    if (!isSha256(evidence.evidenceSha256)) errors.push(label + " evidence SHA-256 is required");
+    if (!isSha256(evidence.evidenceSha256)) {
+      errors.push(label + " evidence SHA-256 is required");
+    } else {
+      parityDigests.push(evidence.evidenceSha256.toLowerCase());
+    }
+  }
+  if (new Set(parityDigests).size !== parityDigests.length) {
+    errors.push("Each parity channel must have its own independently hashed evidence");
   }
 
   const sourceMapArt = input.sourceMapArt;
@@ -313,6 +321,11 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   }
   if (!sourceMapArt || !isSha256(sourceMapArt.transformSha256)) {
     errors.push("Source-map world/image transform evidence SHA-256 is required");
+  }
+  if (sourceMapArt && isSha256(sourceMapArt.sourceSha256) &&
+      isSha256(sourceMapArt.transformSha256) &&
+      sourceMapArt.sourceSha256.toLowerCase() === sourceMapArt.transformSha256.toLowerCase()) {
+    errors.push("Source-map art and world/image transform must have separate evidence hashes");
   }
 
   const assetRights = input.assetRights;
@@ -327,6 +340,19 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
   }
   if (!assetRights || !isSha256(assetRights.evidenceSha256)) {
     errors.push("Source-map rights evidence SHA-256 is required");
+  }
+  if (assetRights && isSha256(assetRights.evidenceSha256)) {
+    const rightsDigest = assetRights.evidenceSha256.toLowerCase();
+    const sourceDigest = sourceMapArt && isSha256(sourceMapArt.sourceSha256)
+      ? sourceMapArt.sourceSha256.toLowerCase()
+      : null;
+    const transformDigest = sourceMapArt && isSha256(sourceMapArt.transformSha256)
+      ? sourceMapArt.transformSha256.toLowerCase()
+      : null;
+    if (rightsDigest === sourceDigest || rightsDigest === transformDigest ||
+        parityDigests.includes(rightsDigest)) {
+      errors.push("Commercial-rights evidence must be independently hashed from art, transform and runtime parity evidence");
+    }
   }
 
   const visual = input.visualReview;
