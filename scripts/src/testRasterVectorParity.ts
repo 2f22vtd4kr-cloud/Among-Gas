@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { measureRasterVectorParity } from "./measureRasterVectorParity.js";
+import { measureRasterVectorParity, validateIndependentRedlineSource, CANONICAL_REDLINE_REFERENCE_PATH } from "./measureRasterVectorParity.js";
 
 const base = {
   mapW: 128,
@@ -10,6 +10,51 @@ const base = {
 };
 
 const open = () => true;
+
+const redlineCandidate = {
+  version: 1,
+  mapW: 3224,
+  mapH: 1858,
+  shapes: [],
+  source: {
+    kind: "redline-vector",
+    generatorVersion: 2,
+    sourceFiles: {
+      redlineReference: {
+        path: CANONICAL_REDLINE_REFERENCE_PATH,
+        sha256: "a".repeat(64),
+      },
+    },
+    referenceImage: { width: 1359, height: 784 },
+    vectorization: {
+      redPixelCount: 1,
+      skeletonPixelCount: 1,
+      tracedPathCount: 1,
+      simplifiedPointCount: 2,
+      simplificationToleranceSourcePx: 1,
+      closedSolidCount: 0,
+      openBoundaryCount: 1,
+    },
+    shapeCounts: { total: 1 },
+  },
+} as Parameters<typeof validateIndependentRedlineSource>[0];
+
+assert.deepEqual(validateIndependentRedlineSource(redlineCandidate, "a".repeat(64)), [],
+  "the canonical current-main red-line source and matching bytes should be accepted");
+const staleRedlineCandidate = structuredClone(redlineCandidate);
+staleRedlineCandidate.source.sourceFiles.redlineReference.path =
+  "attached_assets/IMG_2907_1783590932507.jpeg";
+assert.ok(validateIndependentRedlineSource(staleRedlineCandidate, "a".repeat(64)).some(error =>
+  error.includes("canonical current-main red-line image path")),
+  "a historical red-line path must not be accepted as current source evidence");
+assert.ok(validateIndependentRedlineSource(redlineCandidate, "b".repeat(64)).some(error =>
+  error.includes("does not match the canonical tracked image bytes")),
+  "a self-declared source digest must match the actual tracked image bytes");
+const wrongRedlineDimensions = structuredClone(redlineCandidate);
+wrongRedlineDimensions.source.referenceImage.width = 1358;
+assert.ok(validateIndependentRedlineSource(wrongRedlineDimensions, "a".repeat(64)).some(error =>
+  error.includes("canonical 1359x784 image")),
+  "a candidate traced from a different source-image geometry must be rejected");
 const identical = measureRasterVectorParity({
   ...base,
   rasterWalkable: open,
