@@ -235,7 +235,21 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
               });
             }
           } else if (!label) {
-            console.log('ASTEROID INTERACTION UI disappeared at:', lastProgress || 'no progress');
+            await page.waitForTimeout(250);
+            const completedSteps = await page.evaluate((id) => {
+              const debug = window.__AG_TASK_DEBUG;
+              const task = debug?.assignedTasks?.find(item => item.taskId === id);
+              return Number.isInteger(task?.completedSteps) ? task.completedSteps : null;
+            }, taskId).catch(() => null);
+            if (completedSteps !== null && completedSteps >= 1) {
+              completed = true;
+              console.log('ASTEROID TASK COMPLETION CONFIRMED BY GAME STATE:', completedSteps);
+            } else {
+              console.log('ASTEROID INTERACTION UI disappeared before task completion:', {
+                progress: lastProgress || 'no progress',
+                completedSteps,
+              });
+            }
             break;
           }
           await page.waitForTimeout(50);
