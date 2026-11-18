@@ -36,6 +36,8 @@ for (let index = 0; index < 12; index++) {
 const base = process.env.VECTOR_COLLISION_EDITOR_BASE_URL || "http://127.0.0.1:5173";
 const documentPath = process.env.VECTOR_COLLISION_DOCUMENT_PATH;
 assert.ok(documentPath, "VECTOR_COLLISION_DOCUMENT_PATH must point to a disposable test file");
+const regionReviewDirectory = process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY;
+assert.ok(regionReviewDirectory, "DISCONNECTED_REGION_REVIEW_DIRECTORY must point to a disposable test directory");
 const backupDirectory = path.join(path.dirname(documentPath), ".backups");
 const zoneFilePath = path.join(path.dirname(documentPath), "collision.zone-Z01.v1.json");
 const zoneBackupDirectory = path.join(path.dirname(documentPath), ".backups", "zone-Z01");
@@ -103,6 +105,7 @@ try {
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
   fs.rmSync(finalZoneFilePath, { force: true });
   fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(regionReviewDirectory, { recursive: true, force: true });
 
   const initialResponse = await fetch(endpoint, { cache: "no-store" });
   assert.equal(initialResponse.status, 200, "GET returns a scratch candidate document");
@@ -362,7 +365,156 @@ try {
   assert.equal(zoneReload.document.shapes[0].label, "Zone Z01 rotation 20");
   assert.equal(reloaded.document.shapes[0].label, "Rotation 20",
     "saving a zone must never overwrite the full candidate file");
-  console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global and per-zone candidate versioning");
+
+  // Detached-region decisions are stored separately from map zones and geometry.
+  const detachedRegionBase = base.replace(/\/$/, "") + "/__vector-collision-api/regions/";
+  for (const regionId of ["C0", "C20", "C27", "C38", "C56"]) {
+    const response = await fetch(detachedRegionBase + regionId + "/review", { cache: "no-store" });
+    assert.equal(response.status, 200, regionId + " review endpoint is available");
+    const result = await jsonResponse(response);
+    assert.equal(result.saved, false, regionId + " starts without an authored decision");
+    assert.equal(result.record.id, regionId);
+    assert.equal(result.record.status, "not-started");
+    assert.equal(result.record.decision, "deferred");
+  }
+  const regionEndpoint = detachedRegionBase + "C0/review";
+  const regionFilePath = path.join(regionReviewDirectory, "C0.json");
+  const regionBackupDirectory = path.join(regionReviewDirectory, ".backups");
+  const defaultRegionResponse = await fetch(regionEndpoint, { cache: "no-store" });
+  assert.equal(defaultRegionResponse.status, 200);
+  const defaultRegion = await jsonResponse(defaultRegionResponse);
+  assert.equal(defaultRegion.saved, false);
+  assert.equal(defaultRegion.record.id, "C0");
+  assert.equal(defaultRegion.record.status, "not-started");
+  assert.equal(defaultRegion.record.decision, "deferred");
+  assert.equal(defaultRegion.record.routeEvidenceComplete, false);
+
+  const invalidRegionEndpoint = detachedRegionBase + "C99/review";
+  assert.equal((await fetch(invalidRegionEndpoint, { cache: "no-store" })).status, 404,
+    "unknown detached-region IDs are rejected");
+
+  const regionEvidenceDirectory = path.join(regionReviewDirectory, "C0", "evidence");
+  const otherRegionEvidenceDirectory = path.join(regionReviewDirectory, "C20", "evidence");
+  fs.mkdirSync(regionEvidenceDirectory, { recursive: true });
+  fs.mkdirSync(otherRegionEvidenceDirectory, { recursive: true });
+  const regionEvidencePath = path.join(regionEvidenceDirectory, "C0-evidence.json");
+  const otherRegionEvidencePath = path.join(otherRegionEvidenceDirectory, "C20-evidence.json");
+  const regionEvidenceBytes = JSON.stringify({
+    source: "API test fixture",
+    note: "Not real source art or route acceptance.",
+    samplePositions: [[100, 100], [108, 100]],
+  });
+  const otherRegionEvidenceBytes = JSON.stringify({
+    source: "C20 API test fixture",
+    note: "Must not be readable from the C0 evidence namespace.",
+  });
+  fs.writeFileSync(regionEvidencePath, regionEvidenceBytes);
+  fs.writeFileSync(otherRegionEvidencePath, otherRegionEvidenceBytes);
+  const regionEvidenceSha256 = createHash("sha256").update(regionEvidenceBytes).digest("hex");
+  const otherRegionEvidenceSha256 = createHash("sha256").update(otherRegionEvidenceBytes).digest("hex");
+  const regionRecord = {
+    id: "C0",
+    status: "approved",
+    authorName: "Source author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
+    reviewerName: "Independent reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    reviewerDisposition: "accepted",
+    ownerName: "Design owner",
+    ownerDecidedAt: "2026-11-14T08:20:00.000Z",
+    decision: "intentionally-sealed",
+    evidenceSha256: regionEvidenceSha256,
+    evidencePath: "evidence/C0-evidence.json",
+    routeEvidenceComplete: true,
+    notes: "Test fixture only; not a real owner decision.",
+  };
+  const inReviewRegion = {
+    ...regionRecord,
+    status: "in-review",
+    reviewerName: "",
+    reviewerReviewedAt: "",
+    reviewerDisposition: "unresolved",
+    ownerName: "",
+    ownerDecidedAt: "",
+    decision: "deferred",
+  };
+
+  const selfApprovedRegion = { ...regionRecord, reviewerName: regionRecord.authorName };
+  const selfRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(selfApprovedRegion),
+  });
+  assert.equal(selfRegionResponse.status, 400, "the source author cannot self-review a detached-region decision");
+
+  const ownerIsReviewer = { ...regionRecord, ownerName: regionRecord.reviewerName };
+  const ownerIsReviewerResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(ownerIsReviewer),
+  });
+  assert.equal(ownerIsReviewerResponse.status, 400, "the independent reviewer cannot also act as design owner");
+
+  const reviewBeforeAuthor = { ...regionRecord, reviewerReviewedAt: "2026-11-14T07:59:59.000Z" };
+  const reviewBeforeAuthorResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(reviewBeforeAuthor),
+  });
+  assert.equal(reviewBeforeAuthorResponse.status, 400, "independent review cannot predate source authoring");
+
+  const ownerBeforeReview = { ...regionRecord, ownerDecidedAt: "2026-11-14T08:09:59.000Z" };
+  const ownerBeforeReviewResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(ownerBeforeReview),
+  });
+  assert.equal(ownerBeforeReviewResponse.status, 400, "design-owner decision cannot predate independent review");
+
+  const incompleteRegion = { ...regionRecord, routeEvidenceComplete: false };
+  const incompleteRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(incompleteRegion),
+  });
+  assert.equal(incompleteRegionResponse.status, 400, "approval requires completed full-footprint connectivity evidence");
+
+  const badRegionEvidenceHash = { ...inReviewRegion, evidenceSha256: "b".repeat(64) };
+  const badRegionEvidenceResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(badRegionEvidenceHash),
+  });
+  assert.equal(badRegionEvidenceResponse.status, 400, "detached-region evidence bytes must match their recorded SHA-256");
+
+  const escapingRegionEvidence = { ...inReviewRegion, evidencePath: "../outside.json" };
+  const escapingRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(escapingRegionEvidence),
+  });
+  assert.equal(escapingRegionResponse.status, 400, "detached-region evidence paths cannot escape their evidence directory");
+
+  const crossRegionEvidence = {
+    ...inReviewRegion,
+    evidenceSha256: otherRegionEvidenceSha256,
+    evidencePath: "C20/evidence/C20-evidence.json",
+  };
+  const crossRegionResponse = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(crossRegionEvidence),
+  });
+  assert.equal(crossRegionResponse.status, 400,
+    "a C0 review record cannot read a C20 evidence bundle through the shared review root");
+
+  const firstRegionSave = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify(inReviewRegion),
+  });
+  assert.equal(firstRegionSave.status, 200, "an in-review record can be saved without claiming approval");
+  const firstRegionResult = await jsonResponse(firstRegionSave);
+  assert.equal(firstRegionResult.status, "in-review");
+  assert.match(firstRegionResult.contentHash, /^[a-f0-9]{64}$/);
+  assert.ok(fs.existsSync(regionFilePath), "detached-region record is stored in its isolated directory");
+
+  const secondRegionSave = await fetch(regionEndpoint, {
+    method: "POST", headers, body: JSON.stringify({ ...inReviewRegion, notes: "Updated test fixture." }),
+  });
+  assert.equal(secondRegionSave.status, 200);
+  assert.equal((await jsonResponse(secondRegionSave)).backupCount, 1,
+    "detached-region review saves retain the previous record separately from zone backups");
+  assert.equal(fs.readdirSync(regionBackupDirectory).filter(name => name.endsWith(".json")).length, 1);
+
+  const regionReload = await jsonResponse(await fetch(regionEndpoint, { cache: "no-store" }));
+  assert.equal(regionReload.saved, true);
+  assert.equal(regionReload.record.status, "in-review");
+  assert.equal(regionReload.record.notes, "Updated test fixture.");
+
+  console.log("VECTOR COLLISION EDITOR API TESTS PASSED: global, per-zone and detached-region review storage");
 } finally {
   fs.rmSync(documentPath, { force: true });
   fs.rmSync(backupDirectory, { recursive: true, force: true });
@@ -370,4 +522,5 @@ try {
   fs.rmSync(zoneBackupDirectory, { recursive: true, force: true });
   fs.rmSync(finalZoneFilePath, { force: true });
   fs.rmSync(finalZoneBackupDirectory, { recursive: true, force: true });
+  fs.rmSync(regionReviewDirectory, { recursive: true, force: true });
 }

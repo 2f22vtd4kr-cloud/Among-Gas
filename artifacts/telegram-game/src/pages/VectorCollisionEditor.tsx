@@ -11,6 +11,9 @@ import {
   isMapAuthoringZoneId,
   assignMapAuthoringZonesByCentroid,
   createDefaultZoneReviewRecord,
+  DISCONNECTED_REGION_IDS,
+  createDefaultDisconnectedRegionReviewRecord,
+  type DisconnectedRegionId,
   type CollisionDocument,
   type CollisionShape,
   type Point,
@@ -312,6 +315,8 @@ export default function VectorCollisionEditor() {
   const [shapeLabel, setShapeLabel] = useState("");
   const [zone, setZone] = useState("unassigned");
   const [zoneReviewJson, setZoneReviewJson] = useState("");
+  const [regionReviewId, setRegionReviewId] = useState<DisconnectedRegionId>("C0");
+  const [regionReviewJson, setRegionReviewJson] = useState("");
   const [walkPoints, setWalkPoints] = useState<Point[]>([]);
   const walkPointsRef = useRef<Point[]>([]);
   const [walkStatus, setWalkStatus] = useState("");
@@ -1400,6 +1405,70 @@ export default function VectorCollisionEditor() {
     }
   };
 
+  const loadRegionReview = async (): Promise<boolean> => {
+    setZoneBusy(true);
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/regions/" + regionReviewId + "/review", {
+        cache: "no-store",
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        saved?: boolean;
+        record?: unknown;
+      };
+      if (!response.ok) throw new Error(result.error || "Region review load rejected (" + response.status + ")");
+      const record = result.record ?? createDefaultDisconnectedRegionReviewRecord(regionReviewId);
+      setRegionReviewJson(JSON.stringify(record, null, 2));
+      setStatus("Loaded " + regionReviewId + " detached-region record · " +
+        (result.saved ? "saved review metadata" : "not started") +
+        ". No access decision is inferred and no geometry is changed.");
+      return true;
+    } catch (error) {
+      setStatus("Detached-region review load failed: " + (error instanceof Error ? error.message : String(error)));
+      return false;
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
+  const saveRegionReview = async () => {
+    let record: unknown;
+    try {
+      record = JSON.parse(regionReviewJson);
+    } catch (error) {
+      setStatus("Detached-region review JSON is invalid: " + (error instanceof Error ? error.message : String(error)));
+      return;
+    }
+    setZoneBusy(true);
+    try {
+      const response = await fetch(import.meta.env.BASE_URL + "__vector-collision-api/regions/" + regionReviewId + "/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Vector-Collision-Editor": "1" },
+        body: JSON.stringify(record),
+      });
+      const result = await response.json().catch(() => ({})) as {
+        error?: string;
+        status?: string;
+        contentHash?: string;
+        backupCount?: number;
+      };
+      if (!response.ok) throw new Error(result.error || "Detached-region review save rejected (" + response.status + ")");
+      if (!result.contentHash || !/^[a-f0-9]{64}$/.test(result.contentHash)) {
+        throw new Error("Detached-region review save did not return a valid SHA-256 digest");
+      }
+      if (!(await loadRegionReview())) {
+        throw new Error("Record was saved, but reloading it failed; refresh before editing again");
+      }
+      setStatus("Saved " + regionReviewId + " review record · " + result.status +
+        " · SHA-256 " + result.contentHash.slice(0, 12) +
+        " · " + (result.backupCount ?? 0) + " retained backups. This does not alter collision geometry.");
+    } catch (error) {
+      setStatus("Detached-region review save failed: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setZoneBusy(false);
+    }
+  };
+
   const restoreLocalDraft = () => {
     if (!localDraft) return;
     replaceDocument(localDraft.document);
@@ -1577,6 +1646,39 @@ export default function VectorCollisionEditor() {
           spellCheck={false}
           rows={5}
           placeholder="Load a zone review record or create a new one, then record source evidence, author, independent review and owner decision."
+          style={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", background: "#0a141c", color: "#d9e7ee", border: "1px solid #536879", borderRadius: 6, padding: 9, font: "11px ui-monospace, SFMono-Regular, monospace", lineHeight: 1.45 }}
+        />
+      </details>
+
+      <details style={{ flex: "0 0 auto", maxHeight: 220, overflowY: "auto", background: "#101c26", borderBottom: "1px solid #334c5e", padding: "6px 10px" }}>
+        <summary style={{ minHeight: 36, display: "flex", alignItems: "center", cursor: "pointer", color: "#d9e7ee", fontSize: 12, fontWeight: 700 }}>
+          Detached-region owner decisions · C0 / C20 / C27 / C38 / C56
+        </summary>
+        <p style={{ margin: "4px 0 8px", color: "#a9bbc7", fontSize: 11, lineHeight: 1.4 }}>
+          These are five separate diagnostic components, not map zones. Each record starts deferred and unapproved. Record source evidence, full-player-footprint route evidence, an independent reviewer and the design owner's explicit accessible/sealed decision. Names are self-attested by this local editor, not authenticated.
+        </p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+          <select aria-label="Detached region" value={regionReviewId} onChange={event => setRegionReviewId(event.target.value as DisconnectedRegionId)} disabled={zoneBusy} style={{ minHeight: 42, background: "#0a141c", color: "#d9e7ee", border: "1px solid #536879", borderRadius: 6, padding: "6px 8px" }}>
+            {DISCONNECTED_REGION_IDS.map(id => <option key={id} value={id}>{id}</option>)}
+          </select>
+          <button type="button" style={buttonStyle()} onClick={() => setRegionReviewJson(JSON.stringify(createDefaultDisconnectedRegionReviewRecord(regionReviewId), null, 2))} disabled={zoneBusy}>
+            New region record
+          </button>
+          <button type="button" style={buttonStyle()} onClick={() => void loadRegionReview()} disabled={zoneBusy}>
+            Load region review
+          </button>
+          <button type="button" style={buttonStyle()} onClick={() => void saveRegionReview()} disabled={zoneBusy || !regionReviewJson.trim()}>
+            Save region review
+          </button>
+        </div>
+        <textarea
+          aria-label="Detached region review record JSON"
+          data-testid="detached-region-review-record"
+          value={regionReviewJson}
+          onChange={event => setRegionReviewJson(event.target.value)}
+          spellCheck={false}
+          rows={5}
+          placeholder="Load a detached-region record and enter its source-backed decision; leave it deferred until the design owner decides."
           style={{ display: "block", width: "100%", boxSizing: "border-box", resize: "vertical", background: "#0a141c", color: "#d9e7ee", border: "1px solid #536879", borderRadius: 6, padding: 9, font: "11px ui-monospace, SFMono-Regular, monospace", lineHeight: 1.45 }}
         />
       </details>

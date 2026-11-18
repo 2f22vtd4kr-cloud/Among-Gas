@@ -10,6 +10,42 @@ import { CELL, COLS, ROWS } from '../../lib/shared/src/collisionData';
 import { validateCollisionDocument } from '../../lib/shared/src/collision/vectorCollision';
 import { isMapAuthoringZoneId, validateMapAuthoringZoneDocument } from '../../lib/shared/src/collision/mapZones';
 import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from '../../lib/shared/src/collision/zoneReview';
+import {
+  createDefaultDisconnectedRegionReviewRecord,
+  isDisconnectedRegionId,
+  validateDisconnectedRegionReviewRecord,
+} from '../../lib/shared/src/collision/disconnectedRegionReview';
+
+function validateDisconnectedRegionEvidenceFile(record: unknown, evidenceRoot: string): string[] {
+  if (!record || typeof record !== 'object' || Array.isArray(record)) return ['Detached-region review record must be an object'];
+  const value = record as Record<string, unknown>;
+  const evidencePath = value.evidencePath;
+  if (typeof evidencePath !== 'string' || !evidencePath.trim()) {
+    return value.status === 'approved' ? ['Approved detached-region record requires an evidence bundle path'] : [];
+  }
+  if (path.isAbsolute(evidencePath) || evidencePath.split(/[\\\\/]/).some(part => part === '..' || part === '.')) {
+    return ['Detached-region evidence path must be relative and remain inside its region evidence directory'];
+  }
+  try {
+    const candidate = path.resolve(evidenceRoot, evidencePath);
+    const realPath = fs.realpathSync(candidate);
+    const relative = path.relative(evidenceRoot, realPath);
+    if (!relative || relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) {
+      return ['Detached-region evidence path must remain inside its region evidence directory'];
+    }
+    const stat = fs.statSync(realPath);
+    if (!stat.isFile() || stat.size <= 0 || stat.size > 5 * 1024 * 1024) {
+      return ['Detached-region evidence bundle must be a non-empty file no larger than 5 MiB'];
+    }
+    const actualSha256 = createHash('sha256').update(fs.readFileSync(realPath)).digest('hex');
+    if (actualSha256 !== String(value.evidenceSha256).toLowerCase()) {
+      return ['Detached-region evidence SHA-256 does not match the current evidence bundle bytes'];
+    }
+  } catch {
+    return ['Detached-region evidence bundle does not exist or cannot be read'];
+  }
+  return [];
+}
 
 function validateZoneReviewSourceFiles(record: unknown, repositoryRoot: string): string[] {
   if (!record || typeof record !== 'object' || !Array.isArray((record as { sourceEvidence?: unknown }).sourceEvidence)) {
@@ -98,9 +134,13 @@ function vectorCollisionEditorApiPlugin(): Plugin {
         const route = (req.url || '/').split('?')[0];
         const reviewMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))\/review$/);
         const zoneMatch = route.match(/^\/zones\/(Z(?:0[1-9]|1[0-2]))$/);
+        const regionReviewMatch = route.match(/^\/regions\/(C0|C20|C27|C38|C56)\/review$/);
         const reviewRoute = Boolean(reviewMatch);
+        const regionReviewRoute = Boolean(regionReviewMatch);
         const zoneCandidate = reviewMatch?.[1] ?? zoneMatch?.[1] ?? null;
+        const regionCandidate = regionReviewMatch?.[1] ?? null;
         const zone = isMapAuthoringZoneId(zoneCandidate) ? zoneCandidate : null;
+        const region = isDisconnectedRegionId(regionCandidate) ? regionCandidate : null;
         if (route.startsWith('/zones/') && zone === null) {
           res.statusCode = 404;
           res.setHeader('Content-Type', 'application/json; charset=utf-8');
@@ -108,7 +148,14 @@ function vectorCollisionEditorApiPlugin(): Plugin {
           res.end(JSON.stringify({ error: 'Unknown authoring zone; expected Z01–Z12' }));
           return;
         }
-        if (route !== '/document' && zone === null) {
+        if (route.startsWith('/regions/') && region === null) {
+          res.statusCode = 404;
+          res.setHeader('Content-Type', 'application/json; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-store');
+          res.end(JSON.stringify({ error: 'Unknown disconnected region; expected C0, C20, C27, C38 or C56' }));
+          return;
+        }
+        if (route !== '/document' && zone === null && region === null) {
           next();
           return;
         }
@@ -123,37 +170,51 @@ function vectorCollisionEditorApiPlugin(): Plugin {
         // CI injects a disposable path so the dev API can be tested without
         // leaving generated candidate geometry in the production source tree.
         const repositoryRoot = path.resolve(import.meta.dirname, '../..');
+        const regionReviewDirectory = process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY
+          ? path.resolve(process.env.DISCONNECTED_REGION_REVIEW_DIRECTORY)
+          : path.join(repositoryRoot, 'docs/map-region-review-records');
         const baseFilePath = process.env.VECTOR_COLLISION_DOCUMENT_PATH
           ? path.resolve(process.env.VECTOR_COLLISION_DOCUMENT_PATH)
           : path.resolve(
               import.meta.dirname,
               '../../lib/shared/src/collision/collision.v1.json',
             );
-        const filePath = reviewRoute
-          ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.review.v1.json')
-          : zone
-            ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
-            : baseFilePath;
-        const backupDirectory = reviewRoute
-          ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone + '-review')
-          : zone
-            ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone)
-            : path.join(path.dirname(baseFilePath), '.backups');
-        const backupPrefix = reviewRoute
-          ? 'collision.zone-' + zone + '.review.v1.'
-          : zone ? 'collision.zone-' + zone + '.v1.' : 'collision.v1.';
+        const filePath = regionReviewRoute
+          ? path.join(regionReviewDirectory, region + '.json')
+          : reviewRoute
+            ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.review.v1.json')
+            : zone
+              ? path.join(path.dirname(baseFilePath), 'collision.zone-' + zone + '.v1.json')
+              : baseFilePath;
+        const backupDirectory = regionReviewRoute
+          ? path.join(regionReviewDirectory, '.backups')
+          : reviewRoute
+            ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone + '-review')
+            : zone
+              ? path.join(path.dirname(baseFilePath), '.backups', 'zone-' + zone)
+              : path.join(path.dirname(baseFilePath), '.backups');
+        const backupPrefix = regionReviewRoute
+          ? region + '.'
+          : reviewRoute
+            ? 'collision.zone-' + zone + '.review.v1.'
+            : zone ? 'collision.zone-' + zone + '.v1.' : 'collision.v1.';
 
         if (req.method === 'GET') {
           try {
             const exists = fs.existsSync(filePath);
-            if (reviewRoute) {
+            if (reviewRoute || regionReviewRoute) {
               const record = exists
                 ? JSON.parse(fs.readFileSync(filePath, 'utf8'))
-                : createDefaultZoneReviewRecord(zone!);
-              const reviewErrors = validateZoneReviewRecord(record, zone);
-              reviewErrors.push(...validateZoneReviewSourceFiles(record, repositoryRoot));
+                : regionReviewRoute
+                  ? createDefaultDisconnectedRegionReviewRecord(region!)
+                  : createDefaultZoneReviewRecord(zone!);
+              const reviewErrors = regionReviewRoute
+                ? validateDisconnectedRegionReviewRecord(record, region!)
+                : validateZoneReviewRecord(record, zone);
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(record, path.join(regionReviewDirectory, region!)));
+              if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(record, repositoryRoot));
               if (reviewErrors.length) {
-                respond(500, { error: 'Saved zone review record is invalid: ' + reviewErrors.slice(0, 8).join('; ') });
+                respond(500, { error: 'Saved review record is invalid: ' + reviewErrors.slice(0, 8).join('; ') });
                 return;
               }
               respond(200, { record, saved: exists });
@@ -218,9 +279,12 @@ function vectorCollisionEditorApiPlugin(): Plugin {
           }
           try {
             const candidate = JSON.parse(body) as unknown;
-            if (reviewRoute) {
-              const reviewErrors = validateZoneReviewRecord(candidate, zone);
-              reviewErrors.push(...validateZoneReviewSourceFiles(candidate, repositoryRoot));
+            if (reviewRoute || regionReviewRoute) {
+              const reviewErrors = regionReviewRoute
+                ? validateDisconnectedRegionReviewRecord(candidate, region!)
+                : validateZoneReviewRecord(candidate, zone);
+              if (regionReviewRoute) reviewErrors.push(...validateDisconnectedRegionEvidenceFile(candidate, path.join(regionReviewDirectory, region!)));
+              if (reviewRoute) reviewErrors.push(...validateZoneReviewSourceFiles(candidate, repositoryRoot));
               if (reviewErrors.length) {
                 respond(400, { error: reviewErrors.slice(0, 12).join('; ') });
                 return;
@@ -247,7 +311,7 @@ function vectorCollisionEditorApiPlugin(): Plugin {
               const backupCount = fs.existsSync(backupDirectory)
                 ? fs.readdirSync(backupDirectory).filter(name => name.startsWith(backupPrefix) && name.endsWith('.json')).length
                 : 0;
-              respond(200, { saved: true, zone, status: record.status, contentHash, backupCount });
+              respond(200, { saved: true, zone, region, status: record.status, contentHash, backupCount });
               return;
             }
             const errors = validateCollisionDocument(candidate);

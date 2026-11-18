@@ -30,9 +30,32 @@ try {
   await reviewEditor.fill(JSON.stringify(scratchReview, null, 2));
   await page.getByRole("button", { name: "Save review" }).click();
   await page.getByText(/Saved Z01 review record · tracing/).waitFor({ timeout: 5000 });
-  await page.getByText("Zone review / owner decision record").click(); // collapse review panel so the mobile canvas keeps its full work area
+  await page.getByText("Zone review / owner decision record").click(); // collapse zone review panel
   const savedScratchReview = JSON.parse(await reviewEditor.inputValue());
   assert.equal(savedScratchReview.status, "tracing", "review metadata persists separately from geometry");
+
+  await page.getByText("Detached-region owner decisions · C0 / C20 / C27 / C38 / C56").click();
+  await page.getByRole("combobox", { name: "Detached region", exact: true }).selectOption("C38");
+  await page.getByRole("button", { name: "Load region review" }).click();
+  const regionEditor = page.getByTestId("detached-region-review-record");
+  await regionEditor.waitFor({ state: "visible" });
+  await page.waitForFunction(() => {
+    const editor = document.querySelector('[data-testid="detached-region-review-record"]');
+    return !!editor && editor.value.includes('"status": "not-started"') && editor.value.includes('"decision": "deferred"');
+  });
+  const regionScratch = JSON.parse(await regionEditor.inputValue());
+  assert.equal(regionScratch.id, "C38");
+  assert.equal(regionScratch.status, "not-started");
+  regionScratch.status = "in-review";
+  regionScratch.authorName = "Browser smoke source author";
+  regionScratch.authorCompletedAt = "2026-11-14T08:00:00.000Z";
+  regionScratch.notes = "Browser smoke scratch record; not a real owner decision.";
+  await regionEditor.fill(JSON.stringify(regionScratch, null, 2));
+  await page.getByRole("button", { name: "Save region review" }).click();
+  await page.getByText(/Saved C38 review record · in-review/).waitFor({ timeout: 5000 });
+  assert.equal(JSON.parse(await regionEditor.inputValue()).status, "in-review");
+  await page.getByText("Detached-region owner decisions · C0 / C20 / C27 / C38 / C56").click();
+
   const canvas = page.locator("canvas[data-editor-loaded='true']");
   await canvas.waitFor({ timeout: 15000 });
   await page.waitForFunction(() => {

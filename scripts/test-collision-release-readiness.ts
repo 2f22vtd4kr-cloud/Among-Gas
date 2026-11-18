@@ -64,10 +64,17 @@ const completeEvidence: CollisionCutoverEvidence = {
   })),
   disconnectedRegions: COLLISION_CUTOVER_REQUIRED_REGIONS.map((id) => ({
     id,
+    status: "approved" as const,
+    authorName: "Source Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
     reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    reviewerDisposition: "accepted" as const,
     ownerName: "Design Owner",
+    ownerDecidedAt: "2026-11-14T08:20:00.000Z",
     decision: "intentionally-sealed",
     evidenceSha256: digest,
+    evidencePath: "evidence/" + id + ".json",
     routeEvidenceComplete: true,
     notes: "Source-art review and full-footprint route evidence support this disposition.",
   })),
@@ -117,7 +124,8 @@ assert.ok(validateCollisionCutoverEvidence(selfApproved).some((error) => error.i
 
 const deferredBay: CollisionCutoverEvidence = structuredClone(completeEvidence);
 deferredBay.disconnectedRegions[3].decision = "deferred";
-assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) => error.includes("C38: design disposition remains deferred")),
+assert.ok(validateCollisionCutoverEvidence(deferredBay).some((error) =>
+  error.includes("C38: Approval requires an explicit design-owner decision and date")),
   "the ambiguous vehicle-service bay must remain blocked from cut-over while deferred");
 
 const vectorOverParityLimit: CollisionCutoverEvidence = structuredClone(completeEvidence);
@@ -214,8 +222,14 @@ assert.ok(validateCollisionCutoverEvidence(extraAnchor).some((error) =>
 const extraRegion: CollisionCutoverEvidence = structuredClone(completeEvidence);
 extraRegion.disconnectedRegions.push({
   id: "C0",
+  status: "approved",
+  authorName: "Source Author",
+  authorCompletedAt: "2026-11-14T08:00:00.000Z",
   reviewerName: "Independent Reviewer",
+  reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+  reviewerDisposition: "accepted",
   ownerName: "Design Owner",
+  ownerDecidedAt: "2026-11-14T08:20:00.000Z",
   decision: "intentionally-sealed",
   evidenceSha256: digest,
   routeEvidenceComplete: true,
