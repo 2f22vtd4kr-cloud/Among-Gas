@@ -65,6 +65,35 @@ export interface RasterVectorParityReport {
 const MAX_DISAGREEMENT_RATIO = 0.02;
 const MIN_SAMPLE_COUNT = 1_000;
 
+export const CANONICAL_REDLINE_REFERENCE_PATH =
+  "attached_assets/IMG_2907_1783632830477.jpeg";
+export const CANONICAL_REDLINE_REFERENCE_DIMENSIONS = { width: 1359, height: 784 } as const;
+
+/** Bind parity measurements to the exact current-main red-line source, not a self-labelled vector file. */
+export function validateIndependentRedlineSource(
+  candidate: CollisionDocument,
+  expectedRedlineSha256: string,
+): string[] {
+  const errors: string[] = [];
+  const source = candidate.source;
+  if (!source || source.kind !== "redline-vector") {
+    return ["Candidate must be an independently authored redline-vector document"];
+  }
+  const reference = source.sourceFiles?.redlineReference;
+  if (!reference || reference.path !== CANONICAL_REDLINE_REFERENCE_PATH) {
+    errors.push("Candidate must reference the canonical current-main red-line image path");
+  }
+  if (!/^[a-f0-9]{64}$/i.test(expectedRedlineSha256) ||
+      !reference || reference.sha256.toLowerCase() !== expectedRedlineSha256.toLowerCase()) {
+    errors.push("Candidate red-line source SHA-256 does not match the canonical tracked image bytes");
+  }
+  if (source.referenceImage.width !== CANONICAL_REDLINE_REFERENCE_DIMENSIONS.width ||
+      source.referenceImage.height !== CANONICAL_REDLINE_REFERENCE_DIMENSIONS.height) {
+    errors.push("Candidate red-line source dimensions do not match the canonical 1359x784 image");
+  }
+  return errors;
+}
+
 function modulo(value: number, divisor: number): number {
   return ((value % divisor) + divisor) % divisor;
 }
@@ -292,10 +321,13 @@ function runCandidateMeasurement(): void {
   if (candidate.mapW !== MAP_W || candidate.mapH !== MAP_H) {
     throw new Error("Vector candidate dimensions must exactly match the production map");
   }
-  const sourceKind = candidate.source?.kind;
-  if (!sourceKind || /raster|fine-grid-derived/i.test(sourceKind)) {
-    throw new Error("Refusing to measure a raster-derived or unproven vector preview as an independent candidate");
+  const redlineBytes = readFileSync(new URL("../../attached_assets/IMG_2907_1783632830477.jpeg", import.meta.url));
+  const canonicalRedlineSha256 = createHash("sha256").update(redlineBytes).digest("hex");
+  const provenanceErrors = validateIndependentRedlineSource(candidate, canonicalRedlineSha256);
+  if (provenanceErrors.length) {
+    throw new Error("Vector candidate source provenance is invalid: " + provenanceErrors.join("; "));
   }
+  const sourceKind = candidate.source!.kind;
 
   const rasterGrid = buildPreciseCollisionGrid();
   const vectorWorld = new CollisionWorld(candidate.shapes, candidate.mapW, candidate.mapH);
