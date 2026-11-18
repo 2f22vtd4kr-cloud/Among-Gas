@@ -45,11 +45,16 @@ function validateDevelopmentWaiver(output) {
     );
   }
 
-  const advisories = [...new Set(output.match(/GHSA-[a-z0-9-]+/gi) ?? [])];
-  const hasSingleHighFinding = /\b1 vulnerabilit(?:y|ies) found\b/i.test(output) &&
-    /Severity:\s*1 high\b/i.test(output);
-  const isPicomatch = /Package\s+picomatch\b/i.test(output);
-  const affectedRangeMatches = /Vulnerable versions\s+<=\s*4\.0\.7/i.test(output);
+  // pnpm 11 renders a Unicode box table; strip its borders before matching
+  // field labels so validation does not depend on column widths.
+  const normalized = output
+    .replace(/\u001b\[[0-9;]*m/g, "")
+    .replace(/[│┌┐└┘├┤┬┴┼─]/g, " ");
+  const advisories = [...new Set(normalized.match(/GHSA-[a-z0-9-]+/gi) ?? [])];
+  const hasSingleHighFinding = /\b1 vulnerabilit(?:y|ies) found\b/i.test(normalized) &&
+    /Severity:\s*1 high\b/i.test(normalized);
+  const isPicomatch = /Package\s+picomatch\b/i.test(normalized);
+  const affectedRangeMatches = /Vulnerable versions\s+<=\s*4\.0\.7/i.test(normalized);
 
   if (
     advisories.length !== 1 ||
