@@ -1,6 +1,6 @@
 # Plan 2 — 12-zone map authoring and review register
 
-**Baseline:** main `925a465458e8462cef8b6112daff90a0edc239b3`; world 3224×1858.  
+**Baseline:** main `93b4b542273fa064f9ca0db59bf43ff3e982cf9c` (revalidated 2026-11-17); world 3224×1858.  
 **Purpose:** establish the non-overlapping 12-zone authoring/review partition required by Master Plan Phase 2. This is a work-allocation and evidence register only. It does not add, infer, approve or change any collision, vision or shadow geometry. The dev-only vector editor/API now uses this same Z01–Z12 partition, enforces primary-owner centroid assignment and stores each zone separately with its own 20-backup rotation. This is authoring infrastructure only; no zone is thereby traced, independently reviewed or owner-approved.
 
 ## Partition contract
@@ -93,3 +93,12 @@ only and never changes runtime geometry or authorizes a cut-over.
 
 
 **Candidate metadata reconciliation (2026-11-14):** The current PR #138 branch assigns all 370 movement-only shapes to the canonical Z01–Z12 partition by ground-centroid metadata. The generated JSON still has 14 closed shapes and 356 open boundaries, all `blocksMove:true`, with zero `blocksSight:true` and no authored `castsShadow` values. This does not change the status table: all twelve zones still require source-backed author tracing, a distinct independent reviewer, and design-owner approval. The earlier five-sector A–E wording is superseded by the Z01–Z12 metadata assignment, not by completed review.
+
+
+## Current-main verification — 2026-11-17
+
+Main `93b4b542273fa064f9ca0db59bf43ff3e982cf9c` passed exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960): verify 57/57 and the separate 20-minute API/WebSocket soak 12/12. The 24-anchor CI test is integrated through PR #210; exact-head run [43822989346](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43822989346) passed all 24 automated approaches, spawn-connected bot routes, interaction-LOS checks and reverse returns.
+
+These automated checks do not change the human review table above: **Z01–Z12 remain 0/12 author-traced, 0/12 independently reviewed and 0/12 owner-approved**. The current interaction-LOS regression uses the same fine raster as movement; it is not evidence of separately authored vision contours.
+
+PR #214 is the candidate dev-only workflow for C0/C20/C27/C38/C56 owner records. Its saved names are self-attested and must be corroborated externally. Until actual owner input and source/route evidence are recorded, all five decisions remain deferred. No candidate geometry is promoted by the tooling.

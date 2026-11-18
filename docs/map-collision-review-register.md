@@ -1,6 +1,6 @@
 # Map collision review register — evidence vs design approval
 
-Updated: 2026-11-10
+Updated: 2026-11-17
 
 Status: **reviewed against the recovered source-art and red-line references; the five isolated-region dispositions remain provisional and are not approved for production collision cut-over.**
 
@@ -58,3 +58,14 @@ Live vector collision remains a candidate/review tool. A production cut-over req
 - Exact-head CI plus inspected full-map and per-sector visual QA at desktop and mobile DPR.
 
 **Decision rule:** where design intent is unknown, preserve the current production geometry and mark the region unresolved. If a region is meant to be accessible, author the doorway in the source map art and add a swept-path regression through it. Do not punch an undocumented collision hole to satisfy a connectivity count.
+
+
+## Current-main verification — 2026-11-17
+
+- Main is `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`; exact-main workflow [43838004960](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43838004960) passed verify 57/57 and the separate 20-minute API/WebSocket soak 12/12.
+- The automated 24-anchor route/interaction-LOS gate passed on PR #210 exact head `1bbeca5e470af811b5a2f7e1aad5b123e5760e9e`, run [43822989346](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43822989346). Human source author/reviewer dispositions for all 24 anchors remain absent.
+- PR #138 is closed and unmerged. The current branch comparison is 139 commits ahead / 59 behind main, with 57 changed paths and broad overlapping runtime/CI/test ownership. No rebase, cherry-pick or production geometry promotion is authorized by this audit.
+- The strict union-of-reachable two-way full-footprint parity evidence contract is in main, but no candidate vector document has yet demonstrated both directional rates at or below 2% on the required shared sample set.
+- Historical visual QA artifact [14156546884](https://github.com/2f22vtd4kr-cloud/Among-Gas/actions/runs/43700262396) was inspected for all 12 collision/vision/shadow tiles and eight detailed source-red-line/production-overlay comparisons. It is from main `c0a110abfb34b288b52364ac48bfd803e90fb8f5`, not the current main head. It confirms the need to distinguish thin red strokes from filled footprints and shows that current vision/shadow diagnostics are not a substitute for independent per-object authored contours.
+
+The 12 zones remain untraced/unreviewed/unapproved; C0/C20/C27/C38/C56 remain deferred; map-art rights remain unverified. This document update does not alter runtime data or acceptance thresholds.
