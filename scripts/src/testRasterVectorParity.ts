@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
-import { measureRasterVectorParity, validateIndependentRedlineSource, CANONICAL_REDLINE_REFERENCE_PATH } from "./measureRasterVectorParity.js";
+import {
+  measureRasterVectorParity,
+  validateIndependentRedlineSource,
+  CANONICAL_REDLINE_REFERENCE_PATH,
+} from "./measureRasterVectorParity.js";
 
 const base = {
   mapW: 128,
