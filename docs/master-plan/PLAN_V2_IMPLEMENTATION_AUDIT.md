@@ -326,3 +326,17 @@ A fresh review-submission and inline-thread check found **zero submitted reviews
 After the table above was written, PR #218 received a further documentation-only source audit at head `74dd52c079e8e248994fe3b06257455d6e06fc5e`. It records the exact current-main sight/shadow derivation: runtime occlusion still derives large masks and compact outlines from fine movement occupancy; the vector candidate builder also derives sight geometry from that source; and the vector engine's omitted `castsShadow` value currently inherits `blocksSight` (the editor labels this explicit mode “Follow sight”). This is not independent per-object source authoring or approval. PR #218's new head requires its own exact-head CI run.
 
 The audit document itself was subsequently extended in this commit; its prior exact-head result applies to the prior head `ebbc4caedc0a9b8b3e03648061ed74bf33076e95` only. The new document head also requires exact-head CI. All candidate PRs remain unmerged and none has an independent review submission. The production baseline remains `93b4b542273fa064f9ca0db59bf43ff3e982cf9c`.
+
+
+## 2026-11-19 execution update
+
+- Main now includes the deterministic full-footprint raster/vector parity measurement contract from PR #224 (merge commit `29cc37afaf97f242339d824b72925f2523fa3fac`). The measurement tool requires a real source-authored red-line vector candidate; it does not accept the fine-grid-derived preview generator as a candidate. No candidate has yet passed the measured 2% limits, and no live vector cut-over is authorized.
+- Reconnect snapshot validation/restoration is isolated on PR #227 against the current mainline. Exact-head verification is in progress; the superseded stale-base PR #225 was closed.
+- PR #228 extends the fail-closed release validator to cover separate statue planter/pedestal semantics, exhaustive parking-line classification, AI map-refinement provenance and owner acceptance, physical iOS/Android/Telegram acceptance, live session-only Groq verification, and an immutable final release dossier. The new tests use fixtures solely to test rejection logic; they are not release evidence.
+- The Stage-1 Real-ESRGAN candidate pipeline and manual workflow already exist under `scripts/map-tiles/`. No learned candidate has been generated or accepted. Stage-2 low-denoise image-to-image refinement, human visual comparison, and the hero-area illustrator decision remain unperformed.
+- All twelve source-authored collision-zone traces and independent reviews remain open. C0/C20/C27/C38/C56 remain deferred with no owner decisions. The statue planter/pedestal and parking markings remain unclassified in production geometry.
+- Commercial map/art rights remain uncleared. The provenance inventory does not constitute a licence.
+- Physical-device acceptance, live provider-backed Groq verification, and the final release dossier remain absent. Mocked tests and CI are not substitutes.
+- No screenshots or QA galleries were generated. No Vercel/Replit access, publishing, deployment, or production mutation was performed.
+
+**Release status remains NOT READY.** The new validator makes the previously implicit non-CI acceptance blockers explicit and fail-closed; it does not manufacture the human/legal/device/provider evidence needed to pass them.
