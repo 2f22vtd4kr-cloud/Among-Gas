@@ -441,6 +441,42 @@ assert.ok(MAP_W > 0 && MAP_H > 0);
   distanceManager.disposeLobby(distantLobby);
 }
 
+// Reconnect snapshots must not resurrect a corpse after its report meeting.
+{
+  const reporter = makePlayer(0, 'crewmate', SPAWN_X, SPAWN_Y);
+  const reportedGhost = makePlayer(1, 'crewmate', 900, 900);
+  const impostor = makePlayer(2, 'impostor', 500, 500);
+  const unreportedGhost = makePlayer(3, 'crewmate', 900, 900);
+  const witness = makePlayer(4, 'crewmate', 700, 700);
+  reportedGhost.player.alive = false;
+  reportedGhost.player.corpseX = SPAWN_X;
+  reportedGhost.player.corpseY = SPAWN_Y;
+  unreportedGhost.player.alive = false;
+  unreportedGhost.player.corpseX = 900;
+  unreportedGhost.player.corpseY = 900;
+  const lobby = makeLobby([
+    reporter.player, reportedGhost.player, impostor.player,
+    unreportedGhost.player, witness.player,
+  ]);
+  const manager = new LobbyManager();
+  assert.equal(manager.callMeeting(lobby, reporter.player.slot, reportedGhost.player.slot), true);
+  assert.equal(reportedGhost.player.bodyReported, true);
+  const duringMeeting = manager.buildResumeSnapshot(lobby, reporter.player.slot);
+  assert.ok(duringMeeting?.meeting);
+  assert.deepEqual(duringMeeting.corpsePositions.map(body => body.slot).sort((a, b) => a - b), [1, 3],
+    'the active meeting body remains in the protocol snapshot for strict meeting/body validation');
+
+  lobby.meeting!.votingOpen = true;
+  manager.castVote(lobby, reporter.player.slot, NO_TARGET);
+  manager.castVote(lobby, impostor.player.slot, NO_TARGET);
+  manager.castVote(lobby, witness.player.slot, NO_TARGET);
+  assert.equal(lobby.meeting, null, 'the meeting has concluded before the roaming snapshot');
+  const afterMeeting = manager.buildResumeSnapshot(lobby, reporter.player.slot);
+  assert.deepEqual(afterMeeting?.corpsePositions.map(body => body.slot), [3],
+    'a previously reported corpse must not return in a later roaming reconnect snapshot');
+  manager.disposeLobby(lobby);
+}
+
 // Bots speak during the discussion window, without using omniscient global positions.
 {
   const host = makePlayer(0, 'crewmate', 100, 100);
