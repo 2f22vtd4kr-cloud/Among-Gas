@@ -112,7 +112,7 @@ async function main(): Promise<void> {
   // without retaining provider headers, unrelated completion text or secrets.
   const outputSegments = outputPath.split(/[\\\\/]/);
   const outputFile = outputSegments.pop()!;
-  const responseEvidencePath = [...outputSegments, outputFile.replace(/\\.json$/i, "-response.json")].join("/");
+  const responseEvidencePath = [...outputSegments, outputFile.replace(/\.json$/i, "-response.json")].join("/");
   const responseEvidenceContent = JSON.stringify({
     version: 1,
     provider: "groq",
@@ -123,7 +123,7 @@ async function main(): Promise<void> {
     requestId,
     responseToken: passed ? SUCCESS_TOKEN : null,
     responseTokenMatched: passed,
-  }, null, 2) + "\\n";
+  }, null, 2) + "\n";
   const responseEvidenceSha256 = sha256(responseEvidenceContent);
   await writeEvidenceOutput(repoRoot, responseEvidencePath, responseEvidenceContent);
 
@@ -144,7 +144,7 @@ async function main(): Promise<void> {
     passed,
     credentialPolicy: "GROQ_API_KEY read from process environment; never logged or persisted",
   };
-  await writeEvidenceOutput(repoRoot, outputPath, JSON.stringify(record, null, 2) + "\\n");
+  await writeEvidenceOutput(repoRoot, outputPath, JSON.stringify(record, null, 2) + "\n");
 
   // Print only non-secret evidence metadata. Do not print the raw model response.
   console.log(JSON.stringify({
