@@ -25,3 +25,6 @@ The repository does not currently contain the source-authored statue/parking dec
 
 
 Commercial asset clearance is now per-file, not one project-wide checkbox: the release record must pin the complete asset-provenance inventory and provide one unique retained-asset path/hash, rights holder, licence, written permission evidence path/hash and cleared status for every inventoried asset. Provenance presence or a repository-level licence cannot substitute for asset-specific rights.
+
+
+The physical iOS/Android/Telegram run protocol is documented in [PHYSICAL_DEVICE_ACCEPTANCE.md](PHYSICAL_DEVICE_ACCEPTANCE.md). It is screenshot-free and requires real devices, exact build identity, tester/time metadata and a digest of redacted diagnostic evidence.
