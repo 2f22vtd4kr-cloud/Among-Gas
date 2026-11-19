@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { writeEvidenceOutput } from "./safeEvidenceOutput.js";
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
@@ -118,14 +118,10 @@ async function main(): Promise<void> {
     passed,
     credentialPolicy: "GROQ_API_KEY read from process environment; never logged or persisted",
   };
-  await mkdir(path.dirname(destination), { recursive: true });
-  await writeFile(destination, JSON.stringify(record, null, 2) + "\n", {
-    encoding: "utf8",
-    mode: 0o600,
-  });
+  await writeEvidenceOutput(repoRoot, outputPath, JSON.stringify(record, null, 2) + "\n");
 
   // Print only non-secret evidence metadata. Do not print the raw model response.
-  console.log(JSON.stringify({ ...record, outputPath: destination }, null, 2));
+  console.log(JSON.stringify({ ...record, outputPath: path.resolve(repoRoot, outputPath) }, null, 2));
   if (!passed) process.exitCode = 1;
 }
 
