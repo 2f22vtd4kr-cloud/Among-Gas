@@ -117,6 +117,18 @@ export interface CollisionCutoverEvidence {
     rightsHolder: string;
     license: string;
     evidenceSha256: string;
+    inventoryPath: string;
+    inventorySha256: string;
+    inventoriedAssetCount: number;
+    perAssetClearances: {
+      assetPath: string;
+      assetSha256: string;
+      rightsHolder: string;
+      license: string;
+      permissionEvidencePath: string;
+      permissionEvidenceSha256: string;
+      status: "cleared" | "unresolved" | "rejected";
+    }[];
   };
   statuePlanterPedestal: {
     planter: AuthoredObjectDisposition;
@@ -439,6 +451,34 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         parityDigests.includes(rightsDigest)) {
       errors.push("Commercial-rights evidence must be independently hashed from art, transform and runtime parity evidence");
     }
+  }
+  if (!assetRights || assetRights.inventoryPath !== "docs/asset-provenance-inventory.md" ||
+      !isSha256(assetRights.inventorySha256) ||
+      !Number.isSafeInteger(assetRights.inventoriedAssetCount) || assetRights.inventoriedAssetCount <= 0 ||
+      !Array.isArray(assetRights.perAssetClearances) ||
+      assetRights.perAssetClearances.length !== assetRights.inventoriedAssetCount) {
+    errors.push("Commercial rights must reconcile to the complete pinned asset-provenance inventory");
+  } else {
+    const paths = new Set<string>();
+    for (const item of assetRights.perAssetClearances) {
+      if (!item || !nonEmpty(item.assetPath) || item.assetPath.startsWith("/") ||
+          item.assetPath.split(/[\\/]/).some(part => part === "." || part === "..")) {
+        errors.push("Every asset clearance must name a safe repository-relative asset path");
+        continue;
+      }
+      if (paths.has(item.assetPath)) errors.push("Asset rights inventory contains a duplicate asset path: " + item.assetPath);
+      paths.add(item.assetPath);
+      if (!isSha256(item.assetSha256)) errors.push("Asset " + item.assetPath + " requires its exact asset SHA-256");
+      if (item.status !== "cleared" || !nonEmpty(item.rightsHolder) || !nonEmpty(item.license)) {
+        errors.push("Asset " + item.assetPath + " lacks asset-specific commercial rights clearance");
+      }
+      if (!item.permissionEvidencePath?.startsWith("evidence/asset-rights/") ||
+          item.permissionEvidencePath.split(/[\\/]/).some(part => part === "." || part === "..") ||
+          !isSha256(item.permissionEvidenceSha256)) {
+        errors.push("Asset " + item.assetPath + " requires asset-specific written permission evidence and digest");
+      }
+    }
+    if (paths.size !== assetRights.inventoriedAssetCount) errors.push("Asset rights clearances do not cover the complete inventory");
   }
 
   const visual = input.visualReview;
