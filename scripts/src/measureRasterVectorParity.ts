@@ -10,6 +10,7 @@ import {
 import {
   CollisionWorld,
   validateCollisionDocument,
+  validateMapAuthoringZoneDocument,
   type CollisionDocument,
 } from "@workspace/shared/collision";
 import {
@@ -156,6 +157,13 @@ export function validateIndependentRedlineSource(
     }
     if (candidate.shapes.some(shape => !requiredZones.includes(shape.zone ?? ""))) {
       errors.push("Every candidate shape must have exactly one canonical Z01–Z12 primary owner");
+    }
+    // Do not trust the zone label or its count as proof of ownership. Recompute
+    // every shape's ground-footprint centroid against the canonical 4×3 map
+    // partition so a mislabeled trace cannot satisfy all twelve zone records.
+    for (const zone of requiredZones) {
+      const zoneShapes = candidate.shapes.filter(shape => shape.zone === zone);
+      errors.push(...validateMapAuthoringZoneDocument({ shapes: zoneShapes }, zone));
     }
   }
   return errors;
