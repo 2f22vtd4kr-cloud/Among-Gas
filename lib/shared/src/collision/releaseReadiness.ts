@@ -675,6 +675,22 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     }
   }
 
+  const statueObjects = [objectBundle?.planter, objectBundle?.pedestal].filter(Boolean) as AuthoredObjectDisposition[];
+  for (const statueObject of statueObjects) {
+    const matching = Array.isArray(authoredObjects)
+      ? authoredObjects.filter(object => object?.objectId === statueObject.objectId)
+      : [];
+    if (!Array.isArray(sourceObjectIds) || !sourceObjectIds.includes(statueObject.objectId) ||
+        matching.length !== 1 || matching[0].evidencePath !== statueObject.evidencePath ||
+        matching[0].evidenceSha256 !== statueObject.evidenceSha256 ||
+        matching[0].blocksMove !== statueObject.blocksMove ||
+        matching[0].blocksSight !== statueObject.blocksSight ||
+        matching[0].castsShadow !== statueObject.castsShadow ||
+        matching[0].shadowTreatment !== statueObject.shadowTreatment) {
+      errors.push(`Statue object ${statueObject.objectId}: dedicated planter/pedestal review must match the exhaustive per-object inventory`);
+    }
+  }
+
   const parking = input.parkingLines;
   if (!parking || !Array.isArray(parking.sourceLineIds) || parking.sourceLineIds.length === 0 ||
       !Array.isArray(parking.classifications)) {
