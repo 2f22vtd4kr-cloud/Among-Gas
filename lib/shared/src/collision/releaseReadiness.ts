@@ -53,7 +53,7 @@ export interface FullFootprintRasterVectorParity {
   /** Raster says walkable while the vector says blocked. */
   rasterWalkableVectorBlocked: number;
   /** SHA-256 of the deterministic full-footprint sample set and its ordering. */
-  sampleSetSha256: string;
+  sampleSetSha256: string;\n  sampleSetPath?: string;
 }
 
 export interface AuthoredObjectDisposition {
@@ -103,11 +103,11 @@ export interface CollisionCutoverEvidence {
   gameplayAnchors: GameplayAnchorDisposition[];
   disconnectedRegions: DisconnectedRegionDisposition[];
   parity: {
-    clientServerMovement: { passed: boolean; evidenceSha256: string };
-    botNavigation: { passed: boolean; evidenceSha256: string };
-    interactionLineOfSight: { passed: boolean; evidenceSha256: string };
-    worldVision: { passed: boolean; evidenceSha256: string };
-    presentationShadow: { passed: boolean; evidenceSha256: string };
+    clientServerMovement: { passed: boolean; evidenceSha256: string; evidencePath?: string };
+    botNavigation: { passed: boolean; evidenceSha256: string; evidencePath?: string };
+    interactionLineOfSight: { passed: boolean; evidenceSha256: string; evidencePath?: string };
+    worldVision: { passed: boolean; evidenceSha256: string; evidencePath?: string };
+    presentationShadow: { passed: boolean; evidenceSha256: string; evidencePath?: string };
   };
   sourceMapArt: {
     sourceSha256: string;
@@ -139,7 +139,7 @@ export interface CollisionCutoverEvidence {
     sourceLineIds: string[];
     classifications: ParkingLineClassification[];
     walkabilityRegressionPassed: boolean;
-    regressionEvidenceSha256: string;
+    regressionEvidenceSha256: string;\n    regressionEvidencePath?: string;
   };
   aiMapRefinement: {
     status: "approved" | "not-generated" | "generated" | "reviewed";
@@ -166,7 +166,7 @@ export interface CollisionCutoverEvidence {
     testerName: string;
     testedAt: string;
     scenario: string;
-    responseEvidenceSha256: string;
+    responseEvidenceSha256: string;\n    responseEvidencePath?: string;
     sessionCredentialOnly: boolean;
     passed: boolean;
   };
