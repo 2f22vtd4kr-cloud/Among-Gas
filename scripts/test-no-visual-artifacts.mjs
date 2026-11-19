@@ -17,10 +17,25 @@ for (const [name, source] of [
 }
 
 assert.doesNotMatch(workflow, /renderCollisionQa|among-gas-visual-qa|VISUAL_QA_DIR/,
-  'CI must not render, upload, or request generated visual QA images');
-assert.match(plan, /CODE-LEVEL QA \(no generated images\)/,
-  'Plan 2 must keep screenshot-free code-level acceptance');
-assert.match(plan, /Do not capture screenshots, render overlays, create image galleries or upload image artifacts/,
-  'Plan 2 must explicitly prohibit generated visual artifacts');
+  'normal CI must remain free of generated visual QA images');
+
+const reviewWorkflow = read('../.github/workflows/collision-source-art-review.yml');
+assert.match(reviewWorkflow, /workflow_dispatch:/,
+  'source-art review crops must be explicitly runnable outside normal CI');
+assert.match(reviewWorkflow, /scripts\\/renderCollisionQa\\.ts/,
+  'the isolated review workflow must use the canonical source-art renderer');
+assert.match(reviewWorkflow, /actions\\/upload-artifact@v7/,
+  'review crops must be shared as a CI artifact rather than committed to runtime assets');
+assert.match(reviewWorkflow, /retention-days: 7/,
+  'review artifacts must expire automatically');
+assert.doesNotMatch(reviewWorkflow, /vercel|replit.*publish|production deployment/i,
+  'the source-art review workflow must not deploy or publish');
+
+assert.ok(plan.includes('Normal CI and browser tests remain assertion-only and screenshot-free'),
+  'Plan 2 must preserve screenshot-free normal CI');
+assert.ok(plan.includes('collision-source-art-review.yml'),
+  'Plan 2 must document the isolated reviewer-only crop workflow');
+assert.ok(plan.includes('They do not substitute for source-author traces'),
+  'Plan 2 must keep generated crops separate from human author/reviewer approval');
 
 console.log('Screenshot-free QA contract passed: browser tests retain assertions without image capture/export.');
