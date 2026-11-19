@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
-import { lstat, open, realpath } from "node:fs/promises";
+import { lstat, open, realpath, readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { pathToFileURL } from "node:url";
@@ -64,6 +64,12 @@ async function hashEvidenceFile(root, relativePath) {
   const handle = await open(cursor, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
   try {
     const info = await handle.stat();
+    const openedRealPath = await realpath(cursor);
+    const pathInfoAfterOpen = await lstat(cursor);
+    if (openedRealPath !== resolved || pathInfoAfterOpen.isSymbolicLink() ||
+        pathInfoAfterOpen.ino !== info.ino || pathInfoAfterOpen.dev !== info.dev) {
+      throw new Error("evidence path changed during secure open");
+    }
     if (!info.isFile()) throw new Error("evidence is not a regular file");
     if (info.nlink !== 1) throw new Error("hard-linked evidence files are not accepted");
     if (info.size <= 0) throw new Error("evidence file is empty");
@@ -204,7 +210,7 @@ async function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
     const dossierPath = path.resolve(args["--dossier"]);
-    const dossier = JSON.parse(await (await open(dossierPath, "r")).readFile("utf8"));
+    const dossier = JSON.parse(await readFile(dossierPath, "utf8"));
     const result = await verifyEvidenceDossier({
       dossier,
       root: path.resolve(args["--root"] ?? process.cwd()),
