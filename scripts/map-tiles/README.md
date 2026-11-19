@@ -87,7 +87,12 @@ candidate passes both this gate and manual review.
 ## Stage 1 — model-based super-resolution candidate
 
 The baseline above remains a faithful resampling reference. It is not the Stage 1
-super-resolution result. A separate, offline model runner now uses the pinned
+super-resolution result. The canonical model input is the shipped high-resolution
+`map-hires.webp` at **6608×3808**; the candidate output is always exactly
+**6448×3716** (2.0 texels per 3224×1858 world pixel). The input is already
+slightly larger than 2×, so the runner applies the global non-integer source-to-
+target transform after 4× inference instead of blindly doubling the input and
+producing a misregistered 13216×7616 image. A separate, offline model runner now uses the pinned
 Real-ESRGAN x4plus Anime 6B ONNX checkpoint to generate a genuine learned 4×
 restoration, then downsamples that result to the canonical 2× texture size.
 The map's logical world dimensions, source crop and tile layout are unchanged.
