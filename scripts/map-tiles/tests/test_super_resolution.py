@@ -28,20 +28,45 @@ class SuperResolutionPatchTests(unittest.TestCase):
         def fake_x4(patch):
             return np.repeat(np.repeat(patch, 4, axis=0), 4, axis=1)
 
+        context = 4
+        output_size = (34, 18)
         result, tile_count = process_image(
-            Image.fromarray(self.source), fake_x4, core_size=6, context=2
+            Image.fromarray(self.source),
+            fake_x4,
+            core_size=6,
+            context=context,
+            output_size=output_size,
         )
-        self.assertEqual(result.size, (34, 18))
+        self.assertEqual(result.size, output_size)
         self.assertEqual(tile_count, 6)
         pixels = np.asarray(result)
         self.assertEqual(pixels.shape, (18, 34, 3))
         self.assertTrue(np.isfinite(pixels).all())
         self.assertGreater(int(pixels[8, 16].sum()), 0)
-        full_x4 = np.repeat(np.repeat(self.source, 4, axis=0), 4, axis=1)
-        expected = Image.fromarray(full_x4).resize((34, 18), Image.Resampling.LANCZOS)
+
+        full_patch = extract_context_patch(
+            self.source, 0, 0, self.source.shape[1], self.source.shape[0], context
+        )
+        full_x4 = fake_x4(full_patch)
+        scale_x = output_size[0] / self.source.shape[1]
+        scale_y = output_size[1] / self.source.shape[0]
+        transform = (
+            4 / scale_x,
+            0,
+            4 * (0.5 / scale_x + context) - 0.5,
+            0,
+            4 / scale_y,
+            4 * (0.5 / scale_y + context) - 0.5,
+        )
+        expected = Image.fromarray(full_x4).transform(
+            output_size,
+            Image.Transform.AFFINE,
+            transform,
+            resample=Image.Resampling.BICUBIC,
+        )
         self.assertTrue(
-            np.array_equal(pixels[4:-4, 4:-4], np.asarray(expected)[4:-4, 4:-4]),
-            "overlapped interior tile cores must stitch to the same result as one full-frame inference",
+            np.array_equal(pixels, np.asarray(expected)),
+            "all tiled cores must stitch to the same global resampling transform",
         )
 
     def test_maps_non_integer_source_scale_to_exact_locked_texture_size(self):
