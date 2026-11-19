@@ -29,8 +29,8 @@ assert.equal(
 );
 const pinnedInventorySection = pinnedInventoryText.split("## Full file inventory")[1];
 assert.ok(pinnedInventorySection, "the asset inventory must include its complete file list");
-const inventoryPaths = pinnedInventorySection.split(/\\r?\\n/).flatMap(line => {
-  const match = line.match(/^\\| `([^\\`]+)` \\| \\d+ \\| `[a-f0-9]{40}` \\|/i);
+const inventoryPaths = pinnedInventorySection.split(/\r?\n/).flatMap(line => {
+  const match = line.match(/^\| `([^`]+)` \| \d+ \| `[a-f0-9]{40}` \|/i);
   return match ? [match[1]] : [];
 });
 assert.deepEqual(
