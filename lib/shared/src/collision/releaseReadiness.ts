@@ -56,6 +56,45 @@ export interface FullFootprintRasterVectorParity {
   sampleSetSha256: string;
 }
 
+export interface AuthoredObjectDisposition {
+  objectId: string;
+  authorName: string;
+  authorCompletedAt: string;
+  reviewerName: string;
+  reviewerReviewedAt: string;
+  disposition: "accepted" | "changes-requested" | "unresolved";
+  evidencePath: string;
+  evidenceSha256: string;
+  blocksMove: boolean;
+  blocksSight: boolean;
+  castsShadow: boolean;
+  shadowTreatment: "painted-art-only" | "separate-occluder" | "none";
+}
+
+export interface ParkingLineClassification {
+  id: string;
+  classification: "paint-only" | "physical-obstacle";
+  blocksMove: boolean;
+  evidencePath: string;
+  evidenceSha256: string;
+  authorName: string;
+  reviewerName: string;
+  reviewedAt: string;
+  disposition: "accepted" | "changes-requested" | "unresolved";
+}
+
+export interface PhysicalDeviceAcceptance {
+  platform: "ios" | "android" | "telegram";
+  deviceModel: string;
+  osVersion: string;
+  appVersion: string;
+  buildCommit: string;
+  testerName: string;
+  testedAt: string;
+  result: "passed" | "failed";
+  evidenceSha256: string;
+}
+
 export interface CollisionCutoverEvidence {
   candidateSha256: string;
   zoneReviews: unknown[];
@@ -77,6 +116,65 @@ export interface CollisionCutoverEvidence {
     status: "cleared" | "unresolved" | "rejected";
     rightsHolder: string;
     license: string;
+    evidenceSha256: string;
+    inventoryPath: string;
+    inventorySha256: string;
+    inventoriedAssetCount: number;
+    perAssetClearances: {
+      assetPath: string;
+      assetSha256: string;
+      rightsHolder: string;
+      license: string;
+      permissionEvidencePath: string;
+      permissionEvidenceSha256: string;
+      status: "cleared" | "unresolved" | "rejected";
+    }[];
+  };
+  statuePlanterPedestal: {
+    planter: AuthoredObjectDisposition;
+    pedestal: AuthoredObjectDisposition;
+  };
+  parkingLines: {
+    sourceLineIds: string[];
+    classifications: ParkingLineClassification[];
+    walkabilityRegressionPassed: boolean;
+    regressionEvidenceSha256: string;
+  };
+  aiMapRefinement: {
+    status: "approved" | "not-generated" | "generated" | "reviewed";
+    model: string;
+    modelVersion: string;
+    sourceSha256: string;
+    candidateSha256: string;
+    promptSha256: string;
+    parametersSha256: string;
+    qaReportSha256: string;
+    authorName: string;
+    authorCompletedAt: string;
+    reviewerName: string;
+    reviewerReviewedAt: string;
+    ownerName: string;
+    ownerApprovedAt: string;
+    ownerDisposition: "accepted" | "rejected" | "deferred";
+  };
+  physicalDeviceAcceptance: PhysicalDeviceAcceptance[];
+  liveGroqProvider: {
+    provider: "groq";
+    model: string;
+    testerName: string;
+    testedAt: string;
+    scenario: string;
+    responseEvidenceSha256: string;
+    sessionCredentialOnly: boolean;
+    passed: boolean;
+  };
+  releaseDossier: {
+    candidateCommit: string;
+    createdAt: string;
+    authorName: string;
+    independentReviewerName: string;
+    approvedAt: string;
+    decision: "approved" | "rejected" | "pending";
     evidenceSha256: string;
   };
   visualReview: {
@@ -354,11 +452,136 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       errors.push("Commercial-rights evidence must be independently hashed from art, transform and runtime parity evidence");
     }
   }
+  if (!assetRights || assetRights.inventoryPath !== "docs/asset-provenance-inventory.md" ||
+      !isSha256(assetRights.inventorySha256) ||
+      !Number.isSafeInteger(assetRights.inventoriedAssetCount) || assetRights.inventoriedAssetCount <= 0 ||
+      !Array.isArray(assetRights.perAssetClearances) ||
+      assetRights.perAssetClearances.length !== assetRights.inventoriedAssetCount) {
+    errors.push("Commercial rights must reconcile to the complete pinned asset-provenance inventory");
+  } else {
+    const paths = new Set<string>();
+    for (const item of assetRights.perAssetClearances) {
+      if (!item || !nonEmpty(item.assetPath) || item.assetPath.startsWith("/") ||
+          item.assetPath.split(/[\\/]/).some(part => part === "." || part === "..")) {
+        errors.push("Every asset clearance must name a safe repository-relative asset path");
+        continue;
+      }
+      if (paths.has(item.assetPath)) errors.push("Asset rights inventory contains a duplicate asset path: " + item.assetPath);
+      paths.add(item.assetPath);
+      if (!isSha256(item.assetSha256)) errors.push("Asset " + item.assetPath + " requires its exact asset SHA-256");
+      if (item.status !== "cleared" || !nonEmpty(item.rightsHolder) || !nonEmpty(item.license)) {
+        errors.push("Asset " + item.assetPath + " lacks asset-specific commercial rights clearance");
+      }
+      if (!item.permissionEvidencePath?.startsWith("evidence/asset-rights/") ||
+          item.permissionEvidencePath.split(/[\\/]/).some(part => part === "." || part === "..") ||
+          !isSha256(item.permissionEvidenceSha256)) {
+        errors.push("Asset " + item.assetPath + " requires asset-specific written permission evidence and digest");
+      }
+    }
+    if (paths.size !== assetRights.inventoriedAssetCount) errors.push("Asset rights clearances do not cover the complete inventory");
+  }
 
   const visual = input.visualReview;
   if (!visual || visual.allTwelveZonesInspected !== true) errors.push("All twelve zone QA crops must be inspected");
   if (!visual || visual.desktopAndMobileDpr !== true) errors.push("Desktop and mobile DPR visual review must pass");
   if (!visual || visual.sourceAndOverlayCompared !== true) errors.push("Source art and all semantic overlays must be compared");
+
+  // Object-specific collision/vision/shadow semantics must be authored and reviewed independently.
+  const objectBundle = input.statuePlanterPedestal;
+  for (const [key, label] of [["planter", "statue planter"], ["pedestal", "statue pedestal"]] as const) {
+    const object = objectBundle?.[key];
+    if (!object || typeof object !== "object") {
+      errors.push(`Source-authored ${label} disposition is required`);
+      continue;
+    }
+    if (!nonEmpty(object.objectId) || !object.objectId.startsWith(`statue-${key}`)) errors.push(`${label}: stable source object ID is required`);
+    const author = nonEmpty(object.authorName) ? object.authorName.trim() : "";
+    const reviewer = nonEmpty(object.reviewerName) ? object.reviewerName.trim() : "";
+    if (!author || !reviewer || author.toLowerCase() === reviewer.toLowerCase()) errors.push(`${label}: distinct source author and independent reviewer are required`);
+    if (!validDate(object.authorCompletedAt) || !validDate(object.reviewerReviewedAt) ||
+        (validDate(object.authorCompletedAt) && validDate(object.reviewerReviewedAt) && Date.parse(object.reviewerReviewedAt) < Date.parse(object.authorCompletedAt))) {
+      errors.push(`${label}: valid author/reviewer chronology is required`);
+    }
+    if (object.disposition !== "accepted") errors.push(`${label}: independent review is not accepted`);
+    if (!object.evidencePath?.startsWith(`evidence/map-objects/statue-${key}/`) || object.evidencePath.includes("..")) errors.push(`${label}: source evidence must be in its object-specific bundle`);
+    if (!isSha256(object.evidenceSha256)) errors.push(`${label}: source-trace evidence SHA-256 is required`);
+    if (typeof object.blocksMove !== "boolean" || typeof object.blocksSight !== "boolean" || typeof object.castsShadow !== "boolean") errors.push(`${label}: movement, sight and shadow semantics must each be explicit`);
+    if (!["painted-art-only", "separate-occluder", "none"].includes(object.shadowTreatment)) errors.push(`${label}: decorative-shadow treatment must be explicit`);
+    if (object.castsShadow !== (object.shadowTreatment === "separate-occluder")) errors.push(`${label}: shadow flag and shadow treatment disagree`);
+  }
+
+  const parking = input.parkingLines;
+  if (!parking || !Array.isArray(parking.sourceLineIds) || parking.sourceLineIds.length === 0 ||
+      !Array.isArray(parking.classifications)) {
+    errors.push("Complete source inventory and classification of parking-line markings is required");
+  } else {
+    const sourceIds = parking.sourceLineIds;
+    const classifiedIds = parking.classifications.map(item => item?.id);
+    if (sourceIds.some(id => !nonEmpty(id)) || new Set(sourceIds).size !== sourceIds.length) errors.push("Parking source-line IDs must be non-empty and unique");
+    if (new Set(classifiedIds).size !== classifiedIds.length ||
+        sourceIds.length !== classifiedIds.length ||
+        sourceIds.some(id => !classifiedIds.includes(id))) errors.push("Every source-inventoried parking line must have exactly one classification");
+    for (const item of parking.classifications) {
+      if (!item || !nonEmpty(item.id)) continue;
+      if (item.disposition !== "accepted") errors.push(`Parking line ${item.id}: independent classification review is not accepted`);
+      if (item.classification === "paint-only" && item.blocksMove !== false) errors.push(`Parking line ${item.id}: paint-only markings must remain walkable`);
+      if (item.classification === "physical-obstacle" && item.blocksMove !== true) errors.push(`Parking line ${item.id}: physical obstacle must have an explicit movement blocker`);
+      if (!["paint-only", "physical-obstacle"].includes(item.classification)) errors.push(`Parking line ${item.id}: unresolved classification is not allowed`);
+      if (!nonEmpty(item.authorName) || !nonEmpty(item.reviewerName) || item.authorName.trim().toLowerCase() === item.reviewerName.trim().toLowerCase()) errors.push(`Parking line ${item.id}: independent author/reviewer identities are required`);
+      if (!validDate(item.reviewedAt)) errors.push(`Parking line ${item.id}: review date is required`);
+      if (!item.evidencePath?.startsWith(`evidence/parking-lines/`) || item.evidencePath.includes("..")) errors.push(`Parking line ${item.id}: evidence path must be inside the parking-line bundle`);
+      if (!isSha256(item.evidenceSha256)) errors.push(`Parking line ${item.id}: source evidence SHA-256 is required`);
+    }
+    if (parking.walkabilityRegressionPassed !== true || !isSha256(parking.regressionEvidenceSha256)) errors.push("Named bidirectional parking-corridor full-footprint regression evidence is required");
+  }
+
+  const refinement = input.aiMapRefinement;
+  if (!refinement || refinement.status !== "approved") {
+    errors.push("AI-assisted map refinement candidate is not generated, independently reviewed and owner-approved");
+  }
+  if (refinement) {
+    for (const [key, label] of [["sourceSha256", "source"], ["candidateSha256", "candidate"], ["promptSha256", "prompt"], ["parametersSha256", "model parameters"], ["qaReportSha256", "QA report"]] as const) {
+      if (!isSha256(refinement[key])) errors.push(`AI map refinement: ${label} SHA-256 is required`);
+    }
+    if (isSha256(refinement.sourceSha256) && isSha256(refinement.candidateSha256) && refinement.sourceSha256 === refinement.candidateSha256) errors.push("AI map refinement must identify a distinct generated candidate, not relabel the source image");
+    if (!nonEmpty(refinement.model) || !nonEmpty(refinement.modelVersion)) errors.push("AI map refinement model and version are required");
+    const author = nonEmpty(refinement.authorName) ? refinement.authorName.trim() : "";
+    const reviewer = nonEmpty(refinement.reviewerName) ? refinement.reviewerName.trim() : "";
+    const owner = nonEmpty(refinement.ownerName) ? refinement.ownerName.trim() : "";
+    if (!author || !reviewer || !owner || new Set([author.toLowerCase(), reviewer.toLowerCase(), owner.toLowerCase()]).size !== 3) errors.push("AI map refinement requires distinct author, independent reviewer and design owner");
+    if (![refinement.authorCompletedAt, refinement.reviewerReviewedAt, refinement.ownerApprovedAt].every(validDate) ||
+        (validDate(refinement.authorCompletedAt) && validDate(refinement.reviewerReviewedAt) && Date.parse(refinement.reviewerReviewedAt) < Date.parse(refinement.authorCompletedAt)) ||
+        (validDate(refinement.reviewerReviewedAt) && validDate(refinement.ownerApprovedAt) && Date.parse(refinement.ownerApprovedAt) < Date.parse(refinement.reviewerReviewedAt))) errors.push("AI map refinement author/reviewer/owner chronology is invalid");
+    if (refinement.ownerDisposition !== "accepted") errors.push("AI map refinement lacks explicit owner acceptance");
+  }
+
+  const devices = input.physicalDeviceAcceptance;
+  const requiredPlatforms = ["ios", "android", "telegram"] as const;
+  if (!Array.isArray(devices) || devices.length !== requiredPlatforms.length) {
+    errors.push("Physical iOS, Android and Telegram acceptance records are required");
+  } else {
+    for (const platform of requiredPlatforms) {
+      const matches = devices.filter(item => item?.platform === platform);
+      if (matches.length !== 1) { errors.push(`Physical-device ${platform} acceptance is required exactly once`); continue; }
+      const device = matches[0];
+      if (!nonEmpty(device.deviceModel) || !nonEmpty(device.osVersion) || !nonEmpty(device.appVersion) || !/^[a-f0-9]{40}$/i.test(device.buildCommit)) errors.push(`Physical-device ${platform}: device, OS, app and tested build identity are required`);
+      if (!nonEmpty(device.testerName) || !validDate(device.testedAt) || device.result !== "passed" || !isSha256(device.evidenceSha256)) errors.push(`Physical-device ${platform}: passed test, tester, date and evidence digest are required`);
+    }
+  }
+
+  const groq = input.liveGroqProvider;
+  if (!groq || groq.provider !== "groq" || groq.passed !== true || groq.sessionCredentialOnly !== true) errors.push("Live Groq provider verification must pass using session-only credentials");
+  if (!groq || !nonEmpty(groq.model) || !nonEmpty(groq.testerName) || !nonEmpty(groq.scenario) || !validDate(groq.testedAt) || !isSha256(groq.responseEvidenceSha256)) errors.push("Live Groq verification requires model, tester, scenario, timestamp and response evidence digest");
+
+  const dossier = input.releaseDossier;
+  if (!dossier || dossier.decision !== "approved") errors.push("Final release dossier and explicit release approval are required");
+  if (!dossier || !/^[a-f0-9]{40}$/i.test(dossier.candidateCommit) || !validDate(dossier.createdAt) || !validDate(dossier.approvedAt) ||
+      !nonEmpty(dossier.authorName) || !nonEmpty(dossier.independentReviewerName) ||
+      dossier.authorName.trim().toLowerCase() === dossier.independentReviewerName.trim().toLowerCase() ||
+      !isSha256(dossier.evidenceSha256) ||
+      (validDate(dossier.createdAt) && validDate(dossier.approvedAt) && Date.parse(dossier.approvedAt) < Date.parse(dossier.createdAt))) {
+    errors.push("Final release dossier requires an immutable candidate commit, distinct author/reviewer, chronology and evidence digest");
+  }
 
   return [...new Set(errors)];
 }
