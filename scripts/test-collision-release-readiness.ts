@@ -105,6 +105,112 @@ const completeEvidence: CollisionCutoverEvidence = {
     license: "Written commercial-use permission",
     evidenceSha256: rightsDigest,
   },
+  statuePlanterPedestal: {
+    planter: {
+      objectId: "statue-planter",
+      authorName: "Map Author",
+      authorCompletedAt: "2026-11-14T08:00:00.000Z",
+      reviewerName: "Independent Reviewer",
+      reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+      disposition: "accepted",
+      evidencePath: "evidence/map-objects/statue-planter/trace.json",
+      evidenceSha256: "4".repeat(64),
+      blocksMove: true,
+      blocksSight: false,
+      castsShadow: false,
+      shadowTreatment: "painted-art-only",
+    },
+    pedestal: {
+      objectId: "statue-pedestal",
+      authorName: "Map Author",
+      authorCompletedAt: "2026-11-14T08:00:00.000Z",
+      reviewerName: "Independent Reviewer",
+      reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+      disposition: "accepted",
+      evidencePath: "evidence/map-objects/statue-pedestal/trace.json",
+      evidenceSha256: "5".repeat(64),
+      blocksMove: true,
+      blocksSight: true,
+      castsShadow: false,
+      shadowTreatment: "painted-art-only",
+    },
+  },
+  parkingLines: {
+    sourceLineIds: ["parking-marking-a", "parking-marking-b"],
+    classifications: [
+      {
+        id: "parking-marking-a",
+        classification: "paint-only",
+        blocksMove: false,
+        evidencePath: "evidence/parking-lines/a.json",
+        evidenceSha256: "6".repeat(64),
+        authorName: "Map Author",
+        reviewerName: "Independent Reviewer",
+        reviewedAt: "2026-11-14T08:10:00.000Z",
+        disposition: "accepted",
+      },
+      {
+        id: "parking-marking-b",
+        classification: "physical-obstacle",
+        blocksMove: true,
+        evidencePath: "evidence/parking-lines/b.json",
+        evidenceSha256: "7".repeat(64),
+        authorName: "Map Author",
+        reviewerName: "Independent Reviewer",
+        reviewedAt: "2026-11-14T08:10:00.000Z",
+        disposition: "accepted",
+      },
+    ],
+    walkabilityRegressionPassed: true,
+    regressionEvidenceSha256: "8".repeat(64),
+  },
+  aiMapRefinement: {
+    status: "approved",
+    model: "example-model",
+    modelVersion: "1.0",
+    sourceSha256: "9".repeat(64),
+    candidateSha256: "a".repeat(64),
+    promptSha256: "b".repeat(64),
+    parametersSha256: "c".repeat(64),
+    qaReportSha256: "d".repeat(64),
+    authorName: "Map Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
+    reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    ownerName: "Design Owner",
+    ownerApprovedAt: "2026-11-14T08:20:00.000Z",
+    ownerDisposition: "accepted",
+  },
+  physicalDeviceAcceptance: (["ios", "android", "telegram"] as const).map(platform => ({
+    platform,
+    deviceModel: "Physical test device",
+    osVersion: "current",
+    appVersion: "release-candidate",
+    buildCommit: "a".repeat(40),
+    testerName: "Device Tester",
+    testedAt: "2026-11-14T08:30:00.000Z",
+    result: "passed" as const,
+    evidenceSha256: "e".repeat(64),
+  })),
+  liveGroqProvider: {
+    provider: "groq",
+    model: "verified-live-model",
+    testerName: "Provider Tester",
+    testedAt: "2026-11-14T08:30:00.000Z",
+    scenario: "authenticated-session reconnect and provider response",
+    responseEvidenceSha256: "f".repeat(64),
+    sessionCredentialOnly: true,
+    passed: true,
+  },
+  releaseDossier: {
+    candidateCommit: "a".repeat(40),
+    createdAt: "2026-11-14T08:40:00.000Z",
+    authorName: "Release Author",
+    independentReviewerName: "Release Reviewer",
+    approvedAt: "2026-11-14T08:50:00.000Z",
+    decision: "approved",
+    evidenceSha256: "0".repeat(64),
+  },
   visualReview: {
     allTwelveZonesInspected: true,
     desktopAndMobileDpr: true,
@@ -114,6 +220,51 @@ const completeEvidence: CollisionCutoverEvidence = {
 
 assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
   "complete independent source, route, parity and visual evidence should satisfy the metadata gate");
+
+const missingPhysicalDevices = structuredClone(completeEvidence);
+missingPhysicalDevices.physicalDeviceAcceptance = [];
+assert.ok(validateCollisionCutoverEvidence(missingPhysicalDevices).some(error => error.includes("Physical iOS, Android and Telegram")),
+  "CI browser tests must not stand in for physical-device acceptance");
+
+const unresolvedPlanter = structuredClone(completeEvidence);
+unresolvedPlanter.statuePlanterPedestal.planter.disposition = "unresolved";
+assert.ok(validateCollisionCutoverEvidence(unresolvedPlanter).some(error => error.includes("statue planter: independent review is not accepted")),
+  "the planter contour must have its own independent source-trace review");
+
+const unclassifiedParking = structuredClone(completeEvidence);
+unclassifiedParking.parkingLines.classifications.pop();
+assert.ok(validateCollisionCutoverEvidence(unclassifiedParking).some(error => error.includes("Every source-inventoried parking line")),
+  "every inventoried parking marking must have exactly one explicit classification");
+
+const blockingPaint = structuredClone(completeEvidence);
+blockingPaint.parkingLines.classifications[0].blocksMove = true;
+assert.ok(validateCollisionCutoverEvidence(blockingPaint).some(error => error.includes("paint-only markings must remain walkable")),
+  "paint-only parking markings must not silently become collision blockers");
+
+const noAiCandidate = structuredClone(completeEvidence);
+noAiCandidate.aiMapRefinement.status = "not-generated";
+assert.ok(validateCollisionCutoverEvidence(noAiCandidate).some(error => error.includes("AI-assisted map refinement candidate")),
+  "an ungenerated AI refinement cannot satisfy the map-art gate");
+
+const selfApprovedAi = structuredClone(completeEvidence);
+selfApprovedAi.aiMapRefinement.ownerName = "Map Author";
+assert.ok(validateCollisionCutoverEvidence(selfApprovedAi).some(error => error.includes("distinct author, independent reviewer and design owner")),
+  "AI map refinement requires a separate owner decision");
+
+const noLiveGroq = structuredClone(completeEvidence);
+noLiveGroq.liveGroqProvider.passed = false;
+assert.ok(validateCollisionCutoverEvidence(noLiveGroq).some(error => error.includes("Live Groq provider verification must pass")),
+  "mocked provider tests cannot satisfy live Groq acceptance");
+
+const persistedGroqCredential = structuredClone(completeEvidence);
+persistedGroqCredential.liveGroqProvider.sessionCredentialOnly = false;
+assert.ok(validateCollisionCutoverEvidence(persistedGroqCredential).some(error => error.includes("session-only credentials")),
+  "provider acceptance must not require committing or persisting secrets");
+
+const unapprovedDossier = structuredClone(completeEvidence);
+unapprovedDossier.releaseDossier.decision = "pending";
+assert.ok(validateCollisionCutoverEvidence(unapprovedDossier).some(error => error.includes("Final release dossier and explicit release approval")),
+  "a completed CI run is not itself final release approval");
 
 const emptyErrors = validateCollisionCutoverEvidence({
   candidateSha256: digest,
