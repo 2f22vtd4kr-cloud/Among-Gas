@@ -80,7 +80,7 @@ async function hashEvidenceFile(root, relativePath) {
         after.size !== info.size || after.mtimeMs !== info.mtimeMs) {
       throw new Error("evidence changed during verification");
     }
-    return createHash("sha256").update(bytes).digest("hex");
+    return { digest: createHash("sha256").update(bytes).digest("hex"), bytes };
   } finally {
     await handle.close();
   }
@@ -170,7 +170,7 @@ export async function verifyEvidenceDossier({
     }
     seenPaths.set(ref.relativePath, ref.expected);
     try {
-      const actual = await hashEvidenceFile(rootPath, ref.relativePath);
+      const { digest: actual, bytes } = await hashEvidenceFile(rootPath, ref.relativePath);
       if (actual !== ref.expected) {
         errors.push(`${ref.at}.${ref.digestKey}: SHA-256 mismatch for ${ref.relativePath}; expected ${ref.expected}, got ${actual}`);
         continue;
@@ -178,6 +178,26 @@ export async function verifyEvidenceDossier({
       if (ref.pathKey === "inventoryPath" && actual !== expectedInventorySha256.toLowerCase()) {
         errors.push(`${ref.at}.${ref.digestKey}: inventory bytes do not match the pinned inventory digest`);
         continue;
+      }
+      if (ref.pathKey === "sourceObjectInventoryPath" || ref.pathKey === "sourceInventoryPath") {
+        try {
+          const inventory = JSON.parse(bytes.toString("utf8"));
+          const expectedIds = ref.pathKey === "sourceObjectInventoryPath"
+            ? dossier.sourceObjectIds
+            : dossier.parkingLines?.sourceLineIds;
+          const actualIds = ref.pathKey === "sourceObjectInventoryPath"
+            ? inventory.objectIds
+            : inventory.sourceLineIds;
+          if (!Array.isArray(expectedIds) || !Array.isArray(actualIds) ||
+              new Set(actualIds).size !== actualIds.length ||
+              JSON.stringify([...actualIds].sort()) !== JSON.stringify([...expectedIds].sort())) {
+            errors.push(`${ref.at}.${ref.pathKey}: source inventory file IDs do not exactly match the dossier inventory`);
+            continue;
+          }
+        } catch {
+          errors.push(`${ref.at}.${ref.pathKey}: source inventory must be valid JSON with an explicit ID array`);
+          continue;
+        }
       }
       verifiedFiles += 1;
     } catch (error) {
