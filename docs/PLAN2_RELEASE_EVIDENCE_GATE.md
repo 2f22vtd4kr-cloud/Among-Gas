@@ -22,3 +22,6 @@ This contract is implemented by `lib/shared/src/collision/releaseReadiness.ts` a
 ## Current truth
 
 The repository does not currently contain the source-authored statue/parking decisions, an approved AI-refined map candidate, physical-device evidence, live Groq evidence, or a signed release dossier. The validator now makes each of those absences an explicit release blocker. No runtime collision geometry or map artwork is changed by this contract.
+
+
+Commercial asset clearance is now per-file, not one project-wide checkbox: the release record must pin the complete asset-provenance inventory and provide one unique retained-asset path/hash, rights holder, licence, written permission evidence path/hash and cleared status for every inventoried asset. Provenance presence or a repository-level licence cannot substitute for asset-specific rights.
