@@ -14,7 +14,7 @@ Required environment variables:
 
 Optional environment variables:
 - `GROQ_MODEL` — defaults to `openai/gpt-oss-120b`.
-- `GROQ_EVIDENCE_OUTPUT` — defaults to `artifacts/release-evidence/live-groq-verification.json`.
+- `GROQ_EVIDENCE_OUTPUT` — defaults to `artifacts/release-evidence/live-groq-verification.json`; it must be a repository-relative path and cannot escape the checkout.
 
 The command sends one minimal chat-completions request containing no player or game data and requires the exact `GROQ_LIVE_OK` response. It writes only candidate commit, provider/model, tester, timestamp, HTTP status, provider request ID, response-body SHA-256, pass/fail, and the session-only credential policy. It never writes the API key or raw response and never logs provider exception details.
 
