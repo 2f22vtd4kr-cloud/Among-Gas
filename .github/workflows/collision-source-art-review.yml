@@ -1,0 +1,98 @@
+name: Collision source-art review artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - feat/collision-source-art-review-artifacts
+  pull_request:
+    paths:
+      - .github/workflows/collision-source-art-review.yml
+      - scripts/renderCollisionQa.ts
+      - lib/shared/src/collisionDataFine.ts
+      - lib/shared/src/collisionOverrides.ts
+      - artifacts/telegram-game/public/map-hires.png
+      - artifacts/telegram-game/public/map-hires.webp
+      - attached_assets/IMG_2907_1783632830477.jpeg
+      - attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collision-source-art-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  render-review-crops:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11.13.1
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Assert CI runtime matches repository Node.js 24 requirement
+        run: |
+          node -e "const major = Number(process.versions.node.split('.')[0]); if (major !== 24) throw new Error('Review renderer requires Node.js 24')"
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Render source-art collision, vision, shadow and detailed comparison crops
+        run: pnpm --filter @workspace/scripts exec tsx ../renderCollisionQa.ts
+
+      - name: Write artifact provenance and interpretation notes
+        env:
+          REVIEW_COMMIT: ${{ github.sha }}
+          REVIEW_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/collision-source-art-review"
+          {
+            echo "# Collision source-art review artifact"
+            echo
+            echo "- Commit: ${REVIEW_COMMIT}"
+            echo "- Event: ${REVIEW_EVENT}"
+            echo "- Canonical original map: attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png"
+            echo "- Red-line collision reference: attached_assets/IMG_2907_1783632830477.jpeg"
+            echo "- Renderer: scripts/renderCollisionQa.ts"
+            echo
+            echo "## Interpretation"
+            echo
+            echo "- The 12 collision, shadow and vision tiles are diagnostic overlays on the existing source map, not source-authored geometry."
+            echo "- The 8 detailed comparisons show the red-line reference beside the current production collision overlay."
+            echo "- Raster-derived masks, sparse vision probes and shadow grids are not independent per-object authoring, review, or owner approval."
+            echo "- These images support human inspection only. They do not authorize a geometry change, vector runtime cut-over, licensing decision, deployment, or release."
+            echo
+            echo "## Source hashes"
+            sha256sum attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png
+            sha256sum attached_assets/IMG_2907_1783632830477.jpeg
+          } > "${RUNNER_TEMP}/collision-source-art-review/README.md"
+
+      - name: Upload expiring review-only artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: collision-source-art-review-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            artifacts/telegram-game/collision-qa-overlay.png
+            artifacts/telegram-game/collision-shadow-qa-overlay.png
+            artifacts/telegram-game/collision-vision-qa-overlay.png
+            artifacts/telegram-game/collision-qa-overlay-webp.png
+            artifacts/telegram-game/collision-reference-overlay.png
+            artifacts/telegram-game/collision-qa-tiles/
+            ${{ runner.temp }}/collision-source-art-review/README.md
+          if-no-files-found: error
+          retention-days: 7
