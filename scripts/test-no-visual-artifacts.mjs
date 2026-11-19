@@ -23,9 +23,9 @@ const reviewWorkflow = read('../.github/workflows/collision-source-art-review.ym
 const collisionRenderer = read('./renderCollisionQa.ts');
 assert.match(reviewWorkflow, /workflow_dispatch:/,
   'source-art review crops must be explicitly runnable outside normal CI');
-assert.match(reviewWorkflow, /scripts\\/renderCollisionQa\\.ts/,
+assert.ok(reviewWorkflow.includes('scripts/renderCollisionQa.ts'),
   'the isolated review workflow must use the canonical source-art renderer');
-assert.match(reviewWorkflow, /actions\\/upload-artifact@v7/,
+assert.ok(reviewWorkflow.includes('actions/upload-artifact@v7'),
   'review crops must be shared as a CI artifact rather than committed to runtime assets');
 assert.match(reviewWorkflow, /retention-days: 7/,
   'review artifacts must expire automatically');
@@ -36,9 +36,9 @@ assert.match(collisionRenderer, /MAP_AUTHORING_ZONES/,
   'zone crops must use the canonical Z01–Z12 partition');
 assert.match(collisionRenderer, /zoneReviewContextWorldPx = 24/,
   'each zone crop must include the required 24 world-pixel seam context');
-assert.match(collisionRenderer, /1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918\\.png/,
+assert.ok(collisionRenderer.includes('1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png'),
   'zone crops must include the recovered original source artwork');
-assert.match(collisionRenderer, /collision-qa-zones/,
+assert.ok(collisionRenderer.includes('collision-qa-zones'),
   'the renderer must emit a separate set of exact zone crops');
 
 assert.ok(plan.includes('Normal CI and browser tests remain assertion-only and screenshot-free'),
