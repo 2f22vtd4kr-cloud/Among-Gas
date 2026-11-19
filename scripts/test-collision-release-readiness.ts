@@ -206,6 +206,7 @@ const completeEvidence: CollisionCutoverEvidence = {
   },
   physicalDeviceAcceptance: (["ios", "android", "telegram"] as const).map(platform => ({
     platform,
+    deviceType: "physical" as const,
     deviceModel: "Physical test device",
     osVersion: "current",
     appVersion: "release-candidate",
@@ -217,6 +218,7 @@ const completeEvidence: CollisionCutoverEvidence = {
   })),
   liveGroqProvider: {
     provider: "groq",
+    candidateCommit: "a".repeat(40),
     model: "verified-live-model",
     testerName: "Provider Tester",
     testedAt: "2026-11-14T08:30:00.000Z",
@@ -274,6 +276,21 @@ const missingPhysicalDevices = structuredClone(completeEvidence);
 missingPhysicalDevices.physicalDeviceAcceptance = [];
 assert.ok(validateCollisionCutoverEvidence(missingPhysicalDevices).some(error => error.includes("Physical iOS, Android and Telegram")),
   "CI browser tests must not stand in for physical-device acceptance");
+
+const emulatorDevice = structuredClone(completeEvidence);
+(emulatorDevice.physicalDeviceAcceptance[0] as any).deviceType = "emulator";
+assert.ok(validateCollisionCutoverEvidence(emulatorDevice).some(error => error.includes("deviceType must explicitly be physical")),
+  "an emulator or simulator cannot satisfy physical-device acceptance");
+
+const staleDeviceBuild = structuredClone(completeEvidence);
+staleDeviceBuild.physicalDeviceAcceptance[0].buildCommit = "b".repeat(40);
+assert.ok(validateCollisionCutoverEvidence(staleDeviceBuild).some(error => error.includes("tested build commit must match the final release candidate commit")),
+  "physical-device evidence must be bound to the exact release candidate commit");
+
+const staleGroqBuild = structuredClone(completeEvidence);
+staleGroqBuild.liveGroqProvider.candidateCommit = "b".repeat(40);
+assert.ok(validateCollisionCutoverEvidence(staleGroqBuild).some(error => error.includes("Live Groq provider verification must match the final release candidate commit")),
+  "live provider evidence must be bound to the same release candidate commit");
 
 const unresolvedPlanter = structuredClone(completeEvidence);
 unresolvedPlanter.statuePlanterPedestal.planter.disposition = "unresolved";
