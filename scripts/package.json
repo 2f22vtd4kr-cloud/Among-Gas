@@ -39,7 +39,7 @@
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
     "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
     "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts",
-    "test:groq-evidence-output": "tsx ./src/testSafeEvidenceOutput.ts"
+    "test:groq-evidence-output": "tsx ./src/testSafeEvidenceOutput.ts && tsx ./src/testGroqEvidence.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
