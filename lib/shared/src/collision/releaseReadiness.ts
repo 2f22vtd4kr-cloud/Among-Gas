@@ -529,7 +529,8 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     }
   }
   if (!assetRights || assetRights.inventoryPath !== "docs/asset-provenance-inventory.md" ||
-      assetRights.inventorySha256?.toLowerCase() !== COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256 ||
+      !isSha256(assetRights.inventorySha256) ||
+      assetRights.inventorySha256.toLowerCase() !== COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256 ||
       assetRights.inventoriedAssetCount !== COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length ||
       !Array.isArray(assetRights.perAssetClearances) ||
       assetRights.perAssetClearances.length !== COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length) {
