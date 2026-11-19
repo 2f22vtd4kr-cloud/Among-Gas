@@ -1,16 +1,12 @@
-import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeEvidenceOutput } from "./safeEvidenceOutput.js";
+import { createGroqResponseEvidence } from "./groqEvidence.js";
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
 const SUCCESS_TOKEN = "GROQ_LIVE_OK";
-
-function sha256(value: string): string {
-  return createHash("sha256").update(value, "utf8").digest("hex");
-}
 
 /**
  * Performs one minimal provider-backed request and writes evidence metadata.
@@ -113,19 +109,16 @@ async function main(): Promise<void> {
   const outputSegments = outputPath.split(/[\\\\/]/);
   const outputFile = outputSegments.pop()!;
   const responseEvidencePath = [...outputSegments, outputFile.replace(/\.json$/i, "-response.json")].join("/");
-  const responseEvidenceContent = JSON.stringify({
-    version: 1,
-    provider: "groq",
+  const responseEvidence = createGroqResponseEvidence({
     candidateCommit,
     model,
     testedAt,
     httpStatus,
     requestId,
-    responseToken: passed ? SUCCESS_TOKEN : null,
-    responseTokenMatched: passed,
-  }, null, 2) + "\n";
-  const responseEvidenceSha256 = sha256(responseEvidenceContent);
-  await writeEvidenceOutput(repoRoot, responseEvidencePath, responseEvidenceContent);
+    passed,
+  });
+  const responseEvidenceSha256 = responseEvidence.sha256;
+  await writeEvidenceOutput(repoRoot, responseEvidencePath, responseEvidence.content);
 
   const record = {
     version: 1,
