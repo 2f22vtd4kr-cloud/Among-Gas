@@ -53,7 +53,8 @@ export interface FullFootprintRasterVectorParity {
   /** Raster says walkable while the vector says blocked. */
   rasterWalkableVectorBlocked: number;
   /** SHA-256 of the deterministic full-footprint sample set and its ordering. */
-  sampleSetSha256: string;\n  sampleSetPath?: string;
+  sampleSetSha256: string;
+  sampleSetPath?: string;
 }
 
 export interface AuthoredObjectDisposition {
@@ -94,10 +95,12 @@ export interface PhysicalDeviceAcceptance {
   testedAt: string;
   result: "passed" | "failed";
   evidenceSha256: string;
+  evidencePath?: string;
 }
 
 export interface CollisionCutoverEvidence {
   candidateSha256: string;
+  candidatePath?: string;
   zoneReviews: unknown[];
   fullFootprintRasterVectorParity: FullFootprintRasterVectorParity;
   gameplayAnchors: GameplayAnchorDisposition[];
@@ -111,13 +114,16 @@ export interface CollisionCutoverEvidence {
   };
   sourceMapArt: {
     sourceSha256: string;
+    sourcePath?: string;
     transformSha256: string;
+    transformPath?: string;
   };
   assetRights: {
     status: "cleared" | "unresolved" | "rejected";
     rightsHolder: string;
     license: string;
     evidenceSha256: string;
+    evidencePath?: string;
     inventoryPath: string;
     inventorySha256: string;
     inventoriedAssetCount: number;
@@ -139,17 +145,23 @@ export interface CollisionCutoverEvidence {
     sourceLineIds: string[];
     classifications: ParkingLineClassification[];
     walkabilityRegressionPassed: boolean;
-    regressionEvidenceSha256: string;\n    regressionEvidencePath?: string;
+    regressionEvidenceSha256: string;
+    regressionEvidencePath?: string;
   };
   aiMapRefinement: {
     status: "approved" | "not-generated" | "generated" | "reviewed";
     model: string;
     modelVersion: string;
     sourceSha256: string;
+    sourcePath?: string;
     candidateSha256: string;
+    candidatePath?: string;
     promptSha256: string;
+    promptPath?: string;
     parametersSha256: string;
+    parametersPath?: string;
     qaReportSha256: string;
+    qaReportPath?: string;
     authorName: string;
     authorCompletedAt: string;
     reviewerName: string;
@@ -166,7 +178,8 @@ export interface CollisionCutoverEvidence {
     testerName: string;
     testedAt: string;
     scenario: string;
-    responseEvidenceSha256: string;\n    responseEvidencePath?: string;
+    responseEvidenceSha256: string;
+    responseEvidencePath?: string;
     sessionCredentialOnly: boolean;
     passed: boolean;
   };
@@ -178,6 +191,7 @@ export interface CollisionCutoverEvidence {
     approvedAt: string;
     decision: "approved" | "rejected" | "pending";
     evidenceSha256: string;
+    evidencePath?: string;
   };
   visualReview: {
     allTwelveZonesInspected: boolean;
