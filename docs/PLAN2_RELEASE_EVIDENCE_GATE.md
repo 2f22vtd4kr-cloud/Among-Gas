@@ -36,7 +36,7 @@ The metadata validator deliberately remains pure and does not read files. A rele
 
 ```sh
 pnpm --filter @workspace/scripts run test:release-evidence-bytes
-pnpm --filter @workspace/scripts run verify:release-evidence-bytes -- --dossier <path-to-release-dossier.json> --candidate-commit <full-40-character-commit-sha> --root .
+pnpm --filter @workspace/scripts run verify:release-evidence-bytes -- --dossier artifacts/release-evidence/release-dossier.json --candidate-commit <full-40-character-commit-sha> --root ..
 ```
 
 Every field ending in `Sha256` must have a sibling repository-relative file path. The conventional pair is `evidenceSha256` / `evidencePath`; explicit pairs include `sampleSetSha256` / `sampleSetPath`, `responseEvidenceSha256` / `responseEvidencePath`, `movementEvidenceSha256` / `movementEvidencePath`, `sightEvidenceSha256` / `sightEvidencePath`, `regressionEvidenceSha256` / `regressionEvidencePath`, `permissionEvidenceSha256` / `permissionEvidencePath`, and `inventorySha256` / `inventoryPath`. The map source, transform, AI source/candidate/prompt/parameters/QA report, parity channels, physical-device records and final dossier likewise require their corresponding file paths.
