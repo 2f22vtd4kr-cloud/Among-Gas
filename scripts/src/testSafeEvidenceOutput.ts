@@ -24,9 +24,9 @@ try {
     "the output override must not write into repository control files",
   );
 
-  await symlink(outside, path.join(root, "linked-directory"), "dir");
+  await symlink(outside, path.join(root, "artifacts", "release-evidence", "linked-directory"), "dir");
   await assert.rejects(
-    writeEvidenceOutput(root, "linked-directory/escape.json", "must not be written"),
+    writeEvidenceOutput(root, "artifacts/release-evidence/linked-directory/escape.json", "must not be written"),
     /symlink|outside the repository/,
     "a symlinked parent directory must be rejected",
   );
@@ -38,7 +38,7 @@ try {
 
   const outsideTarget = path.join(outside, "target.json");
   await writeFile(outsideTarget, "unchanged");
-  await symlink(outsideTarget, path.join(root, "linked-file.json"), "file");
+  await symlink(outsideTarget, path.join(root, "artifacts", "release-evidence", "artifacts/release-evidence/linked-file.json"), "file");
   await assert.rejects(
     writeEvidenceOutput(root, "linked-file.json", "overwrite"),
     /linked file|ELOOP/,
@@ -48,7 +48,7 @@ try {
 
   const hardlinkTarget = path.join(outside, "hardlink.json");
   await writeFile(hardlinkTarget, "protected");
-  await link(hardlinkTarget, path.join(root, "hardlinked.json"));
+  await link(hardlinkTarget, path.join(root, "artifacts", "release-evidence", "artifacts/release-evidence/hardlinked.json"));
   await assert.rejects(
     writeEvidenceOutput(root, "hardlinked.json", "overwrite"),
     /linked file/,
@@ -56,7 +56,7 @@ try {
   );
   assert.equal(await readFile(hardlinkTarget, "utf8"), "protected");
 
-  await assert.rejects(writeEvidenceOutput(root, "../escape.json", "bad"), /repository-relative|parent segments/);
+  await assert.rejects(writeEvidenceOutput(root, "artifacts/release-evidence/../escape.json", "bad"), /repository-relative|parent segments/);
   await assert.rejects(writeEvidenceOutput(root, path.join(outside, "absolute.json"), "bad"), /repository-relative/);
 } finally {
   await rm(root, { recursive: true, force: true });
