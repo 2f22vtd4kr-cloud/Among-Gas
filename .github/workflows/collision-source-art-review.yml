@@ -72,7 +72,8 @@ jobs:
             echo
             echo "## Interpretation"
             echo
-            echo "- The 12 collision, shadow and vision tiles are diagnostic overlays on the existing source map, not source-authored geometry."
+            echo "- Twelve exact Z01–Z12 crops compare original source art, red-line reference and production collision with 24 world-pixel seam context; collision-qa-zones/manifest.json records native rectangles and independent X/Y transforms."
+            echo "- The 12 overlapping collision, shadow and vision tiles are additional diagnostics, not source-authored geometry."
             echo "- The 8 detailed comparisons show the red-line reference beside the current production collision overlay."
             echo "- Raster-derived masks, sparse vision probes and shadow grids are not independent per-object authoring, review, or owner approval."
             echo "- These images support human inspection only. They do not authorize a geometry change, vector runtime cut-over, licensing decision, deployment, or release."
@@ -93,6 +94,7 @@ jobs:
             artifacts/telegram-game/collision-qa-overlay-webp.png
             artifacts/telegram-game/collision-reference-overlay.png
             artifacts/telegram-game/collision-qa-tiles/
+            artifacts/telegram-game/collision-qa-zones/
             ${{ runner.temp }}/collision-source-art-review/README.md
           if-no-files-found: error
           retention-days: 7
