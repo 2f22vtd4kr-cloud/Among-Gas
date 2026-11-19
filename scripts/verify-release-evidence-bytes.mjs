@@ -136,6 +136,12 @@ export async function verifyEvidenceDossier({
     if (!Array.isArray(devices) || devices.length !== 3) {
       errors.push("physicalDeviceAcceptance must contain exactly the three required platform records");
     } else {
+      const requiredPlatforms = ["ios", "android", "telegram"];
+      const actualPlatforms = devices.map(device => device?.platform);
+      if (new Set(actualPlatforms).size !== requiredPlatforms.length ||
+          requiredPlatforms.some(platform => !actualPlatforms.includes(platform))) {
+        errors.push("physicalDeviceAcceptance must contain one unique ios, android and telegram record");
+      }
       for (const device of devices) {
         if (device?.buildCommit?.toLowerCase() !== candidateCommit.toLowerCase()) {
           errors.push(`physical-device ${device?.platform ?? "unknown"} buildCommit must match the exact candidate commit`);
@@ -188,8 +194,10 @@ export async function verifyEvidenceDossier({
           const actualIds = ref.pathKey === "sourceObjectInventoryPath"
             ? inventory.objectIds
             : inventory.sourceLineIds;
-          if (!Array.isArray(expectedIds) || !Array.isArray(actualIds) ||
-              new Set(actualIds).size !== actualIds.length ||
+          const validIds = value => Array.isArray(value) &&
+            value.every(id => typeof id === "string" && id.trim().length > 0) &&
+            new Set(value).size === value.length;
+          if (!validIds(expectedIds) || !validIds(actualIds) ||
               JSON.stringify([...actualIds].sort()) !== JSON.stringify([...expectedIds].sort())) {
             errors.push(`${ref.at}.${ref.pathKey}: source inventory file IDs do not exactly match the dossier inventory`);
             continue;
