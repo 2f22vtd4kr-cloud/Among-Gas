@@ -122,7 +122,7 @@ export function validateIndependentRedlineSource(
       const path = typeof record.traceEvidencePath === "string" ? record.traceEvidencePath.replace(/\\/g, "/") : "";
       if (!path.startsWith("evidence/map-zones/" + zone + "/") ||
           path.startsWith("/") || /^[a-z]:/i.test(path) ||
-          path.split("/").some(part => part === "." || part === "..")) {
+          path.split("/").some((part: string) => part === "." || part === "..")) {
         errors.push(zone + ": trace evidence must stay inside its zone-specific evidence bundle");
       }
       if (!/^[a-f0-9]{64}$/i.test(record.traceEvidenceSha256 ?? "")) {
