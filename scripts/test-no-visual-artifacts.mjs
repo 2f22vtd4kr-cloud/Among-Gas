@@ -20,6 +20,7 @@ assert.doesNotMatch(workflow, /renderCollisionQa|among-gas-visual-qa|VISUAL_QA_D
   'normal CI must remain free of generated visual QA images');
 
 const reviewWorkflow = read('../.github/workflows/collision-source-art-review.yml');
+const collisionRenderer = read('./renderCollisionQa.ts');
 assert.match(reviewWorkflow, /workflow_dispatch:/,
   'source-art review crops must be explicitly runnable outside normal CI');
 assert.match(reviewWorkflow, /scripts\\/renderCollisionQa\\.ts/,
@@ -30,6 +31,15 @@ assert.match(reviewWorkflow, /retention-days: 7/,
   'review artifacts must expire automatically');
 assert.doesNotMatch(reviewWorkflow, /vercel|replit.*publish|production deployment/i,
   'the source-art review workflow must not deploy or publish');
+
+assert.match(collisionRenderer, /MAP_AUTHORING_ZONES/,
+  'zone crops must use the canonical Z01–Z12 partition');
+assert.match(collisionRenderer, /zoneReviewContextWorldPx = 24/,
+  'each zone crop must include the required 24 world-pixel seam context');
+assert.match(collisionRenderer, /1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918\\.png/,
+  'zone crops must include the recovered original source artwork');
+assert.match(collisionRenderer, /collision-qa-zones/,
+  'the renderer must emit a separate set of exact zone crops');
 
 assert.ok(plan.includes('Normal CI and browser tests remain assertion-only and screenshot-free'),
   'Plan 2 must preserve screenshot-free normal CI');
