@@ -1,6 +1,9 @@
 name: Map super-resolution candidate
 
 on:
+  push:
+    branches:
+      - run/plan2-stage1-map-candidate
   workflow_dispatch:
     inputs:
       core_size:
@@ -58,8 +61,8 @@ jobs:
             --output /tmp/among-gas-map-sr/candidate-2x.png \
             --model /tmp/among-gas-map-sr/model.onnx \
             --manifest /tmp/among-gas-map-sr/candidate.manifest.json \
-            --core-size "${{ inputs.core_size }}" \
-            --context "${{ inputs.context }}"
+            --core-size "${{ inputs.core_size || '192' }}" \
+            --context "${{ inputs.context || '64' }}"
 
       - name: Compare candidate against faithful baseline
         run: |
