@@ -7,10 +7,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from PIL import Image
 
-from super_resolution import extract_context_patch, process_image
+from super_resolution import (
+    OUTPUT_RESAMPLING,
+    OUTPUT_RESAMPLING_DESCRIPTION,
+    extract_context_patch,
+    process_image,
+)
 
 
 class SuperResolutionPatchTests(unittest.TestCase):
+    def test_manifest_resampler_matches_the_actual_affine_kernel(self):
+        self.assertEqual(OUTPUT_RESAMPLING, Image.Resampling.BICUBIC)
+        self.assertEqual(
+            OUTPUT_RESAMPLING_DESCRIPTION,
+            "Pillow BICUBIC affine (global pixel-centre transform)",
+        )
+
     def setUp(self):
         yy, xx = np.mgrid[0:9, 0:17]
         self.source = np.stack([xx * 7, yy * 19, (xx + yy) * 5], axis=-1).astype(np.uint8)
