@@ -193,6 +193,80 @@ const REQUIRED_ANCHORS = [
   ...Array.from({ length: 6 }, (_, index) => `sabotage-${index + 1}`),
 ] as const;
 const REQUIRED_REGIONS = DISCONNECTED_REGION_IDS;
+
+/** Pinned full-file inventory; update together with the provenance manifest. */
+export const COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256 =
+  "ab2b97d01e0316ae40289001c63008901cefcfe23517dc1be78bd9e13fb6a332";
+export const COLLISION_CUTOVER_REQUIRED_ASSET_PATHS = [
+  "attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png",
+  "attached_assets/BAF1186A-CC7C-4076-B23F-03C55C906007_1783604564967.png",
+  "attached_assets/generated_images/character_sprite_sheet.png",
+  "attached_assets/IMG_2887_1783602362663.webp",
+  "attached_assets/IMG_2887_1783605337712.webp",
+  "attached_assets/IMG_2888_1783605337712.webp",
+  "attached_assets/IMG_2898_1783586696260.jpeg",
+  "attached_assets/IMG_2907_1783590932507.jpeg",
+  "attached_assets/IMG_2907_1783593845208.jpeg",
+  "attached_assets/IMG_2907_1783632830477.jpeg",
+  "attached_assets/IMG_2915_1783596039233.jpeg",
+  "attached_assets/IMG_2936_1783604300237.jpeg",
+  "attached_assets/IMG_2937_1783605293999.jpeg",
+  "attached_assets/IMG_2940_1783608711056.png",
+  "attached_assets/IMG_2941_1783609434358.png",
+  "attached_assets/IMG_2942_1783609434358.png",
+  "attached_assets/IMG_2945_1783611262735.jpeg",
+  "attached_assets/IMG_2946_1783617740543.jpeg",
+  "attached_assets/IMG_2947_1783617740543.webp",
+  "attached_assets/IMG_2947_1783619677358.webp",
+  "attached_assets/IMG_2947_1783620092373.webp",
+  "attached_assets/IMG_2947_1783620848793.webp",
+  "attached_assets/IMG_2947_1783630457114.webp",
+  "attached_assets/IMG_2949_1783619591295.jpeg",
+  "attached_assets/IMG_2950_1783620092373.jpeg",
+  "attached_assets/IMG_2951_1783620590679.jpeg",
+  "attached_assets/IMG_2951_1783620829862.jpeg",
+  "attached_assets/IMG_2952_1783621040713.jpeg",
+  "attached_assets/IMG_2952_1783621070573.jpeg",
+  "attached_assets/IMG_2952_1783623605477.jpeg",
+  "attached_assets/IMG_2954_1783630920533.png",
+  "attached_assets/IMG_2958_1783624186711.jpeg",
+  "attached_assets/IMG_2959_1783625500018.jpeg",
+  "attached_assets/IMG_2961_1783625789937.jpeg",
+  "attached_assets/IMG_2963_1783627194029.jpeg",
+  "attached_assets/IMG_2964_1783628295670.jpeg",
+  "attached_assets/IMG_2965_1783628526684.jpeg",
+  "attached_assets/IMG_2966_1783628526684.jpeg",
+  "attached_assets/IMG_2967_1783628526684.jpeg",
+  "attached_assets/IMG_2968_1783629316648.jpeg",
+  "attached_assets/IMG_2969_1783629657719.jpeg",
+  "attached_assets/IMG_2969_1783630322300.jpeg",
+  "attached_assets/IMG_2971_1783631156418.jpeg",
+  "attached_assets/IMG_2972_1783631392364.jpeg",
+  "attached_assets/IMG_2973_1783631680200.jpeg",
+  "attached_assets/IMG_2974_1783656137059.jpeg",
+  "attached_assets/IMG_2979_1783658554613.jpeg",
+  "attached_assets/IMG_2983_1783671562586.jpeg",
+  "attached_assets/IMG_2984_1783672810937.jpeg",
+  "attached_assets/IMG_2984_1783682885759.jpeg",
+  "attached_assets/IMG_2989_1783676922907.png",
+  "attached_assets/IMG_2993_1783681349063.png",
+  "attached_assets/IMG_3001_1783704862506.png",
+  "attached_assets/IMG_3006_1783716314524.jpeg",
+  "attached_assets/IMG_3009_1783748833295.jpeg",
+  "attached_assets/IMG_3010_1783748833295.webp",
+  "attached_assets/IMG_3010_1783749973232.webp",
+  "attached_assets/IMG_3011_1783749973232.jpeg",
+  "attached_assets/Pasted-Great-progress-the-server-ts-you-shared-is-a-strong-sel_1783665582933.txt",
+  "attached_assets/Pasted-Here-is-the-complete-self-contained-and-ready-to-run-se_1783665407349.txt",
+  "attached_assets/Pasted-Processed-Improved-I-reviewed-the-three-modules-you-sha_1783665384475.txt",
+  "attached_assets/Pasted-Repo-Analysis-Complete-I-examined-https-github-com-2f22_1783683371738.txt",
+  "attached_assets/Pasted-Save-this-file-in-your-Replit-workspace-as-AMONG-US-TEL_1783665354423.txt",
+  "attached_assets/Pasted-This-consolidated-specification-is-excellent-You-captur_1783665338453.txt",
+  "attached_assets/Pasted-To-make-sure-your-Replit-workspace-has-the-complete-seq_1783665346953.txt",
+  "attached_assets/Pasted-Your-consolidation-is-flawless-You-have-successfully-de_1783665396738.txt",
+] as const;
+const REQUIRED_ASSET_PATHS = new Set<string>(COLLISION_CUTOVER_REQUIRED_ASSET_PATHS);
+
 export const MAX_RASTER_VECTOR_DISAGREEMENT_RATIO = 0.02;
 const isSha256 = (value: unknown): value is string =>
   typeof value === "string" && /^[a-f0-9]{64}$/i.test(value);
@@ -455,17 +529,19 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     }
   }
   if (!assetRights || assetRights.inventoryPath !== "docs/asset-provenance-inventory.md" ||
-      !isSha256(assetRights.inventorySha256) ||
-      !Number.isSafeInteger(assetRights.inventoriedAssetCount) || assetRights.inventoriedAssetCount <= 0 ||
+      assetRights.inventorySha256?.toLowerCase() !== COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256 ||
+      assetRights.inventoriedAssetCount !== COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length ||
       !Array.isArray(assetRights.perAssetClearances) ||
-      assetRights.perAssetClearances.length !== assetRights.inventoriedAssetCount) {
-    errors.push("Commercial rights must reconcile to the complete pinned asset-provenance inventory");
+      assetRights.perAssetClearances.length !== COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length) {
+    errors.push("Commercial rights must reconcile to the exact pinned 66-path asset-provenance inventory and SHA-256");
   } else {
     const paths = new Set<string>();
+    const permissionDigests = new Set<string>();
     for (const item of assetRights.perAssetClearances) {
-      if (!item || !nonEmpty(item.assetPath) || item.assetPath.startsWith("/") ||
+      if (!item || !nonEmpty(item.assetPath) || !REQUIRED_ASSET_PATHS.has(item.assetPath) ||
+          item.assetPath.startsWith("/") ||
           item.assetPath.split(/[\\/]/).some(part => part === "." || part === "..")) {
-        errors.push("Every asset clearance must name a safe repository-relative asset path");
+        errors.push("Every asset clearance must name one exact path in the pinned repository-relative asset inventory");
         continue;
       }
       if (paths.has(item.assetPath)) errors.push("Asset rights inventory contains a duplicate asset path: " + item.assetPath);
@@ -478,9 +554,16 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
           item.permissionEvidencePath.split(/[\\/]/).some(part => part === "." || part === "..") ||
           !isSha256(item.permissionEvidenceSha256)) {
         errors.push("Asset " + item.assetPath + " requires asset-specific written permission evidence and digest");
+      } else if (permissionDigests.has(item.permissionEvidenceSha256.toLowerCase())) {
+        errors.push("Every retained asset must have its own distinct written permission evidence digest");
+      } else {
+        permissionDigests.add(item.permissionEvidenceSha256.toLowerCase());
       }
     }
-    if (paths.size !== assetRights.inventoriedAssetCount) errors.push("Asset rights clearances do not cover the complete inventory");
+    if (paths.size !== COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length ||
+        COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.some(assetPath => !paths.has(assetPath))) {
+      errors.push("Asset rights clearances must cover every exact path in the pinned 66-file inventory");
+    }
   }
 
   const visual = input.visualReview;
