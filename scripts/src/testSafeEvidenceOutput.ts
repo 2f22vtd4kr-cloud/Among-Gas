@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { link, lstat, mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { link, lstat, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { writeEvidenceOutput } from "./safeEvidenceOutput";
