@@ -5,9 +5,9 @@ This is a manual acceptance run against one immutable candidate commit. Browser 
 ## Required records
 
 Create one record each for `ios`, `android`, and `telegram` in the release dossier. Record:
-- Physical device manufacturer/model (not an emulator or simulator).
+- Explicit `deviceType: "physical"` plus the physical device manufacturer/model (not an emulator or simulator).
 - OS version and Telegram client version where applicable.
-- App build/version and exact 40-character Git commit.
+- App build/version and exact 40-character Git commit; this must equal the final release dossier candidate commit.
 - Tester identity and UTC test timestamp.
 - Pass/fail result and SHA-256 of the retained text/log evidence bundle.
 
