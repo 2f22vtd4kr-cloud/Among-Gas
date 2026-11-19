@@ -17,8 +17,8 @@ async function fixture(t) {
   await writeFile(path.join(root, "evidence", "audit.json"), bytes);
   const objectIds = ["statue-planter", "statue-pedestal"];
   const sourceLineIds = ["parking-marking-a", "parking-marking-b"];
-  const objectInventoryBytes = Buffer.from(JSON.stringify({ objectIds }) + "\\n");
-  const parkingInventoryBytes = Buffer.from(JSON.stringify({ sourceLineIds }) + "\\n");
+  const objectInventoryBytes = Buffer.from(JSON.stringify({ objectIds }) + "\n");
+  const parkingInventoryBytes = Buffer.from(JSON.stringify({ sourceLineIds }) + "\n");
   await mkdir(path.join(root, "evidence", "map-objects", "source-object-inventory"), { recursive: true });
   await mkdir(path.join(root, "evidence", "parking-lines", "source-inventory"), { recursive: true });
   await writeFile(path.join(root, "evidence", "map-objects", "source-object-inventory", "objects.json"), objectInventoryBytes);
