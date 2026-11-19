@@ -275,6 +275,12 @@ assert.ok(validateCollisionCutoverEvidence(staleInventoryDigest).some(error =>
   error.includes("exact pinned 66-path asset-provenance inventory")),
   "the rights dossier must bind the exact current inventory bytes, not an arbitrary digest");
 
+const malformedInventoryDigest = structuredClone(completeEvidence);
+(malformedInventoryDigest.assetRights as any).inventorySha256 = 123;
+assert.ok(validateCollisionCutoverEvidence(malformedInventoryDigest).some(error =>
+  error.includes("exact pinned 66-path asset-provenance inventory")),
+  "malformed inventory digest types must fail closed without throwing");
+
 const reusedPermissionDigest = structuredClone(completeEvidence);
 reusedPermissionDigest.assetRights.perAssetClearances[1].permissionEvidenceSha256 =
   reusedPermissionDigest.assetRights.perAssetClearances[0].permissionEvidenceSha256;
