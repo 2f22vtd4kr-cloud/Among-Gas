@@ -99,7 +99,7 @@ export interface RedlineVectorCollisionSourceManifest {
     readonly holeCount: number;
     readonly excludedComponentCount: number;
   };
-  readonly zoneShapeCounts?: Readonly<Record<string, number>>;
+  readonly zoneShapeCounts: Readonly<Record<string, number>>;
   readonly geometryOverrides?: {
     readonly walkableReplacementZones: readonly {
       readonly id: string;
