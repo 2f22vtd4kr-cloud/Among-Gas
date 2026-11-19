@@ -28,6 +28,10 @@ export async function writeEvidenceOutput(
   if (segments.some(segment => !segment || segment === "." || segment === "..")) {
     throw new Error("Evidence output path must not contain empty, dot, or parent segments");
   }
+  if (segments.length < 3 || segments[0] !== "artifacts" ||
+      segments[1] !== "release-evidence" || !segments.at(-1)?.endsWith(".json")) {
+    throw new Error("Evidence output must be a JSON file beneath artifacts/release-evidence/");
+  }
 
   const canonicalRoot = await realpath(repoRoot);
   let parent = canonicalRoot;
@@ -62,7 +66,7 @@ export async function writeEvidenceOutput(
   const noFollow = constants.O_NOFOLLOW ?? 0;
   const handle = await open(
     destination,
-    constants.O_WRONLY | constants.O_CREAT | constants.O_TRUNC | noFollow,
+    constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | noFollow,
     0o600,
   );
   try {
