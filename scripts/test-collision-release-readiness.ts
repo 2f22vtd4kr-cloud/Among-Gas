@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import {
   COLLISION_CUTOVER_REQUIRED_ANCHORS,
   COLLISION_CUTOVER_REQUIRED_REGIONS,
@@ -17,6 +19,25 @@ const losDigest = "d".repeat(64);
 const visionDigest = "e".repeat(64);
 const shadowDigest = "f".repeat(64);
 const sourceArtDigest = "1".repeat(64);
+
+const pinnedInventoryBytes = await readFile(new URL("../docs/asset-provenance-inventory.md", import.meta.url));
+const pinnedInventoryText = pinnedInventoryBytes.toString("utf8");
+assert.equal(
+  createHash("sha256").update(pinnedInventoryBytes).digest("hex"),
+  COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
+  "the pinned inventory digest must match the actual tracked inventory file bytes",
+);
+const pinnedInventorySection = pinnedInventoryText.split("## Full file inventory")[1];
+assert.ok(pinnedInventorySection, "the asset inventory must include its complete file list");
+const inventoryPaths = pinnedInventorySection.split(/\\r?\\n/).flatMap(line => {
+  const match = line.match(/^\\| `([^\\`]+)` \\| \\d+ \\| `[a-f0-9]{40}` \\|/i);
+  return match ? [match[1]] : [];
+});
+assert.deepEqual(
+  inventoryPaths,
+  [...COLLISION_CUTOVER_REQUIRED_ASSET_PATHS],
+  "the pinned release-gate path set must match the full checked-in 66-file inventory exactly",
+);
 const transformDigest = "2".repeat(64);
 const rightsDigest = "3".repeat(64);
 const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
