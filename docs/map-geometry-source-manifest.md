@@ -235,3 +235,10 @@ Observed limitations:
 - The detailed comparisons cover the central atrium/planter, gas forecourt, northwest garage, service-van/generator area, south lobby threshold, upper-right entry/technical area and west pipe room. Door gaps, floor interiors, furniture, machinery and decorative markings still need separate classification.
 
 No new geometry was inferred from those images, and no zone was marked approved. The historical artifact does not replace fresh source-art crops, the 12-zone author/reviewer/owner process, anchor dispositions or physical-device visual acceptance.
+
+
+## 2026-11-19 parity candidate provenance hardening
+
+The two-way full-footprint parity CLI now rejects a generated red-line skeleton or raster-derived seed unless the candidate manifest also contains explicit `manual-trace` records for all twelve Z01–Z12 zones. Each zone record must carry its own author, completion date, zone-scoped evidence path and unique SHA-256. The manifest's per-zone shape counts must reconcile exactly with the candidate's actual `zone` ownership on every shape.
+
+This is intentionally stricter than validating the red-line image digest alone. A generated 370-shape seed may help a human tracer start work, but it is not source-authored geometry and cannot be presented as a passing release candidate. The 12 checked-in review JSON files remain empty scaffolds; no source trace or approval is claimed by this validator change.
