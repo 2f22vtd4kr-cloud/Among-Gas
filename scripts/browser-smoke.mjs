@@ -193,31 +193,64 @@ async function completeGalleryMinigameStep(page, dialog, taskId) {
       const client = await page.context().newCDPSession(page);
       let completed = false;
       let lastProgress = '';
+      let lastProgressAt = Date.now();
       // This interaction runs after ten other real minigames in the same
-      // headless mobile browser. Give moving targets enough wall-clock time
-      // under parallel CI load, and report the actual progress on failure.
+      // headless mobile browser. Keep the 30/30 requirement, but renew the
+      // touch contact after a stalled target so pointer-capture loss cannot
+      // silently stop firing while the test continues to move the aim point.
       const deadline = Date.now() + 60_000;
-      try {
+      const touchAt = async (target) => {
+        const x = target.x + target.width / 2;
+        const y = target.y + target.height / 2;
+        await client.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }).catch(() => {});
         await client.send('Input.dispatchTouchEvent', {
           type: 'touchStart',
-          touchPoints: [{ id: 0, x: firstTarget.x + firstTarget.width / 2, y: firstTarget.y + firstTarget.height / 2 }],
+          touchPoints: [{ id: 0, x, y }],
         });
+        lastProgressAt = Date.now();
+      };
+      try {
+        await touchAt(firstTarget);
         while (Date.now() < deadline) {
           const label = await progress.innerText().catch(() => '');
-          if (label !== lastProgress) {
-            lastProgress = label;
-            console.log('ASTEROID INTERACTION PROGRESS:', label);
-          }
-          if (label.includes('30/30')) {
-            completed = true;
-            break;
+          if (label) {
+            if (label !== lastProgress) {
+              lastProgress = label;
+              lastProgressAt = Date.now();
+              console.log('ASTEROID INTERACTION PROGRESS:', label);
+            }
+            if (label.includes('30/30')) {
+              completed = true;
+              break;
+            }
           }
           const target = await dialog.getByTestId('asteroid-target').first().boundingBox().catch(() => null);
           if (target) {
-            await client.send('Input.dispatchTouchEvent', {
-              type: 'touchMove',
-              touchPoints: [{ id: 0, x: target.x + target.width / 2, y: target.y + target.height / 2 }],
-            });
+            if (Date.now() - lastProgressAt >= 1_200) {
+              await touchAt(target);
+            } else {
+              await client.send('Input.dispatchTouchEvent', {
+                type: 'touchMove',
+                touchPoints: [{ id: 0, x: target.x + target.width / 2, y: target.y + target.height / 2 }],
+              });
+            }
+          } else if (!label) {
+            await page.waitForTimeout(250);
+            const completedSteps = await page.evaluate((id) => {
+              const debug = window.__AG_TASK_DEBUG;
+              const task = debug?.assignedTasks?.find(item => item.taskId === id);
+              return Number.isInteger(task?.completedSteps) ? task.completedSteps : null;
+            }, taskId).catch(() => null);
+            if (completedSteps !== null && completedSteps >= 1) {
+              completed = true;
+              console.log('ASTEROID TASK COMPLETION CONFIRMED BY GAME STATE:', completedSteps);
+            } else {
+              console.log('ASTEROID INTERACTION UI disappeared before task completion:', {
+                progress: lastProgress || 'no progress',
+                completedSteps,
+              });
+            }
+            break;
           }
           await page.waitForTimeout(50);
         }
