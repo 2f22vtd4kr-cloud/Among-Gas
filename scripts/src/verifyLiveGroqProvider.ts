@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const DEFAULT_MODEL = "openai/gpt-oss-120b";
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
   const model = (process.env.GROQ_MODEL ?? DEFAULT_MODEL).trim();
   const outputPath = process.env.GROQ_EVIDENCE_OUTPUT ??
     "artifacts/release-evidence/live-groq-verification.json";
+  const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
   if (!/^gsk_[A-Za-z0-9_-]{20,240}$/.test(apiKey)) {
     throw new Error("GROQ_API_KEY is missing or has an invalid format; provide it through a secure environment variable.");
@@ -33,8 +35,17 @@ async function main(): Promise<void> {
   if (!/^[a-f0-9]{40}$/i.test(candidateCommit)) {
     throw new Error("GROQ_VERIFICATION_COMMIT must be the exact 40-character candidate commit under test.");
   }
-  const checkoutHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-  const checkoutChanges = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
+  const checkoutHead = execFileSync("git", ["-C", repoRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const destination = path.resolve(repoRoot, outputPath);
+  const relativeOutput = path.relative(repoRoot, destination);
+  if (path.isAbsolute(outputPath) || !relativeOutput || relativeOutput === ".." ||
+      relativeOutput.startsWith(".." + path.sep) || path.isAbsolute(relativeOutput)) {
+    throw new Error("GROQ_EVIDENCE_OUTPUT must stay inside the repository and use a relative path.");
+  }
+  const gitOutputPath = relativeOutput.split(path.sep).join("/");
+  const checkoutChanges = execFileSync("git", [
+    "-C", repoRoot, "status", "--porcelain", "--untracked-files=all", "--", ".", ":!" + gitOutputPath,
+  ], { encoding: "utf8" }).trim();
   if (checkoutHead.toLowerCase() !== candidateCommit.toLowerCase() || checkoutChanges) {
     throw new Error("The live Groq check must run from a clean checkout at GROQ_VERIFICATION_COMMIT.");
   }
@@ -107,7 +118,6 @@ async function main(): Promise<void> {
     passed,
     credentialPolicy: "GROQ_API_KEY read from process environment; never logged or persisted",
   };
-  const destination = path.resolve(outputPath);
   await mkdir(path.dirname(destination), { recursive: true });
   await writeFile(destination, JSON.stringify(record, null, 2) + "\n", {
     encoding: "utf8",
