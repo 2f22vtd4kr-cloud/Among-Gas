@@ -37,7 +37,8 @@
     "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx",
     "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx",
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
-    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts"
+    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
+    "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
