@@ -19,14 +19,20 @@ const redlineCandidate = {
   version: 1,
   mapW: 3224,
   mapH: 1858,
-  shapes: Array.from({ length: 12 }, (_, index) => ({
-    id: "authored-zone-" + index,
-    points: [[index, 0], [index + 1, 0]] as [[number, number], [number, number]],
-    closed: false,
-    blocksMove: true,
-    blocksSight: false,
-    zone: "Z" + String(index + 1).padStart(2, "0"),
-  })),
+  shapes: Array.from({ length: 12 }, (_, index) => {
+    const column = index % 4;
+    const row = Math.floor(index / 4);
+    const centerX = (column + 0.5) * (3224 / 4);
+    const centerY = (row + 0.5) * (1858 / 3);
+    return {
+      id: "authored-zone-" + index,
+      points: [[centerX - 1, centerY], [centerX + 1, centerY]] as [[number, number], [number, number]],
+      closed: false,
+      blocksMove: true,
+      blocksSight: false,
+      zone: "Z" + String(index + 1).padStart(2, "0"),
+    };
+  }),
   source: {
     kind: "redline-vector",
     generatorVersion: 2,
@@ -102,6 +108,14 @@ const mismatchedZoneCounts = structuredClone(redlineCandidate);
 assert.ok(validateIndependentRedlineSource(mismatchedZoneCounts, "a".repeat(64)).some(error =>
   error.includes("recorded shape count does not match candidate geometry")),
   "the source manifest's per-zone counts must match actual candidate shapes");
+
+const mislabeledZoneGeometry = structuredClone(redlineCandidate);
+(mislabeledZoneGeometry.shapes[0] as any).zone = "Z02";
+(mislabeledZoneGeometry.source as any).zoneShapeCounts.Z01 = 0;
+(mislabeledZoneGeometry.source as any).zoneShapeCounts.Z02 = 2;
+assert.ok(validateIndependentRedlineSource(mislabeledZoneGeometry, "a".repeat(64)).some(error =>
+  error.includes("belongs to Z01, not Z02")),
+  "declared zone ownership must match the actual shape ground-footprint centroid");
 const staleRedlineCandidate = {
   ...redlineCandidate,
   source: {
