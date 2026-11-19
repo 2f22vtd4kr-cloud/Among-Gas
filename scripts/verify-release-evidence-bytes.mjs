@@ -237,11 +237,37 @@ function parseArgs(argv) {
 async function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
-    const dossierPath = path.resolve(args["--dossier"]);
-    const dossier = JSON.parse(await readFile(dossierPath, "utf8"));
+    const rootArgument = path.resolve(args["--root"] ?? process.cwd());
+    const rootInfo = await lstat(rootArgument);
+    if (rootInfo.isSymbolicLink() || !rootInfo.isDirectory()) {
+      throw new Error("verification root must be a real directory, not a symlink");
+    }
+    const rootPath = await realpath(rootArgument);
+    if (!safeRelativePath(args["--dossier"])) {
+      throw new Error("--dossier must be a safe repository-relative path beneath --root");
+    }
+    const dossierPath = path.resolve(rootPath, args["--dossier"]);
+    if (!inside(rootPath, dossierPath)) throw new Error("dossier path escapes verification root");
+    const dossierInfo = await lstat(dossierPath);
+    if (dossierInfo.isSymbolicLink() || !dossierInfo.isFile() || dossierInfo.nlink !== 1) {
+      throw new Error("dossier must be a regular, non-linked file");
+    }
+    const dossierHandle = await open(dossierPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
+    let dossier;
+    try {
+      const openedInfo = await dossierHandle.stat();
+      const pathInfo = await lstat(dossierPath);
+      if (openedInfo.ino !== dossierInfo.ino || openedInfo.dev !== dossierInfo.dev ||
+          pathInfo.isSymbolicLink() || pathInfo.ino !== openedInfo.ino || pathInfo.dev !== openedInfo.dev) {
+        throw new Error("dossier file identity changed during secure open");
+      }
+      dossier = JSON.parse(await dossierHandle.readFile("utf8"));
+    } finally {
+      await dossierHandle.close();
+    }
     const result = await verifyEvidenceDossier({
       dossier,
-      root: path.resolve(args["--root"] ?? process.cwd()),
+      root: rootPath,
       candidateCommit: args["--candidate-commit"],
     });
     if (result.errors.length) {
