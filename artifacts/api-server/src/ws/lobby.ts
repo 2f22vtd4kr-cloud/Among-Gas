@@ -739,7 +739,11 @@ export class LobbyManager {
         .map(candidate => candidate.slot)
         .sort((a, b) => a - b),
       corpsePositions: Array.from(lobby.players.values())
-        .filter(candidate => candidate.corpseX !== undefined && candidate.corpseY !== undefined)
+        // A just-reported corpse remains in an active meeting snapshot so the
+        // client can validate meeting.bodySlot, but must not reappear as a
+        // reportable body after the meeting has ended.
+        .filter(candidate => candidate.corpseX !== undefined && candidate.corpseY !== undefined &&
+          (!candidate.bodyReported || lobby.meeting?.bodySlot === candidate.slot))
         .map(candidate => ({
           slot: candidate.slot,
           wireX: toWire(candidate.corpseX!, MAP_W),
