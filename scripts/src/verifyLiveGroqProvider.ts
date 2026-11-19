@@ -42,6 +42,11 @@ async function main(): Promise<void> {
       relativeOutput.startsWith(".." + path.sep) || path.isAbsolute(relativeOutput)) {
     throw new Error("GROQ_EVIDENCE_OUTPUT must stay inside the repository and use a relative path.");
   }
+  const outputSegments = outputPath.split(/[\\/]/);
+  if (outputSegments.length < 3 || outputSegments[0] !== "artifacts" ||
+      outputSegments[1] !== "release-evidence" || !outputSegments.at(-1)?.endsWith(".json")) {
+    throw new Error("GROQ_EVIDENCE_OUTPUT must be a JSON file beneath artifacts/release-evidence/.");
+  }
   const gitOutputPath = relativeOutput.split(path.sep).join("/");
   const checkoutChanges = execFileSync("git", [
     "-C", repoRoot, "status", "--porcelain", "--untracked-files=all", "--", ".", ":!" + gitOutputPath,
