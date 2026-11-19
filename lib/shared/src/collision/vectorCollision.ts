@@ -61,6 +61,17 @@ export interface RedlineVectorCollisionSourceManifest {
   readonly kind: "redline-vector";
   readonly generatorVersion: number;
   readonly sourceFiles: Readonly<Record<string, { readonly path: string; readonly sha256: string }>>;
+  /** All twelve zones must carry source-authored manual-trace evidence. */
+  readonly authoring: {
+    readonly method: "manual-trace";
+    readonly zones: readonly {
+      readonly zone: string;
+      readonly authorName: string;
+      readonly completedAt: string;
+      readonly traceEvidencePath: string;
+      readonly traceEvidenceSha256: string;
+    }[];
+  };
   readonly referenceImage: { readonly width: number; readonly height: number };
   readonly vectorization: {
     readonly redPixelCount: number;
@@ -88,7 +99,7 @@ export interface RedlineVectorCollisionSourceManifest {
     readonly holeCount: number;
     readonly excludedComponentCount: number;
   };
-  readonly zoneShapeCounts?: Readonly<Record<string, number>>;
+  readonly zoneShapeCounts: Readonly<Record<string, number>>;
   readonly geometryOverrides?: {
     readonly walkableReplacementZones: readonly {
       readonly id: string;
