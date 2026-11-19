@@ -85,6 +85,7 @@ export interface ParkingLineClassification {
 
 export interface PhysicalDeviceAcceptance {
   platform: "ios" | "android" | "telegram";
+  deviceType: "physical";
   deviceModel: string;
   osVersion: string;
   appVersion: string;
@@ -160,6 +161,7 @@ export interface CollisionCutoverEvidence {
   physicalDeviceAcceptance: PhysicalDeviceAcceptance[];
   liveGroqProvider: {
     provider: "groq";
+    candidateCommit: string;
     model: string;
     testerName: string;
     testedAt: string;
@@ -564,6 +566,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       const matches = devices.filter(item => item?.platform === platform);
       if (matches.length !== 1) { errors.push(`Physical-device ${platform} acceptance is required exactly once`); continue; }
       const device = matches[0];
+      if (device.deviceType !== "physical") errors.push(`Physical-device ${platform}: deviceType must explicitly be physical, not an emulator or simulator`);
       if (!nonEmpty(device.deviceModel) || !nonEmpty(device.osVersion) || !nonEmpty(device.appVersion) || !/^[a-f0-9]{40}$/i.test(device.buildCommit)) errors.push(`Physical-device ${platform}: device, OS, app and tested build identity are required`);
       if (!nonEmpty(device.testerName) || !validDate(device.testedAt) || device.result !== "passed" || !isSha256(device.evidenceSha256)) errors.push(`Physical-device ${platform}: passed test, tester, date and evidence digest are required`);
     }
@@ -571,7 +574,11 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
 
   const groq = input.liveGroqProvider;
   if (!groq || groq.provider !== "groq" || groq.passed !== true || groq.sessionCredentialOnly !== true) errors.push("Live Groq provider verification must pass using session-only credentials");
-  if (!groq || !nonEmpty(groq.model) || !nonEmpty(groq.testerName) || !nonEmpty(groq.scenario) || !validDate(groq.testedAt) || !isSha256(groq.responseEvidenceSha256)) errors.push("Live Groq verification requires model, tester, scenario, timestamp and response evidence digest");
+  if (!groq || !/^[a-f0-9]{40}$/i.test(groq.candidateCommit ?? "") ||
+      !nonEmpty(groq.model) || !nonEmpty(groq.testerName) || !nonEmpty(groq.scenario) ||
+      !validDate(groq.testedAt) || !isSha256(groq.responseEvidenceSha256)) {
+    errors.push("Live Groq verification requires the exact tested candidate commit, model, tester, scenario, timestamp and response evidence digest");
+  }
 
   const dossier = input.releaseDossier;
   if (!dossier || dossier.decision !== "approved") errors.push("Final release dossier and explicit release approval are required");
@@ -581,6 +588,26 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       !isSha256(dossier.evidenceSha256) ||
       (validDate(dossier.createdAt) && validDate(dossier.approvedAt) && Date.parse(dossier.approvedAt) < Date.parse(dossier.createdAt))) {
     errors.push("Final release dossier requires an immutable candidate commit, distinct author/reviewer, chronology and evidence digest");
+  }
+
+  // Device and provider checks must describe the same immutable candidate
+  // that the final dossier approves; a passing test from an older build cannot
+  // be carried forward to a different release candidate.
+  const releaseCandidateCommit = dossier && typeof dossier.candidateCommit === "string" &&
+    /^[a-f0-9]{40}$/i.test(dossier.candidateCommit)
+    ? dossier.candidateCommit.toLowerCase()
+    : null;
+  if (releaseCandidateCommit) {
+    for (const device of Array.isArray(devices) ? devices : []) {
+      if (typeof device?.buildCommit !== "string" ||
+          device.buildCommit.toLowerCase() !== releaseCandidateCommit) {
+        errors.push(`Physical-device ${device?.platform ?? "unknown"}: tested build commit must match the final release candidate commit`);
+      }
+    }
+    if (typeof groq?.candidateCommit !== "string" ||
+        groq.candidateCommit.toLowerCase() !== releaseCandidateCommit) {
+      errors.push("Live Groq provider verification must match the final release candidate commit");
+    }
   }
 
   return [...new Set(errors)];
