@@ -112,32 +112,32 @@ def process_image(
                 restored = np.clip(restored, 0, 255).round().astype(np.uint8)
 
             restored_image = Image.fromarray(restored, mode="RGB")
-            # The shipped WebP is 6608×3808, while the locked world texture is
-            # 6448×3716. Resize each context-bearing patch using the same global
-            # source→target transform, then copy only its exact mapped core.
-            # This avoids the old bug that emitted 13216×7616 and drifted from
-            # the canonical 2 texels/world-pixel manifest.
+            # Use one global source→target pixel transform for every tile. Resizing
+            # each patch to its independently rounded dimensions changes the local
+            # sampling ratio and introduces visible seams at non-integer scales.
+            # AFFINE maps each output pixel centre back into this context patch;
+            # the default 64px context keeps the bicubic support away from its edge.
             patch_left = x0 - context
             patch_top = y0 - context
-            patch_output_left = round(patch_left * scale_x)
-            patch_output_top = round(patch_top * scale_y)
-            patch_output_right = round((x1 + context) * scale_x)
-            patch_output_bottom = round((y1 + context) * scale_y)
-            patch_output_width = patch_output_right - patch_output_left
-            patch_output_height = patch_output_bottom - patch_output_top
-            resized = restored_image.resize(
-                (patch_output_width, patch_output_height),
-                Image.Resampling.LANCZOS,
-            )
-            resized_pixels = np.asarray(resized, dtype=np.uint8)
             output_left = round(x0 * scale_x)
             output_top = round(y0 * scale_y)
             output_right = round(x1 * scale_x)
             output_bottom = round(y1 * scale_y)
-            core = resized_pixels[
-                output_top - patch_output_top:output_bottom - patch_output_top,
-                output_left - patch_output_left:output_right - patch_output_left,
-            ]
+            transform = (
+                MODEL_SCALE / scale_x,
+                0,
+                MODEL_SCALE * ((output_left + 0.5) / scale_x - patch_left) - 0.5,
+                0,
+                MODEL_SCALE / scale_y,
+                MODEL_SCALE * ((output_top + 0.5) / scale_y - patch_top) - 0.5,
+            )
+            core_image = restored_image.transform(
+                (output_right - output_left, output_bottom - output_top),
+                Image.Transform.AFFINE,
+                transform,
+                resample=Image.Resampling.BICUBIC,
+            )
+            core = np.asarray(core_image, dtype=np.uint8)
             expected_core_shape = (output_bottom - output_top, output_right - output_left, 3)
             if core.shape != expected_core_shape:
                 raise RuntimeError(
