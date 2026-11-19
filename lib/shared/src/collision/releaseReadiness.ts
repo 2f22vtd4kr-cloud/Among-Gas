@@ -137,12 +137,19 @@ export interface CollisionCutoverEvidence {
       status: "cleared" | "unresolved" | "rejected";
     }[];
   };
+  /** Exhaustive source-object inventory, independently reviewed per object. */
+  sourceObjectIds: string[];
+  sourceObjectInventoryPath?: string;
+  sourceObjectInventorySha256?: string;
+  authoredObjects: AuthoredObjectDisposition[];
   statuePlanterPedestal: {
     planter: AuthoredObjectDisposition;
     pedestal: AuthoredObjectDisposition;
   };
   parkingLines: {
     sourceLineIds: string[];
+    sourceInventoryPath?: string;
+    sourceInventorySha256?: string;
     classifications: ParkingLineClassification[];
     walkabilityRegressionPassed: boolean;
     regressionEvidenceSha256: string;
@@ -610,11 +617,75 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     if (object.castsShadow !== (object.shadowTreatment === "separate-occluder")) errors.push(`${label}: shadow flag and shadow treatment disagree`);
   }
 
+  // Exhaustive source-object inventory: movement, interaction sight and
+  // presentation shadow are authored per object, never inferred from one another.
+  const sourceObjectIds = input.sourceObjectIds;
+  const authoredObjects = input.authoredObjects;
+  if (!Array.isArray(sourceObjectIds) || sourceObjectIds.length === 0 ||
+      sourceObjectIds.some(id => !nonEmpty(id) || !/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(id)) ||
+      new Set(sourceObjectIds).size !== sourceObjectIds.length) {
+    errors.push("A non-empty, unique source-authored object ID inventory is required");
+  }
+  if (!nonEmpty(input.sourceObjectInventoryPath) ||
+      !input.sourceObjectInventoryPath.startsWith("evidence/map-objects/source-object-inventory/") ||
+      input.sourceObjectInventoryPath.split(/[\\\\/]/).some(part => part === "." || part === "..") ||
+      !isSha256(input.sourceObjectInventorySha256)) {
+    errors.push("The exhaustive source-object inventory requires a byte-verifiable path and SHA-256");
+  }
+  if (!Array.isArray(authoredObjects) || !Array.isArray(sourceObjectIds) ||
+      authoredObjects.length !== sourceObjectIds.length) {
+    errors.push("Every source-inventoried map object requires exactly one independent movement/sight/shadow disposition");
+  } else {
+    const seenObjectIds = new Set<string>();
+    for (const object of authoredObjects) {
+      if (!object || !nonEmpty(object.objectId) || !sourceObjectIds.includes(object.objectId) ||
+          seenObjectIds.has(object.objectId)) {
+        errors.push("Authored map-object dispositions must uniquely match the exhaustive source-object inventory");
+        continue;
+      }
+      seenObjectIds.add(object.objectId);
+      const author = nonEmpty(object.authorName) ? object.authorName.trim() : "";
+      const reviewer = nonEmpty(object.reviewerName) ? object.reviewerName.trim() : "";
+      if (!author || !reviewer || author.toLowerCase() === reviewer.toLowerCase()) {
+        errors.push(`Map object ${object.objectId}: distinct source author and independent reviewer are required`);
+      }
+      if (!validDate(object.authorCompletedAt) || !validDate(object.reviewerReviewedAt) ||
+          (validDate(object.authorCompletedAt) && validDate(object.reviewerReviewedAt) &&
+           Date.parse(object.reviewerReviewedAt) < Date.parse(object.authorCompletedAt))) {
+        errors.push(`Map object ${object.objectId}: author/reviewer chronology is invalid`);
+      }
+      if (object.disposition !== "accepted") errors.push(`Map object ${object.objectId}: independent review is not accepted`);
+      if (!object.evidencePath?.startsWith(`evidence/map-objects/${object.objectId}/`) ||
+          object.evidencePath.split(/[\\\\/]/).some(part => part === "." || part === "..")) {
+        errors.push(`Map object ${object.objectId}: evidence must be stored in its object-specific source bundle`);
+      }
+      if (!isSha256(object.evidenceSha256)) errors.push(`Map object ${object.objectId}: source evidence SHA-256 is required`);
+      if (typeof object.blocksMove !== "boolean" || typeof object.blocksSight !== "boolean" ||
+          typeof object.castsShadow !== "boolean") {
+        errors.push(`Map object ${object.objectId}: movement, interaction-sight and presentation-shadow semantics must all be explicit`);
+      }
+      if (!["painted-art-only", "separate-occluder", "none"].includes(object.shadowTreatment) ||
+          object.castsShadow !== (object.shadowTreatment === "separate-occluder")) {
+        errors.push(`Map object ${object.objectId}: shadow flag and treatment must be explicit and consistent`);
+      }
+    }
+    if (seenObjectIds.size !== sourceObjectIds.length ||
+        sourceObjectIds.some(id => !seenObjectIds.has(id))) {
+      errors.push("Every source-inventoried map object must have one reviewed disposition");
+    }
+  }
+
   const parking = input.parkingLines;
   if (!parking || !Array.isArray(parking.sourceLineIds) || parking.sourceLineIds.length === 0 ||
       !Array.isArray(parking.classifications)) {
     errors.push("Complete source inventory and classification of parking-line markings is required");
   } else {
+    if (!nonEmpty(parking.sourceInventoryPath) ||
+        !parking.sourceInventoryPath.startsWith("evidence/parking-lines/source-inventory/") ||
+        parking.sourceInventoryPath.split(/[\\\\/]/).some(part => part === "." || part === "..") ||
+        !isSha256(parking.sourceInventorySha256)) {
+      errors.push("Exhaustive parking-line source inventory requires a byte-verifiable path and SHA-256");
+    }
     const sourceIds = parking.sourceLineIds;
     const classifiedIds = parking.classifications.map(item => item?.id);
     if (sourceIds.some(id => !nonEmpty(id)) || new Set(sourceIds).size !== sourceIds.length) errors.push("Parking source-line IDs must be non-empty and unique");
