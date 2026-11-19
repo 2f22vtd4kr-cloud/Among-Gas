@@ -35,7 +35,7 @@ function inside(root, candidate) {
 
 function safeRelativePath(value) {
   if (typeof value !== "string" || value.length === 0 || value.length > 1024 ||
-      value.includes("\\0") || value.includes("\\\\") || value.startsWith("/") ||
+      value.includes(String.fromCharCode(0)) || value.includes(String.fromCharCode(92)) || value.startsWith("/") ||
       /^[a-z]:/i.test(value)) return false;
   const parts = value.split("/");
   return parts.every(part => part.length > 0 && part !== "." && part !== "..");
