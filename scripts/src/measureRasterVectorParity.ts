@@ -91,6 +91,73 @@ export function validateIndependentRedlineSource(
       source.referenceImage.height !== CANONICAL_REDLINE_REFERENCE_DIMENSIONS.height) {
     errors.push("Candidate red-line source dimensions do not match the canonical 1359x784 image");
   }
+
+  // A red-line skeleton is only a seed. Release parity may be measured only
+  // against a manually authored, source-evidenced candidate covering all 12
+  // canonical authoring zones. Generated raster/vector conversions must not
+  // masquerade as source-authored geometry.
+  const requiredZones = Array.from({ length: 12 }, (_, index) =>
+    "Z" + String(index + 1).padStart(2, "0"));
+  const authoring = source.authoring;
+  if (!authoring || authoring.method !== "manual-trace" || !Array.isArray(authoring.zones)) {
+    errors.push("Candidate requires explicit manual-trace authoring records for all twelve zones");
+  } else {
+    if (authoring.zones.length !== requiredZones.length) {
+      errors.push("Candidate must contain exactly twelve source-authored zone records");
+    }
+    const digests: string[] = [];
+    for (const zone of requiredZones) {
+      const records = authoring.zones.filter(record => record?.zone === zone);
+      if (records.length !== 1) {
+        errors.push(zone + ": exactly one source-authored trace record is required");
+        continue;
+      }
+      const record = records[0];
+      if (typeof record.authorName !== "string" || !record.authorName.trim()) {
+        errors.push(zone + ": source author identity is required");
+      }
+      if (typeof record.completedAt !== "string" || !Number.isFinite(Date.parse(record.completedAt))) {
+        errors.push(zone + ": source trace completion date is required");
+      }
+      const path = typeof record.traceEvidencePath === "string" ? record.traceEvidencePath.replace(/\\/g, "/") : "";
+      if (!path.startsWith("evidence/map-zones/" + zone + "/") ||
+          path.startsWith("/") || /^[a-z]:/i.test(path) ||
+          path.split("/").some((part: string) => part === "." || part === "..")) {
+        errors.push(zone + ": trace evidence must stay inside its zone-specific evidence bundle");
+      }
+      if (!/^[a-f0-9]{64}$/i.test(record.traceEvidenceSha256 ?? "")) {
+        errors.push(zone + ": source trace evidence SHA-256 is required");
+      } else {
+        digests.push(record.traceEvidenceSha256.toLowerCase());
+      }
+    }
+    if (new Set(digests).size !== digests.length) {
+      errors.push("Each source-authored zone must have its own evidence digest");
+    }
+  }
+
+  const zoneCounts = source.zoneShapeCounts;
+  if (!zoneCounts || typeof zoneCounts !== "object") {
+    errors.push("Candidate must record shape ownership counts for all twelve zones");
+  } else {
+    let total = 0;
+    for (const zone of requiredZones) {
+      const count = zoneCounts[zone];
+      if (!Number.isSafeInteger(count) || count < 0) {
+        errors.push(zone + ": a non-negative integer authored-shape count is required");
+      } else {
+        total += count;
+      }
+      const actual = candidate.shapes.filter(shape => shape.zone === zone).length;
+      if (actual !== count) errors.push(zone + ": recorded shape count does not match candidate geometry");
+    }
+    if (total !== candidate.shapes.length || source.shapeCounts.total !== candidate.shapes.length) {
+      errors.push("Twelve-zone shape counts must reconcile exactly with the candidate geometry");
+    }
+    if (candidate.shapes.some(shape => !requiredZones.includes(shape.zone ?? ""))) {
+      errors.push("Every candidate shape must have exactly one canonical Z01–Z12 primary owner");
+    }
+  }
   return errors;
 }
 
