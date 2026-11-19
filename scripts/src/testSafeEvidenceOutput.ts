@@ -13,6 +13,17 @@ try {
   assert.equal((await lstat(destination)).mode & 0o777, 0o600,
     "evidence files must be owner-readable/writable only");
 
+  await assert.rejects(
+    writeEvidenceOutput(root, "artifacts/release-evidence/result.json", "replacement"),
+    /regular, non-linked file|EEXIST/,
+    "an existing evidence record must never be silently overwritten",
+  );
+  await assert.rejects(
+    writeEvidenceOutput(root, ".git/config", "unsafe"),
+    /beneath artifacts\\/release-evidence/,
+    "the output override must not write into repository control files",
+  );
+
   await symlink(outside, path.join(root, "linked-directory"), "dir");
   await assert.rejects(
     writeEvidenceOutput(root, "linked-directory/escape.json", "must not be written"),
