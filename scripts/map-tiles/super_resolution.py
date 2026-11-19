@@ -21,6 +21,8 @@ SOURCE_W, SOURCE_H = 6608, 3808
 OUTPUT_W, OUTPUT_H = 6448, 3716
 MODEL_SCALE = 4
 OUTPUT_SCALE = 2
+OUTPUT_RESAMPLING = Image.Resampling.BICUBIC
+OUTPUT_RESAMPLING_DESCRIPTION = "Pillow BICUBIC affine (global pixel-centre transform)"
 MODEL_REPOSITORY = "skillsafe-ai/realesrgan-x4plus-anime-6b"
 MODEL_REVISION = "c001be5"
 MODEL_URL = (
@@ -135,7 +137,7 @@ def process_image(
                 (output_right - output_left, output_bottom - output_top),
                 Image.Transform.AFFINE,
                 transform,
-                resample=Image.Resampling.BICUBIC,
+                resample=OUTPUT_RESAMPLING,
             )
             core = np.asarray(core_image, dtype=np.uint8)
             expected_core_shape = (output_bottom - output_top, output_right - output_left, 3)
@@ -232,7 +234,7 @@ def run(
         },
         "processing": {
             "output_scale": OUTPUT_SCALE,
-            "downsample": "Pillow Lanczos",
+            "downsample": OUTPUT_RESAMPLING_DESCRIPTION,
             "core_size": core_size,
             "context": context,
             "tile_count": tile_count,
