@@ -38,9 +38,9 @@ try {
 
   const outsideTarget = path.join(outside, "target.json");
   await writeFile(outsideTarget, "unchanged");
-  await symlink(outsideTarget, path.join(root, "artifacts", "release-evidence", "artifacts/release-evidence/linked-file.json"), "file");
+  await symlink(outsideTarget, path.join(root, "artifacts", "release-evidence", "linked-file.json"), "file");
   await assert.rejects(
-    writeEvidenceOutput(root, "linked-file.json", "overwrite"),
+    writeEvidenceOutput(root, "artifacts/release-evidence/linked-file.json", "overwrite"),
     /linked file|ELOOP/,
     "a symlinked final target must be rejected",
   );
@@ -48,9 +48,9 @@ try {
 
   const hardlinkTarget = path.join(outside, "hardlink.json");
   await writeFile(hardlinkTarget, "protected");
-  await link(hardlinkTarget, path.join(root, "artifacts", "release-evidence", "artifacts/release-evidence/hardlinked.json"));
+  await link(hardlinkTarget, path.join(root, "artifacts", "release-evidence", "hardlinked.json"));
   await assert.rejects(
-    writeEvidenceOutput(root, "hardlinked.json", "overwrite"),
+    writeEvidenceOutput(root, "artifacts/release-evidence/hardlinked.json", "overwrite"),
     /linked file/,
     "a hard-linked evidence target must be rejected",
   );
