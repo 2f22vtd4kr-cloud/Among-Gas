@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -18,6 +19,7 @@ function sha256(value: string): string {
 async function main(): Promise<void> {
   const apiKey = process.env.GROQ_API_KEY ?? "";
   const testerName = (process.env.GROQ_VERIFIER_NAME ?? "").trim();
+  const candidateCommit = (process.env.GROQ_VERIFICATION_COMMIT ?? "").trim();
   const model = (process.env.GROQ_MODEL ?? DEFAULT_MODEL).trim();
   const outputPath = process.env.GROQ_EVIDENCE_OUTPUT ??
     "artifacts/release-evidence/live-groq-verification.json";
@@ -27,6 +29,14 @@ async function main(): Promise<void> {
   }
   if (!testerName || testerName.length > 120) {
     throw new Error("GROQ_VERIFIER_NAME must identify the person performing the live provider check.");
+  }
+  if (!/^[a-f0-9]{40}$/i.test(candidateCommit)) {
+    throw new Error("GROQ_VERIFICATION_COMMIT must be the exact 40-character candidate commit under test.");
+  }
+  const checkoutHead = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+  const checkoutChanges = execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim();
+  if (checkoutHead.toLowerCase() !== candidateCommit.toLowerCase() || checkoutChanges) {
+    throw new Error("The live Groq check must run from a clean checkout at GROQ_VERIFICATION_COMMIT.");
   }
   if (!model || model.length > 128) {
     throw new Error("GROQ_MODEL must be a non-empty model identifier up to 128 characters.");
@@ -84,6 +94,7 @@ async function main(): Promise<void> {
   const record = {
     version: 1,
     provider: "groq",
+    candidateCommit,
     model,
     testerName,
     testedAt,
