@@ -107,6 +107,26 @@ async function main(): Promise<void> {
     passed = false;
   }
 
+  // Persist only the exact expected token (and only on success), never the raw
+  // provider response body. This creates a byte-verifiable response artifact
+  // without retaining provider headers, unrelated completion text or secrets.
+  const outputSegments = outputPath.split(/[\\\\/]/);
+  const outputFile = outputSegments.pop()!;
+  const responseEvidencePath = [...outputSegments, outputFile.replace(/\\.json$/i, "-response.json")].join("/");
+  const responseEvidenceContent = JSON.stringify({
+    version: 1,
+    provider: "groq",
+    candidateCommit,
+    model,
+    testedAt,
+    httpStatus,
+    requestId,
+    responseToken: passed ? SUCCESS_TOKEN : null,
+    responseTokenMatched: passed,
+  }, null, 2) + "\\n";
+  const responseEvidenceSha256 = sha256(responseEvidenceContent);
+  await writeEvidenceOutput(repoRoot, responseEvidencePath, responseEvidenceContent);
+
   const record = {
     version: 1,
     provider: "groq",
@@ -117,16 +137,21 @@ async function main(): Promise<void> {
     scenario,
     httpStatus,
     requestId,
-    responseEvidenceSha256: sha256(responseBody),
+    responseEvidencePath,
+    responseEvidenceSha256,
     responseTokenMatched: passed,
     sessionCredentialOnly: true,
     passed,
     credentialPolicy: "GROQ_API_KEY read from process environment; never logged or persisted",
   };
-  await writeEvidenceOutput(repoRoot, outputPath, JSON.stringify(record, null, 2) + "\n");
+  await writeEvidenceOutput(repoRoot, outputPath, JSON.stringify(record, null, 2) + "\\n");
 
   // Print only non-secret evidence metadata. Do not print the raw model response.
-  console.log(JSON.stringify({ ...record, outputPath: path.resolve(repoRoot, outputPath) }, null, 2));
+  console.log(JSON.stringify({
+    ...record,
+    outputPath: path.resolve(repoRoot, outputPath),
+    responseEvidencePath: path.resolve(repoRoot, responseEvidencePath),
+  }, null, 2));
   if (!passed) process.exitCode = 1;
 }
 
