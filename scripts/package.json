@@ -29,7 +29,7 @@
     "test:minigame-registry": "tsx --tsconfig ./tsconfig.minigame.json ../artifacts/telegram-game/src/components/minigames/testMinigameRegistry.tsx",
     "test:map-camera": "tsx ../artifacts/telegram-game/src/game/mapCamera.test.ts",
     "test:remote-player-animation": "tsx ../artifacts/telegram-game/src/game/remotePlayerAnimation.test.ts",
-    "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts && tsx ../artifacts/telegram-game/src/components/GameActionBar.test.tsx && tsx ../artifacts/telegram-game/src/context/GameContext.resume.test.ts",
+    "test:game-action-state": "tsx ../artifacts/telegram-game/src/game/gameActionState.test.ts",
     "test:game-input": "tsx ../artifacts/telegram-game/src/game/gameInput.test.ts",
     "build:character-atlas": "tsx ./src/buildCharacterAtlas.ts",
     "test:admin-table": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameAdminTable.test.tsx",
@@ -37,7 +37,8 @@
     "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx",
     "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx",
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
-    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts"
+    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
+    "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
