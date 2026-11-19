@@ -448,25 +448,25 @@ for (const zone of MAP_AUTHORING_ZONES) {
     pngScale.x, pngScale.y, '#ff1744', 0.32, false,
     collisionRect.left, collisionRect.top,
   );
-  // Rasterize and normalize the crop-local SVG before compositing. Sharp can
-  // resolve an SVG's intrinsic raster size differently from its declared
-  // logical dimensions; an explicit PNG resize guarantees an exact match to
-  // the extracted source-map rectangle and keeps the world-pixel transform.
+  // Sharp applies resize/extract before composite. Rasterize the overlay to
+  // the final panel dimensions so it remains the same size as the base image
+  // at the moment the composite is applied, including when the crop is downscaled.
   const collisionOverlayPng = await sharp(collisionSvg)
-    .resize({ width: collisionRect.width, height: collisionRect.height, fit: 'fill' })
+    .resize({ width: zonePanelWidth, height: panelHeight, fit: 'fill', kernel: 'nearest' })
     .png().toBuffer();
   const collisionOverlayMeta = await sharp(collisionOverlayPng).metadata();
-  if (collisionOverlayMeta.width !== collisionRect.width ||
-      collisionOverlayMeta.height !== collisionRect.height) {
-    throw new Error('Zone collision overlay dimensions do not match its source-map crop');
+  if (collisionOverlayMeta.width !== zonePanelWidth ||
+      collisionOverlayMeta.height !== panelHeight) {
+    throw new Error('Zone collision overlay dimensions do not match its review panel');
   }
   const [sourceCrop, redlineCrop, collisionCrop] = await Promise.all([
     sharp(sourceArtPath).extract(sourceArtRect)
       .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
     sharp(referencePath).extract(redlineRect)
       .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
-    sharp(mapPath).extract(collisionRect).composite([{ input: collisionOverlayPng }])
-      .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+    sharp(mapPath).extract(collisionRect)
+      .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' })
+      .composite([{ input: collisionOverlayPng }]).png().toBuffer(),
   ]);
   const canvasWidth = zonePanelWidth * 3 + zoneGap * 2;
   const headerSvg = Buffer.from(
