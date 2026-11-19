@@ -52,7 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Render source-art collision, vision, shadow and detailed comparison crops
-        run: pnpm --filter @workspace/scripts exec tsx ../renderCollisionQa.ts
+        run: pnpm --filter @workspace/scripts exec tsx renderCollisionQa.ts
 
       - name: Write artifact provenance and interpretation notes
         env:
