@@ -15,6 +15,14 @@ async function fixture(t) {
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, "evidence"), { recursive: true });
   await writeFile(path.join(root, "evidence", "audit.json"), bytes);
+  const objectIds = ["statue-planter", "statue-pedestal"];
+  const sourceLineIds = ["parking-marking-a", "parking-marking-b"];
+  const objectInventoryBytes = Buffer.from(JSON.stringify({ objectIds }) + "\\n");
+  const parkingInventoryBytes = Buffer.from(JSON.stringify({ sourceLineIds }) + "\\n");
+  await mkdir(path.join(root, "evidence", "map-objects", "source-object-inventory"), { recursive: true });
+  await mkdir(path.join(root, "evidence", "parking-lines", "source-inventory"), { recursive: true });
+  await writeFile(path.join(root, "evidence", "map-objects", "source-object-inventory", "objects.json"), objectInventoryBytes);
+  await writeFile(path.join(root, "evidence", "parking-lines", "source-inventory", "lines.json"), parkingInventoryBytes);
   const dossier = {
     releaseDossier: { candidateCommit: candidate },
     physicalDeviceAcceptance: [
@@ -23,6 +31,14 @@ async function fixture(t) {
       { platform: "telegram", buildCommit: candidate },
     ],
     liveGroqProvider: { candidateCommit: candidate },
+    sourceObjectIds: objectIds,
+    sourceObjectInventoryPath: "evidence/map-objects/source-object-inventory/objects.json",
+    sourceObjectInventorySha256: createHash("sha256").update(objectInventoryBytes).digest("hex"),
+    parkingLines: {
+      sourceLineIds,
+      sourceInventoryPath: "evidence/parking-lines/source-inventory/lines.json",
+      sourceInventorySha256: createHash("sha256").update(parkingInventoryBytes).digest("hex"),
+    },
     auditPath: "evidence/audit.json",
     auditSha256: digest,
   };
@@ -33,7 +49,7 @@ test("verifies real file bytes and exact candidate commit", async t => {
   const { root, dossier } = await fixture(t);
   const result = await verifyEvidenceDossier({ dossier, root, candidateCommit: candidate });
   assert.deepEqual(result.errors, []);
-  assert.equal(result.verifiedFiles, 1);
+  assert.equal(result.verifiedFiles, 3);
 });
 
 test("rejects path traversal and absolute paths", async t => {
@@ -105,6 +121,18 @@ test("requires each digest to have a corresponding file path", async t => {
   delete dossier.auditPath;
   const result = await verifyEvidenceDossier({ dossier, root, candidateCommit: candidate });
   assert.ok(result.errors.some(error => error.includes("required safe relative path")));
+});
+
+
+test("reconciles exhaustive object and parking IDs to the hashed inventory bytes", async t => {
+  const { root, dossier } = await fixture(t);
+  dossier.sourceObjectIds = ["statue-planter", "invented-object"];
+  let result = await verifyEvidenceDossier({ dossier, root, candidateCommit: candidate });
+  assert.ok(result.errors.some(error => error.includes("source inventory file IDs")));
+  dossier.sourceObjectIds = ["statue-planter", "statue-pedestal"];
+  dossier.parkingLines.sourceLineIds = ["parking-marking-a", "invented-line"];
+  result = await verifyEvidenceDossier({ dossier, root, candidateCommit: candidate });
+  assert.ok(result.errors.some(error => error.includes("source inventory file IDs")));
 });
 
 test("pins inventory bytes to the supplied inventory digest", async t => {
