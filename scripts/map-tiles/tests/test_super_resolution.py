@@ -44,6 +44,26 @@ class SuperResolutionPatchTests(unittest.TestCase):
             "overlapped interior tile cores must stitch to the same result as one full-frame inference",
         )
 
+    def test_maps_non_integer_source_scale_to_exact_locked_texture_size(self):
+        def fake_x4(patch):
+            return np.repeat(np.repeat(patch, 4, axis=0), 4, axis=1)
+
+        result, tile_count = process_image(
+            Image.fromarray(self.source),
+            fake_x4,
+            core_size=6,
+            context=2,
+            output_size=(31, 17),
+        )
+        self.assertEqual(result.size, (31, 17))
+        self.assertEqual(tile_count, 6)
+        pixels = np.asarray(result)
+        self.assertEqual(pixels.shape, (17, 31, 3))
+        self.assertTrue(np.isfinite(pixels).all())
+        self.assertGreater(int(pixels.sum()), 0)
+        self.assertTrue(np.any(pixels[:, -1, :] > 0), "the mapped east edge must be populated")
+        self.assertTrue(np.any(pixels[-1, :, :] > 0), "the mapped south edge must be populated")
+
     def test_rejects_wrong_model_output_scale(self):
         def wrong_scale(patch):
             return patch
