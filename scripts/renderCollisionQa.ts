@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -22,6 +22,7 @@ import {
   smoothVisibilityPolygon,
   type VisionPoint,
 } from '../artifacts/telegram-game/src/game/visibility.js';
+import { MAP_AUTHORING_ZONES } from '@workspace/shared/collision';
 import {
   FEET_OFFSET_Y,
   PLAYER_RADIUS,
@@ -55,6 +56,7 @@ if (useCandidatePayload) {
 console.log('[collision-qa] payload source: ' + (useCandidatePayload ? 'generated source-art preview' : 'committed canonical payload'));
 const mapPath = path.join(root, 'artifacts/telegram-game/public/map-hires.png');
 const webpPath = path.join(root, 'artifacts/telegram-game/public/map-hires.webp');
+const sourceArtPath = path.join(root, 'attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png');
 const referencePath = path.join(root, 'attached_assets/IMG_2907_1783632830477.jpeg');
 const outputPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay.png');
 const outputShadowPath = path.join(root, 'artifacts/telegram-game/collision-shadow-qa-overlay.png');
@@ -62,6 +64,7 @@ const outputVisionPath = path.join(root, 'artifacts/telegram-game/collision-visi
 const outputWebpPath = path.join(root, 'artifacts/telegram-game/collision-qa-overlay-webp.png');
 const referenceOutputPath = path.join(root, 'artifacts/telegram-game/collision-reference-overlay.png');
 const tileDir = path.join(root, 'artifacts/telegram-game/collision-qa-tiles');
+const zoneReviewDir = path.join(root, 'artifacts/telegram-game/collision-qa-zones');
 
 const grid = useCandidatePayload && candidatePayload ? buildPreciseCollisionGridFromRle(candidatePayload) : buildPreciseCollisionGrid();
 const shadowGrid = buildShadowGrid(grid);
@@ -70,9 +73,11 @@ const narrowSegments = buildFineShadowSegments(grid);
 const map = sharp(mapPath);
 const metadata = await map.metadata();
 const webpMetadata = await sharp(webpPath).metadata();
+const sourceArt = sharp(sourceArtPath);
+const sourceArtMetadata = await sourceArt.metadata();
 const reference = sharp(referencePath);
 const referenceMeta = await reference.metadata();
-for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['reference', referenceMeta]] as const) {
+for (const [label, meta] of [['PNG', metadata], ['WebP', webpMetadata], ['original source art', sourceArtMetadata], ['reference', referenceMeta]] as const) {
   if (!meta.width || !meta.height) throw new Error(label + ' map image dimensions unavailable');
 }
 const scaleFor = (width: number, height: number, label: string, requireUpscale = true) => {
@@ -86,6 +91,7 @@ const scaleFor = (width: number, height: number, label: string, requireUpscale =
 };
 const pngScale = scaleFor(metadata.width!, metadata.height!, 'PNG');
 const webpScale = scaleFor(webpMetadata.width!, webpMetadata.height!, 'WebP');
+const sourceArtScale = scaleFor(sourceArtMetadata.width!, sourceArtMetadata.height!, 'original source art', false);
 const refScale = scaleFor(referenceMeta.width!, referenceMeta.height!, 'red-line reference', false);
 
 function makeOverlaySvg(
@@ -393,12 +399,133 @@ for (const region of detailRegions) {
   ]).png().toFile(path.join(tileDir, 'detail-' + region.id + '-comparison.png'));
 }
 
+
+// Produce one exact Z01–Z12 review crop from the canonical original artwork,
+// the red-line reference, and the current production collision overlay. Each
+// crop includes 24 world pixels of seam context and records all native rectangles.
+mkdirSync(zoneReviewDir, { recursive: true });
+const zoneReviewContextWorldPx = 24;
+const zonePanelWidth = 600;
+const zoneGap = 16;
+const zoneHeaderHeight = 48;
+const zoneReviewManifest: Array<Record<string, unknown>> = [];
+
+function worldRectToImageRect(
+  worldRect: { left: number; top: number; right: number; bottom: number },
+  scale: { x: number; y: number },
+  imageWidth: number,
+  imageHeight: number,
+) {
+  const left = Math.max(0, Math.floor(worldRect.left * scale.x));
+  const top = Math.max(0, Math.floor(worldRect.top * scale.y));
+  const right = Math.min(imageWidth, Math.ceil(worldRect.right * scale.x));
+  const bottom = Math.min(imageHeight, Math.ceil(worldRect.bottom * scale.y));
+  if (right <= left || bottom <= top) throw new Error('Zone crop maps to an empty image rectangle');
+  return { left, top, width: right - left, height: bottom - top };
+}
+
+for (const zone of MAP_AUTHORING_ZONES) {
+  const worldRect = {
+    left: Math.max(0, zone.minX - zoneReviewContextWorldPx),
+    top: Math.max(0, zone.minY - zoneReviewContextWorldPx),
+    right: Math.min(MAP_W, zone.maxX + zoneReviewContextWorldPx),
+    bottom: Math.min(MAP_H, zone.maxY + zoneReviewContextWorldPx),
+  };
+  const sourceArtRect = worldRectToImageRect(
+    worldRect, sourceArtScale, sourceArtMetadata.width!, sourceArtMetadata.height!,
+  );
+  const redlineRect = worldRectToImageRect(
+    worldRect, refScale, referenceMeta.width!, referenceMeta.height!,
+  );
+  const collisionRect = worldRectToImageRect(
+    worldRect, pngScale, metadata.width!, metadata.height!,
+  );
+  const panelHeight = Math.max(1, Math.round(
+    zonePanelWidth * (worldRect.bottom - worldRect.top) / (worldRect.right - worldRect.left),
+  ));
+  const collisionSvg = makeOverlaySvg(
+    grid, collisionRect.width, collisionRect.height,
+    pngScale.x, pngScale.y, '#ff1744', 0.32, false,
+    collisionRect.left, collisionRect.top,
+  );
+  const [sourceCrop, redlineCrop, collisionCrop] = await Promise.all([
+    sharp(sourceArtPath).extract(sourceArtRect)
+      .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+    sharp(referencePath).extract(redlineRect)
+      .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+    sharp(mapPath).extract(collisionRect).composite([{ input: collisionSvg }])
+      .resize({ width: zonePanelWidth, height: panelHeight, kernel: 'nearest' }).png().toBuffer(),
+  ]);
+  const canvasWidth = zonePanelWidth * 3 + zoneGap * 2;
+  const headerSvg = Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="' + canvasWidth + '" height="' + zoneHeaderHeight + '">' +
+    '<rect width="100%" height="100%" fill="#101820"/>' +
+    '<text x="12" y="31" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffffff">' + zone.id + ' — ORIGINAL SOURCE ART</text>' +
+    '<text x="' + (zonePanelWidth + zoneGap + 12) + '" y="31" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffffff">RED-LINE REFERENCE</text>' +
+    '<text x="' + ((zonePanelWidth + zoneGap) * 2 + 12) + '" y="31" font-family="sans-serif" font-size="18" font-weight="bold" fill="#ffffff">PRODUCTION COLLISION</text>' +
+    '</svg>',
+  );
+  const output = path.join(zoneReviewDir, 'zone-' + zone.id.toLowerCase() + '-source-redline-collision.png');
+  await sharp({
+    create: {
+      width: canvasWidth,
+      height: panelHeight + zoneHeaderHeight,
+      channels: 3,
+      background: '#101820',
+    },
+  }).composite([
+    { input: headerSvg, left: 0, top: 0 },
+    { input: sourceCrop, left: 0, top: zoneHeaderHeight },
+    { input: redlineCrop, left: zonePanelWidth + zoneGap, top: zoneHeaderHeight },
+    { input: collisionCrop, left: (zonePanelWidth + zoneGap) * 2, top: zoneHeaderHeight },
+  ]).png().toFile(output);
+  zoneReviewManifest.push({
+    id: zone.id,
+    label: zone.label,
+    worldRect,
+    sourceArtRect,
+    redlineRect,
+    collisionRect,
+    output: path.basename(output),
+  });
+}
+
+writeFileSync(path.join(zoneReviewDir, 'manifest.json'), JSON.stringify({
+  world: { width: MAP_W, height: MAP_H },
+  contextWorldPx: zoneReviewContextWorldPx,
+  sourceArt: {
+    path: 'attached_assets/1FE850B3-71D3-486E-BF8F-88B9E1132380_1783601827918.png',
+    width: sourceArtMetadata.width,
+    height: sourceArtMetadata.height,
+    scaleX: sourceArtScale.x,
+    scaleY: sourceArtScale.y,
+  },
+  redlineReference: {
+    path: 'attached_assets/IMG_2907_1783632830477.jpeg',
+    width: referenceMeta.width,
+    height: referenceMeta.height,
+    scaleX: refScale.x,
+    scaleY: refScale.y,
+  },
+  collisionOverlay: {
+    path: 'artifacts/telegram-game/public/map-hires.png',
+    width: metadata.width,
+    height: metadata.height,
+    scaleX: pngScale.x,
+    scaleY: pngScale.y,
+  },
+  zones: zoneReviewManifest,
+}, null, 2) + '\\n');
+
 console.log(JSON.stringify({
   collision: outputPath,
   shadow: outputShadowPath,
   vision: outputVisionPath,
   reference: referenceOutputPath,
   tileDirectory: tileDir,
+  zoneReviewDirectory: zoneReviewDir,
+  zoneReviewCount: zoneReviewManifest.length,
+  zoneReviewContextWorldPx,
   tileCount: visionSamples.length,
   detailCount: detailRegions.length,
   detailScale: detailScale + 'x',
