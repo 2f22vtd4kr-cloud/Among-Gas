@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import {
   COLLISION_CUTOVER_REQUIRED_ANCHORS,
   COLLISION_CUTOVER_REQUIRED_REGIONS,
+  COLLISION_CUTOVER_REQUIRED_ASSET_PATHS,
+  COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
   validateCollisionCutoverEvidence,
   type CollisionCutoverEvidence,
 } from "../lib/shared/src/collision/releaseReadiness.js";
@@ -105,28 +107,17 @@ const completeEvidence: CollisionCutoverEvidence = {
     license: "Written commercial-use permission",
     evidenceSha256: rightsDigest,
     inventoryPath: "docs/asset-provenance-inventory.md",
-    inventorySha256: "1".repeat(64),
-    inventoriedAssetCount: 2,
-    perAssetClearances: [
-      {
-        assetPath: "attached_assets/map-source.png",
-        assetSha256: "2".repeat(64),
-        rightsHolder: "Map creator",
-        license: "Commercial written permission",
-        permissionEvidencePath: "evidence/asset-rights/map-source.pdf",
-        permissionEvidenceSha256: "3".repeat(64),
-        status: "cleared",
-      },
-      {
-        assetPath: "artifacts/telegram-game/public/map-hires.webp",
-        assetSha256: "4".repeat(64),
-        rightsHolder: "Map creator",
-        license: "Commercial written permission",
-        permissionEvidencePath: "evidence/asset-rights/map-hires.pdf",
-        permissionEvidenceSha256: "5".repeat(64),
-        status: "cleared",
-      },
-    ],
+    inventorySha256: COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
+    inventoriedAssetCount: COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length,
+    perAssetClearances: COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.map((assetPath, index) => ({
+      assetPath,
+      assetSha256: "2".repeat(64),
+      rightsHolder: "Map creator",
+      license: "Commercial written permission",
+      permissionEvidencePath: `evidence/asset-rights/${index + 1}.pdf`,
+      permissionEvidenceSha256: (index + 1).toString(16).padStart(64, "0"),
+      status: "cleared" as const,
+    })),
   },
   statuePlanterPedestal: {
     planter: {
@@ -249,7 +240,7 @@ assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
 const incompleteAssetRights = structuredClone(completeEvidence);
 incompleteAssetRights.assetRights.perAssetClearances.pop();
 assert.ok(validateCollisionCutoverEvidence(incompleteAssetRights).some(error =>
-  error.includes("complete pinned asset-provenance inventory")),
+  error.includes("exact pinned 66-path asset-provenance inventory")),
   "one project-wide licence must not clear a missing asset-specific permission record");
 
 const duplicateAssetRights = structuredClone(completeEvidence);
@@ -271,6 +262,25 @@ unsafeAssetRights.assetRights.perAssetClearances[0].permissionEvidencePath =
 assert.ok(validateCollisionCutoverEvidence(unsafeAssetRights).some(error =>
   error.includes("written permission evidence")),
   "asset-specific rights evidence must remain in the controlled evidence bundle");
+
+const unknownAssetPath = structuredClone(completeEvidence);
+unknownAssetPath.assetRights.perAssetClearances[0].assetPath = "attached_assets/not-in-pinned-inventory.png";
+assert.ok(validateCollisionCutoverEvidence(unknownAssetPath).some(error =>
+  error.includes("exact path in the pinned")),
+  "an arbitrary replacement path must not satisfy the pinned retained-asset inventory");
+
+const staleInventoryDigest = structuredClone(completeEvidence);
+staleInventoryDigest.assetRights.inventorySha256 = "9".repeat(64);
+assert.ok(validateCollisionCutoverEvidence(staleInventoryDigest).some(error =>
+  error.includes("exact pinned 66-path asset-provenance inventory")),
+  "the rights dossier must bind the exact current inventory bytes, not an arbitrary digest");
+
+const reusedPermissionDigest = structuredClone(completeEvidence);
+reusedPermissionDigest.assetRights.perAssetClearances[1].permissionEvidenceSha256 =
+  reusedPermissionDigest.assetRights.perAssetClearances[0].permissionEvidenceSha256;
+assert.ok(validateCollisionCutoverEvidence(reusedPermissionDigest).some(error =>
+  error.includes("distinct written permission evidence digest")),
+  "each retained asset must have its own permission evidence digest");
 
 const missingPhysicalDevices = structuredClone(completeEvidence);
 missingPhysicalDevices.physicalDeviceAcceptance = [];
