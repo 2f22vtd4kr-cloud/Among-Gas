@@ -20,7 +20,7 @@ try {
   );
   await assert.rejects(
     writeEvidenceOutput(root, ".git/config", "unsafe"),
-    /beneath artifacts\\/release-evidence/,
+    /beneath artifacts\/release-evidence/,
     "the output override must not write into repository control files",
   );
 
