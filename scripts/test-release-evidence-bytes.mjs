@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, mkdir, writeFile, symlink, link, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { test } from "node:test";
 import { verifyEvidenceDossier } from "./verify-release-evidence-bytes.mjs";
 
 const candidate = "a".repeat(40);
