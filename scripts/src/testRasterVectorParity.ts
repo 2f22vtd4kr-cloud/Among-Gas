@@ -73,7 +73,7 @@ assert.deepEqual(validateIndependentRedlineSource(redlineCandidate, "a".repeat(6
   "the canonical current-main red-line source and matching bytes should be accepted");
 
 const generatedSeed = structuredClone(redlineCandidate);
-delete (generatedSeed.source as Record<string, unknown>).authoring;
+delete (generatedSeed.source as unknown as Record<string, unknown>).authoring;
 assert.ok(validateIndependentRedlineSource(generatedSeed, "a".repeat(64)).some(error =>
   error.includes("manual-trace authoring records")),
   "a generated skeleton seed must not masquerade as a source-authored zone candidate");
