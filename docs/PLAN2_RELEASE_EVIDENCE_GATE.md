@@ -44,3 +44,10 @@ Every field ending in `Sha256` must have a sibling repository-relative file path
 The verifier reads each referenced file and recomputes SHA-256. It fails closed for absent/empty files, malformed digests, path traversal, absolute or non-canonical paths, symlinks in path components, hardlinks, file replacement detected during open/read, conflicting digests for one path, and stale candidate-commit bindings. It also compares the actual asset-inventory bytes with the pinned inventory digest. It does not authenticate human identities, prove legal rights, judge geometry, or create approvals. Those remain independently evidenced human decisions.
 
 The verifier is not a release pass until it is run against the complete real dossier and all evidence files from the exact candidate checkout. Test fixtures only exercise the verifier's rejection behaviour and are never valid release evidence.
+
+
+## Exhaustive object and parking inventories
+
+The release record now requires a byte-verifiable source-object inventory under `evidence/map-objects/source-object-inventory/`. Its JSON must contain an `objectIds` array, and the IDs must exactly equal the `sourceObjectIds` list in the dossier. Every inventoried object must have one accepted, independently reviewed record with its own evidence file and explicit `blocksMove`, `blocksSight`, `castsShadow`, and `shadowTreatment` fields. The statue planter and pedestal records must also appear in, and agree with, this exhaustive object inventory. This keeps movement, interaction sight, and presentation shadow as separate authored semantics.
+
+Parking lines likewise require a byte-verifiable JSON source inventory under `evidence/parking-lines/source-inventory/` containing `sourceLineIds`. The file's IDs must exactly match the dossier list, which in turn must reconcile one-to-one with the accepted line classifications. A caller-supplied list alone is not exhaustive-source evidence.
