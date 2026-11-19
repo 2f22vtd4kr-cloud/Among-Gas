@@ -269,6 +269,43 @@ const completeEvidence: CollisionCutoverEvidence = {
 assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
   "complete independent source, route, parity and visual evidence should satisfy the metadata gate");
 
+const missingObjectDisposition: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingObjectDisposition.authoredObjects.pop();
+assert.ok(validateCollisionCutoverEvidence(missingObjectDisposition).some(error =>
+  error.includes("Every source-inventoried map object requires exactly one")),
+  "every source-inventoried object needs its own disposition");
+
+const selfReviewedObject: CollisionCutoverEvidence = structuredClone(completeEvidence);
+selfReviewedObject.authoredObjects[0].reviewerName = selfReviewedObject.authoredObjects[0].authorName;
+assert.ok(validateCollisionCutoverEvidence(selfReviewedObject).some(error =>
+  error.includes("distinct source author and independent reviewer")),
+  "object-level vision/shadow review cannot be self-approved");
+
+const inferredShadow: CollisionCutoverEvidence = structuredClone(completeEvidence);
+inferredShadow.authoredObjects[0].castsShadow = true;
+assert.ok(validateCollisionCutoverEvidence(inferredShadow).some(error =>
+  error.includes("shadow flag and treatment")),
+  "shadow casting must be independently explicit and consistent with its treatment");
+
+const missingObjectInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingObjectInventory.sourceObjectInventoryPath = "";
+assert.ok(validateCollisionCutoverEvidence(missingObjectInventory).some(error =>
+  error.includes("exhaustive source-object inventory requires a byte-verifiable path")),
+  "object dispositions cannot pass without a hashed exhaustive source inventory");
+
+const statueOutsideInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+statueOutsideInventory.sourceObjectIds = ["another-object"];
+statueOutsideInventory.authoredObjects = [];
+assert.ok(validateCollisionCutoverEvidence(statueOutsideInventory).some(error =>
+  error.includes("dedicated planter/pedestal review must match")),
+  "the statue planter and pedestal must be included in the exhaustive object inventory");
+
+const missingParkingInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingParkingInventory.parkingLines.sourceInventoryPath = "";
+assert.ok(validateCollisionCutoverEvidence(missingParkingInventory).some(error =>
+  error.includes("Exhaustive parking-line source inventory requires a byte-verifiable path")),
+  "parking classifications must reconcile to a hashed source-line inventory");
+
 const incompleteAssetRights = structuredClone(completeEvidence);
 incompleteAssetRights.assetRights.perAssetClearances.pop();
 assert.ok(validateCollisionCutoverEvidence(incompleteAssetRights).some(error =>
