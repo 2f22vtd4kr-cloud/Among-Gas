@@ -38,7 +38,8 @@
     "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx",
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
     "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
-    "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts"
+    "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts",
+    "test:groq-evidence-output": "tsx ./src/testSafeEvidenceOutput.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
