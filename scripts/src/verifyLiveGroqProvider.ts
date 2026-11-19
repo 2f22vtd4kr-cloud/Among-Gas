@@ -106,9 +106,9 @@ async function main(): Promise<void> {
   // Persist only the exact expected token (and only on success), never the raw
   // provider response body. This creates a byte-verifiable response artifact
   // without retaining provider headers, unrelated completion text or secrets.
-  const outputSegments = outputPath.split(/[\\\\/]/);
-  const outputFile = outputSegments.pop()!;
-  const responseEvidencePath = [...outputSegments, outputFile.replace(/\.json$/i, "-response.json")].join("/");
+  const responseOutputSegments = outputPath.split(/[\\\\/]/);
+  const outputFile = responseOutputSegments.pop()!;
+  const responseEvidencePath = [...responseOutputSegments, outputFile.replace(/\.json$/i, "-response.json")].join("/");
   const responseEvidence = createGroqResponseEvidence({
     candidateCommit,
     model,
