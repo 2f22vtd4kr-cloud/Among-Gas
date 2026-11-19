@@ -165,9 +165,13 @@ Map art and collision are independent because world coordinates and the 2.0× sc
 
 ---
 
-## 8. CODE-LEVEL QA (no generated images)
+## 8. CODE-LEVEL QA AND SOURCE-ART REVIEW ARTIFACTS
 
-Keep the browser and geometry harnesses as assertion-only tests. Cover the HUD's six states, touch editor interactions, map transforms and tile lifecycle, source-backed collision/vision semantics, three-circle movement clearance, routes and client/server parity through DOM measurements, pixel/alpha metrics read directly from source assets, numeric geometry reports and test logs. Do not capture screenshots, render overlays, create image galleries or upload image artifacts. The owner will inspect the live game directly after the code is complete.
+Normal CI and browser tests remain assertion-only and screenshot-free. Cover the HUD's six states, touch editor interactions, map transforms and tile lifecycle, source-backed collision/vision semantics, three-circle movement clearance, routes and client/server parity through DOM measurements, pixel/alpha metrics read directly from source assets, numeric geometry reports and test logs. Keep browser screenshot capture and image export out of the normal `.github/workflows/ci.yml` gate.
+
+For collision authoring only, the separate `.github/workflows/collision-source-art-review.yml` workflow may render read-only diagnostic overlays and detailed crops from the canonical source map art and current production masks. It is isolated from normal CI, can be run manually, and uploads only a seven-day review artifact. It must never commit generated images, modify runtime assets, or change collision/vision/shadow geometry. The artifact must label raster-derived overlays as diagnostics, not authored or approved geometry.
+
+These crops support source-art inspection and reviewer discussion only. They do not substitute for source-author traces, independent review, design-owner decisions, commercial asset rights, physical-device acceptance, or release authorization. No deployment or publishing is part of this workflow.
 
 ---
 
