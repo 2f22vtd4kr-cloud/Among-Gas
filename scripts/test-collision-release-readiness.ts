@@ -104,6 +104,29 @@ const completeEvidence: CollisionCutoverEvidence = {
     rightsHolder: "Map asset rights holder",
     license: "Written commercial-use permission",
     evidenceSha256: rightsDigest,
+    inventoryPath: "docs/asset-provenance-inventory.md",
+    inventorySha256: "1".repeat(64),
+    inventoriedAssetCount: 2,
+    perAssetClearances: [
+      {
+        assetPath: "attached_assets/map-source.png",
+        assetSha256: "2".repeat(64),
+        rightsHolder: "Map creator",
+        license: "Commercial written permission",
+        permissionEvidencePath: "evidence/asset-rights/map-source.pdf",
+        permissionEvidenceSha256: "3".repeat(64),
+        status: "cleared",
+      },
+      {
+        assetPath: "artifacts/telegram-game/public/map-hires.webp",
+        assetSha256: "4".repeat(64),
+        rightsHolder: "Map creator",
+        license: "Commercial written permission",
+        permissionEvidencePath: "evidence/asset-rights/map-hires.pdf",
+        permissionEvidenceSha256: "5".repeat(64),
+        status: "cleared",
+      },
+    ],
   },
   statuePlanterPedestal: {
     planter: {
@@ -220,6 +243,32 @@ const completeEvidence: CollisionCutoverEvidence = {
 
 assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
   "complete independent source, route, parity and visual evidence should satisfy the metadata gate");
+
+const incompleteAssetRights = structuredClone(completeEvidence);
+incompleteAssetRights.assetRights.perAssetClearances.pop();
+assert.ok(validateCollisionCutoverEvidence(incompleteAssetRights).some(error =>
+  error.includes("complete pinned asset-provenance inventory")),
+  "one project-wide licence must not clear a missing asset-specific permission record");
+
+const duplicateAssetRights = structuredClone(completeEvidence);
+duplicateAssetRights.assetRights.perAssetClearances[1].assetPath =
+  duplicateAssetRights.assetRights.perAssetClearances[0].assetPath;
+assert.ok(validateCollisionCutoverEvidence(duplicateAssetRights).some(error =>
+  error.includes("duplicate asset path")),
+  "the rights inventory must contain one unique clearance per retained asset");
+
+const unresolvedAssetRights = structuredClone(completeEvidence);
+unresolvedAssetRights.assetRights.perAssetClearances[0].status = "unresolved";
+assert.ok(validateCollisionCutoverEvidence(unresolvedAssetRights).some(error =>
+  error.includes("asset-specific commercial rights clearance")),
+  "provenance inventory presence cannot substitute for commercial permission");
+
+const unsafeAssetRights = structuredClone(completeEvidence);
+unsafeAssetRights.assetRights.perAssetClearances[0].permissionEvidencePath =
+  "evidence/asset-rights/../../private/permission.pdf";
+assert.ok(validateCollisionCutoverEvidence(unsafeAssetRights).some(error =>
+  error.includes("written permission evidence")),
+  "asset-specific rights evidence must remain in the controlled evidence bundle");
 
 const missingPhysicalDevices = structuredClone(completeEvidence);
 missingPhysicalDevices.physicalDeviceAcceptance = [];
