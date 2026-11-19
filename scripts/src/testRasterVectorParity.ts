@@ -19,7 +19,14 @@ const redlineCandidate = {
   version: 1,
   mapW: 3224,
   mapH: 1858,
-  shapes: [],
+  shapes: Array.from({ length: 12 }, (_, index) => ({
+    id: "authored-zone-" + index,
+    points: [[index, 0], [index + 1, 0]] as [[number, number], [number, number]],
+    closed: false,
+    blocksMove: true,
+    blocksSight: false,
+    zone: "Z" + String(index + 1).padStart(2, "0"),
+  })),
   source: {
     kind: "redline-vector",
     generatorVersion: 2,
@@ -30,6 +37,19 @@ const redlineCandidate = {
       },
     },
     referenceImage: { width: 1359, height: 784 },
+    authoring: {
+      method: "manual-trace",
+      zones: Array.from({ length: 12 }, (_, index) => {
+        const zone = "Z" + String(index + 1).padStart(2, "0");
+        return {
+          zone,
+          authorName: "Source Author",
+          completedAt: "2026-11-18T10:00:00.000Z",
+          traceEvidencePath: `evidence/map-zones/${zone}/trace.json`,
+          traceEvidenceSha256: (index + 1).toString(16).padStart(64, "0"),
+        };
+      }),
+    },
     vectorization: {
       redPixelCount: 1,
       skeletonPixelCount: 1,
@@ -39,7 +59,10 @@ const redlineCandidate = {
       closedSolidCount: 0,
       openBoundaryCount: 1,
     },
-    shapeCounts: { total: 1 },
+    shapeCounts: { total: 12 },
+    zoneShapeCounts: Object.fromEntries(Array.from({ length: 12 }, (_, index) =>
+      ["Z" + String(index + 1).padStart(2, "0"), 1])),
+
   },
 } as Parameters<typeof validateIndependentRedlineSource>[0];
 
@@ -48,6 +71,37 @@ assert.ok(redlineSource && redlineSource.kind === "redline-vector");
 
 assert.deepEqual(validateIndependentRedlineSource(redlineCandidate, "a".repeat(64)), [],
   "the canonical current-main red-line source and matching bytes should be accepted");
+
+const generatedSeed = structuredClone(redlineCandidate);
+delete (generatedSeed.source as Record<string, unknown>).authoring;
+assert.ok(validateIndependentRedlineSource(generatedSeed, "a".repeat(64)).some(error =>
+  error.includes("manual-trace authoring records")),
+  "a generated skeleton seed must not masquerade as a source-authored zone candidate");
+
+const incompleteZoneAuthorship = structuredClone(redlineCandidate);
+(incompleteZoneAuthorship.source as any).authoring.zones.pop();
+assert.ok(validateIndependentRedlineSource(incompleteZoneAuthorship, "a".repeat(64)).some(error =>
+  error.includes("exactly twelve source-authored zone records")),
+  "all twelve canonical zones require a trace record");
+
+const duplicateZoneAuthorship = structuredClone(redlineCandidate);
+(duplicateZoneAuthorship.source as any).authoring.zones[11].zone = "Z01";
+assert.ok(validateIndependentRedlineSource(duplicateZoneAuthorship, "a".repeat(64)).some(error =>
+  error.includes("Z01: exactly one source-authored trace record")),
+  "duplicate zone traces cannot replace an omitted zone");
+
+const unsafeZoneEvidence = structuredClone(redlineCandidate);
+(unsafeZoneEvidence.source as any).authoring.zones[0].traceEvidencePath =
+  "evidence/map-zones/Z01/../../Z02/trace.json";
+assert.ok(validateIndependentRedlineSource(unsafeZoneEvidence, "a".repeat(64)).some(error =>
+  error.includes("zone-specific evidence bundle")),
+  "zone evidence cannot traverse into another zone's directory");
+
+const mismatchedZoneCounts = structuredClone(redlineCandidate);
+(mismatchedZoneCounts.source as any).zoneShapeCounts.Z01 = 0;
+assert.ok(validateIndependentRedlineSource(mismatchedZoneCounts, "a".repeat(64)).some(error =>
+  error.includes("recorded shape count does not match candidate geometry")),
+  "the source manifest's per-zone counts must match actual candidate shapes");
 const staleRedlineCandidate = {
   ...redlineCandidate,
   source: {
