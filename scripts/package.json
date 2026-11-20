@@ -39,7 +39,8 @@
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
     "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
     "verify:release-evidence-bytes": "node ./verify-release-evidence-bytes.mjs",
-    "test:release-evidence-bytes": "node --test ./test-release-evidence-bytes.mjs"
+    "test:release-evidence-bytes": "node --test ./test-release-evidence-bytes.mjs",
+    "verify:release-readiness": "tsx ./verify-release-readiness.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
