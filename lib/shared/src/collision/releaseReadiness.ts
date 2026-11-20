@@ -710,7 +710,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
     }
     const sourceIds = parking.sourceLineIds;
     const classifiedIds = parking.classifications.map(item => item?.id);
-    if (sourceIds.some(id => !nonEmpty(id)) || new Set(sourceIds).size !== sourceIds.length) errors.push("Parking source-line IDs must be non-empty and unique");
+    if (sourceIds.some(id => !nonEmpty(id) || !/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(id)) || new Set(sourceIds).size !== sourceIds.length) errors.push("Parking source-line IDs must be canonical, non-empty and unique");
     if (new Set(classifiedIds).size !== classifiedIds.length ||
         sourceIds.length !== classifiedIds.length ||
         sourceIds.some(id => !classifiedIds.includes(id))) errors.push("Every source-inventoried parking line must have exactly one classification");
