@@ -698,6 +698,12 @@ assert.ok(validateCollisionCutoverEvidence(parkingReviewChronology).some(error =
   error.includes("Parking line parking-marking-a: author/reviewer chronology is invalid")),
   "parking-line review cannot predate the author's completed classification");
 
+const unsafeParkingLineId: CollisionCutoverEvidence = structuredClone(completeEvidence);
+unsafeParkingLineId.parkingLines.sourceLineIds[0] = "../escape";
+assert.ok(validateCollisionCutoverEvidence(unsafeParkingLineId).some(error =>
+  error.includes("Parking source-line IDs must be canonical, non-empty and unique")),
+  "parking source IDs must not be usable as path fragments");
+
 const parkingEvidenceCrossLink: CollisionCutoverEvidence = structuredClone(completeEvidence);
 parkingEvidenceCrossLink.parkingLines.classifications[0].evidencePath =
   "evidence/parking-lines/parking-marking-b/source.json";
