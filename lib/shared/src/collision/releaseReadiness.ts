@@ -295,15 +295,18 @@ const nonEmpty = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
 const validDate = (value: unknown): value is string =>
   nonEmpty(value) && Number.isFinite(Date.parse(value));
-function safeAnchorEvidencePath(value: unknown, anchorId: string, channel: "movement" | "sight"): boolean {
-  if (!nonEmpty(value) || value.length > 512) return false;
-  const path = value.replace(/\\/g, "/");
-  return path.startsWith(`evidence/gameplay-anchors/${anchorId}/${channel}/`) &&
-    !path.startsWith("/") &&
-    !/^[a-z]:/i.test(path) &&
-    !path.split("/").some(part => part === "." || part === "..");
+function safeEvidenceBundlePath(value: unknown, prefix: string, maxLength = 1024): boolean {
+  if (!nonEmpty(value) || value.length > maxLength ||
+      /[\x00-\x1f\x7f]/.test(value) || value.includes("\\")) return false;
+  if (!value.startsWith(prefix) || value.startsWith("/") || /^[a-z]:/i.test(value)) return false;
+  const parts = value.split("/");
+  return parts.length > prefix.split("/").length &&
+    parts.every(part => part.length > 0 && part !== "." && part !== "..");
 }
 
+function safeAnchorEvidencePath(value: unknown, anchorId: string, channel: "movement" | "sight"): boolean {
+  return safeEvidenceBundlePath(value, "evidence/gameplay-anchors/" + anchorId + "/" + channel + "/", 512);
+}
 /**
  * Fail-closed evidence gate for a future vector-collision cut-over.
  * This validates review metadata and test attestations only; it does not
@@ -610,7 +613,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       errors.push(`${label}: valid author/reviewer chronology is required`);
     }
     if (object.disposition !== "accepted") errors.push(`${label}: independent review is not accepted`);
-    if (!object.evidencePath?.startsWith(`evidence/map-objects/statue-${key}/`) || object.evidencePath.includes("..")) errors.push(`${label}: source evidence must be in its object-specific bundle`);
+    if (!safeEvidenceBundlePath(object.evidencePath, "evidence/map-objects/statue-" + key + "/")) errors.push(label + ": source evidence must be in its object-specific bundle");
     if (!isSha256(object.evidenceSha256)) errors.push(`${label}: source-trace evidence SHA-256 is required`);
     if (typeof object.blocksMove !== "boolean" || typeof object.blocksSight !== "boolean" || typeof object.castsShadow !== "boolean") errors.push(`${label}: movement, sight and shadow semantics must each be explicit`);
     if (!["painted-art-only", "separate-occluder", "none"].includes(object.shadowTreatment)) errors.push(`${label}: decorative-shadow treatment must be explicit`);
@@ -626,9 +629,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       new Set(sourceObjectIds).size !== sourceObjectIds.length) {
     errors.push("A non-empty, unique source-authored object ID inventory is required");
   }
-  if (!nonEmpty(input.sourceObjectInventoryPath) ||
-      !input.sourceObjectInventoryPath.startsWith("evidence/map-objects/source-object-inventory/") ||
-      input.sourceObjectInventoryPath.split(/[\\\\/]/).some(part => part === "." || part === "..") ||
+  if (!safeEvidenceBundlePath(input.sourceObjectInventoryPath, "evidence/map-objects/source-object-inventory/") ||
       !isSha256(input.sourceObjectInventorySha256)) {
     errors.push("The exhaustive source-object inventory requires a byte-verifiable path and SHA-256");
   }
@@ -655,8 +656,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
         errors.push(`Map object ${object.objectId}: author/reviewer chronology is invalid`);
       }
       if (object.disposition !== "accepted") errors.push(`Map object ${object.objectId}: independent review is not accepted`);
-      if (!object.evidencePath?.startsWith(`evidence/map-objects/${object.objectId}/`) ||
-          object.evidencePath.split(/[\\\\/]/).some(part => part === "." || part === "..")) {
+      if (!safeEvidenceBundlePath(object.evidencePath, "evidence/map-objects/" + object.objectId + "/")) {
         errors.push(`Map object ${object.objectId}: evidence must be stored in its object-specific source bundle`);
       }
       if (!isSha256(object.evidenceSha256)) errors.push(`Map object ${object.objectId}: source evidence SHA-256 is required`);
@@ -681,7 +681,12 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       ? authoredObjects.filter(object => object?.objectId === statueObject.objectId)
       : [];
     if (!Array.isArray(sourceObjectIds) || !sourceObjectIds.includes(statueObject.objectId) ||
-        matching.length !== 1 || matching[0].evidencePath !== statueObject.evidencePath ||
+        matching.length !== 1 || matching[0].authorName !== statueObject.authorName ||
+        matching[0].authorCompletedAt !== statueObject.authorCompletedAt ||
+        matching[0].reviewerName !== statueObject.reviewerName ||
+        matching[0].reviewerReviewedAt !== statueObject.reviewerReviewedAt ||
+        matching[0].disposition !== statueObject.disposition ||
+        matching[0].evidencePath !== statueObject.evidencePath ||
         matching[0].evidenceSha256 !== statueObject.evidenceSha256 ||
         matching[0].blocksMove !== statueObject.blocksMove ||
         matching[0].blocksSight !== statueObject.blocksSight ||
@@ -696,9 +701,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       !Array.isArray(parking.classifications)) {
     errors.push("Complete source inventory and classification of parking-line markings is required");
   } else {
-    if (!nonEmpty(parking.sourceInventoryPath) ||
-        !parking.sourceInventoryPath.startsWith("evidence/parking-lines/source-inventory/") ||
-        parking.sourceInventoryPath.split(/[\\\\/]/).some(part => part === "." || part === "..") ||
+    if (!safeEvidenceBundlePath(parking.sourceInventoryPath, "evidence/parking-lines/source-inventory/") ||
         !isSha256(parking.sourceInventorySha256)) {
       errors.push("Exhaustive parking-line source inventory requires a byte-verifiable path and SHA-256");
     }
@@ -716,7 +719,7 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       if (!["paint-only", "physical-obstacle"].includes(item.classification)) errors.push(`Parking line ${item.id}: unresolved classification is not allowed`);
       if (!nonEmpty(item.authorName) || !nonEmpty(item.reviewerName) || item.authorName.trim().toLowerCase() === item.reviewerName.trim().toLowerCase()) errors.push(`Parking line ${item.id}: independent author/reviewer identities are required`);
       if (!validDate(item.reviewedAt)) errors.push(`Parking line ${item.id}: review date is required`);
-      if (!item.evidencePath?.startsWith(`evidence/parking-lines/`) || item.evidencePath.includes("..")) errors.push(`Parking line ${item.id}: evidence path must be inside the parking-line bundle`);
+      if (!safeEvidenceBundlePath(item.evidencePath, "evidence/parking-lines/")) errors.push("Parking line " + item.id + ": evidence path must be inside the parking-line bundle");
       if (!isSha256(item.evidenceSha256)) errors.push(`Parking line ${item.id}: source evidence SHA-256 is required`);
     }
     if (parking.walkabilityRegressionPassed !== true || !isSha256(parking.regressionEvidenceSha256)) errors.push("Named bidirectional parking-corridor full-footprint regression evidence is required");
