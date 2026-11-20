@@ -11,6 +11,7 @@ import {
 } from "../lib/shared/src/collision/releaseReadiness.js";
 import { MAP_AUTHORING_ZONES } from "../lib/shared/src/collision/mapZones.js";
 import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
+import { validateReleaseReadinessMetadata } from "./verify-release-readiness.js";
 
 const digest = "a".repeat(64);
 const sightDigest = "b".repeat(64);
@@ -270,6 +271,17 @@ const completeEvidence: CollisionCutoverEvidence = {
 
 assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
   "complete independent source, route, parity and visual evidence should satisfy the metadata gate");
+
+assert.deepEqual(
+  validateReleaseReadinessMetadata(completeEvidence, "a".repeat(40), "a".repeat(40)),
+  [],
+  "the combined release command should accept complete metadata bound to the current checkout",
+);
+assert.ok(
+  validateReleaseReadinessMetadata(completeEvidence, "a".repeat(40), "b".repeat(40))
+    .some(error => error.includes("Candidate commit must equal the current clean checkout HEAD")),
+  "the combined release command must reject a dossier tested against a different checkout commit",
+);
 
 const missingObjectDisposition: CollisionCutoverEvidence = structuredClone(completeEvidence);
 missingObjectDisposition.authoredObjects.pop();
