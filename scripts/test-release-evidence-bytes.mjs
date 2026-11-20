@@ -4,7 +4,7 @@ import { mkdtemp, mkdir, writeFile, symlink, link, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { verifyEvidenceDossier } from "./verify-release-evidence-bytes.mjs";
+import { resolveSafeDossierPath, verifyEvidenceDossier } from "./verify-release-evidence-bytes.mjs";
 
 const candidate = "a".repeat(40);
 const bytes = Buffer.from("independent release evidence\n");
@@ -44,6 +44,19 @@ async function fixture(t) {
   };
   return { root, dossier };
 }
+
+
+test("rejects a dossier reached through a symlinked parent directory", async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "among-gas-dossier-path-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, "real"), { recursive: true });
+  await writeFile(path.join(root, "real", "dossier.json"), "{}\\n");
+  await symlink(path.join(root, "real"), path.join(root, "linked"), "dir");
+  await assert.rejects(
+    resolveSafeDossierPath(root, "linked/dossier.json"),
+    /symlink component/,
+  );
+});
 
 test("verifies real file bytes and exact candidate commit", async t => {
   const { root, dossier } = await fixture(t);
