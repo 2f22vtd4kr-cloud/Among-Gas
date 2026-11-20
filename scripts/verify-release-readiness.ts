@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { lstat, open, realpath } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateCollisionCutoverEvidence } from "../lib/shared/src/collision/releaseReadiness.js";
 
 const COMMIT = /^[a-f0-9]{40}$/i;
@@ -20,7 +20,7 @@ function inside(root: string, candidate: string): boolean {
 
 function safeRelativePath(value: unknown): value is string {
   if (typeof value !== "string" || !value || value.length > 1024 ||
-      value.includes("\\0") || value.includes("\\\\") || value.startsWith("/") ||
+      value.includes("\0") || value.includes("\\") || value.startsWith("/") ||
       /^[a-z]:/i.test(value)) return false;
   return value.split("/").every(part => part.length > 0 && part !== "." && part !== "..");
 }
@@ -87,7 +87,7 @@ export function validateReleaseReadinessMetadata(
   }
   if (!COMMIT.test(checkoutHead) || !COMMIT.test(candidateCommit) ||
       checkoutHead.toLowerCase() !== candidateCommit.toLowerCase()) {
-    errors.push("Candidate commit must equal the current clean checkout HEAD");
+    errors.push("Candidate commit must equal the current checkout HEAD");
   }
   return [...new Set(errors)];
 }
@@ -109,7 +109,7 @@ function parseArgs(argv: string[]): { dossier: string; candidateCommit: string; 
   return {
     dossier: options["--dossier"],
     candidateCommit: options["--candidate-commit"],
-    root: path.resolve(options["--root"] ?? path.resolve(path.dirname(new URL(import.meta.url).pathname), "..")),
+    root: path.resolve(options["--root"] ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")),
   };
 }
 
