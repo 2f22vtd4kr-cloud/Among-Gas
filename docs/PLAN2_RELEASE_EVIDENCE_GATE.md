@@ -32,16 +32,18 @@ The physical iOS/Android/Telegram run protocol is documented in [PHYSICAL_DEVICE
 
 ## Byte-level evidence verification (separate from metadata validation)
 
-The metadata validator deliberately remains pure and does not read files. A release candidate must additionally pass the independent Node verifier:
+The metadata validator deliberately remains pure and does not read files. The combined release command runs that validator, confirms the candidate SHA equals the current clean checkout HEAD, then runs the independent byte verifier against every referenced file. Use this combined command for the release gate:
 
 ```sh
 pnpm --filter @workspace/scripts run test:release-evidence-bytes
-pnpm --filter @workspace/scripts run verify:release-evidence-bytes -- --dossier artifacts/release-evidence/release-dossier.json --candidate-commit <full-40-character-commit-sha> --root ..
+pnpm --filter @workspace/scripts run verify:release-readiness -- --dossier artifacts/release-evidence/release-dossier.json --candidate-commit <full-40-character-commit-sha> --root ..
 ```
+
+The lower-level `verify:release-evidence-bytes` command remains available for byte-integrity diagnostics only; it does not replace the combined metadata + byte-integrity gate.
 
 Every field ending in `Sha256` must have a sibling repository-relative file path. The conventional pair is `evidenceSha256` / `evidencePath`; explicit pairs include `sampleSetSha256` / `sampleSetPath`, `responseEvidenceSha256` / `responseEvidencePath`, `movementEvidenceSha256` / `movementEvidencePath`, `sightEvidenceSha256` / `sightEvidencePath`, `regressionEvidenceSha256` / `regressionEvidencePath`, `permissionEvidenceSha256` / `permissionEvidencePath`, and `inventorySha256` / `inventoryPath`. The map source, transform, AI source/candidate/prompt/parameters/QA report, parity channels, physical-device records and final dossier likewise require their corresponding file paths.
 
-The verifier reads each referenced file and recomputes SHA-256. It fails closed for absent/empty files, malformed digests, path traversal, absolute or non-canonical paths, symlinks in path components, hardlinks, file replacement detected during open/read, conflicting digests for one path, and stale candidate-commit bindings. It also compares the actual asset-inventory bytes with the pinned inventory digest. It does not authenticate human identities, prove legal rights, judge geometry, or create approvals. Those remain independently evidenced human decisions.
+The combined command reads the dossier without following symlinked parent paths, verifies its candidate is the current checkout HEAD, then reads each referenced evidence file and recomputes SHA-256. It fails closed for absent/empty files, malformed digests, path traversal, absolute or non-canonical paths, symlinks in path components, hardlinks, file replacement detected during open/read, conflicting digests for one path, and stale candidate-commit bindings. It also compares the actual asset-inventory bytes with the pinned inventory digest. It does not authenticate human identities, prove legal rights, judge geometry, or create approvals. Those remain independently evidenced human decisions.
 
 The verifier is not a release pass until it is run against the complete real dossier and all evidence files from the exact candidate checkout. Test fixtures only exercise the verifier's rejection behaviour and are never valid release evidence.
 
