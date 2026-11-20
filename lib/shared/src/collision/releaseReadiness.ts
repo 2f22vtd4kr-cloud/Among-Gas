@@ -79,8 +79,9 @@ export interface ParkingLineClassification {
   evidencePath: string;
   evidenceSha256: string;
   authorName: string;
+  authorCompletedAt: string;
   reviewerName: string;
-  reviewedAt: string;
+  reviewerReviewedAt: string;
   disposition: "accepted" | "changes-requested" | "unresolved";
 }
 
@@ -720,8 +721,12 @@ export function validateCollisionCutoverEvidence(value: unknown): string[] {
       if (item.classification === "physical-obstacle" && item.blocksMove !== true) errors.push(`Parking line ${item.id}: physical obstacle must have an explicit movement blocker`);
       if (!["paint-only", "physical-obstacle"].includes(item.classification)) errors.push(`Parking line ${item.id}: unresolved classification is not allowed`);
       if (!nonEmpty(item.authorName) || !nonEmpty(item.reviewerName) || item.authorName.trim().toLowerCase() === item.reviewerName.trim().toLowerCase()) errors.push(`Parking line ${item.id}: independent author/reviewer identities are required`);
-      if (!validDate(item.reviewedAt)) errors.push(`Parking line ${item.id}: review date is required`);
-      if (!safeEvidenceBundlePath(item.evidencePath, "evidence/parking-lines/")) errors.push("Parking line " + item.id + ": evidence path must be inside the parking-line bundle");
+      if (!validDate(item.authorCompletedAt) || !validDate(item.reviewerReviewedAt) ||
+          (validDate(item.authorCompletedAt) && validDate(item.reviewerReviewedAt) &&
+           Date.parse(item.reviewerReviewedAt) < Date.parse(item.authorCompletedAt))) {
+        errors.push(`Parking line ${item.id}: author/reviewer chronology is invalid`);
+      }
+      if (!safeEvidenceBundlePath(item.evidencePath, "evidence/parking-lines/" + item.id + "/")) errors.push("Parking line " + item.id + ": evidence path must be inside its line-specific source bundle");
       if (!isSha256(item.evidenceSha256)) errors.push(`Parking line ${item.id}: source evidence SHA-256 is required`);
     }
     if (parking.walkabilityRegressionPassed !== true || !isSha256(parking.regressionEvidenceSha256)) errors.push("Named bidirectional parking-corridor full-footprint regression evidence is required");
