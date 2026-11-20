@@ -81,6 +81,9 @@ jobs:
       - name: Test extracted contextual HUD action selection and disable rules
         run: pnpm --filter @workspace/scripts run test:game-action-state
 
+      - name: Verify live Groq evidence output cannot escape the checkout
+        run: pnpm --filter @workspace/scripts run test:groq-evidence-output
+
       - name: Test shared keyboard and joystick movement input contracts
         run: pnpm --filter @workspace/scripts run test:game-input
 
