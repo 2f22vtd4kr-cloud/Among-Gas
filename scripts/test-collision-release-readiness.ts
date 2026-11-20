@@ -667,4 +667,31 @@ const wrongZoneScaffold = structuredClone(validScaffold);
 assert.ok(validateZoneReviewRecord(wrongZoneScaffold, "Z02").some(error => error.includes("24 world-pixel seam context")),
   "a Z01 crop must not be reused as Z02 source evidence");
 
+
+const statueReviewIdentityMismatch: CollisionCutoverEvidence = structuredClone(completeEvidence);
+statueReviewIdentityMismatch.statuePlanterPedestal.planter.reviewerName = "Different Reviewer";
+assert.ok(validateCollisionCutoverEvidence(statueReviewIdentityMismatch).some(error =>
+  error.includes("dedicated planter/pedestal review must match the exhaustive per-object inventory")),
+  "statue-specific review must match the same author, reviewer, chronology and disposition as the exhaustive object inventory");
+
+const objectPathAlias: CollisionCutoverEvidence = structuredClone(completeEvidence);
+objectPathAlias.authoredObjects[0].evidencePath = "evidence/map-objects/statue-planter//trace.json";
+assert.ok(validateCollisionCutoverEvidence(objectPathAlias).some(error =>
+  error.includes("evidence must be stored in its object-specific source bundle")),
+  "object evidence paths must reject repeated separators and non-canonical aliases");
+
+const parkingPathBackslash: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingPathBackslash.parkingLines.classifications[0].evidencePath =
+  "evidence/parking-lines\\\\paint-only.json";
+assert.ok(validateCollisionCutoverEvidence(parkingPathBackslash).some(error =>
+  error.includes("evidence path must be inside the parking-line bundle")),
+  "parking evidence paths must reject backslash-based path aliases");
+
+const parkingInventoryAlias: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingInventoryAlias.parkingLines.sourceInventoryPath =
+  "evidence/parking-lines/source-inventory//lines.json";
+assert.ok(validateCollisionCutoverEvidence(parkingInventoryAlias).some(error =>
+  error.includes("Exhaustive parking-line source inventory requires a byte-verifiable path")),
+  "parking source inventory paths must be canonical and namespace-bound");
+
 console.log("COLLISION CUTOVER READINESS TESTS PASSED: 12 zones, 24 anchors, 5 disconnected regions, independent approvals and separate movement/sight/shadow evidence");
