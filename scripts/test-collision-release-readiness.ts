@@ -669,7 +669,10 @@ assert.ok(validateZoneReviewRecord(wrongZoneScaffold, "Z02").some(error => error
 
 
 const statueReviewIdentityMismatch: CollisionCutoverEvidence = structuredClone(completeEvidence);
-statueReviewIdentityMismatch.statuePlanterPedestal.planter.reviewerName = "Different Reviewer";
+statueReviewIdentityMismatch.statuePlanterPedestal.planter = {
+  ...statueReviewIdentityMismatch.statuePlanterPedestal.planter,
+  reviewerName: "Different Reviewer",
+};
 assert.ok(validateCollisionCutoverEvidence(statueReviewIdentityMismatch).some(error =>
   error.includes("dedicated planter/pedestal review must match the exhaustive per-object inventory")),
   "statue-specific review must match the same author, reviewer, chronology and disposition as the exhaustive object inventory");
