@@ -281,7 +281,7 @@ assert.deepEqual(
 );
 assert.ok(
   validateReleaseReadinessMetadata(completeEvidence, "a".repeat(40), "b".repeat(40))
-    .some(error => error.includes("Candidate commit must equal the current clean checkout HEAD")),
+    .some(error => error.includes("Candidate commit must equal the current checkout HEAD")),
   "the combined release command must reject a dossier tested against a different checkout commit",
 );
 
