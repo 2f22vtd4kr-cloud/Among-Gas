@@ -689,7 +689,7 @@ const parkingPathBackslash: CollisionCutoverEvidence = structuredClone(completeE
 parkingPathBackslash.parkingLines.classifications[0].evidencePath =
   "evidence/parking-lines\\\\paint-only.json";
 assert.ok(validateCollisionCutoverEvidence(parkingPathBackslash).some(error =>
-  error.includes("evidence path must be inside the parking-line bundle")),
+  error.includes("evidence path must be inside its line-specific source bundle")),
   "parking evidence paths must reject backslash-based path aliases");
 
 const parkingReviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
