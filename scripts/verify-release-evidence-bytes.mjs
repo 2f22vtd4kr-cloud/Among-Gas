@@ -109,6 +109,32 @@ function collectDigestReferences(value, at = "$", refs = [], errors = []) {
   return { refs, errors };
 }
 
+export async function resolveSafeDossierPath(root, relativePath) {
+  if (!safeRelativePath(relativePath)) {
+    throw new Error("--dossier must be a safe repository-relative path beneath --root");
+  }
+  const canonicalRoot = await realpath(root);
+  let cursor = canonicalRoot;
+  const parts = relativePath.split("/");
+  for (let index = 0; index < parts.length; index += 1) {
+    cursor = path.join(cursor, parts[index]);
+    const info = await lstat(cursor);
+    if (info.isSymbolicLink()) throw new Error("dossier path contains a symlink component");
+    if (index < parts.length - 1 && !info.isDirectory()) {
+      throw new Error("dossier parent path component is not a directory");
+    }
+  }
+  const resolved = await realpath(cursor);
+  if (!inside(canonicalRoot, resolved) || resolved !== cursor) {
+    throw new Error("dossier path resolves outside the verification root or is aliased");
+  }
+  const info = await lstat(cursor);
+  if (!info.isFile() || info.nlink !== 1) {
+    throw new Error("dossier must be a regular, non-linked file");
+  }
+  return { path: cursor, info };
+}
+
 export async function verifyEvidenceDossier({
   dossier,
   root = process.cwd(),
@@ -243,23 +269,18 @@ async function main() {
       throw new Error("verification root must be a real directory, not a symlink");
     }
     const rootPath = await realpath(rootArgument);
-    if (!safeRelativePath(args["--dossier"])) {
-      throw new Error("--dossier must be a safe repository-relative path beneath --root");
-    }
-    const dossierPath = path.resolve(rootPath, args["--dossier"]);
-    if (!inside(rootPath, dossierPath)) throw new Error("dossier path escapes verification root");
-    const dossierInfo = await lstat(dossierPath);
-    if (dossierInfo.isSymbolicLink() || !dossierInfo.isFile() || dossierInfo.nlink !== 1) {
-      throw new Error("dossier must be a regular, non-linked file");
-    }
+    const { path: dossierPath, info: dossierInfo } =
+      await resolveSafeDossierPath(rootPath, args["--dossier"]);
     const dossierHandle = await open(dossierPath, fsConstants.O_RDONLY | (fsConstants.O_NOFOLLOW ?? 0));
     let dossier;
     try {
       const openedInfo = await dossierHandle.stat();
       const pathInfo = await lstat(dossierPath);
+      const openedRealPath = await realpath(dossierPath);
       if (openedInfo.ino !== dossierInfo.ino || openedInfo.dev !== dossierInfo.dev ||
-          pathInfo.isSymbolicLink() || pathInfo.ino !== openedInfo.ino || pathInfo.dev !== openedInfo.dev) {
-        throw new Error("dossier file identity changed during secure open");
+          pathInfo.isSymbolicLink() || pathInfo.ino !== openedInfo.ino || pathInfo.dev !== openedInfo.dev ||
+          openedRealPath !== dossierPath || !inside(rootPath, openedRealPath)) {
+        throw new Error("dossier file identity or parent path changed during secure open");
       }
       dossier = JSON.parse(await dossierHandle.readFile("utf8"));
     } finally {
