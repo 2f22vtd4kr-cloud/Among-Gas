@@ -40,7 +40,9 @@
     "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
     "verify:release-evidence-bytes": "node ./verify-release-evidence-bytes.mjs",
     "test:release-evidence-bytes": "node --test ./test-release-evidence-bytes.mjs",
-    "verify:release-readiness": "tsx ./verify-release-readiness.ts"
+    "verify:release-readiness": "tsx ./verify-release-readiness.ts",
+    "verify:groq-live": "tsx ./src/verifyLiveGroqProvider.ts",
+    "test:groq-evidence-output": "tsx ./src/testSafeEvidenceOutput.ts && tsx ./src/testGroqEvidence.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",
