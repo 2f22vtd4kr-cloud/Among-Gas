@@ -25,7 +25,7 @@ function safeRelativePath(value: unknown): value is string {
   return value.split("/").every(part => part.length > 0 && part !== "." && part !== "..");
 }
 
-async function readDossierSafely(root: string, relativePath: string): Promise<unknown> {
+export async function readDossierSafely(root: string, relativePath: string): Promise<unknown> {
   if (!safeRelativePath(relativePath)) {
     throw new Error("--dossier must be a canonical repository-relative path");
   }
