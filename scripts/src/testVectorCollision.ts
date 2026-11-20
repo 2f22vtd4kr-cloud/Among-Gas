@@ -201,12 +201,25 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
     version: 1,
     mapW: 200,
     mapH: 200,
-    shapes: [strokedWall],
+    shapes: [{ ...strokedWall, zone: "Z01" }],
     source: {
       kind: "redline-vector",
       generatorVersion: 1,
       sourceFiles: { reference: { path: "reference/redline.jpeg", sha256: "a".repeat(64) } },
       referenceImage: { width: 1359, height: 784 },
+      authoring: {
+        method: "manual-trace",
+        zones: Array.from({ length: 12 }, (_, index) => {
+          const zone = "Z" + String(index + 1).padStart(2, "0");
+          return {
+            zone,
+            authorName: "Test Author",
+            completedAt: "2026-11-18T10:00:00.000Z",
+            traceEvidencePath: `evidence/map-zones/${zone}/trace.json`,
+            traceEvidenceSha256: (index + 1).toString(16).padStart(64, "0"),
+          };
+        }),
+      },
       vectorization: {
         redPixelCount: 100,
         skeletonPixelCount: 80,
@@ -217,6 +230,10 @@ function contains(point: Point, polygon: readonly Point[]): boolean {
         openBoundaryCount: 1,
       },
       shapeCounts: { total: 1 },
+      zoneShapeCounts: Object.fromEntries(Array.from({ length: 12 }, (_, index) => [
+        "Z" + String(index + 1).padStart(2, "0"),
+        index === 0 ? 1 : 0,
+      ])),
     },
   };
   assert.deepEqual(validateCollisionDocument(redlineDocument), [],
