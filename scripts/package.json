@@ -15,7 +15,7 @@
     "test:character-atlas": "tsx ./test-character-atlas.ts",
     "test:character-atlas-browser": "tsx ./test-character-atlas-browser.mjs",
     "test:telegram-start-param": "tsx ./test-telegram-start-param.ts",
-    "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./src/testRasterVectorParity.ts && tsx ./test-collision-release-readiness.ts && tsx ./test-disconnected-region-review.ts",
+    "test:vector-collision": "tsx ./src/testVectorCollision.ts && tsx ./src/testRasterVectorParity.ts && tsx ./test-collision-release-readiness.ts && tsx ./test-disconnected-region-review.ts && node --test ./test-release-evidence-bytes.mjs",
     "test:vector-collision-editor-api": "node ./test-vector-collision-editor-api.mjs",
     "build:map-tiles": "tsx src/buildMapTiles.ts",
     "test:map-tiles": "tsx src/testMapTiles.ts",
@@ -37,7 +37,10 @@
     "test:emergency-button": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameEmergencyMeetingButton.test.tsx",
     "test:meeting-overlay": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMeetingOverlay.test.tsx",
     "test:game-minimap": "pnpm --filter @workspace/telegram-game exec tsx src/components/GameMiniMapOverlay.test.tsx",
-    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts"
+    "measure:raster-vector-parity": "tsx ./src/measureRasterVectorParity.ts",
+    "verify:release-evidence-bytes": "node ./verify-release-evidence-bytes.mjs",
+    "test:release-evidence-bytes": "node --test ./test-release-evidence-bytes.mjs",
+    "verify:release-readiness": "tsx ./verify-release-readiness.ts"
   },
   "devDependencies": {
     "@types/node": "catalog:",

@@ -1,12 +1,19 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   COLLISION_CUTOVER_REQUIRED_ANCHORS,
   COLLISION_CUTOVER_REQUIRED_REGIONS,
+  COLLISION_CUTOVER_REQUIRED_ASSET_PATHS,
+  COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
   validateCollisionCutoverEvidence,
   type CollisionCutoverEvidence,
 } from "../lib/shared/src/collision/releaseReadiness.js";
 import { MAP_AUTHORING_ZONES } from "../lib/shared/src/collision/mapZones.js";
 import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
+import { readDossierSafely, validateReleaseReadinessMetadata } from "./verify-release-readiness.js";
 
 const digest = "a".repeat(64);
 const sightDigest = "b".repeat(64);
@@ -15,6 +22,25 @@ const losDigest = "d".repeat(64);
 const visionDigest = "e".repeat(64);
 const shadowDigest = "f".repeat(64);
 const sourceArtDigest = "1".repeat(64);
+
+const pinnedInventoryBytes = await readFile(new URL("../docs/asset-provenance-inventory.md", import.meta.url));
+const pinnedInventoryText = pinnedInventoryBytes.toString("utf8");
+assert.equal(
+  createHash("sha256").update(pinnedInventoryBytes).digest("hex"),
+  COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
+  "the pinned inventory digest must match the actual tracked inventory file bytes",
+);
+const pinnedInventorySection = pinnedInventoryText.split("## Full file inventory")[1];
+assert.ok(pinnedInventorySection, "the asset inventory must include its complete file list");
+const inventoryPaths = pinnedInventorySection.split(/\r?\n/).flatMap(line => {
+  const match = line.match(/^\| `([^`]+)` \| \d+ \| `[a-f0-9]{40}` \|/i);
+  return match ? [match[1]] : [];
+});
+assert.deepEqual(
+  inventoryPaths,
+  [...COLLISION_CUTOVER_REQUIRED_ASSET_PATHS],
+  "the pinned release-gate path set must match the full checked-in 66-file inventory exactly",
+);
 const transformDigest = "2".repeat(64);
 const rightsDigest = "3".repeat(64);
 const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
@@ -48,6 +74,37 @@ const approvedZones = MAP_AUTHORING_ZONES.map((zone) => ({
   },
   updatedAt: "2026-11-14T08:20:00.000Z",
 }));
+
+const objectDispositions = [
+  {
+    objectId: "statue-planter",
+    authorName: "Map Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
+    reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    disposition: "accepted",
+    evidencePath: "evidence/map-objects/statue-planter/trace.json",
+    evidenceSha256: "4".repeat(64),
+    blocksMove: true,
+    blocksSight: false,
+    castsShadow: false,
+    shadowTreatment: "painted-art-only",
+  },
+  {
+    objectId: "statue-pedestal",
+    authorName: "Map Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
+    reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    disposition: "accepted",
+    evidencePath: "evidence/map-objects/statue-pedestal/trace.json",
+    evidenceSha256: "5".repeat(64),
+    blocksMove: true,
+    blocksSight: true,
+    castsShadow: false,
+    shadowTreatment: "painted-art-only",
+  },
+] satisfies CollisionCutoverEvidence["authoredObjects"];
 
 const completeEvidence: CollisionCutoverEvidence = {
   candidateSha256: digest,
@@ -104,6 +161,108 @@ const completeEvidence: CollisionCutoverEvidence = {
     rightsHolder: "Map asset rights holder",
     license: "Written commercial-use permission",
     evidenceSha256: rightsDigest,
+    inventoryPath: "docs/asset-provenance-inventory.md",
+    inventorySha256: COLLISION_CUTOVER_REQUIRED_ASSET_INVENTORY_SHA256,
+    inventoriedAssetCount: COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.length,
+    perAssetClearances: COLLISION_CUTOVER_REQUIRED_ASSET_PATHS.map((assetPath, index) => ({
+      assetPath,
+      assetSha256: "2".repeat(64),
+      rightsHolder: "Map creator",
+      license: "Commercial written permission",
+      permissionEvidencePath: `evidence/asset-rights/${index + 1}.pdf`,
+      permissionEvidenceSha256: (index + 1).toString(16).padStart(64, "0"),
+      status: "cleared" as const,
+    })),
+  },
+  sourceObjectIds: objectDispositions.map(object => object.objectId),
+  sourceObjectInventoryPath: "evidence/map-objects/source-object-inventory/objects.json",
+  sourceObjectInventorySha256: digest,
+  authoredObjects: objectDispositions,
+  statuePlanterPedestal: {
+    planter: objectDispositions[0],
+    pedestal: objectDispositions[1],
+  },
+  parkingLines: {
+    sourceLineIds: ["parking-marking-a", "parking-marking-b"],
+    sourceInventoryPath: "evidence/parking-lines/source-inventory/lines.json",
+    sourceInventorySha256: digest,
+    classifications: [
+      {
+        id: "parking-marking-a",
+        classification: "paint-only",
+        blocksMove: false,
+        evidencePath: "evidence/parking-lines/parking-marking-a/source.json",
+        evidenceSha256: "6".repeat(64),
+        authorName: "Map Author",
+        authorCompletedAt: "2026-11-14T08:00:00.000Z",
+        reviewerName: "Independent Reviewer",
+        reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+        disposition: "accepted",
+      },
+      {
+        id: "parking-marking-b",
+        classification: "physical-obstacle",
+        blocksMove: true,
+        evidencePath: "evidence/parking-lines/parking-marking-b/source.json",
+        evidenceSha256: "7".repeat(64),
+        authorName: "Map Author",
+        authorCompletedAt: "2026-11-14T08:00:00.000Z",
+        reviewerName: "Independent Reviewer",
+        reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+        disposition: "accepted",
+      },
+    ],
+    walkabilityRegressionPassed: true,
+    regressionEvidenceSha256: "8".repeat(64),
+  },
+  aiMapRefinement: {
+    status: "approved",
+    model: "example-model",
+    modelVersion: "1.0",
+    sourceSha256: "9".repeat(64),
+    candidateSha256: "a".repeat(64),
+    promptSha256: "b".repeat(64),
+    parametersSha256: "c".repeat(64),
+    qaReportSha256: "d".repeat(64),
+    authorName: "Map Author",
+    authorCompletedAt: "2026-11-14T08:00:00.000Z",
+    reviewerName: "Independent Reviewer",
+    reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
+    ownerName: "Design Owner",
+    ownerApprovedAt: "2026-11-14T08:20:00.000Z",
+    ownerDisposition: "accepted",
+  },
+  physicalDeviceAcceptance: (["ios", "android", "telegram"] as const).map(platform => ({
+    platform,
+    deviceType: "physical" as const,
+    deviceModel: "Physical test device",
+    osVersion: "current",
+    appVersion: "release-candidate",
+    buildCommit: "a".repeat(40),
+    testerName: "Device Tester",
+    testedAt: "2026-11-14T08:30:00.000Z",
+    result: "passed" as const,
+    evidenceSha256: "e".repeat(64),
+  })),
+  liveGroqProvider: {
+    provider: "groq",
+    candidateCommit: "a".repeat(40),
+    model: "verified-live-model",
+    testerName: "Provider Tester",
+    testedAt: "2026-11-14T08:30:00.000Z",
+    scenario: "authenticated-session reconnect and provider response",
+    responseEvidenceSha256: "f".repeat(64),
+    sessionCredentialOnly: true,
+    passed: true,
+  },
+  releaseDossier: {
+    candidateCommit: "a".repeat(40),
+    createdAt: "2026-11-14T08:40:00.000Z",
+    authorName: "Release Author",
+    independentReviewerName: "Release Reviewer",
+    approvedAt: "2026-11-14T08:50:00.000Z",
+    decision: "approved",
+    evidenceSha256: "0".repeat(64),
   },
   visualReview: {
     allTwelveZonesInspected: true,
@@ -114,6 +273,165 @@ const completeEvidence: CollisionCutoverEvidence = {
 
 assert.deepEqual(validateCollisionCutoverEvidence(completeEvidence), [],
   "complete independent source, route, parity and visual evidence should satisfy the metadata gate");
+
+assert.deepEqual(
+  validateReleaseReadinessMetadata(completeEvidence, "a".repeat(40), "a".repeat(40)),
+  [],
+  "the combined release command should accept complete metadata bound to the current checkout",
+);
+assert.ok(
+  validateReleaseReadinessMetadata(completeEvidence, "a".repeat(40), "b".repeat(40))
+    .some(error => error.includes("Candidate commit must equal the current checkout HEAD")),
+  "the combined release command must reject a dossier tested against a different checkout commit",
+);
+
+const missingObjectDisposition: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingObjectDisposition.authoredObjects.pop();
+assert.ok(validateCollisionCutoverEvidence(missingObjectDisposition).some(error =>
+  error.includes("Every source-inventoried map object requires exactly one")),
+  "every source-inventoried object needs its own disposition");
+
+const selfReviewedObject: CollisionCutoverEvidence = structuredClone(completeEvidence);
+selfReviewedObject.authoredObjects[0].reviewerName = selfReviewedObject.authoredObjects[0].authorName;
+assert.ok(validateCollisionCutoverEvidence(selfReviewedObject).some(error =>
+  error.includes("distinct source author and independent reviewer")),
+  "object-level vision/shadow review cannot be self-approved");
+
+const inferredShadow: CollisionCutoverEvidence = structuredClone(completeEvidence);
+inferredShadow.authoredObjects[0].castsShadow = true;
+assert.ok(validateCollisionCutoverEvidence(inferredShadow).some(error =>
+  error.includes("shadow flag and treatment")),
+  "shadow casting must be independently explicit and consistent with its treatment");
+
+const missingObjectInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingObjectInventory.sourceObjectInventoryPath = "";
+assert.ok(validateCollisionCutoverEvidence(missingObjectInventory).some(error =>
+  error.includes("exhaustive source-object inventory requires a byte-verifiable path")),
+  "object dispositions cannot pass without a hashed exhaustive source inventory");
+
+const statueOutsideInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+statueOutsideInventory.sourceObjectIds = ["another-object"];
+statueOutsideInventory.authoredObjects = [];
+assert.ok(validateCollisionCutoverEvidence(statueOutsideInventory).some(error =>
+  error.includes("dedicated planter/pedestal review must match")),
+  "the statue planter and pedestal must be included in the exhaustive object inventory");
+
+const missingParkingInventory: CollisionCutoverEvidence = structuredClone(completeEvidence);
+missingParkingInventory.parkingLines.sourceInventoryPath = "";
+assert.ok(validateCollisionCutoverEvidence(missingParkingInventory).some(error =>
+  error.includes("Exhaustive parking-line source inventory requires a byte-verifiable path")),
+  "parking classifications must reconcile to a hashed source-line inventory");
+
+const incompleteAssetRights = structuredClone(completeEvidence);
+incompleteAssetRights.assetRights.perAssetClearances.pop();
+assert.ok(validateCollisionCutoverEvidence(incompleteAssetRights).some(error =>
+  error.includes("exact pinned 66-path asset-provenance inventory")),
+  "one project-wide licence must not clear a missing asset-specific permission record");
+
+const duplicateAssetRights = structuredClone(completeEvidence);
+duplicateAssetRights.assetRights.perAssetClearances[1].assetPath =
+  duplicateAssetRights.assetRights.perAssetClearances[0].assetPath;
+assert.ok(validateCollisionCutoverEvidence(duplicateAssetRights).some(error =>
+  error.includes("duplicate asset path")),
+  "the rights inventory must contain one unique clearance per retained asset");
+
+const unresolvedAssetRights = structuredClone(completeEvidence);
+unresolvedAssetRights.assetRights.perAssetClearances[0].status = "unresolved";
+assert.ok(validateCollisionCutoverEvidence(unresolvedAssetRights).some(error =>
+  error.includes("asset-specific commercial rights clearance")),
+  "provenance inventory presence cannot substitute for commercial permission");
+
+const unsafeAssetRights = structuredClone(completeEvidence);
+unsafeAssetRights.assetRights.perAssetClearances[0].permissionEvidencePath =
+  "evidence/asset-rights/../../private/permission.pdf";
+assert.ok(validateCollisionCutoverEvidence(unsafeAssetRights).some(error =>
+  error.includes("written permission evidence")),
+  "asset-specific rights evidence must remain in the controlled evidence bundle");
+
+const unknownAssetPath = structuredClone(completeEvidence);
+unknownAssetPath.assetRights.perAssetClearances[0].assetPath = "attached_assets/not-in-pinned-inventory.png";
+assert.ok(validateCollisionCutoverEvidence(unknownAssetPath).some(error =>
+  error.includes("exact path in the pinned")),
+  "an arbitrary replacement path must not satisfy the pinned retained-asset inventory");
+
+const staleInventoryDigest = structuredClone(completeEvidence);
+staleInventoryDigest.assetRights.inventorySha256 = "9".repeat(64);
+assert.ok(validateCollisionCutoverEvidence(staleInventoryDigest).some(error =>
+  error.includes("exact pinned 66-path asset-provenance inventory")),
+  "the rights dossier must bind the exact current inventory bytes, not an arbitrary digest");
+
+const malformedInventoryDigest = structuredClone(completeEvidence);
+(malformedInventoryDigest.assetRights as any).inventorySha256 = 123;
+assert.ok(validateCollisionCutoverEvidence(malformedInventoryDigest).some(error =>
+  error.includes("exact pinned 66-path asset-provenance inventory")),
+  "malformed inventory digest types must fail closed without throwing");
+
+const reusedPermissionDigest = structuredClone(completeEvidence);
+reusedPermissionDigest.assetRights.perAssetClearances[1].permissionEvidenceSha256 =
+  reusedPermissionDigest.assetRights.perAssetClearances[0].permissionEvidenceSha256;
+assert.ok(validateCollisionCutoverEvidence(reusedPermissionDigest).some(error =>
+  error.includes("distinct written permission evidence digest")),
+  "each retained asset must have its own permission evidence digest");
+
+const missingPhysicalDevices = structuredClone(completeEvidence);
+missingPhysicalDevices.physicalDeviceAcceptance = [];
+assert.ok(validateCollisionCutoverEvidence(missingPhysicalDevices).some(error => error.includes("Physical iOS, Android and Telegram")),
+  "CI browser tests must not stand in for physical-device acceptance");
+
+const emulatorDevice = structuredClone(completeEvidence);
+(emulatorDevice.physicalDeviceAcceptance[0] as any).deviceType = "emulator";
+assert.ok(validateCollisionCutoverEvidence(emulatorDevice).some(error => error.includes("deviceType must explicitly be physical")),
+  "an emulator or simulator cannot satisfy physical-device acceptance");
+
+const staleDeviceBuild = structuredClone(completeEvidence);
+staleDeviceBuild.physicalDeviceAcceptance[0].buildCommit = "b".repeat(40);
+assert.ok(validateCollisionCutoverEvidence(staleDeviceBuild).some(error => error.includes("tested build commit must match the final release candidate commit")),
+  "physical-device evidence must be bound to the exact release candidate commit");
+
+const staleGroqBuild = structuredClone(completeEvidence);
+staleGroqBuild.liveGroqProvider.candidateCommit = "b".repeat(40);
+assert.ok(validateCollisionCutoverEvidence(staleGroqBuild).some(error => error.includes("Live Groq provider verification must match the final release candidate commit")),
+  "live provider evidence must be bound to the same release candidate commit");
+
+const unresolvedPlanter = structuredClone(completeEvidence);
+unresolvedPlanter.statuePlanterPedestal.planter.disposition = "unresolved";
+assert.ok(validateCollisionCutoverEvidence(unresolvedPlanter).some(error => error.includes("statue planter: independent review is not accepted")),
+  "the planter contour must have its own independent source-trace review");
+
+const unclassifiedParking = structuredClone(completeEvidence);
+unclassifiedParking.parkingLines.classifications.pop();
+assert.ok(validateCollisionCutoverEvidence(unclassifiedParking).some(error => error.includes("Every source-inventoried parking line")),
+  "every inventoried parking marking must have exactly one explicit classification");
+
+const blockingPaint = structuredClone(completeEvidence);
+blockingPaint.parkingLines.classifications[0].blocksMove = true;
+assert.ok(validateCollisionCutoverEvidence(blockingPaint).some(error => error.includes("paint-only markings must remain walkable")),
+  "paint-only parking markings must not silently become collision blockers");
+
+const noAiCandidate = structuredClone(completeEvidence);
+noAiCandidate.aiMapRefinement.status = "not-generated";
+assert.ok(validateCollisionCutoverEvidence(noAiCandidate).some(error => error.includes("AI-assisted map refinement candidate")),
+  "an ungenerated AI refinement cannot satisfy the map-art gate");
+
+const selfApprovedAi = structuredClone(completeEvidence);
+selfApprovedAi.aiMapRefinement.ownerName = "Map Author";
+assert.ok(validateCollisionCutoverEvidence(selfApprovedAi).some(error => error.includes("distinct author, independent reviewer and design owner")),
+  "AI map refinement requires a separate owner decision");
+
+const noLiveGroq = structuredClone(completeEvidence);
+noLiveGroq.liveGroqProvider.passed = false;
+assert.ok(validateCollisionCutoverEvidence(noLiveGroq).some(error => error.includes("Live Groq provider verification must pass")),
+  "mocked provider tests cannot satisfy live Groq acceptance");
+
+const persistedGroqCredential = structuredClone(completeEvidence);
+persistedGroqCredential.liveGroqProvider.sessionCredentialOnly = false;
+assert.ok(validateCollisionCutoverEvidence(persistedGroqCredential).some(error => error.includes("session-only credentials")),
+  "provider acceptance must not require committing or persisting secrets");
+
+const unapprovedDossier = structuredClone(completeEvidence);
+unapprovedDossier.releaseDossier.decision = "pending";
+assert.ok(validateCollisionCutoverEvidence(unapprovedDossier).some(error => error.includes("Final release dossier and explicit release approval")),
+  "a completed CI run is not itself final release approval");
 
 const emptyErrors = validateCollisionCutoverEvidence({
   candidateSha256: digest,
@@ -364,5 +682,79 @@ assert.ok(validateZoneReviewRecord(clippedScaffold, "Z01").some(error => error.i
 const wrongZoneScaffold = structuredClone(validScaffold);
 assert.ok(validateZoneReviewRecord(wrongZoneScaffold, "Z02").some(error => error.includes("24 world-pixel seam context")),
   "a Z01 crop must not be reused as Z02 source evidence");
+
+
+const statueReviewIdentityMismatch: CollisionCutoverEvidence = structuredClone(completeEvidence);
+statueReviewIdentityMismatch.statuePlanterPedestal.planter = {
+  ...statueReviewIdentityMismatch.statuePlanterPedestal.planter,
+  reviewerName: "Different Reviewer",
+};
+assert.ok(validateCollisionCutoverEvidence(statueReviewIdentityMismatch).some(error =>
+  error.includes("dedicated planter/pedestal review must match the exhaustive per-object inventory")),
+  "statue-specific review must match the same author, reviewer, chronology and disposition as the exhaustive object inventory");
+
+const objectPathAlias: CollisionCutoverEvidence = structuredClone(completeEvidence);
+objectPathAlias.authoredObjects[0].evidencePath = "evidence/map-objects/statue-planter//trace.json";
+assert.ok(validateCollisionCutoverEvidence(objectPathAlias).some(error =>
+  error.includes("evidence must be stored in its object-specific source bundle")),
+  "object evidence paths must reject repeated separators and non-canonical aliases");
+
+const parkingPathBackslash: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingPathBackslash.parkingLines.classifications[0].evidencePath =
+  "evidence/parking-lines\\\\paint-only.json";
+assert.ok(validateCollisionCutoverEvidence(parkingPathBackslash).some(error =>
+  error.includes("evidence path must be inside its line-specific source bundle")),
+  "parking evidence paths must reject backslash-based path aliases");
+
+const parkingReviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingReviewChronology.parkingLines.classifications[0].reviewerReviewedAt = "2026-11-14T07:59:00.000Z";
+assert.ok(validateCollisionCutoverEvidence(parkingReviewChronology).some(error =>
+  error.includes("Parking line parking-marking-a: author/reviewer chronology is invalid")),
+  "parking-line review cannot predate the author's completed classification");
+
+const unsafeParkingLineId: CollisionCutoverEvidence = structuredClone(completeEvidence);
+unsafeParkingLineId.parkingLines.sourceLineIds[0] = "../escape";
+assert.ok(validateCollisionCutoverEvidence(unsafeParkingLineId).some(error =>
+  error.includes("Parking source-line IDs must be canonical, non-empty and unique")),
+  "parking source IDs must not be usable as path fragments");
+
+const parkingEvidenceCrossLink: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingEvidenceCrossLink.parkingLines.classifications[0].evidencePath =
+  "evidence/parking-lines/parking-marking-b/source.json";
+assert.ok(validateCollisionCutoverEvidence(parkingEvidenceCrossLink).some(error =>
+  error.includes("Parking line parking-marking-a: evidence path must be inside its line-specific source bundle")),
+  "parking-line evidence must remain bound to its own source-line identity");
+
+const parkingInventoryAlias: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingInventoryAlias.parkingLines.sourceInventoryPath =
+  "evidence/parking-lines/source-inventory//lines.json";
+assert.ok(validateCollisionCutoverEvidence(parkingInventoryAlias).some(error =>
+  error.includes("Exhaustive parking-line source inventory requires a byte-verifiable path")),
+  "parking source inventory paths must be canonical and namespace-bound");
+
+
+const secureDossierRoot = await mkdtemp(path.join(os.tmpdir(), "among-gas-release-dossier-"));
+try {
+  await mkdir(path.join(secureDossierRoot, "real"), { recursive: true });
+  await writeFile(path.join(secureDossierRoot, "real", "release.json"), JSON.stringify({ version: 1 }));
+  assert.deepEqual(
+    await readDossierSafely(secureDossierRoot, "real/release.json"),
+    { version: 1 },
+    "the combined release command must read a canonical dossier beneath its root",
+  );
+  await symlink(path.join(secureDossierRoot, "real"), path.join(secureDossierRoot, "linked"), "dir");
+  await assert.rejects(
+    readDossierSafely(secureDossierRoot, "linked/release.json"),
+    /symlink component/,
+    "the combined release command must reject symlinked dossier parents",
+  );
+  await assert.rejects(
+    readDossierSafely(secureDossierRoot, "../outside.json"),
+    /canonical repository-relative path/,
+    "the combined release command must reject dossier path traversal",
+  );
+} finally {
+  await rm(secureDossierRoot, { recursive: true, force: true });
+}
 
 console.log("COLLISION CUTOVER READINESS TESTS PASSED: 12 zones, 24 anchors, 5 disconnected regions, independent approvals and separate movement/sight/shadow evidence");
