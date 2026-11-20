@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   COLLISION_CUTOVER_REQUIRED_ANCHORS,
   COLLISION_CUTOVER_REQUIRED_REGIONS,
@@ -11,7 +13,7 @@ import {
 } from "../lib/shared/src/collision/releaseReadiness.js";
 import { MAP_AUTHORING_ZONES } from "../lib/shared/src/collision/mapZones.js";
 import { createDefaultZoneReviewRecord, validateZoneReviewRecord } from "../lib/shared/src/collision/zoneReview.js";
-import { validateReleaseReadinessMetadata } from "./verify-release-readiness.js";
+import { readDossierSafely, validateReleaseReadinessMetadata } from "./verify-release-readiness.js";
 
 const digest = "a".repeat(64);
 const sightDigest = "b".repeat(64);
@@ -729,5 +731,30 @@ parkingInventoryAlias.parkingLines.sourceInventoryPath =
 assert.ok(validateCollisionCutoverEvidence(parkingInventoryAlias).some(error =>
   error.includes("Exhaustive parking-line source inventory requires a byte-verifiable path")),
   "parking source inventory paths must be canonical and namespace-bound");
+
+
+const secureDossierRoot = await mkdtemp(path.join(os.tmpdir(), "among-gas-release-dossier-"));
+try {
+  await mkdir(path.join(secureDossierRoot, "real"), { recursive: true });
+  await writeFile(path.join(secureDossierRoot, "real", "release.json"), JSON.stringify({ version: 1 }));
+  assert.deepEqual(
+    await readDossierSafely(secureDossierRoot, "real/release.json"),
+    { version: 1 },
+    "the combined release command must read a canonical dossier beneath its root",
+  );
+  await symlink(path.join(secureDossierRoot, "real"), path.join(secureDossierRoot, "linked"), "dir");
+  await assert.rejects(
+    readDossierSafely(secureDossierRoot, "linked/release.json"),
+    /symlink component/,
+    "the combined release command must reject symlinked dossier parents",
+  );
+  await assert.rejects(
+    readDossierSafely(secureDossierRoot, "../outside.json"),
+    /canonical repository-relative path/,
+    "the combined release command must reject dossier path traversal",
+  );
+} finally {
+  await rm(secureDossierRoot, { recursive: true, force: true });
+}
 
 console.log("COLLISION CUTOVER READINESS TESTS PASSED: 12 zones, 24 anchors, 5 disconnected regions, independent approvals and separate movement/sight/shadow evidence");
