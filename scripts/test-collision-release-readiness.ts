@@ -188,18 +188,19 @@ const completeEvidence: CollisionCutoverEvidence = {
         id: "parking-marking-a",
         classification: "paint-only",
         blocksMove: false,
-        evidencePath: "evidence/parking-lines/a.json",
+        evidencePath: "evidence/parking-lines/parking-marking-a/source.json",
         evidenceSha256: "6".repeat(64),
         authorName: "Map Author",
+        authorCompletedAt: "2026-11-14T08:00:00.000Z",
         reviewerName: "Independent Reviewer",
-        reviewedAt: "2026-11-14T08:10:00.000Z",
+        reviewerReviewedAt: "2026-11-14T08:10:00.000Z",
         disposition: "accepted",
       },
       {
         id: "parking-marking-b",
         classification: "physical-obstacle",
         blocksMove: true,
-        evidencePath: "evidence/parking-lines/b.json",
+        evidencePath: "evidence/parking-lines/parking-marking-b/source.json",
         evidenceSha256: "7".repeat(64),
         authorName: "Map Author",
         reviewerName: "Independent Reviewer",
@@ -689,6 +690,19 @@ parkingPathBackslash.parkingLines.classifications[0].evidencePath =
 assert.ok(validateCollisionCutoverEvidence(parkingPathBackslash).some(error =>
   error.includes("evidence path must be inside the parking-line bundle")),
   "parking evidence paths must reject backslash-based path aliases");
+
+const parkingReviewChronology: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingReviewChronology.parkingLines.classifications[0].reviewerReviewedAt = "2026-11-14T07:59:00.000Z";
+assert.ok(validateCollisionCutoverEvidence(parkingReviewChronology).some(error =>
+  error.includes("Parking line parking-marking-a: author/reviewer chronology is invalid")),
+  "parking-line review cannot predate the author's completed classification");
+
+const parkingEvidenceCrossLink: CollisionCutoverEvidence = structuredClone(completeEvidence);
+parkingEvidenceCrossLink.parkingLines.classifications[0].evidencePath =
+  "evidence/parking-lines/parking-marking-b/source.json";
+assert.ok(validateCollisionCutoverEvidence(parkingEvidenceCrossLink).some(error =>
+  error.includes("Parking line parking-marking-a: evidence path must be inside its line-specific source bundle")),
+  "parking-line evidence must remain bound to its own source-line identity");
 
 const parkingInventoryAlias: CollisionCutoverEvidence = structuredClone(completeEvidence);
 parkingInventoryAlias.parkingLines.sourceInventoryPath =
