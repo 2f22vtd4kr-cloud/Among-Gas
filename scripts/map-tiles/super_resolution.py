@@ -17,9 +17,12 @@ from typing import Callable
 import numpy as np
 from PIL import Image
 
-WORLD_W, WORLD_H = 3224, 1858
+SOURCE_W, SOURCE_H = 6608, 3808
+OUTPUT_W, OUTPUT_H = 6448, 3716
 MODEL_SCALE = 4
 OUTPUT_SCALE = 2
+OUTPUT_RESAMPLING = Image.Resampling.BICUBIC
+OUTPUT_RESAMPLING_DESCRIPTION = "Pillow BICUBIC affine (global pixel-centre transform)"
 MODEL_REPOSITORY = "skillsafe-ai/realesrgan-x4plus-anime-6b"
 MODEL_REVISION = "c001be5"
 MODEL_URL = (
@@ -82,13 +85,18 @@ def process_image(
     *,
     core_size: int = 192,
     context: int = 64,
+    output_size: tuple[int, int] | None = None,
 ) -> tuple[Image.Image, int]:
-    """Run 4× inference with context-safe cores, then produce an exact 2× master."""
+    """Run 4× inference with context-safe cores and stitch to an exact target size."""
     if core_size <= 0 or context < 0:
         raise ValueError("Core size must be positive and context non-negative")
     source = np.asarray(image.convert("RGB"), dtype=np.uint8)
     height, width = source.shape[:2]
-    output = np.zeros((height * OUTPUT_SCALE, width * OUTPUT_SCALE, 3), dtype=np.uint8)
+    output_width, output_height = output_size or (width * OUTPUT_SCALE, height * OUTPUT_SCALE)
+    if output_width <= 0 or output_height <= 0:
+        raise ValueError("Output dimensions must be positive")
+    scale_x, scale_y = output_width / width, output_height / height
+    output = np.zeros((output_height, output_width, 3), dtype=np.uint8)
     tile_count = 0
 
     for y0 in range(0, height, core_size):
@@ -106,18 +114,38 @@ def process_image(
                 restored = np.clip(restored, 0, 255).round().astype(np.uint8)
 
             restored_image = Image.fromarray(restored, mode="RGB")
-            half = restored_image.resize(
-                (patch.shape[1] * OUTPUT_SCALE, patch.shape[0] * OUTPUT_SCALE),
-                Image.Resampling.LANCZOS,
+            # Use one global source→target pixel transform for every tile. Resizing
+            # each patch to its independently rounded dimensions changes the local
+            # sampling ratio and introduces visible seams at non-integer scales.
+            # AFFINE maps each output pixel centre back into this context patch;
+            # the default 64px context keeps the bicubic support away from its edge.
+            patch_left = x0 - context
+            patch_top = y0 - context
+            output_left = round(x0 * scale_x)
+            output_top = round(y0 * scale_y)
+            output_right = round(x1 * scale_x)
+            output_bottom = round(y1 * scale_y)
+            transform = (
+                MODEL_SCALE / scale_x,
+                0,
+                MODEL_SCALE * ((output_left + 0.5) / scale_x - patch_left) - 0.5,
+                0,
+                MODEL_SCALE / scale_y,
+                MODEL_SCALE * ((output_top + 0.5) / scale_y - patch_top) - 0.5,
             )
-            core = np.asarray(half, dtype=np.uint8)[
-                context * OUTPUT_SCALE:(context + (y1 - y0)) * OUTPUT_SCALE,
-                context * OUTPUT_SCALE:(context + (x1 - x0)) * OUTPUT_SCALE,
-            ]
-            output[
-                y0 * OUTPUT_SCALE:y1 * OUTPUT_SCALE,
-                x0 * OUTPUT_SCALE:x1 * OUTPUT_SCALE,
-            ] = core
+            core_image = restored_image.transform(
+                (output_right - output_left, output_bottom - output_top),
+                Image.Transform.AFFINE,
+                transform,
+                resample=OUTPUT_RESAMPLING,
+            )
+            core = np.asarray(core_image, dtype=np.uint8)
+            expected_core_shape = (output_bottom - output_top, output_right - output_left, 3)
+            if core.shape != expected_core_shape:
+                raise RuntimeError(
+                    f"Mapped tile core has {core.shape}; expected {expected_core_shape}"
+                )
+            output[output_top:output_bottom, output_left:output_right] = core
             tile_count += 1
 
     return Image.fromarray(output, mode="RGB"), tile_count
@@ -168,9 +196,9 @@ def run(
     manifest_path: str | Path | None = None,
 ) -> dict:
     source = Image.open(input_path).convert("RGB")
-    if source.size != (WORLD_W, WORLD_H):
+    if source.size != (SOURCE_W, SOURCE_H):
         raise ValueError(
-            f"Canonical source must be {WORLD_W}x{WORLD_H}; got {source.width}x{source.height}"
+            f"Canonical high-resolution WebP source must be {SOURCE_W}x{SOURCE_H}; got {source.width}x{source.height}"
         )
     model_sha = sha256_file(model_path)
     if model_sha != MODEL_SHA256:
@@ -178,7 +206,8 @@ def run(
 
     upscale, ort_version, selected_provider = load_onnx_upscaler(model_path, provider)
     candidate, tile_count = process_image(
-        source, upscale, core_size=core_size, context=context
+        source, upscale, core_size=core_size, context=context,
+        output_size=(OUTPUT_W, OUTPUT_H),
     )
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -205,7 +234,7 @@ def run(
         },
         "processing": {
             "output_scale": OUTPUT_SCALE,
-            "downsample": "Pillow Lanczos",
+            "downsample": OUTPUT_RESAMPLING_DESCRIPTION,
             "core_size": core_size,
             "context": context,
             "tile_count": tile_count,

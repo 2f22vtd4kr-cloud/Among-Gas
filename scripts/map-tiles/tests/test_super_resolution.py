@@ -7,10 +7,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import numpy as np
 from PIL import Image
 
-from super_resolution import extract_context_patch, process_image
+from super_resolution import (
+    OUTPUT_RESAMPLING,
+    OUTPUT_RESAMPLING_DESCRIPTION,
+    extract_context_patch,
+    process_image,
+)
 
 
 class SuperResolutionPatchTests(unittest.TestCase):
+    def test_manifest_resampler_matches_the_actual_affine_kernel(self):
+        self.assertEqual(OUTPUT_RESAMPLING, Image.Resampling.BICUBIC)
+        self.assertEqual(
+            OUTPUT_RESAMPLING_DESCRIPTION,
+            "Pillow BICUBIC affine (global pixel-centre transform)",
+        )
+
     def setUp(self):
         yy, xx = np.mgrid[0:9, 0:17]
         self.source = np.stack([xx * 7, yy * 19, (xx + yy) * 5], axis=-1).astype(np.uint8)
@@ -28,20 +40,108 @@ class SuperResolutionPatchTests(unittest.TestCase):
         def fake_x4(patch):
             return np.repeat(np.repeat(patch, 4, axis=0), 4, axis=1)
 
+        context = 4
+        output_size = (34, 18)
         result, tile_count = process_image(
-            Image.fromarray(self.source), fake_x4, core_size=6, context=2
+            Image.fromarray(self.source),
+            fake_x4,
+            core_size=6,
+            context=context,
+            output_size=output_size,
         )
-        self.assertEqual(result.size, (34, 18))
+        self.assertEqual(result.size, output_size)
         self.assertEqual(tile_count, 6)
         pixels = np.asarray(result)
         self.assertEqual(pixels.shape, (18, 34, 3))
         self.assertTrue(np.isfinite(pixels).all())
         self.assertGreater(int(pixels[8, 16].sum()), 0)
-        full_x4 = np.repeat(np.repeat(self.source, 4, axis=0), 4, axis=1)
-        expected = Image.fromarray(full_x4).resize((34, 18), Image.Resampling.LANCZOS)
+
+        full_patch = extract_context_patch(
+            self.source, 0, 0, self.source.shape[1], self.source.shape[0], context
+        )
+        full_x4 = fake_x4(full_patch)
+        scale_x = output_size[0] / self.source.shape[1]
+        scale_y = output_size[1] / self.source.shape[0]
+        transform = (
+            4 / scale_x,
+            0,
+            4 * (0.5 / scale_x + context) - 0.5,
+            0,
+            4 / scale_y,
+            4 * (0.5 / scale_y + context) - 0.5,
+        )
+        expected = Image.fromarray(full_x4).transform(
+            output_size,
+            Image.Transform.AFFINE,
+            transform,
+            resample=Image.Resampling.BICUBIC,
+        )
         self.assertTrue(
-            np.array_equal(pixels[4:-4, 4:-4], np.asarray(expected)[4:-4, 4:-4]),
-            "overlapped interior tile cores must stitch to the same result as one full-frame inference",
+            np.array_equal(pixels, np.asarray(expected)),
+            "all tiled cores must stitch to the same global resampling transform",
+        )
+
+    def test_maps_non_integer_source_scale_to_exact_locked_texture_size(self):
+        def fake_x4(patch):
+            return np.repeat(np.repeat(patch, 4, axis=0), 4, axis=1)
+
+        result, tile_count = process_image(
+            Image.fromarray(self.source),
+            fake_x4,
+            core_size=6,
+            context=2,
+            output_size=(31, 17),
+        )
+        self.assertEqual(result.size, (31, 17))
+        self.assertEqual(tile_count, 6)
+        pixels = np.asarray(result)
+        self.assertEqual(pixels.shape, (17, 31, 3))
+        self.assertTrue(np.isfinite(pixels).all())
+        self.assertGreater(int(pixels.sum()), 0)
+        self.assertTrue(np.any(pixels[:, -1, :] > 0), "the mapped east edge must be populated")
+        self.assertTrue(np.any(pixels[-1, :, :] > 0), "the mapped south edge must be populated")
+
+    def test_non_integer_tiles_match_one_global_resample_without_seams(self):
+        def fake_x4(patch):
+            return np.repeat(np.repeat(patch, 4, axis=0), 4, axis=1)
+
+        context = 4
+        output_size = (31, 17)
+        actual, tile_count = process_image(
+            Image.fromarray(self.source),
+            fake_x4,
+            core_size=6,
+            context=context,
+            output_size=output_size,
+        )
+        self.assertEqual(tile_count, 6)
+
+        # A single padded full-frame inference is the deterministic reference.
+        # Each tiled core must use the same global pixel-centre transform rather
+        # than a locally rounded resize ratio that can create tile seams.
+        full_patch = extract_context_patch(
+            self.source, 0, 0, self.source.shape[1], self.source.shape[0], context
+        )
+        full_restored = fake_x4(full_patch)
+        scale_x = output_size[0] / self.source.shape[1]
+        scale_y = output_size[1] / self.source.shape[0]
+        transform = (
+            4 / scale_x,
+            0,
+            4 * (0.5 / scale_x + context) - 0.5,
+            0,
+            4 / scale_y,
+            4 * (0.5 / scale_y + context) - 0.5,
+        )
+        expected = Image.fromarray(full_restored).transform(
+            output_size,
+            Image.Transform.AFFINE,
+            transform,
+            resample=Image.Resampling.BICUBIC,
+        )
+        self.assertTrue(
+            np.array_equal(np.asarray(actual), np.asarray(expected)),
+            "non-integer tiled output must match one global resampling transform exactly",
         )
 
     def test_rejects_wrong_model_output_scale(self):
