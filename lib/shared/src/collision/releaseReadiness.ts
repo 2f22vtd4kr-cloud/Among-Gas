@@ -300,7 +300,9 @@ function safeEvidenceBundlePath(value: unknown, prefix: string, maxLength = 1024
       /[\x00-\x1f\x7f]/.test(value) || value.includes("\\")) return false;
   if (!value.startsWith(prefix) || value.startsWith("/") || /^[a-z]:/i.test(value)) return false;
   const parts = value.split("/");
-  return parts.length > prefix.split("/").length &&
+  const prefixParts = prefix.endsWith("/") ? prefix.slice(0, -1).split("/") : prefix.split("/");
+  return parts.length > prefixParts.length &&
+    prefixParts.every((part, index) => parts[index] === part) &&
     parts.every(part => part.length > 0 && part !== "." && part !== "..");
 }
 
